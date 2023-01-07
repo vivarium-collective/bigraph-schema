@@ -54,12 +54,17 @@ schema_registry = {
     "environment": environment_schema,
 }
 
+def compose_environment_cell():
+    # figure this out
+    cell_in_environment_schema = compose_schemas({
+        "environment": environment_schema,
+        "cell": cell_schema}, {
+        "environment": {},
+        "cell": {}})
+    print(cell_in_environment_schema)
 
+def main():
+    compose_environment_cell()
 
-class SomeProcess(Process):
-    def ports_schema(self):
-        return "some_process_schema"
-
-        return {
-            "stuff": "field[concentration]"
-        }
+if __name__ == "__main__":
+    main()
