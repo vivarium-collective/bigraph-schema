@@ -6,7 +6,7 @@ def validate_schema(schema):
 def compose_schemas(schemas, wires):
     return {} # new schema
 
-def query(schema, query):
+def query(schema, redex):
     subschema = {}
     return subschema
 
