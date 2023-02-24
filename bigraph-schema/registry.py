@@ -46,22 +46,38 @@ class Registry(object):
         return True
 
 
+required_schema_keys = [
+    '_default',
+    '_apply',
+    '_serialize',
+    '_deserialize'
+]
+
+optional_schema_keys = [
+    '_divide',
+    '_description'
+]
+
 type_schema_keys = [
-    '_default', '_apply', '_serialize', '_deserialize', '_description']
+    '_default',
+    '_apply',
+    '_serialize',
+    '_deserialize'
+    '_divide',
+    '_description'
+]
 
-def validate_schema(schema):
-    
 
-class TypeRegistry(Registry):
-    def validate(self, schema):
-        return validate_schema(item)
+# class TypeRegistry(Registry):
+#     def validate(self, schema):
+#         return validate_schema(item)
 
 
 def accumulate(current, update):
     return current + update
 
 def divide_float(value):
-    half = value/2.0
+    half = value / 2.0
     return (half, half)
 
 def divide_int(value):
@@ -71,64 +87,118 @@ def divide_int(value):
         other_half += 1
     return half, other_half
 
+def divide_longest(dimensions):
+    width = dimensions['width']
+    height = dimensions['height']
+    
+    if width > height:
+        a, b = divide_int(width)
+        return [{'width': a, 'height': height}, {'width': b, 'height': height}]
+    else:
+        x, y = divide_int(height)
+        return [{'width': width, 'height': x}, {'width': width, 'height': y}]
+
+
+def replace(old_value, new_value):
+    return new_value
+
+apply_registry = Registry()
+serialize_registry = Registry()
+deserialize_registry = Registry()
+divide_registry = Registry()
 type_registry = Registry()
 
+apply_registry.register('accumulate', accumulate)
+apply_registry.register('replace', replace)
+divide_registry.register('divide_float', divide_float)
+divide_registry.register('divide_int', divide_int)
+serialize_registry.register('str', str)
+deserialize_registry.register('float', float)
+deserialize_registry.register('int', int)
+
 types = {
+    'int': {
+        '_default': 0,
+        '_apply': 'accumulate',
+        '_serialize': 'str',
+        '_deserialize': 'int',
+        '_divide': 'divide_int',
+        '_description': '64-bit integer'
+    },
+
     'float': {
         '_default': 0.0,
-        '_apply': accumulate,
-        '_serialize': str,
-        '_deserialize': float,
-        '_divide': divide_float,
+        '_apply': 'accumulate',
+        '_serialize': 'str',
+        '_deserialize': 'float',
+        '_divide': 'divide_float',
         '_description': '64-bit floating point precision number'
     }, 
 
-    'int': {
-        '_default': 0,
-        '_apply': accumulate,
-        '_serialize': str,
-        '_deserialize': int,
-        '_divide': divide_int,
+    'string': {
+        '_default': '',
+        '_apply': 'replace',
+        '_serialize': 'str',
+        '_deserialize': 'str',
+        '_divide': 'divide_int',
         '_description': '64-bit integer'
-    }
+    },
+
+    'rectangle': {
+        'width': {'_type': 'int'},
+        'height': {'_type': 'int'}
+        '_divide': 'divide_longest',
+        '_description': 'a two-dimensional value'
+    },
+
+
 }
-
-supported_units = {
-    'm/s': }
-
-for units in supported_units:
-    type_registry.register('m/s', {
-        '_default': 0.0,
-        '_apply': accumulate,
-        '_serialize': str,
-        '_deserialize': int
-    })
 
 for key, schema in types.items():
     type_registry.register(key, schema)
 
 
-def test_schema_validate():
-    int_schema = {
-        'int': {
-            '_default': 0,
-            '_apply': accumulate,
-            '_serialize': str,
-            '_deserialize': int,
-            '_divide': divide_int,
-            '_description': '64-bit integer'
-        }
+supported_units = {
+    'm/s': {
+        '_default': 0.0,
+        '_apply': 'accumulate',
+        '_serialize': 'str',
+        '_deserialize': 'float',
+        '_divide': 'divide_float',
+        '_description': 'meters per second'
     }
+}
 
-    dimension_schema = {
-        'dimension': {
+for key, units in supported_units.items():
+    type_registry.register(key, units)
+
+
+class DimensionProcess(Process):
+    def ports_schema(self):
+        return {'_type': 'dimension'}
+
+        return {
+            '_description': 'a two-dimensional value'
+            '_divide': custom_divide,
+            'width': {'_type': 'float'},
+            'height': {'_type': 'float'},
+        }
+
+        return {
             '_description': 'a two-dimensional value'
             '_divide': custom_divide,
             'width': {'_type': 'int'},
-            'height': {'_type': 'int'}
+            'height': {
+                '_default': 0,
+                '_apply': accumulate,
+                '_serialize': str,
+                '_deserialize': int,
+                '_divide': divide_int,
+                '_description': '64-bit integer'
+            }
         }
-    }
 
+def schema_zoo():
     mitochondria_schema = {
         'mitochondria': {
             'volume': {'_type': 'float'},
@@ -164,6 +234,14 @@ def test_schema_validate():
                 'cytoplasm': {
                     'external_ions': {'_type': 'ions'},
                     'internal_ions': {'_type': 'ions'},
+                    'other_ions': {'_type': {
+                        '_default': 0.0,
+                        '_apply': accumulate,
+                        '_serialize': str,
+                        '_deserialize': float,
+                        '_divide': divide_float,
+                        '_description': '64-bit floating point precision number'
+                    }},
                     'electron_transport': {
                         '_type': 'process',
                         '_value': 'ElectronTransport',
@@ -199,3 +277,11 @@ def test_schema_validate():
     }, {
         
     })
+
+
+registry_registry = Registry()
+
+registry_registry.register('_apply', apply_registry)
+registry_registry.register('_divide', divide_registry)
+registry_registry.register('_serialize', serialize_registry)
+registry_registry.register('_deserialize', deserialize_registry)
