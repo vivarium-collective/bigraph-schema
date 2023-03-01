@@ -50,21 +50,21 @@ required_schema_keys = [
     '_default',
     '_apply',
     '_serialize',
-    '_deserialize'
+    '_deserialize',
 ]
 
 optional_schema_keys = [
     '_divide',
-    '_description'
+    '_description',
 ]
 
 type_schema_keys = [
     '_default',
     '_apply',
     '_serialize',
-    '_deserialize'
+    '_deserialize',
     '_divide',
-    '_description'
+    '_description',
 ]
 
 
@@ -112,11 +112,13 @@ apply_registry.register('accumulate', accumulate)
 apply_registry.register('replace', replace)
 divide_registry.register('divide_float', divide_float)
 divide_registry.register('divide_int', divide_int)
+divide_registry.register('divide_longest', divide_longest)
 serialize_registry.register('str', str)
 deserialize_registry.register('float', float)
 deserialize_registry.register('int', int)
+deserialize_registry.register('str', str)
 
-types = {
+type_library = {
     'int': {
         '_default': 0,
         '_apply': 'accumulate',
@@ -146,7 +148,7 @@ types = {
 
     'rectangle': {
         'width': {'_type': 'int'},
-        'height': {'_type': 'int'}
+        'height': {'_type': 'int'},
         '_divide': 'divide_longest',
         '_description': 'a two-dimensional value'
     },
@@ -154,7 +156,7 @@ types = {
 
 }
 
-for key, schema in types.items():
+for key, schema in type_library.items():
     type_registry.register(key, schema)
 
 
@@ -173,30 +175,30 @@ for key, units in supported_units.items():
     type_registry.register(key, units)
 
 
-class DimensionProcess(Process):
-    def ports_schema(self):
-        return {'_type': 'dimension'}
+# class DimensionProcess(Process):
+#     def ports_schema(self):
+#         return {'_type': 'dimension'}
 
-        return {
-            '_description': 'a two-dimensional value'
-            '_divide': custom_divide,
-            'width': {'_type': 'float'},
-            'height': {'_type': 'float'},
-        }
+#         return {
+#             '_description': 'a two-dimensional value',
+#             '_divide': custom_divide,
+#             'width': {'_type': 'float'},
+#             'height': {'_type': 'float'},
+#         }
 
-        return {
-            '_description': 'a two-dimensional value'
-            '_divide': custom_divide,
-            'width': {'_type': 'int'},
-            'height': {
-                '_default': 0,
-                '_apply': accumulate,
-                '_serialize': str,
-                '_deserialize': int,
-                '_divide': divide_int,
-                '_description': '64-bit integer'
-            }
-        }
+#         return {
+#             '_description': 'a two-dimensional value',
+#             '_divide': custom_divide,
+#             'width': {'_type': 'int'},
+#             'height': {
+#                 '_default': 0,
+#                 '_apply': accumulate,
+#                 '_serialize': str,
+#                 '_deserialize': int,
+#                 '_divide': divide_int,
+#                 '_description': '64-bit integer'
+#             }
+#         }
 
 def schema_zoo():
     mitochondria_schema = {
@@ -211,18 +213,18 @@ def schema_zoo():
 
     cytoplasm_schema = {
         'cytoplasm': {
-            'mitochondria': {'_type': 'branch[mitochondria]'}
-            'proteins': {'_type': 'branch[mitochondria]'}
-            'nucleus': {'_type': 'branch[mitochondria]'}
-            'transcripts': {'_type': 'branch[mitochondria]'}
+            'mitochondria': {'_type': 'branch[mitochondria]'},
+            'proteins': {'_type': 'branch[mitochondria]'},
+            'nucleus': {'_type': 'branch[mitochondria]'},
+            'transcripts': {'_type': 'branch[mitochondria]'},
         }
     }
 
     cell_schema = {
         'cell': {
-            'shape': {'_type': 'mesh'}
-            'volume': {'_type': 'mL'}
-            'temperature': {'_type': 'K'}
+            'shape': {'_type': 'mesh'},
+            'volume': {'_type': 'mL'},
+            'temperature': {'_type': 'K'},
         }
     }
 
@@ -281,6 +283,7 @@ def schema_zoo():
 
 registry_registry = Registry()
 
+registry_registry.register('_type', type_registry)
 registry_registry.register('_apply', apply_registry)
 registry_registry.register('_divide', divide_registry)
 registry_registry.register('_serialize', serialize_registry)
