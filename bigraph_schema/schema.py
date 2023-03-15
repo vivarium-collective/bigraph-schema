@@ -25,8 +25,8 @@ def validate_schema(schema):
 
     for key, value in schema.items():
         if key == '_type':
-            type = type_registry.access(value)
-            if type is None:
+            typ = type_registry.access(value)
+            if typ is None:
                 report[key] = f'type: {value} is not in the registry'
         elif key in type_schema_keys:
             schema_keys.add(key)
@@ -44,12 +44,15 @@ def validate_schema(schema):
             if len(branch_report) > 0:
                 report[key] = branch_report
 
-    if len(schema_keys) > 0 and len(branches) == 0:
-        undeclared = set(type_schema_keys) - schema_keys
-        if len(undeclared) > 0:
-            for key in undeclared:
-                if not key in optional_schema_keys:
-                    report[key] = f'missing required key: {key} for declaring atomic type'
+    # # We will need this when building instances to check to see if we are
+    # # trying to instantiate an abstract type, but we can still register
+    # # register abstract types so it is not invalid
+    # if len(schema_keys) > 0 and len(branches) == 0:
+    #     undeclared = set(type_schema_keys) - schema_keys
+    #     if len(undeclared) > 0:
+    #         for key in undeclared:
+    #             if not key in optional_schema_keys:
+    #                 report[key] = f'missing required key: {key} for declaring atomic type'
 
     return report
 
@@ -129,21 +132,21 @@ def test_validate_schema():
             },
             'edge1': {
                 # this could become a process_edge type
-                '_type': 'process',
+                '_type': 'edge',
                 '_ports': {
                     '1': {'_type': 'int'},
                     # '2': {'_type': 'float'}
                 },
-                'process': {
-                    '_type': 'process instance',
-                    '_value': 'process:location/somewhere',
-                },
+                # 'process': {
+                #     '_type': 'process instance',
+                #     '_value': 'process:location/somewhere',
+                # },
                 'config': {
-                    '_type': 'dict',
+                    '_type': 'mapping[any]',
                     '_value': {},
                 },
                 'wires': {
-                    '_type': 'dict',
+                    '_type': 'mapping[list[string]]',
                     '_value': {
                         '1': ['..', 'a'],
                         # '2': ['..', 'b']

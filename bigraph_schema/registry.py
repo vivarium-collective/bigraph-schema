@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 
+from bigraph_schema.parse import parse_type_parameters
 
 required_schema_keys = [
     '_default',
@@ -13,6 +14,7 @@ required_schema_keys = [
 ]
 
 optional_schema_keys = [
+    '_value',
     '_divide',
     '_description',
     '_ports',
@@ -22,6 +24,7 @@ optional_schema_keys = [
 
 type_schema_keys = [
     '_default',
+    '_value',
     '_apply',
     '_serialize',
     '_deserialize',
@@ -89,19 +92,6 @@ def type_merge(dct, merge_dct, path=tuple()):
                 f'{dct} overwrites {k} from {merge_dct}'
             )
             
-        # elif k in dct and not check_equality and (dct[k] is not merge_dct[k]):
-        #     raise ValueError(
-        #         f'Failure to deep-merge dictionaries at path {path + (k,)}: '
-        #         f'{dct[k]} IS NOT {merge_dct[k]}'
-        #     )
-        # elif k in dct and check_equality and (dct[k] != merge_dct[k]):
-        #     raise ValueError(
-        #         f'Failure to deep-merge dictionaries at path {path + (k,)}: '
-        #         f'{dct[k]} DOES NOT EQUAL {merge_dct[k]}'
-        #     )
-        # else:
-        #     dct[k] = merge_dct[k]
-
     return dct
 
 
@@ -129,8 +119,9 @@ class Registry(object):
         for registry_key in keys:
             if registry_key in self.registry:
                 if item != self.registry[registry_key]:
-                    raise Exception('registry already contains an entry for {}: {} --> {}'.format(
-                        registry_key, self.registry[key], item))
+                    raise Exception(
+                        'registry already contains an entry for {}: {} --> {}'.format(
+                            registry_key, self.registry[key], item))
             else:
                 self.registry[registry_key] = item
         self.main_keys.append(key)
@@ -151,10 +142,11 @@ class TypeRegistry(Registry):
         super().__init__()
 
         self.supers = {}
+        self.register('any', {})
 
     def register(self, key, item, alternate_keys=tuple()):
-        if isinstance(item, dict) and '_super' in item:
-            supers = item['_super'] # list of immediate supers
+        if isinstance(item, dict):
+            supers = item.get('_super', ['any']) # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
             for su in supers:
@@ -162,10 +154,48 @@ class TypeRegistry(Registry):
                     su, str), f"super for {key} must be a string, not {su}"
             self.supers[key] = supers
             for su in supers:
-                su_type = self.access(su)
+                su_type = self.registry.get(su, {})
                 item = type_merge(item, su_type)
 
         super().register(key, item, alternate_keys)
+
+    def resolve_parameters(self, qualified_type):
+        type_name, parameter_types = qualified_type
+        outer_type = self.registry.get(type_name)
+
+        if outer_type is None:
+            raise ValueError(f'type {qualified_type} is looking for type {type_name} but that is not in the registry')
+
+        parameters = {}
+        if '_parameters' in outer_type:
+            parameter_names = outer_type['_parameters']
+            resolved = [
+                self.resolve_parameters(parameter_type)
+                for parameter_type in parameter_types
+            ]
+            parameters = dict(zip(parameter_names, resolved))
+
+        result = {
+            '_type': type_name,
+        }
+
+        if parameters:
+            result['_parameters'] = parameters
+
+        return result
+
+
+    def access(self, key):
+        """Get an item by key from the registry."""
+        typ = self.registry.get(key)
+
+        if typ is None:
+            parse = parse_type_parameters(key)
+            if parse[0] in self.registry:
+                typ = self.resolve_parameters(parse)
+                print(f'parsed {key} to get {typ}')
+
+        return typ
 
     def lookup(type_key, attribute):
         return self.access(type_key).get(attribute)
@@ -301,17 +331,17 @@ deserialize_registry.register('eval', eval)
 
 type_library = {
     'number': {
-        '_default': '0',
+        # '_default': '0',
         '_apply': 'accumulate',
         '_serialize': 'str',
         # if you don't provide all the keys, it is abstract? 
         # '_deserialize': 'int',
         # '_divide': 'divide_int',
-        '_description': 'abstract base type for numbers'
+        '_description': 'abstract base type for numbers',
     },
 
     'int': {
-        # '_default': 0,
+        '_default': 0,
         # '_apply': 'accumulate',
         # '_serialize': 'str',
         '_deserialize': 'int',
@@ -372,7 +402,7 @@ type_library = {
         '_description': 'general list type (or sublists)'
     },
 
-    'dict': {
+    'mapping': {
         '_default': '{}',
         '_apply': 'merge',
         '_serialize': 'str',
@@ -383,7 +413,7 @@ type_library = {
     },
 
     'edge': {
-        'wires': {'_type': 'dict[list[str]]'},
+        'wires': {'_type': 'mapping[list[string]]'},
     },
 
     # 'process': {
@@ -393,41 +423,6 @@ type_library = {
     # },
 }
 
-# less_type_library = {
-#     'int': {
-#         '_default': 0,
-#         '_apply': 'accumulate',
-#         '_serialize': 'str',
-#         '_deserialize': 'int',
-#         '_divide': 'divide_int',
-#         '_description': '64-bit integer',
-#     },
-
-#     'float': {
-#         '_default': 0.0,
-#         '_apply': 'accumulate',
-#         '_serialize': 'str',
-#         '_deserialize': 'float',
-#         '_divide': 'divide_float',
-#         '_description': '64-bit floating point precision number',
-#     }, 
-
-#     'string': {
-#         '_default': '',
-#         '_apply': 'replace',
-#         '_serialize': 'str',
-#         '_deserialize': 'str',
-#         '_divide': 'divide_int',
-#         '_description': '64-bit integer'
-#     },
-
-#     'rectangle': {
-#         'width': {'_type': 'int'},
-#         'height': {'_type': 'int'},
-#         '_divide': 'divide_longest',
-#         '_description': 'a two-dimensional value',
-#     },
-# }
 
 for key, schema in type_library.items():
     type_registry.register(key, schema)
