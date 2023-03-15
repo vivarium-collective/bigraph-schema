@@ -5,6 +5,106 @@ from typing import Any
 import numpy as np
 
 
+required_schema_keys = [
+    '_default',
+    '_apply',
+    '_serialize',
+    '_deserialize',
+]
+
+optional_schema_keys = [
+    '_divide',
+    '_description',
+    '_ports',
+    '_parameters',
+    '_super',
+]
+
+type_schema_keys = [
+    '_default',
+    '_apply',
+    '_serialize',
+    '_deserialize',
+    '_divide',
+    '_description',
+    '_ports',
+    '_parameters',
+    '_super',
+]
+
+# class Function(object):
+#     def __init__(self, domain, codomain, fn):
+#         self.domain = domain
+#         self.codomain = codomain
+#         self.fn = fn
+
+#     def __apply__(self, arguments):
+#         return None
+
+# divide_longest = Function(Dimension, )
+
+
+def deep_merge(dct, merge_dct):
+    """ Recursive dict merge
+    This mutates dct - the contents of merge_dct are added to dct (which is also returned).
+    If you want to keep dct you could call it like deep_merge(copy.deepcopy(dct), merge_dct)
+    """
+    if dct is None:
+        dct = {}
+    if merge_dct is None:
+        merge_dct = {}
+    for k, v in merge_dct.items():
+        if (k in dct and isinstance(dct[k], dict)
+                and isinstance(merge_dct[k], collections.abc.Mapping)):
+            deep_merge(dct[k], merge_dct[k])
+        else:
+            dct[k] = merge_dct[k]
+    return dct
+
+
+def type_merge(dct, merge_dct, path=tuple()):
+    """Recursively merge type definitions, never overwrite.
+    Args:
+        dct: The dictionary to merge into. This dictionary is mutated
+            and ends up being the merged dictionary.  If you want to
+            keep dct you could call it like
+            ``deep_merge_check(copy.deepcopy(dct), merge_dct)``.
+        merge_dct: The dictionary to merge into ``dct``.
+        path: If the ``dct`` is nested within a larger dictionary, the
+            path to ``dct``. This is normally an empty tuple (the
+            default) for the end user but is used for recursive calls.
+    Returns:
+        ``dct``
+    """
+    for k in merge_dct:
+        if not k in dct:
+            dct[k] = merge_dct[k]
+        elif isinstance(dct[k], dict) and isinstance(
+            merge_dct[k], collections.abc.Mapping):
+
+            type_merge(dct[k], merge_dct[k], path + (k,))
+        elif not k in type_schema_keys:
+            raise ValueError(
+                f'cannot merge types at path {path + (k,)}: '
+                f'{dct} overwrites {k} from {merge_dct}'
+            )
+            
+        # elif k in dct and not check_equality and (dct[k] is not merge_dct[k]):
+        #     raise ValueError(
+        #         f'Failure to deep-merge dictionaries at path {path + (k,)}: '
+        #         f'{dct[k]} IS NOT {merge_dct[k]}'
+        #     )
+        # elif k in dct and check_equality and (dct[k] != merge_dct[k]):
+        #     raise ValueError(
+        #         f'Failure to deep-merge dictionaries at path {path + (k,)}: '
+        #         f'{dct[k]} DOES NOT EQUAL {merge_dct[k]}'
+        #     )
+        # else:
+        #     dct[k] = merge_dct[k]
+
+    return dct
+
+
 class Registry(object):
     def __init__(self):
         """A Registry holds a collection of functions or objects."""
@@ -46,26 +146,64 @@ class Registry(object):
         return True
 
 
-required_schema_keys = [
-    '_default',
-    '_apply',
-    '_serialize',
-    '_deserialize',
-]
+class TypeRegistry(Registry):
+    def __init__(self):
+        super().__init__()
 
-optional_schema_keys = [
-    '_divide',
-    '_description',
-]
+        self.supers = {}
 
-type_schema_keys = [
-    '_default',
-    '_apply',
-    '_serialize',
-    '_deserialize',
-    '_divide',
-    '_description',
-]
+    def register(self, key, item, alternate_keys=tuple()):
+        if isinstance(item, dict) and '_super' in item:
+            supers = item['_super'] # list of immediate supers
+            if isinstance(supers, str):
+                supers = [supers]
+            for su in supers:
+                assert isinstance(
+                    su, str), f"super for {key} must be a string, not {su}"
+            self.supers[key] = supers
+            for su in supers:
+                su_type = self.access(su)
+                item = type_merge(item, su_type)
+
+        super().register(key, item, alternate_keys)
+
+    def lookup(type_key, attribute):
+        return self.access(type_key).get(attribute)
+
+    def is_descendent(self, key, ancestor):
+        for sup in self.supers.get(key, []):
+            if sup == ancestor:
+                return True
+            else:
+                found = self.is_descendent(sup, ancestor)
+                if found:
+                    return True
+        return False
+
+
+class RegistryRegistry(Registry):
+    def type_attribute(self, type_key, attribute):
+        type_registry = self.access('_type')
+        type_value = type_registry.access(type_key)
+        attribute_key = type_value.get(attribute)
+        if attribute_key is not None:
+            attribute_registry = self.access(attribute)
+            return attribute_registry.access(attribute_key)
+
+
+apply_registry = Registry()
+serialize_registry = Registry()
+deserialize_registry = Registry()
+divide_registry = Registry()
+type_registry = TypeRegistry()
+
+registry_registry = RegistryRegistry()
+registry_registry.register('_type', type_registry)
+registry_registry.register('_apply', apply_registry)
+registry_registry.register('_divide', divide_registry)
+registry_registry.register('_serialize', serialize_registry)
+registry_registry.register('_deserialize', deserialize_registry)
+
 
 
 # class TypeRegistry(Registry):
@@ -76,18 +214,25 @@ type_schema_keys = [
 def accumulate(current, update):
     return current + update
 
-def divide_float(value):
+def concatenate(current, update):
+    return current + update
+
+def divide_float(value, _):
     half = value / 2.0
     return (half, half)
 
-def divide_int(value):
+def divide_int(value, _):
     half = value // 2
     other_half = half
     if value % 2 == 1:
         other_half += 1
     return half, other_half
 
-def divide_longest(dimensions):
+# def divide_longest(dimensions: Dimension) -> Tuple[Dimension, Dimension]:
+def divide_longest(dimensions, _):
+    # any way to declare the required keys for this function in the registry?
+    # find a way to ask a function what type its domain and codomain are
+
     width = dimensions['width']
     height = dimensions['height']
     
@@ -99,42 +244,90 @@ def divide_longest(dimensions):
         return [{'width': width, 'height': x}, {'width': width, 'height': y}]
 
 
+def divide_list(l, parameters):
+    result = [[], []]
+    divide_type = parameters[0]
+    divide = registry_registry.type_attribute(divide_type, '_divide')
+
+    for item in l:
+        if isinstance(item, list):
+            divisions = divide_list(item)
+        else:
+            divisions = divide(item)
+
+        result[0].append(divisions[0])
+        result[1].append(divisions[1])
+
+    return result
+
+
+def divide_dict(d, parameters):
+    result = [{}, {}]
+    # get the type of the values for this dict
+    divide_type = parameters[0]
+    divide = registry_registry.type_attribute(divide_type, '_divide')
+
+    for key, value in d:
+        if isinstance(value, dict):
+            divisions = divide_dict(value)
+        else:
+            divisions = divide(value)
+
+        result[0][key], result[1][key] = divisions
+
+    return result
+
+
 def replace(old_value, new_value):
     return new_value
 
-apply_registry = Registry()
-serialize_registry = Registry()
-deserialize_registry = Registry()
-divide_registry = Registry()
-type_registry = Registry()
 
 apply_registry.register('accumulate', accumulate)
+apply_registry.register('concatenate', concatenate)
 apply_registry.register('replace', replace)
+apply_registry.register('merge', deep_merge)
 divide_registry.register('divide_float', divide_float)
 divide_registry.register('divide_int', divide_int)
 divide_registry.register('divide_longest', divide_longest)
+divide_registry.register('divide_list', divide_list)
+divide_registry.register('divide_dict', divide_dict)
 serialize_registry.register('str', str)
 deserialize_registry.register('float', float)
 deserialize_registry.register('int', int)
 deserialize_registry.register('str', str)
+deserialize_registry.register('eval', eval)
+
+# if super type is re-registered, propagate changes to subtypes
 
 type_library = {
-    'int': {
-        '_default': 0,
+    'number': {
+        '_default': '0',
         '_apply': 'accumulate',
         '_serialize': 'str',
+        # if you don't provide all the keys, it is abstract? 
+        # '_deserialize': 'int',
+        # '_divide': 'divide_int',
+        '_description': 'abstract base type for numbers'
+    },
+
+    'int': {
+        # '_default': 0,
+        # '_apply': 'accumulate',
+        # '_serialize': 'str',
         '_deserialize': 'int',
         '_divide': 'divide_int',
-        '_description': '64-bit integer'
+        '_description': '64-bit integer',
+        '_super': 'number',
     },
 
     'float': {
-        '_default': 0.0,
-        '_apply': 'accumulate',
-        '_serialize': 'str',
+        '_default': '0.0',
+        # '_apply': 'accumulate',
+        # '_serialize': 'str',
         '_deserialize': 'float',
         '_divide': 'divide_float',
-        '_description': '64-bit floating point precision number'
+        '_description': '64-bit floating point precision number',
+        '_super': 'number',
     }, 
 
     'string': {
@@ -146,15 +339,95 @@ type_library = {
         '_description': '64-bit integer'
     },
 
+    # 'float binomial division': {
+    #     '_divide': 'divide_binomial',
+    #     '_description': '64-bit integer',
+    #     '_super': 'float', 
+    # },
+
+    'shape': {},
+
     'rectangle': {
         'width': {'_type': 'int'},
         'height': {'_type': 'int'},
         '_divide': 'divide_longest',
-        '_description': 'a two-dimensional value'
+        '_description': 'a two-dimensional value',
+        '_super': 'shape',
     },
 
+    # if we override an existing non-_ key, throw an error?
+    # cannot override existing keys unless it is of a subtype
+    'cube': {
+        'depth': {'_type': 'int'},
+        '_super': 'rectangle',
+    },
 
+    'list': {
+        '_default': '[]',
+        '_apply': 'concatenate',
+        '_serialize': 'str',
+        '_deserialize': 'eval',
+        '_divide': 'divide_list',
+        '_parameters': ['A'],
+        '_description': 'general list type (or sublists)'
+    },
+
+    'dict': {
+        '_default': '{}',
+        '_apply': 'merge',
+        '_serialize': 'str',
+        '_deserialize': 'eval',
+        '_divide': 'divide_dict',
+        '_parameters': ['A'],
+        '_description': 'mapping from str to some type (or nested dicts)'
+    },
+
+    'edge': {
+        'wires': {'_type': 'dict[list[str]]'},
+    },
+
+    # 'process': {
+    #     'process': {'_type': 'process instance'},
+    #     'config': {'_type': 'dict'},
+    #     '_super': 'edge',
+    # },
 }
+
+# less_type_library = {
+#     'int': {
+#         '_default': 0,
+#         '_apply': 'accumulate',
+#         '_serialize': 'str',
+#         '_deserialize': 'int',
+#         '_divide': 'divide_int',
+#         '_description': '64-bit integer',
+#     },
+
+#     'float': {
+#         '_default': 0.0,
+#         '_apply': 'accumulate',
+#         '_serialize': 'str',
+#         '_deserialize': 'float',
+#         '_divide': 'divide_float',
+#         '_description': '64-bit floating point precision number',
+#     }, 
+
+#     'string': {
+#         '_default': '',
+#         '_apply': 'replace',
+#         '_serialize': 'str',
+#         '_deserialize': 'str',
+#         '_divide': 'divide_int',
+#         '_description': '64-bit integer'
+#     },
+
+#     'rectangle': {
+#         'width': {'_type': 'int'},
+#         'height': {'_type': 'int'},
+#         '_divide': 'divide_longest',
+#         '_description': 'a two-dimensional value',
+#     },
+# }
 
 for key, schema in type_library.items():
     type_registry.register(key, schema)
@@ -281,10 +554,3 @@ def schema_zoo():
     })
 
 
-registry_registry = Registry()
-
-registry_registry.register('_type', type_registry)
-registry_registry.register('_apply', apply_registry)
-registry_registry.register('_divide', divide_registry)
-registry_registry.register('_serialize', serialize_registry)
-registry_registry.register('_deserialize', deserialize_registry)
