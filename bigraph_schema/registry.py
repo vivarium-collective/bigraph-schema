@@ -18,7 +18,7 @@ optional_schema_keys = [
     '_divide',
     '_description',
     '_ports',
-    '_parameters',
+    '_type_parameters',
     '_super',
 ]
 
@@ -31,7 +31,7 @@ type_schema_keys = [
     '_divide',
     '_description',
     '_ports',
-    '_parameters',
+    '_type_parameters',
     '_super',
 ]
 
@@ -87,6 +87,7 @@ def type_merge(dct, merge_dct, path=tuple()):
 
             type_merge(dct[k], merge_dct[k], path + (k,))
         elif not k in type_schema_keys:
+            # don't let _super or _type be overridden
             raise ValueError(
                 f'cannot merge types at path {path + (k,)}: '
                 f'{dct} overwrites {k} from {merge_dct}'
@@ -167,8 +168,8 @@ class TypeRegistry(Registry):
             raise ValueError(f'type {qualified_type} is looking for type {type_name} but that is not in the registry')
 
         parameters = {}
-        if '_parameters' in outer_type:
-            parameter_names = outer_type['_parameters']
+        if '_type_parameters' in outer_type:
+            parameter_names = outer_type['_type_parameters']
             resolved = [
                 self.resolve_parameters(parameter_type)
                 for parameter_type in parameter_types
@@ -180,7 +181,7 @@ class TypeRegistry(Registry):
         }
 
         if parameters:
-            result['_parameters'] = parameters
+            result['_type_parameters'] = parameters
 
         return result
 
@@ -251,12 +252,17 @@ def divide_float(value, _):
     half = value / 2.0
     return (half, half)
 
-def divide_int(value, _):
+# support function types for registrys?
+# def divide_int(value: int, _) -> tuple[int, int]:
+def divide_int(value: int, _) -> tuple[int, int]:
     half = value // 2
     other_half = half
     if value % 2 == 1:
         other_half += 1
     return half, other_half
+
+# class DivideRegistry(Registry):
+    
 
 # def divide_longest(dimensions: Dimension) -> Tuple[Dimension, Dimension]:
 def divide_longest(dimensions, _):
@@ -316,6 +322,7 @@ apply_registry.register('accumulate', accumulate)
 apply_registry.register('concatenate', concatenate)
 apply_registry.register('replace', replace)
 apply_registry.register('merge', deep_merge)
+# validate the function registered is of the right type?
 divide_registry.register('divide_float', divide_float)
 divide_registry.register('divide_int', divide_int)
 divide_registry.register('divide_longest', divide_longest)
@@ -398,22 +405,22 @@ type_library = {
         '_serialize': 'str',
         '_deserialize': 'eval',
         '_divide': 'divide_list',
-        '_parameters': ['A'],
+        '_type_parameters': ['A'],
         '_description': 'general list type (or sublists)'
     },
 
-    'mapping': {
+    'hash': {
         '_default': '{}',
         '_apply': 'merge',
         '_serialize': 'str',
         '_deserialize': 'eval',
         '_divide': 'divide_dict',
-        '_parameters': ['A'],
+        '_type_parameters': ['A'],
         '_description': 'mapping from str to some type (or nested dicts)'
     },
 
     'edge': {
-        'wires': {'_type': 'mapping[list[string]]'},
+        'wires': {'_type': 'hash[list[string]]'},
     },
 
     # 'process': {
@@ -467,6 +474,44 @@ for key, units in supported_units.items():
 #                 '_description': '64-bit integer'
 #             }
 #         }
+
+    #### 
+    # def process_types(self):
+    #     return {
+    #         'base_rectangle': {
+    #             'width': {'_type': 'int'},
+    #             'height': {'_type': 'int'},
+    #             '_description': 'a two-dimensional value',
+    #             '_super': 'rectangle',
+    #         },
+    #         'rectangle_width': {
+    #             '_divide': 'divide_width',
+    #             '_super': 'base_rectangle',
+    #         },
+    #         'rectangle_longest': {
+    #             '_divide': 'divide_width',
+    #             '_super': 'base_rectangle',
+    #         }            
+    #     }
+
+
+    # def ports_schema(self):
+    #     return {'rectangle': {'_type': 'base_rectangle'}}
+
+
+    # def next_update(self, timestep, state):
+    #     rect = generate('rectangle_width', {
+    #         'width': 5,
+    #         'height': 11,
+    #     })
+
+    #     rect = generate('rectangle_base': {
+    #         'width': 5,
+    #         'height': 11,
+    #         '_divider': lambda a, parameters: a * 5
+    #     })
+    
+
 
 def schema_zoo():
     mitochondria_schema = {

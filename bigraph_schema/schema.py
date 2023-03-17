@@ -90,40 +90,36 @@ def react(schema, redex, reactum):
 
 
 
-def print_schema_validation(library):
+def print_schema_validation(library, should_pass):
     for key, declaration in library.items():
         report = validate_schema(declaration)
         if len(report) == 0:
-            print(f'valid schema: {key}')
-            pprint.pprint(declaration)
-            print('')
+            message = f'valid schema: {key}'
+            if should_pass:
+                print(f'PASS: {message}')
+                pprint.pprint(declaration)
+            else:
+                raise Exception(f'FAIL: {message}\n{declaration}\n{report}')
         else:
-            print(f'INVALID SCHEMA: {key}')
-            pprint.pprint(declaration)
-            print('')
-            print('validation report:')
-            pprint.pprint(report)
-            print('')
+            message = f'invalid schema: {key}'
+            if not should_pass:
+                print(f'PASS: {message}')
+                pprint.pprint(declaration)
+            else:
+                raise Exception(f'FAIL: {message}\n{declaration}\n{report}')
 
 
 def test_validate_schema():
     # good schemas
-    print_schema_validation(type_library)
+    print_schema_validation(type_library, True)
 
-    # bad schemas
-    bad = {
-        'empty': None,
-        'str?': 'not a schema',
+    good = {
         'not quite int': {
             '_default': 0,
             '_apply': 'accumulate',
             '_serialize': 'str',
             '_deserialize': 'int',
             '_description': '64-bit integer'
-        },
-        'branch is weird': {
-            'left': {'_type': 'ogre'},
-            'right': {'_default': 1, '_apply': 'accumulate'},
         },
         'ports match': {
             'a': {
@@ -142,11 +138,11 @@ def test_validate_schema():
                 #     '_value': 'process:location/somewhere',
                 # },
                 'config': {
-                    '_type': 'mapping[any]',
+                    '_type': 'hash[any]',
                     '_value': {},
                 },
                 'wires': {
-                    '_type': 'mapping[list[string]]',
+                    '_type': 'hash[list[string]]',
                     '_value': {
                         '1': ['..', 'a'],
                         # '2': ['..', 'b']
@@ -154,11 +150,22 @@ def test_validate_schema():
                 }
             }
         }
+    }        
+
+    # bad schemas
+    bad = {
+        'empty': None,
+        'str?': 'not a schema',
+        'branch is weird': {
+            'left': {'_type': 'ogre'},
+            'right': {'_default': 1, '_apply': 'accumulate'},
+        },
     }
 
     # test for ports and wires mismatch
 
-    print_schema_validation(bad)
+    print_schema_validation(good, True)
+    print_schema_validation(bad, False)
 
 def test_fill():
     schemas = {
