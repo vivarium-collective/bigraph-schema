@@ -2,12 +2,9 @@ import fire
 from parsimonious.grammar import Grammar
 from parsimonious.nodes import NodeVisitor
 
-# from bigraph.bigraph import Control, Node, One, Id, Edge, EdgeGroup, Parallel, Merge, Big, InGroup, Condition, Reaction, Range, Assign, Init, Param, RuleGroup, Rules, Preds, System, BigraphicalReactiveSystem, PARAMETER_SYMBOLS
-
 
 examples = {
     'no-parameters': 'simple',
-    # 'empty-parameters': 'empty[]',
     'one-parameter': 'parameterized[A]',
     'three-parameters': 'parameterized[A,B,C]',
     'nested-parameters': 'nested[outer[inner]]',

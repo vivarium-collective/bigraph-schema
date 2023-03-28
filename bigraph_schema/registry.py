@@ -6,45 +6,95 @@ import numpy as np
 
 from bigraph_schema.parse import parse_type_parameters
 
-required_schema_keys = [
+required_schema_keys = (
     '_default',
     '_apply',
     '_serialize',
     '_deserialize',
-]
+)
 
-optional_schema_keys = [
+optional_schema_keys = (
     '_value',
     '_divide',
     '_description',
     '_ports',
     '_type_parameters',
     '_super',
-]
+)
 
-type_schema_keys = [
+type_schema_keys = required_schema_keys + optional_schema_keys
+
+
+# (
+#     '_default',
+#     '_apply',
+#     '_serialize',
+#     '_deserialize',
+#     '_value',
+#     '_divide',
+#     '_description',
+#     '_ports',
+#     '_type_parameters',
+#     '_super',
+# )
+
+overridable_schema_keys = (
     '_default',
-    '_value',
     '_apply',
     '_serialize',
     '_deserialize',
+    '_value',
     '_divide',
     '_description',
+)
+
+merge_schema_keys = (
     '_ports',
     '_type_parameters',
+)
+
+# check to see where are not adding in supertypes of types
+# already present
+concatenate_schema_keys = (
     '_super',
-]
+)
 
-# class Function(object):
-#     def __init__(self, domain, codomain, fn):
-#         self.domain = domain
-#         self.codomain = codomain
-#         self.fn = fn
 
-#     def __apply__(self, arguments):
-#         return None
-
-# divide_longest = Function(Dimension, )
+def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
+    """Recursively merge type definitions, never overwrite.
+    Args:
+        dct: The dictionary to merge into. This dictionary is mutated
+            and ends up being the merged dictionary.  If you want to
+            keep dct you could call it like
+            ``deep_merge_check(copy.deepcopy(dct), merge_dct)``.
+        merge_dct: The dictionary to merge into ``dct``.
+        path: If the ``dct`` is nested within a larger dictionary, the
+            path to ``dct``. This is normally an empty tuple (the
+            default) for the end user but is used for recursive calls.
+    Returns:
+        ``dct``
+    """
+    for k in merge_dct:
+        if not k in dct or k in overridable_schema_keys:
+            dct[k] = merge_dct[k]
+        elif k in merge_schema_keys or isinstance(
+            dct[k], dict
+        ) and isinstance(
+            merge_dct[k], collections.abc.Mapping
+        ):
+            type_merge(dct[k], merge_dct[k], path + (k,))
+        elif k in concatenate_schema_keys:
+            # this check may not be necessary if we check
+            # for merging super types
+            if k != '_super' or merge_supers:
+                dct[k].extend(merge_dct[k])
+        else:
+            raise ValueError(
+                f'cannot merge types at path {path + (k,)}: '
+                f'{dct} overwrites {k} from {merge_dct}'
+            )
+            
+    return dct
 
 
 def deep_merge(dct, merge_dct):
@@ -65,35 +115,19 @@ def deep_merge(dct, merge_dct):
     return dct
 
 
-def type_merge(dct, merge_dct, path=tuple()):
-    """Recursively merge type definitions, never overwrite.
-    Args:
-        dct: The dictionary to merge into. This dictionary is mutated
-            and ends up being the merged dictionary.  If you want to
-            keep dct you could call it like
-            ``deep_merge_check(copy.deepcopy(dct), merge_dct)``.
-        merge_dct: The dictionary to merge into ``dct``.
-        path: If the ``dct`` is nested within a larger dictionary, the
-            path to ``dct``. This is normally an empty tuple (the
-            default) for the end user but is used for recursive calls.
-    Returns:
-        ``dct``
-    """
-    for k in merge_dct:
-        if not k in dct:
-            dct[k] = merge_dct[k]
-        elif isinstance(dct[k], dict) and isinstance(
-            merge_dct[k], collections.abc.Mapping):
 
-            type_merge(dct[k], merge_dct[k], path + (k,))
-        elif not k in type_schema_keys:
-            # don't let _super or _type be overridden
-            raise ValueError(
-                f'cannot merge types at path {path + (k,)}: '
-                f'{dct} overwrites {k} from {merge_dct}'
-            )
-            
-    return dct
+# class Function(object):
+#     def __init__(self, domain, codomain, fn):
+#         self.domain = domain
+#         self.codomain = codomain
+#         self.fn = fn
+
+#     def __apply__(self, arguments):
+#         return None
+
+# divide_longest = Function(Dimension, )
+
+
 
 
 class Registry(object):
@@ -139,26 +173,31 @@ class Registry(object):
 
 
 class TypeRegistry(Registry):
+
     def __init__(self):
         super().__init__()
 
         self.supers = {}
         self.register('any', {})
 
+
     def register(self, key, item, alternate_keys=tuple()):
+        item = copy.deepcopy(item)
         if isinstance(item, dict):
             supers = item.get('_super', ['any']) # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
+                item['_super'] = supers
             for su in supers:
                 assert isinstance(
                     su, str), f"super for {key} must be a string, not {su}"
             self.supers[key] = supers
             for su in supers:
                 su_type = self.registry.get(su, {})
-                item = type_merge(item, su_type)
+                item = type_merge(item, su_type, merge_supers=False)
 
         super().register(key, item, alternate_keys)
+
 
     def resolve_parameters(self, qualified_type):
         type_name, parameter_types = qualified_type
@@ -186,6 +225,35 @@ class TypeRegistry(Registry):
         return result
 
 
+    def generate_default(self, type_key):
+        default = {
+            '_type': type_key,
+        }
+
+        import ipdb; ipdb.set_trace()
+
+        typ = self.access(type_key)
+
+        for key, subtyp in typ.items():
+            if key == '_default':
+                if not '_deserialize' in typ:
+                    raise Exception(
+                        f'asking for default for {type_key} but no deserialize in {typ}')
+                deserialize = deserialize_registry.access(typ['_deserialize'])
+                default['_value'] = deserialize(subtyp)
+            elif key not in type_schema_keys:
+                if '_type' in subtyp:
+                    subtyp_key = subtyp['_type']
+                    default[key] = self.generate_default(
+                        subtyp_key)
+                else:
+                    
+
+        default = self.generate_type_default(typ)
+
+                
+        return default
+
     def access(self, key):
         """Get an item by key from the registry."""
         typ = self.registry.get(key)
@@ -198,8 +266,10 @@ class TypeRegistry(Registry):
 
         return typ
 
+
     def lookup(type_key, attribute):
         return self.access(type_key).get(attribute)
+
 
     def is_descendent(self, key, ancestor):
         for sup in self.supers.get(key, []):
@@ -236,12 +306,6 @@ registry_registry.register('_serialize', serialize_registry)
 registry_registry.register('_deserialize', deserialize_registry)
 
 
-
-# class TypeRegistry(Registry):
-#     def validate(self, schema):
-#         return validate_schema(item)
-
-
 def accumulate(current, update):
     return current + update
 
@@ -260,6 +324,7 @@ def divide_int(value: int, _) -> tuple[int, int]:
     if value % 2 == 1:
         other_half += 1
     return half, other_half
+
 
 # class DivideRegistry(Registry):
     
@@ -318,11 +383,11 @@ def replace(old_value, new_value):
     return new_value
 
 
+# validate the function registered is of the right type?
 apply_registry.register('accumulate', accumulate)
 apply_registry.register('concatenate', concatenate)
 apply_registry.register('replace', replace)
 apply_registry.register('merge', deep_merge)
-# validate the function registered is of the right type?
 divide_registry.register('divide_float', divide_float)
 divide_registry.register('divide_int', divide_int)
 divide_registry.register('divide_longest', divide_longest)
@@ -334,23 +399,19 @@ deserialize_registry.register('int', int)
 deserialize_registry.register('str', str)
 deserialize_registry.register('eval', eval)
 
-# if super type is re-registered, propagate changes to subtypes
+# if super type is re-registered, propagate changes to subtypes (?)
 
 type_library = {
+    # abstract number type
     'number': {
-        # '_default': '0',
         '_apply': 'accumulate',
         '_serialize': 'str',
-        # if you don't provide all the keys, it is abstract? 
-        # '_deserialize': 'int',
-        # '_divide': 'divide_int',
         '_description': 'abstract base type for numbers',
     },
 
     'int': {
-        '_default': 0,
-        # '_apply': 'accumulate',
-        # '_serialize': 'str',
+        '_default': '0',
+        # inherit _apply and _serialize from number type
         '_deserialize': 'int',
         '_divide': 'divide_int',
         '_description': '64-bit integer',
@@ -359,8 +420,6 @@ type_library = {
 
     'float': {
         '_default': '0.0',
-        # '_apply': 'accumulate',
-        # '_serialize': 'str',
         '_deserialize': 'float',
         '_divide': 'divide_float',
         '_description': '64-bit floating point precision number',
@@ -594,3 +653,13 @@ def schema_zoo():
     })
 
 
+def test_generate_default():
+    int_default = type_registry.generate_default('int')
+    assert int_default['_type'] == 'int'
+    assert int_default['_value'] == 0
+
+    cube_default = type_registry.generate_default('cube')
+
+
+if __name__ == '__main__':
+    test_generate_default()

@@ -5,7 +5,7 @@ from bigraph_schema.registry import registry_registry, type_schema_keys, optiona
 type_registry = registry_registry.access('_type')
 
 
-def validate_schema(schema):
+def validate_schema(schema, enforce_connections=False):
     # add ports and wires
     # validate ports are wired to a matching type,
     #   either the same type or a subtype (more specific type)
@@ -57,8 +57,46 @@ def validate_schema(schema):
     return report
 
 
-def fill(schemas, wires):
-    return {} # new schema
+def fill_schema(schema, top=None, path=(), type_key=None, context=None):
+    # if a port is disconnected, build a store
+    # for it under the '_open' key in the current
+    # node
+
+    # inform the user that they have disconnected
+    # ports somehow
+
+    if type_key is None:
+        if '_type' in schema:
+            type_key = schema['_type']
+        else:
+            raise Exception(
+                f'no _type known or inferred at path {path} for {schema}'
+            )
+
+    if context is None:
+        context = type_registry.access(type_key)
+
+    result = {
+        '_type': type_key
+    }
+
+    if top is None:
+        top = result
+
+    for key, subcontext in context.items():
+        if key not in schema:
+            raise Exception(
+                f'branch of type {type_key} not present in schema {schema}'
+            )
+        if key not in type_schema_keys:
+            result[key] = fill_schema(schema[key])
+
+    return result
+
+
+# def validate_edges(state, schema, enforce_connections=False):
+#     for key, subschema in schema.items():
+        
 
 
 def merge(a, b):
@@ -83,11 +121,8 @@ def query(schema, redex):
     return subschema
 
 
-# create subtype tree
-
 def react(schema, redex, reactum):
     return {}
-
 
 
 def print_schema_validation(library, should_pass):
@@ -137,17 +172,17 @@ def test_validate_schema():
                 #     '_type': 'process instance',
                 #     '_value': 'process:location/somewhere',
                 # },
-                'config': {
-                    '_type': 'hash[any]',
-                    '_value': {},
-                },
-                'wires': {
-                    '_type': 'hash[list[string]]',
-                    '_value': {
-                        '1': ['..', 'a'],
-                        # '2': ['..', 'b']
-                    }
-                }
+                # 'config': {
+                #     '_type': 'hash[any]',
+                #     '_value': {},
+                # },
+                # 'wires': {
+                #     '_type': 'hash[list[string]]',
+                #     '_value': {
+                #         '1': ['..', 'a'],
+                #         # '2': ['..', 'b']
+                #     }
+                # }
             }
         }
     }        
@@ -167,41 +202,111 @@ def test_validate_schema():
     print_schema_validation(good, True)
     print_schema_validation(bad, False)
 
-def test_fill():
-    schemas = {
-        'ports mismatch': {
-            'a': {'_type': 'int', '_value': 2},
-            'edge1': {
-                # this could become a process_edge type
-                '_type': 'process',
-                '_ports': {
-                    '1': {'_type': 'float'},
-                    # '2': {'_type': 'float'}
-                },
-                'process': 'process:location/somewhere',
-                'config': {},
-                'wires': {
-                    '1': ['..', 'a'],
-                    # '2': ['..', 'b']
-                },
-                # 'process': {
-                #     '_type': 'process instance',
-                #     '_value': 'process:location/somewhere',
-                # },
-                # 'config': {
-                #     '_type': 'dict',
-                #     '_value': {},
-                # },
-                # 'wires': {
-                #     '_type': 'dict',
-                #     '_value': {
-                #         '1': ['..', 'a'],
-                #         # '2': ['..', 'b']
-                #     }
-                # }
-            }
+    import ipdb; ipdb.set_trace()
+
+
+def test_fill_in_missing_nodes():
+    test_schema = {
+        # 'a': {'_type': 'int', '_value': 2},
+        'edge1': {
+            # this could become a process_edge type
+            '_type': 'edge',
+            '_ports': {
+                '1': {'_type': 'float'},
+                # '2': {'_type': 'float'}
+            },
+            # 'process': 'process:location/somewhere',
+            # 'config': {},
+            'wires': {
+                '1': ['..', 'a'],
+                # '2': ['..', 'b']
+            },
+            # 'process': {
+            #     '_type': 'process instance',
+            #     '_value': 'process:location/somewhere',
+            # },
+            # 'config': {
+            #     '_type': 'dict',
+            #     '_value': {},
+            # },
         }
     }
+
+    filled = fill_schema(test_schema)
+    unenforced_report = validate_schema(filled)
+    enforced_report = validate_schema(
+        filled, enforce_connections=True)
+
+    assert not unenforced_report
+    assert enforced_report
+    assert enforced_report['a']
+
+
+def test_fill_in_disconnected_port():
+    test_schema = {
+        # 'a': {'_type': 'int', '_value': 2},
+        'edge1': {
+            '_type': 'edge',
+            '_ports': {
+                '1': {'_type': 'float'},
+                # '2': {'_type': 'float'}
+            },
+        }
+    }
+
+def test_fill_type_mismatch():
+    test_schema = {
+        'a': {'_type': 'int', '_value': 2},
+        'edge1': {
+            '_type': 'edge',
+            '_ports': {
+                '1': {'_type': 'float'},
+                # '2': {'_type': 'float'}
+            },
+            'wires': {
+                '1': ['..', 'a']
+            },
+        },
+    }
+
+
+def test_edge_type_mismatch():
+    test_schema = {
+        'edge1': {
+            '_type': 'edge',
+            '_ports': {
+                '1': {'_type': 'float'},
+            },
+            'wires': {
+                '1': ['..', 'a']
+            },
+        },
+        'edge2': {
+            '_type': 'edge',
+            '_ports': {
+                '1': {'_type': 'int'},
+            },
+            'wires': {
+                '1': ['..', 'a']
+            },
+        },
+    }
+
+
+def test_fill_nested_store():
+        # 'a': {'_type': 'int', '_value': 2},
+    test_schema = {
+        'edge1': {
+            '_type': 'edge',
+            '_ports': {
+                '1': {'_type': 'float'},
+                # '2': {'_type': 'float'}
+            },
+            'wires': {
+                '1': ['somewhere', 'down', 'this', 'path']
+            },
+        },
+    }    
 
 
 
