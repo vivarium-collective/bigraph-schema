@@ -57,6 +57,47 @@ def validate_schema(schema, enforce_connections=False):
     return report
 
 
+def substitute_type(schema):
+    if '_type' in schema:
+        type_key = schema['_type']
+        type_schema = type_registry.access(type_key)
+        schema = schema.copy()
+        schema.pop('_type')
+        schema.update(type_schema)
+
+    return schema
+
+
+def validate_instance(schema, instance):
+    schema = substitute_schema(schema)
+    validation = {}
+
+    if '_serialize' in schema:
+        if '_deserialize' not in schema:
+            validation = {
+                '_deserialize': f'serialize found in type without deserialize: {schema}'
+            }
+        else:
+            serialize = serialize_registry.access(schema['serialize'])
+            deserialize = deserialize_registry.access(schema['deserialize'])
+            serial = serialize(instance)
+            pass_through = deserialize(serial)
+
+            if instance != pass_through:
+                validation = f'instance and pass_through are not the same: {serial}'
+    else:
+        for key, subschema in schema.items():
+            if key not in type_schema_keys:
+                if key not in instance:
+                    validation[key] = f'key present in schema but not in instance: {key}\nschema: {schema}\ninstance: {instance}\n'
+                else:
+                    subvalidation = validate_instance(subschema, instance[key])
+                    if not (subvalidation is None or len(subvalidation) == 0):
+                        validation[key] = subvalidation
+
+    return validation
+
+
 def establish_path(tree, path, top=None, cursor=()):
     if top is None:
         top = tree
@@ -136,12 +177,7 @@ def fill(schema, instance=None, top=None, path=(), type_key=None, context=None):
     if top is None:
         top = instance
 
-    if '_type' in schema:
-        type_key = schema['_type']
-        type_schema = type_registry.access(type_key)
-        schema = schema.copy()
-        schema.pop('_type')
-        schema.update(type_schema)
+    schema = substitute_type(schema)
 
     if instance is None:
         if '_default' in schema:
@@ -157,7 +193,6 @@ def fill(schema, instance=None, top=None, path=(), type_key=None, context=None):
 
     for key, subschema in schema.items():
         if key == '_ports':
-            import ipdb; ipdb.set_trace()
             wires = instance.get('wires', {})
             instance = fill_ports(
                 subschema,
@@ -350,28 +385,12 @@ def test_fill_cube():
 
 def test_fill_in_missing_nodes():
     test_schema = {
-        # 'a': {'_type': 'int', '_value': 2},
         'edge 1': {
             # this could become a process_edge type
             '_type': 'edge',
             '_ports': {
                 'port A': {'_type': 'float'},
-                # '2': {'_type': 'float'}
             },
-            # 'process': 'process:location/somewhere',
-            # 'config': {},
-            # 'wires': {
-            #     '1': ['..', 'a'],
-            #     # '2': ['..', 'b']
-            # },
-            # 'process': {
-            #     '_type': 'process instance',
-            #     '_value': 'process:location/somewhere',
-            # },
-            # 'config': {
-            #     '_type': 'dict',
-            #     '_value': {},
-            # },
         }
     }
 
@@ -388,14 +407,6 @@ def test_fill_in_missing_nodes():
         test_instance)
 
     import ipdb; ipdb.set_trace()
-
-    # unenforced_report = validate_schema(filled)
-    # enforced_report = validate_schema(
-    #     filled, enforce_connections=True)
-
-    # assert not unenforced_report
-    # assert enforced_report
-    # assert enforced_report['a']
 
 
 def test_fill_in_disconnected_port():
