@@ -14,6 +14,7 @@ required_schema_keys = (
 )
 
 optional_schema_keys = (
+    '_type',
     '_value',
     '_divide',
     '_description',
@@ -505,7 +506,9 @@ type_library = {
     },
 
     'edge': {
-        'wires': {'_type': 'hash[list[string]]'},
+        'wires': {
+            '_type': 'hash[list[string]]'
+        },
     },
 
     # 'process': {
@@ -687,7 +690,9 @@ def test_generate_default():
     cube_default = type_registry.generate_default(
         {'_type': 'cube'})
 
-    import ipdb; ipdb.set_trace()
+    assert 'width' in cube_default
+    assert 'height' in cube_default
+    assert 'depth' in cube_default
 
 
 if __name__ == '__main__':

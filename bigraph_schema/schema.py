@@ -1,5 +1,5 @@
 import pprint
-from bigraph_schema.registry import registry_registry, type_schema_keys, optional_schema_keys, type_library
+from bigraph_schema.registry import registry_registry, type_schema_keys, optional_schema_keys, type_library, deep_merge
 
 
 type_registry = registry_registry.access('_type')
@@ -57,6 +57,73 @@ def validate_schema(schema, enforce_connections=False):
     return report
 
 
+def establish_path(tree, path, top=None, cursor=()):
+    if top is None:
+        top = tree
+    if path is None or path == ():
+        return tree
+    else:
+        head = path[0]
+        if head == '..':
+            if cursor == ():
+                raise Exception(
+                    f'trying to travel above the top of the tree: {path}')
+            else:
+                return establish_path(
+                    top,
+                    cursor[:-1])
+        else:
+            if head not in tree:
+                tree[head] = {}
+            return establish_path(
+                tree[head],
+                path[1:],
+                top=top,
+                cursor=cursor + (head,))
+
+
+def fill_ports(schema, wires=None, instance=None, top=None, path=()):
+    # deal with wires
+    if wires is None:
+        wires = {}
+    if instance is None:
+        instance = {}
+    if top is None:
+        top = instance
+
+    more_wires = instance.get('wires', {})
+    wires = deep_merge(wires, more_wires)
+
+    for port_key, port_schema in schema.items():
+        if port_key in wires:
+            subwires = wires[port_key]
+            if isinstance(subwires, dict):
+                instance[port_key] = fill_ports(
+                    port_schema,
+                    wires=subwires,
+                    instance=instance.get(port_key),
+                    top=top,
+                    path=path)
+            else:
+                destination = establish_path(
+                    instance,
+                    subwires[:-1],
+                    top=top,
+                    cursor=path)
+
+                destination_key = subwires[-1]
+
+                if destination_key in destination:
+                    validate_instance(
+                        port_schema,
+                        destination[destination_key])
+                else:
+                    destination[destination_key] = type_registry.generate_default(
+                        port_schema)
+
+    return instance
+
+
 def fill(schema, instance=None, top=None, path=(), type_key=None, context=None):
 
     # if a port is disconnected, build a store
@@ -67,11 +134,14 @@ def fill(schema, instance=None, top=None, path=(), type_key=None, context=None):
     # ports somehow
 
     if top is None:
-        top = schema
+        top = instance
 
     if '_type' in schema:
         type_key = schema['_type']
-        schema = type_registry.access(type_key)
+        type_schema = type_registry.access(type_key)
+        schema = schema.copy()
+        schema.pop('_type')
+        schema.update(type_schema)
 
     if instance is None:
         if '_default' in schema:
@@ -79,8 +149,24 @@ def fill(schema, instance=None, top=None, path=(), type_key=None, context=None):
         else:
             instance = {}
 
+    if isinstance(schema, str):
+        import ipdb; ipdb.set_trace()
+        raise Exception(
+            f'schema cannot be a str: {str}'
+        )
+
     for key, subschema in schema.items():
-        if key not in type_schema_keys:
+        if key == '_ports':
+            import ipdb; ipdb.set_trace()
+            wires = instance.get('wires', {})
+            instance = fill_ports(
+                subschema,
+                wires=wires,
+                instance=instance,
+                top=top,
+                path=path)
+
+        elif key not in type_schema_keys:
             subpath = path + (key,)
             if isinstance(instance, dict):
                 instance[key] = fill(
@@ -231,8 +317,6 @@ def test_validate_schema():
     print_schema_validation(good, True)
     print_schema_validation(bad, False)
 
-    import ipdb; ipdb.set_trace()
-
 
 def test_fill_int():
     test_schema = {
@@ -241,19 +325,37 @@ def test_fill_int():
 
     full_instance = fill(test_schema)
 
-    import ipdb; ipdb.set_trace()
-
     assert full_instance == 0
+
+
+def test_fill_cube():
+    test_schema = {
+        '_type': 'cube'
+    }
+
+    partial_instance = {
+        'height': 5,
+    }
+
+    full_instance = fill(
+        test_schema,
+        instance=partial_instance)
+
+    assert 'width' in full_instance
+    assert 'height' in full_instance
+    assert 'depth' in full_instance
+    assert full_instance['height'] == 5
+    assert full_instance['depth'] == 0
 
 
 def test_fill_in_missing_nodes():
     test_schema = {
         # 'a': {'_type': 'int', '_value': 2},
-        'edge1': {
+        'edge 1': {
             # this could become a process_edge type
             '_type': 'edge',
             '_ports': {
-                '1': {'_type': 'float'},
+                'port A': {'_type': 'float'},
                 # '2': {'_type': 'float'}
             },
             # 'process': 'process:location/somewhere',
@@ -274,9 +376,9 @@ def test_fill_in_missing_nodes():
     }
 
     test_instance = {
-        'edge1': {
+        'edge 1': {
             'wires': {
-                '1': ['..', 'a'],
+                'port A': ['..', 'a'],
             }
         }
     }
@@ -368,6 +470,28 @@ def test_fill_nested_store():
     }    
 
 
+def test_establish_path():
+    tree = {}
+    destination = establish_path(
+        tree,
+        ('some',
+         'where',
+         'deep',
+         'inside',
+         'lives',
+         'a',
+         'tiny',
+         'creature',
+         'made',
+         'of',
+         'light'))
+
+    assert tree['some']['where']['deep']['inside']['lives']['a']['tiny']['creature']['made']['of']['light'] == destination
+
 
 if __name__ == '__main__':
     test_validate_schema()
+    test_fill_int()
+    test_fill_cube()
+    test_establish_path()
+    test_fill_in_missing_nodes()
