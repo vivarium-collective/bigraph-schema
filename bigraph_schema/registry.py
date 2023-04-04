@@ -225,14 +225,41 @@ class TypeRegistry(Registry):
         return result
 
 
-    def generate_default(self, type_key):
-        default = {
-            '_type': type_key,
-        }
+    def generate_default(self, schema):
+        default = None
 
-        import ipdb; ipdb.set_trace()
+        if '_type' in schema:
+            schema = self.access(schema['_type'])
 
-        typ = self.access(type_key)
+        if '_default' in schema:
+            if not '_deserialize' in schema:
+                raise Exception(
+                    f'asking for default for {type_key} but no deserialize in {schema}')
+            deserialize = deserialize_registry.access(
+                schema['_deserialize'])
+            default = deserialize(
+                schema['_default'])
+        else:
+            default = {}
+            for key, subschema in schema.items():
+                if key not in type_schema_keys:
+                    default[key] = self.generate_default(subschema)
+
+        return default
+
+        # for key, subschema in schema.items():
+        #     if key == '_default':
+        #         if not '_deserialize' in typ:
+        #             raise Exception(
+        #                 f'asking for default for {type_key} but no deserialize in {typ}')
+        #         deserialize = deserialize_registry.access(typ['_deserialize'])
+        #         default['_value'] = deserialize(subtyp)
+        #     elif key not in type_schema_keys:
+        
+
+    def generate_default_type(self, type_key):
+        schema = self.access(type_key)
+        return self.generate_default(schema)
 
         for key, subtyp in typ.items():
             if key == '_default':
@@ -247,10 +274,9 @@ class TypeRegistry(Registry):
                     default[key] = self.generate_default(
                         subtyp_key)
                 else:
-                    
+                    pass
 
         default = self.generate_type_default(typ)
-
                 
         return default
 
@@ -318,7 +344,7 @@ def divide_float(value, _):
 
 # support function types for registrys?
 # def divide_int(value: int, _) -> tuple[int, int]:
-def divide_int(value: int, _) -> tuple[int, int]:
+def divide_int(value, _):
     half = value // 2
     other_half = half
     if value % 2 == 1:
@@ -654,11 +680,14 @@ def schema_zoo():
 
 
 def test_generate_default():
-    int_default = type_registry.generate_default('int')
-    assert int_default['_type'] == 'int'
-    assert int_default['_value'] == 0
+    int_default = type_registry.generate_default(
+        {'_type': 'int'})
+    assert int_default == 0
 
-    cube_default = type_registry.generate_default('cube')
+    cube_default = type_registry.generate_default(
+        {'_type': 'cube'})
+
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':

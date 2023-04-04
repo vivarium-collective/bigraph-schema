@@ -57,7 +57,8 @@ def validate_schema(schema, enforce_connections=False):
     return report
 
 
-def fill_schema(schema, top=None, path=(), type_key=None, context=None):
+def fill(schema, instance=None, top=None, path=(), type_key=None, context=None):
+
     # if a port is disconnected, build a store
     # for it under the '_open' key in the current
     # node
@@ -65,33 +66,61 @@ def fill_schema(schema, top=None, path=(), type_key=None, context=None):
     # inform the user that they have disconnected
     # ports somehow
 
-    if type_key is None:
-        if '_type' in schema:
-            type_key = schema['_type']
-        else:
-            raise Exception(
-                f'no _type known or inferred at path {path} for {schema}'
-            )
-
-    if context is None:
-        context = type_registry.access(type_key)
-
-    result = {
-        '_type': type_key
-    }
-
     if top is None:
-        top = result
+        top = schema
 
-    for key, subcontext in context.items():
-        if key not in schema:
-            raise Exception(
-                f'branch of type {type_key} not present in schema {schema}'
-            )
+    if '_type' in schema:
+        type_key = schema['_type']
+        schema = type_registry.access(type_key)
+
+    if instance is None:
+        if '_default' in schema:
+            instance = type_registry.generate_default(schema)
+        else:
+            instance = {}
+
+    for key, subschema in schema.items():
         if key not in type_schema_keys:
-            result[key] = fill_schema(schema[key])
+            subpath = path + (key,)
+            if isinstance(instance, dict):
+                instance[key] = fill(
+                    subschema,
+                    instance=instance.get(key),
+                    top=top,
+                    path=subpath)
+        
+    return instance
 
-    return result
+    # if instance is None:
+    #     instance = type_registry.generate_default()
+
+    # if type_key is None:
+    #     if '_type' in schema:
+    #         type_key = schema['_type']
+    #     else:
+    #         raise Exception(
+    #             f'no _type known or inferred at path {path} for {schema}'
+    #         )
+
+    # if context is None:
+    #     context = type_registry.access(type_key)
+
+    # result = {
+    #     '_type': type_key
+    # }
+
+    # if top is None:
+    #     top = result
+
+    # for key, subcontext in context.items():
+    #     if key not in schema:
+    #         raise Exception(
+    #             f'branch of type {type_key} not present in schema {schema}'
+    #         )
+    #     if key not in type_schema_keys:
+    #         result[key] = fill_schema(schema[key])
+
+    # return result
 
 
 # def validate_edges(state, schema, enforce_connections=False):
@@ -205,6 +234,18 @@ def test_validate_schema():
     import ipdb; ipdb.set_trace()
 
 
+def test_fill_int():
+    test_schema = {
+        '_type': 'int'
+    }
+
+    full_instance = fill(test_schema)
+
+    import ipdb; ipdb.set_trace()
+
+    assert full_instance == 0
+
+
 def test_fill_in_missing_nodes():
     test_schema = {
         # 'a': {'_type': 'int', '_value': 2},
@@ -217,10 +258,10 @@ def test_fill_in_missing_nodes():
             },
             # 'process': 'process:location/somewhere',
             # 'config': {},
-            'wires': {
-                '1': ['..', 'a'],
-                # '2': ['..', 'b']
-            },
+            # 'wires': {
+            #     '1': ['..', 'a'],
+            #     # '2': ['..', 'b']
+            # },
             # 'process': {
             #     '_type': 'process instance',
             #     '_value': 'process:location/somewhere',
@@ -232,14 +273,27 @@ def test_fill_in_missing_nodes():
         }
     }
 
-    filled = fill_schema(test_schema)
-    unenforced_report = validate_schema(filled)
-    enforced_report = validate_schema(
-        filled, enforce_connections=True)
+    test_instance = {
+        'edge1': {
+            'wires': {
+                '1': ['..', 'a'],
+            }
+        }
+    }
 
-    assert not unenforced_report
-    assert enforced_report
-    assert enforced_report['a']
+    filled = fill(
+        test_schema,
+        test_instance)
+
+    import ipdb; ipdb.set_trace()
+
+    # unenforced_report = validate_schema(filled)
+    # enforced_report = validate_schema(
+    #     filled, enforce_connections=True)
+
+    # assert not unenforced_report
+    # assert enforced_report
+    # assert enforced_report['a']
 
 
 def test_fill_in_disconnected_port():
@@ -253,6 +307,11 @@ def test_fill_in_disconnected_port():
             },
         }
     }
+
+    test_instance = {}
+
+    import ipdb; ipdb.set_trace()
+
 
 def test_fill_type_mismatch():
     test_schema = {
