@@ -684,7 +684,8 @@ def schema_zoo():
 
 def test_generate_default():
     int_default = type_registry.generate_default(
-        {'_type': 'int'})
+        {'_type': 'int'}
+    )
     assert int_default == 0
 
     cube_default = type_registry.generate_default(

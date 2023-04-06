@@ -161,6 +161,9 @@ def fill_ports(schema, wires=None, instance=None, top=None, path=()):
                 else:
                     destination[destination_key] = type_registry.generate_default(
                         port_schema)
+        else:
+            # handle unconnected ports
+            pass
 
     return instance
 
@@ -186,7 +189,6 @@ def fill(schema, instance=None, top=None, path=(), type_key=None, context=None):
             instance = {}
 
     if isinstance(schema, str):
-        import ipdb; ipdb.set_trace()
         raise Exception(
             f'schema cannot be a str: {str}'
         )
@@ -396,7 +398,10 @@ def test_fill_in_missing_nodes():
 
     test_instance = {
         'edge 1': {
+            'process': some_process
             'wires': {
+                ## support this syntax
+                # 'port A': 'a',
                 'port A': ['..', 'a'],
             }
         }
@@ -437,7 +442,9 @@ def test_fill_type_mismatch():
             },
             'wires': {
                 '1': ['..', 'a']
+                '2': ['a'],
             },
+            'a': 5
         },
     }
 
