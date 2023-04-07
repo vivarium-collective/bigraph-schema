@@ -226,10 +226,25 @@ class TypeRegistry(Registry):
         return result
 
 
+    def substitute_type(self, schema):
+        if isinstance(schema, str):
+            schema = self.access(schema)
+        elif '_type' in schema:
+            type_key = schema['_type']
+            type_schema = self.access(type_key)
+            schema = schema.copy()
+            schema.pop('_type')
+            schema.update(type_schema)
+
+        return schema
+
+
     def generate_default(self, schema):
         default = None
 
-        if '_type' in schema:
+        if isinstance(schema, str):
+            schema = self.access(schema)
+        elif '_type' in schema:
             schema = self.access(schema['_type'])
 
         if '_default' in schema:
