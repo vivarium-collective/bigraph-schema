@@ -1,5 +1,0 @@
-numpy~=1.23.5
-matplotlib~=3.6.2
-networkx~=2.8.8
-parsimonious~=0.10.0
-fire~=0.5.0

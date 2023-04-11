@@ -2,8 +2,6 @@ import copy
 import random
 from typing import Any
 
-import numpy as np
-
 from bigraph_schema.parse import parse_type_parameters
 
 required_schema_keys = (
