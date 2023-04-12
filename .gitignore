@@ -10,3 +10,5 @@ __pycache__
 .pytest_cache
 lib/
 *.ipynb_checkpoints/
+dist/
+bigraph_schema.egg-info/

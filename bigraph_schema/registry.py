@@ -23,20 +23,6 @@ optional_schema_keys = (
 
 type_schema_keys = required_schema_keys + optional_schema_keys
 
-
-# (
-#     '_default',
-#     '_apply',
-#     '_serialize',
-#     '_deserialize',
-#     '_value',
-#     '_divide',
-#     '_description',
-#     '_ports',
-#     '_type_parameters',
-#     '_super',
-# )
-
 overridable_schema_keys = (
     '_default',
     '_apply',
@@ -112,21 +98,6 @@ def deep_merge(dct, merge_dct):
         else:
             dct[k] = merge_dct[k]
     return dct
-
-
-
-# class Function(object):
-#     def __init__(self, domain, codomain, fn):
-#         self.domain = domain
-#         self.codomain = codomain
-#         self.fn = fn
-
-#     def __apply__(self, arguments):
-#         return None
-
-# divide_longest = Function(Dimension, )
-
-
 
 
 class Registry(object):
@@ -237,6 +208,19 @@ class TypeRegistry(Registry):
         return schema
 
 
+    def expand_schema(self, schema):
+        step = self.substitute_type(schema)
+        for key, subschema in step.items():
+            if key not in type_schema_keys:
+                step[key] = self.expand_schema(subschema)
+        return step
+        
+
+    def expand(self, schema):
+        duplicate = copy.deepcopy(schema)
+        return self.expand_schema(duplicate)
+
+
     def generate_default(self, schema):
         default = None
 
@@ -260,39 +244,12 @@ class TypeRegistry(Registry):
                     default[key] = self.generate_default(subschema)
 
         return default
-
-        # for key, subschema in schema.items():
-        #     if key == '_default':
-        #         if not '_deserialize' in typ:
-        #             raise Exception(
-        #                 f'asking for default for {type_key} but no deserialize in {typ}')
-        #         deserialize = deserialize_registry.access(typ['_deserialize'])
-        #         default['_value'] = deserialize(subtyp)
-        #     elif key not in type_schema_keys:
         
 
     def generate_default_type(self, type_key):
         schema = self.access(type_key)
         return self.generate_default(schema)
 
-        for key, subtyp in typ.items():
-            if key == '_default':
-                if not '_deserialize' in typ:
-                    raise Exception(
-                        f'asking for default for {type_key} but no deserialize in {typ}')
-                deserialize = deserialize_registry.access(typ['_deserialize'])
-                default['_value'] = deserialize(subtyp)
-            elif key not in type_schema_keys:
-                if '_type' in subtyp:
-                    subtyp_key = subtyp['_type']
-                    default[key] = self.generate_default(
-                        subtyp_key)
-                else:
-                    pass
-
-        default = self.generate_type_default(typ)
-                
-        return default
 
     def access(self, key):
         """Get an item by key from the registry."""
@@ -302,7 +259,6 @@ class TypeRegistry(Registry):
             parse = parse_type_parameters(key)
             if parse[0] in self.registry:
                 typ = self.resolve_parameters(parse)
-                print(f'parsed {key} to get {typ}')
 
         return typ
 
@@ -547,71 +503,9 @@ supported_units = {
     }
 }
 
+
 for key, units in supported_units.items():
     type_registry.register(key, units)
-
-
-# class DimensionProcess(Process):
-#     def ports_schema(self):
-#         return {'_type': 'dimension'}
-
-#         return {
-#             '_description': 'a two-dimensional value',
-#             '_divide': custom_divide,
-#             'width': {'_type': 'float'},
-#             'height': {'_type': 'float'},
-#         }
-
-#         return {
-#             '_description': 'a two-dimensional value',
-#             '_divide': custom_divide,
-#             'width': {'_type': 'int'},
-#             'height': {
-#                 '_default': 0,
-#                 '_apply': accumulate,
-#                 '_serialize': str,
-#                 '_deserialize': int,
-#                 '_divide': divide_int,
-#                 '_description': '64-bit integer'
-#             }
-#         }
-
-    #### 
-    # def process_types(self):
-    #     return {
-    #         'base_rectangle': {
-    #             'width': {'_type': 'int'},
-    #             'height': {'_type': 'int'},
-    #             '_description': 'a two-dimensional value',
-    #             '_super': 'rectangle',
-    #         },
-    #         'rectangle_width': {
-    #             '_divide': 'divide_width',
-    #             '_super': 'base_rectangle',
-    #         },
-    #         'rectangle_longest': {
-    #             '_divide': 'divide_width',
-    #             '_super': 'base_rectangle',
-    #         }            
-    #     }
-
-
-    # def ports_schema(self):
-    #     return {'rectangle': {'_type': 'base_rectangle'}}
-
-
-    # def next_update(self, timestep, state):
-    #     rect = generate('rectangle_width', {
-    #         'width': 5,
-    #         'height': 11,
-    #     })
-
-    #     rect = generate('rectangle_base': {
-    #         'width': 5,
-    #         'height': 11,
-    #         '_divider': lambda a, parameters: a * 5
-    #     })
-    
 
 
 def schema_zoo():
