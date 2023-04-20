@@ -44,7 +44,7 @@ def validate_schema(schema, enforce_connections=False):
             if len(branch_report) > 0:
                 report[key] = branch_report
 
-    # # We will need this when building instances to check to see if we are
+    # # We will need this when building states to check to see if we are
     # # trying to instantiate an abstract type, but we can still register
     # # register abstract types so it is not invalid
     # if len(schema_keys) > 0 and len(branches) == 0:
@@ -57,7 +57,7 @@ def validate_schema(schema, enforce_connections=False):
     return report
 
 
-def validate_instance(schema, instance):
+def validate_state(schema, state):
     schema = type_registry.substitute_type(schema)
     validation = {}
 
@@ -69,18 +69,18 @@ def validate_instance(schema, instance):
         else:
             serialize = serialize_registry.access(schema['_serialize'])
             deserialize = deserialize_registry.access(schema['_deserialize'])
-            serial = serialize(instance)
+            serial = serialize(state)
             pass_through = deserialize(serial)
 
-            if instance != pass_through:
-                validation = f'instance and pass_through are not the same: {serial}'
+            if state != pass_through:
+                validation = f'state and pass_through are not the same: {serial}'
     else:
         for key, subschema in schema.items():
             if key not in type_schema_keys:
-                if key not in instance:
-                    validation[key] = f'key present in schema but not in instance: {key}\nschema: {schema}\ninstance: {instance}\n'
+                if key not in state:
+                    validation[key] = f'key present in schema but not in state: {key}\nschema: {schema}\nstate: {state}\n'
                 else:
-                    subvalidation = validate_instance(subschema, instance[key])
+                    subvalidation = validate_state(subschema, state[key])
                     if not (subvalidation is None or len(subvalidation) == 0):
                         validation[key] = subvalidation
 
@@ -128,26 +128,26 @@ def establish_path(tree, path, top=None, cursor=()):
                 cursor=cursor + (head,))
 
 
-def fill_ports(schema, wires=None, instance=None, top=None, path=()):
+def fill_ports(schema, wires=None, state=None, top=None, path=()):
     # deal with wires
     if wires is None:
         wires = {}
-    if instance is None:
-        instance = {}
+    if state is None:
+        state = {}
     if top is None:
-        top = instance
+        top = state
 
-    more_wires = instance.get('wires', {})
+    more_wires = state.get('wires', {})
     wires = deep_merge(wires, more_wires)
 
     for port_key, port_schema in schema.items():
         if port_key in wires:
             subwires = wires[port_key]
             if isinstance(subwires, dict):
-                instance[port_key] = fill_ports(
+                state[port_key] = fill_ports(
                     port_schema,
                     wires=subwires,
-                    instance=instance.get(port_key),
+                    state=state.get(port_key),
                     top=top,
                     path=path)
             else:
@@ -173,7 +173,7 @@ def fill_ports(schema, wires=None, instance=None, top=None, path=()):
 
                 if destination_key in destination:
                     pass
-                    # validate_instance(
+                    # validate_state(
                     #     port_schema,
                     #     destination[destination_key])
                 else:
@@ -183,10 +183,10 @@ def fill_ports(schema, wires=None, instance=None, top=None, path=()):
             # handle unconnected ports
             pass
 
-    return instance
+    return state
 
 
-def fill_instance(schema, instance=None, top=None, path=(), type_key=None, context=None):
+def fill_state(schema, state=None, top=None, path=(), type_key=None, context=None):
     # if a port is disconnected, build a store
     # for it under the '_open' key in the current
     # node
@@ -195,15 +195,15 @@ def fill_instance(schema, instance=None, top=None, path=(), type_key=None, conte
     # ports somehow
 
     if top is None:
-        top = instance
+        top = state
 
     schema = type_registry.substitute_type(schema)
 
-    if instance is None:
+    if state is None:
         if '_default' in schema:
-            instance = type_registry.generate_default(schema)
+            state = type_registry.generate_default(schema)
         else:
-            instance = {}
+            state = {}
 
     if isinstance(schema, str):
         raise Exception(
@@ -212,33 +212,37 @@ def fill_instance(schema, instance=None, top=None, path=(), type_key=None, conte
 
     for key, subschema in schema.items():
         if key == '_ports':
-            wires = instance.get('wires', {})
-            instance = fill_ports(
+            wires = state.get('wires', {})
+            state = fill_ports(
                 subschema,
                 wires=wires,
-                instance=instance,
+                state=state,
                 top=top,
                 path=path)
 
         elif key not in type_schema_keys:
             subpath = path + (key,)
-            if isinstance(instance, dict):
-                instance[key] = fill_instance(
+            if isinstance(state, dict):
+                state[key] = fill_state(
                     subschema,
-                    instance=instance.get(key),
+                    state=state.get(key),
                     top=top,
                     path=subpath)
         
-    return instance
+    return state
 
 
-def fill(schema, instance=None):
-    if instance is not None:
-        instance = copy.deepcopy(instance)
-    return fill_instance(schema, instance=instance)
+def fill(schema, state=None):
+    if state is not None:
+        state = copy.deepcopy(state)
+    return fill_state(schema, state=state)
 
 
-def merge(a, b):
+def apply_update(schema, state, update):
+    pass
+
+
+def link_place(place, link):
     pass
 
 
@@ -255,9 +259,13 @@ def dehydrate(schema):
     return {}
 
 
-def query(schema, redex):
+def query(schema, state, redex):
     subschema = {}
     return subschema
+
+
+def substitute(schema, state, reactum):
+    return state
 
 
 def react(schema, redex, reactum):
@@ -330,9 +338,9 @@ def test_fill_int():
         '_type': 'int'
     }
 
-    full_instance = fill(test_schema)
+    full_state = fill(test_schema)
 
-    assert full_instance == 0
+    assert full_state == 0
 
 
 def test_fill_cube():
@@ -340,19 +348,19 @@ def test_fill_cube():
         '_type': 'cube'
     }
 
-    partial_instance = {
+    partial_state = {
         'height': 5,
     }
 
-    full_instance = fill(
+    full_state = fill(
         test_schema,
-        instance=partial_instance)
+        state=partial_state)
 
-    assert 'width' in full_instance
-    assert 'height' in full_instance
-    assert 'depth' in full_instance
-    assert full_instance['height'] == 5
-    assert full_instance['depth'] == 0
+    assert 'width' in full_state
+    assert 'height' in full_state
+    assert 'depth' in full_state
+    assert full_state['height'] == 5
+    assert full_state['depth'] == 0
 
 
 def test_fill_in_missing_nodes():
@@ -366,7 +374,7 @@ def test_fill_in_missing_nodes():
         }
     }
 
-    test_instance = {
+    test_state = {
         'edge 1': {
             'wires': {
                 'port A': 'a',
@@ -376,7 +384,7 @@ def test_fill_in_missing_nodes():
 
     filled = fill(
         test_schema,
-        test_instance
+        test_state
     )
 
     assert filled == {
@@ -398,7 +406,7 @@ def test_fill_in_disconnected_port():
         }
     }
 
-    test_instance = {}
+    test_state = {}
 
     import ipdb; ipdb.set_trace()
 
@@ -477,14 +485,6 @@ def test_establish_path():
     assert tree['some']['where']['deep']['inside']['lives']['a']['tiny']['creature']['made']['of']['light'] == destination
 
 
-def test_expand_schema():
-    schema = {'_type': 'cube'}
-    expanded = type_registry.expand(schema)
-
-    assert len(schema) == 1
-    assert 'height' in expanded
-
-
 def test_expected_schema():
     # equivalent to previous schema:
 
@@ -546,7 +546,7 @@ def test_expected_schema():
         dual_process_schema,
     )
 
-    expected_schema = {
+    test_schema = {
         'store1': 'dual_process',
         'process3': {
             '_ports': {
@@ -555,7 +555,7 @@ def test_expected_schema():
         }
     }
 
-    expected_instance = {
+    test_state = {
         'store1': {
             'process1': {
                 'wires': {
@@ -577,7 +577,7 @@ def test_expected_schema():
         },
     }
     
-    outcome = fill(expected_schema, expected_instance)
+    outcome = fill(test_schema, test_state)
 
     assert outcome == {
         'process3': {
@@ -604,6 +604,115 @@ def test_expected_schema():
     }
 
 
+def test_link_place():
+    bigraph = {
+        'nodes': {
+            ('v0',): {
+                '_type': 'int',
+                '_value': 3},
+            ('v0', 'v1'): {
+                '_type': 'int',
+                '_value': 3},
+            ('v0', 'v2'): {
+                '_type': 'int',
+                '_value': 3},
+            ('v0', 'v2', 'v3'): {
+                '_type': 'int',
+                '_value': 3},
+            ('v4',): {
+                '_type': 'int',
+                '_value': 3},
+            ('v4', 'v5'): {
+                '_type': 'int',
+                '_value': 3},
+            ('e0',): {
+                '_type': 'edge',
+                '_ports': {
+                    'e0.0': 'int',
+                    'e0.1': 'int',
+                    'e0.2': 'int'}},
+            ('e1',): {
+                '_type': 'edge',
+                '_ports': {
+                    'e0.0': 'int',
+                    'e0.1': 'int'}},
+            ('e2',): {
+                '_type': 'edge',
+                '_ports': {
+                    'e0.0': 'int',
+                    'e0.1': 'int',
+                    'e0.2': 'int'}}},
+        'place': {
+            'v0': {
+                'v1': {},
+                'v2': {
+                    'v3': {}}},
+            'v4': {
+                'v5': {}},
+            'e0': {},
+            'e1': {},
+            'e2': {}},
+        'link': {
+            'e0': {
+                'e0.0': ('v0',),
+                'e0.1': ('v0', 'v1'),
+                'e0.2': ('v4',)},
+            'e1': {
+                'e0.0': ('v0', 'v1', 'v3'),
+                'e0.1': ('v0', 'v1')},
+            'e2': {
+                'e0.0': ('v0', 'v1', 'v3'),
+                'e0.1': ('v4',),
+                'e0.2': ('v4', 'v5')}}}
+
+    placegraph = {
+        'v0': {
+            'v1': {},
+            'v2': {
+                'v3': {}}},
+        'v4': {
+            'v5': {}}}
+
+    hypergraph = {
+        'e0': {
+            'wires': {
+                'e0.0': 'v0',
+                'e0.1': 'v1',
+                'e0.2': 'v4'}},
+        'e1': {
+            'wires': {
+                'e0.0': 'v3',
+                'e0.1': 'v1'}},
+        'e2': {
+            'wires': {
+                'e0.0': 'v3',
+                'e0.1': 'v4',
+                'e0.2': 'v5'}}}
+
+    merged = {
+        'v0': {
+            'v1': {},
+            'v2': {
+                'v3': {}}},
+        'v4': {
+            'v5': {}},
+        'e0': {
+            'wires': {
+                'e0.0': 'v0',
+                'e0.1': ('v0', 'v1'),
+                'e0.2': 'v4'}},
+        'e1': {
+            'wires': {
+                'e0.0': ('v0', 'v2', 'v3'),
+                'e0.1': ('v0', 'v1')}},
+        'e2': {
+            'wires': {
+                'e0.0': ('v0', 'v2', 'v3'),
+                'e0.1': 'v4',
+                'e0.2': ('v4', 'v5')}}}    
+
+    result = link_place(placegraph, linkgraph)
+    assert result == merged
 
 
 if __name__ == '__main__':
@@ -613,7 +722,6 @@ if __name__ == '__main__':
     test_establish_path()
     test_fill_in_missing_nodes()
     test_expected_schema()
-    test_expand_schema()
 
 
 

@@ -106,7 +106,7 @@ class Registry(object):
         self.registry = {}
         self.main_keys = []
 
-    def register(self, key, item, alternate_keys=tuple()):
+    def register(self, key, item, alternate_keys=tuple(), force=False):
         """Add an item to the registry.
 
         Args:
@@ -122,7 +122,7 @@ class Registry(object):
         keys = [key]
         keys.extend(alternate_keys)
         for registry_key in keys:
-            if registry_key in self.registry:
+            if registry_key in self.registry and not force:
                 if item != self.registry[registry_key]:
                     raise Exception(
                         'registry already contains an entry for {}: {} --> {}'.format(
@@ -148,13 +148,13 @@ class TypeRegistry(Registry):
         super().__init__()
 
         self.supers = {}
-        self.register('any', {})
+        self.register('', {})
 
 
-    def register(self, key, item, alternate_keys=tuple()):
+    def register(self, key, item, alternate_keys=tuple(), force=False):
         item = copy.deepcopy(item)
         if isinstance(item, dict):
-            supers = item.get('_super', ['any']) # list of immediate supers
+            supers = item.get('_super', ['']) # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
                 item['_super'] = supers
@@ -164,9 +164,13 @@ class TypeRegistry(Registry):
             self.supers[key] = supers
             for su in supers:
                 su_type = self.registry.get(su, {})
-                item = type_merge(item, su_type, merge_supers=False)
+                new_item = copy.deepcopy(su_type)
+                item = type_merge(
+                    new_item,
+                    item,
+                    merge_supers=False)
 
-        super().register(key, item, alternate_keys)
+        super().register(key, item, alternate_keys, force)
 
 
     def resolve_parameters(self, qualified_type):
@@ -209,6 +213,8 @@ class TypeRegistry(Registry):
 
 
     def expand_schema(self, schema):
+        # make this only show the types at the leaves
+
         step = self.substitute_type(schema)
         for key, subschema in step.items():
             if key not in type_schema_keys:
@@ -267,6 +273,7 @@ class TypeRegistry(Registry):
         return self.access(type_key).get(attribute)
 
 
+    # description should come from type
     def is_descendent(self, key, ancestor):
         for sup in self.supers.get(key, []):
             if sup == ancestor:
@@ -397,6 +404,7 @@ deserialize_registry.register('eval', eval)
 
 # if super type is re-registered, propagate changes to subtypes (?)
 
+# remove shape types
 type_library = {
     # abstract number type
     'number': {
@@ -603,5 +611,16 @@ def test_generate_default():
     assert 'depth' in cube_default
 
 
+def test_expand_schema():
+    schema = {'_type': 'cube'}
+    expanded = type_registry.expand(schema)
+
+    assert len(schema) == 1
+    assert 'height' in expanded
+
+    import ipdb; ipdb.set_trace()
+
+
 if __name__ == '__main__':
     test_generate_default()
+    test_expand_schema()
