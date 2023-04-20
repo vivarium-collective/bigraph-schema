@@ -1,5 +1,6 @@
 import copy
 import random
+import pytest
 from typing import Any
 
 from bigraph_schema.parse import parse_type_parameters
@@ -618,14 +619,16 @@ def test_expand_schema():
     assert len(schema) == 1
     assert 'height' in expanded
 
-    import ipdb; ipdb.set_trace()
-
 
 def test_reregister_type():
-    try:
-        type_registry.register('int', )
+    with pytest.raises(Exception) as e:
+        type_registry.register('int', type_library['string'])
+
+    type_registry.register('int', type_library['string'], force=True)
+    type_registry.register('int', type_library['int'], force=True)
 
 
 if __name__ == '__main__':
     test_generate_default()
     test_expand_schema()
+    test_reregister_type()

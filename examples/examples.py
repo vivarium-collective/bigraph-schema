@@ -8,7 +8,7 @@
 # * dict
 # * units
 
-parse("m / s") --> m / s
+# parse("m / s") --> m / s
 
 cell_schema = {
     "transporters": {
