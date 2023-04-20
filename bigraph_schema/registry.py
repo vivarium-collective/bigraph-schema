@@ -104,7 +104,7 @@ class Registry(object):
     def __init__(self):
         """A Registry holds a collection of functions or objects."""
         self.registry = {}
-        self.main_keys = []
+        self.main_keys = set([])
 
     def register(self, key, item, alternate_keys=tuple(), force=False):
         """Add an item to the registry.
@@ -129,7 +129,7 @@ class Registry(object):
                             registry_key, self.registry[key], item))
             else:
                 self.registry[registry_key] = item
-        self.main_keys.append(key)
+        self.main_keys.add(key)
 
     def access(self, key):
         """Get an item by key from the registry."""
@@ -148,13 +148,13 @@ class TypeRegistry(Registry):
         super().__init__()
 
         self.supers = {}
-        self.register('', {})
+        self.register('_', {})
 
 
     def register(self, key, item, alternate_keys=tuple(), force=False):
         item = copy.deepcopy(item)
         if isinstance(item, dict):
-            supers = item.get('_super', ['']) # list of immediate supers
+            supers = item.get('_super', ['_']) # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
                 item['_super'] = supers
@@ -619,6 +619,11 @@ def test_expand_schema():
     assert 'height' in expanded
 
     import ipdb; ipdb.set_trace()
+
+
+def test_reregister_type():
+    try:
+        type_registry.register('int', )
 
 
 if __name__ == '__main__':
