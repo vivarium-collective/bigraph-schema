@@ -15159,8 +15159,8 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>bigraph-schema==0.0.5
-bigraph-viz==0.0.24
+<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@dc947932f1f15692f29356215bc121d41abeba49#egg=bigraph_schema
+bigraph-viz==0.0.25
 </pre>
 </div>
 </div>
@@ -15316,20 +15316,20 @@ bigraph-viz==0.0.24
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
-<pre>[&#39;string&#39;,
- &#39;m/s&#39;,
- &#39;shape&#39;,
+<pre>[&#39;hash&#39;,
  &#39;int&#39;,
- &#39;URI&#39;,
  &#39;number&#39;,
- &#39;rectangle&#39;,
- &#39;edge&#39;,
  &#39;list&#39;,
- &#39;hash&#39;,
+ &#39;string&#39;,
+ &#39;shape&#39;,
+ &#39;m/s&#39;,
+ &#39;URI&#39;,
+ &#39;KISAO&#39;,
  &#39;cube&#39;,
- &#39;_&#39;,
+ &#39;edge&#39;,
  &#39;float&#39;,
- &#39;KISAO&#39;]</pre>
+ &#39;rectangle&#39;,
+ &#39;_&#39;]</pre>
 </div>
 
 </div>
@@ -15546,7 +15546,7 @@ bigraph-viz==0.0.24
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[18]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[9]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">vivarium.core.process</span> <span class="kn">import</span> <span class="n">Process</span>
@@ -15575,13 +15575,13 @@ bigraph-viz==0.0.24
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[&nbsp;]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">process_state</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;test&#39;</span><span class="p">:</span> <span class="p">{</span>
         <span class="s1">&#39;_type&#39;</span><span class="p">:</span> <span class="s1">&#39;process&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;process_location&#39;</span><span class="p">:</span> <span class="s1">&#39;???&#39;</span>
+        <span class="s1">&#39;process_location&#39;</span><span class="p">:</span> <span class="s1">&#39;???&#39;</span><span class="p">,</span>
         <span class="s1">&#39;config&#39;</span><span class="p">:</span> <span class="p">{}</span>
     <span class="p">}</span>
 <span class="p">}</span>
@@ -15597,7 +15597,7 @@ bigraph-viz==0.0.24
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[10]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">temporal_process_schema</span> <span class="o">=</span> <span class="p">{</span>
@@ -15625,7 +15625,7 @@ bigraph-viz==0.0.24
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pp</span><span class="p">(</span><span class="n">type_registry</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="s1">&#39;temporal_process&#39;</span><span class="p">))</span>
@@ -15693,7 +15693,7 @@ bigraph-viz==0.0.24
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">process_instance</span> <span class="o">=</span> <span class="p">{</span>
@@ -15726,7 +15726,7 @@ bigraph-viz==0.0.24
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[12]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
 
 
 
@@ -15861,7 +15861,7 @@ bigraph-viz==0.0.24
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[15]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">bigraph_state</span> <span class="o">=</span> <span class="p">{</span>
@@ -15887,7 +15887,7 @@ bigraph-viz==0.0.24
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[13]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[15]:</div>
 
 
 
@@ -15968,7 +15968,7 @@ bigraph-viz==0.0.24
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[16]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">dual_process_schema</span> <span class="o">=</span> <span class="p">{</span>
@@ -16041,7 +16041,7 @@ bigraph-viz==0.0.24
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[16]:</div>
 
 
 
@@ -16063,7 +16063,7 @@ bigraph-viz==0.0.24
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[15]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[17]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;schema:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
@@ -16123,7 +16123,7 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[16]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[18]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">)</span>
@@ -16142,7 +16142,7 @@ filled instance:
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[16]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[18]:</div>
 
 
 
