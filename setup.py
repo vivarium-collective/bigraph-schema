@@ -38,5 +38,6 @@ setup(
         # List your package dependencies here
         "parsimonious",
         "fire",
+        "pytest",
     ],
 )

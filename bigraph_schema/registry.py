@@ -132,6 +132,10 @@ class Registry(object):
                 self.registry[registry_key] = item
         self.main_keys.add(key)
 
+    def register_multiple(self, schemas, force=False):
+        for key, schema in schemas.items():
+            self.register(key, schema, force=force)
+
     def access(self, key):
         """Get an item by key from the registry."""
         return self.registry.get(key)
@@ -149,13 +153,13 @@ class TypeRegistry(Registry):
         super().__init__()
 
         self.supers = {}
-        self.register('_', {})
+        self.register('any', {})
 
 
     def register(self, key, item, alternate_keys=tuple(), force=False):
         item = copy.deepcopy(item)
         if isinstance(item, dict):
-            supers = item.get('_super', ['_']) # list of immediate supers
+            supers = item.get('_super', ['any']) # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
                 item['_super'] = supers
@@ -206,8 +210,7 @@ class TypeRegistry(Registry):
         elif '_type' in schema:
             type_key = schema['_type']
             type_schema = self.access(type_key)
-            schema = schema.copy()
-            schema.pop('_type')
+            type_schema = copy.deepcopy(type_schema)
             schema.update(type_schema)
 
         return schema
@@ -440,29 +443,6 @@ type_library = {
         '_description': '64-bit integer'
     },
 
-    # 'float binomial division': {
-    #     '_divide': 'divide_binomial',
-    #     '_description': '64-bit integer',
-    #     '_super': 'float', 
-    # },
-
-    'shape': {},
-
-    'rectangle': {
-        'width': {'_type': 'int'},
-        'height': {'_type': 'int'},
-        '_divide': 'divide_longest',
-        '_description': 'a two-dimensional value',
-        '_super': 'shape',
-    },
-
-    # if we override an existing non-_ key, throw an error?
-    # cannot override existing keys unless it is of a subtype
-    'cube': {
-        'depth': {'_type': 'int'},
-        '_super': 'rectangle',
-    },
-
     'list': {
         '_default': '[]',
         '_apply': 'concatenate',
@@ -497,8 +477,7 @@ type_library = {
 }
 
 
-for key, schema in type_library.items():
-    type_registry.register(key, schema)
+type_registry.register_multiple(type_library)
 
 
 supported_units = {
@@ -598,6 +577,28 @@ def schema_zoo():
     })
 
 
+def test_cube():
+    cube_schema = {
+        'shape': {},
+        
+        'rectangle': {
+            'width': {'_type': 'int'},
+            'height': {'_type': 'int'},
+            '_divide': 'divide_longest',
+            '_description': 'a two-dimensional value',
+            '_super': 'shape',
+        },
+        
+        # cannot override existing keys unless it is of a subtype
+        'cube': {
+            'depth': {'_type': 'int'},
+            '_super': 'rectangle',
+        },
+    }
+
+    type_registry.register_multiple(cube_schema)
+
+
 def test_generate_default():
     int_default = type_registry.generate_default(
         {'_type': 'int'}
@@ -629,6 +630,7 @@ def test_reregister_type():
 
 
 if __name__ == '__main__':
+    test_cube()
     test_generate_default()
     test_expand_schema()
     test_reregister_type()
