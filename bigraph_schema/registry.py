@@ -209,9 +209,8 @@ class TypeRegistry(Registry):
             schema = self.access(schema)
         elif '_type' in schema:
             type_key = schema['_type']
-            type_schema = self.access(type_key)
-            type_schema = copy.deepcopy(type_schema)
-            schema.update(type_schema)
+            type_schema = copy.deepcopy(self.access(type_key))
+            schema = deep_merge(type_schema, schema)
 
         return schema
 
@@ -237,7 +236,7 @@ class TypeRegistry(Registry):
         if isinstance(schema, str):
             schema = self.access(schema)
         elif '_type' in schema:
-            schema = self.access(schema['_type'])
+            schema = self.substitute_type(schema)
 
         if '_default' in schema:
             if not '_deserialize' in schema:
@@ -390,6 +389,15 @@ def replace(old_value, new_value):
     return new_value
 
 
+# TODO: make these work
+def serialize_dict(value):
+    return value
+
+
+def deserialize_dict(value):
+    return value
+
+
 # validate the function registered is of the right type?
 apply_registry.register('accumulate', accumulate)
 apply_registry.register('concatenate', concatenate)
@@ -401,10 +409,12 @@ divide_registry.register('divide_longest', divide_longest)
 divide_registry.register('divide_list', divide_list)
 divide_registry.register('divide_dict', divide_dict)
 serialize_registry.register('str', str)
+serialize_registry.register('serialize_dict', serialize_dict)
 deserialize_registry.register('float', float)
 deserialize_registry.register('int', int)
 deserialize_registry.register('str', str)
 deserialize_registry.register('eval', eval)
+deserialize_registry.register('deserialize_dict', deserialize_dict)
 
 # if super type is re-registered, propagate changes to subtypes (?)
 
@@ -461,6 +471,16 @@ type_library = {
         '_divide': 'divide_dict',
         '_type_parameters': ['A'],
         '_description': 'mapping from str to some type (or nested dicts)'
+    },
+
+    'dict': {
+        '_default': '{}',
+        '_apply': 'merge',
+        '_serialize': 'serialize_dict',
+        '_deserialize': 'deserialize_dict',
+        '_divide': 'divide_dict',
+        '_type_parameters': ['key', 'value'],
+        '_description': 'mapping from keys of any type to values of any type'
     },
 
     'edge': {
