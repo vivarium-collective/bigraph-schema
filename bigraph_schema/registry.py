@@ -540,7 +540,7 @@ type_library = {
         '_description': 'general list type (or sublists)'
     },
 
-    'hash': {
+    'tree': {
         '_default': '{}',
         '_apply': 'merge',
         '_serialize': 'str',
@@ -572,7 +572,7 @@ type_library = {
 
     'edge': {
         'wires': {
-            '_type': 'hash[list[string]]'
+            '_type': 'tree[list[string]]'
         },
     },
 
