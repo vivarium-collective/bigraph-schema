@@ -5,6 +5,8 @@ from typing import Any
 
 from bigraph_schema.parse import parse_type_parameters
 
+NONE_SYMBOL = ''
+
 required_schema_keys = (
     '_default',
     '_apply',
@@ -453,12 +455,14 @@ def maybe_divide(value, type_parameters):
     else:
         pass
 
+
 def maybe_serialize(value, type_parameters):
     if value is None:
         return NONE_SYMBOL
     else:
         maybe_type = type_registry.access(parameters[0])
         return serialize(maybe_type, value)
+
 
 def maybe_deserialize(encoded, type_parameters):
     if encoded == NONE_SYMBOL:
