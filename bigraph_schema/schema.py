@@ -1,6 +1,6 @@
 import copy
 import pprint
-from bigraph_schema.registry import registry_registry, type_schema_keys, optional_schema_keys, type_library, deep_merge, test_cube
+from bigraph_schema.registry import registry_registry, type_schema_keys, optional_schema_keys, type_library, deep_merge, test_cube, apply_update, apply
 
 
 type_registry = registry_registry.access('_type')
@@ -237,36 +237,6 @@ def fill(schema, state=None):
     if state is not None:
         state = copy.deepcopy(state)
     return fill_state(schema, state=state)
-
-
-def apply_update(schema, state, update):
-    # expects an expanded schema
-
-    if '_apply' in schema:
-        apply_function = apply_registry.access(schema['_apply'])
-        state = apply_function(state, update)
-    elif isinstance(update, dict):
-        for key, branch in update.items():
-            if key not in schema:
-                raise Exception(f'trying to update a key that is not in the schema {key} for state:\n{state}\nwith schema:\n{schema}')
-            else:
-                subupdate = apply_update(
-                    schema[key],
-                    state[key],
-                    branch
-                )
-
-                state[key] = subupdate
-    else:
-        raise Exception(f'trying to apply an update that is unrecognized {update} for state:\n{state}\nwith schema:\n{schema}')
-
-    return state
-
-
-def apply(schema, initial, update):
-    expanded = type_registry.expand(schema)
-    state = copy.deepcopy(initial)
-    return apply_update(expanded, initial, update)
 
 
 def link_place(place, link):
@@ -740,27 +710,6 @@ def test_link_place():
     # assert result == merged
 
 
-def test_apply_update():
-    schema = {'_type': 'cube'}
-    state = {
-        'width': 11,
-        'height': 13,
-        'depth': 44,
-    }
-    update = {
-        'depth': -5
-    }
-
-    new_state = apply(
-        schema,
-        state,
-        update
-    )
-
-    assert new_state['width'] == 11
-    assert new_state['depth'] == 39
-
-
 if __name__ == '__main__':
     test_cube()
     test_validate_schema()
@@ -769,7 +718,6 @@ if __name__ == '__main__':
     test_establish_path()
     test_fill_in_missing_nodes()
     test_expected_schema()
-    test_apply_update()
 
 
 

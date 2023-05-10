@@ -207,6 +207,8 @@ class TypeRegistry(Registry):
     def substitute_type(self, schema):
         if isinstance(schema, str):
             schema = self.access(schema)
+            if schema is None:
+                raise Exception(f'trying to substitute a type that is unrecognized {schema}')
         elif '_type' in schema:
             type_key = schema['_type']
             type_schema = copy.deepcopy(self.access(type_key))
@@ -244,8 +246,13 @@ class TypeRegistry(Registry):
                     f'asking for default for {type_key} but no deserialize in {schema}')
             deserialize = deserialize_registry.access(
                 schema['_deserialize'])
-            default = deserialize(
-                schema['_default'])
+            if '_type_parameters' in schema:
+                default = deserialize(
+                    schema['_default'],
+                    schema['_type_parameters'])
+            else:
+                default = deserialize(
+                    schema['_default'])
         else:
             default = {}
             for key, subschema in schema.items():
@@ -312,19 +319,53 @@ registry_registry.register('_serialize', serialize_registry)
 registry_registry.register('_deserialize', deserialize_registry)
 
 
+def apply_update(schema, state, update):
+    # expects an expanded schema
+
+    if '_apply' in schema:
+        apply_function = apply_registry.access(schema['_apply'])
+        if '_type_parameters' in schema:
+            state = apply_function(state, update, schema['_type_parameters'])
+        else:
+            state = apply_function(state, update)
+    elif isinstance(update, dict):
+        for key, branch in update.items():
+            if key not in schema:
+                raise Exception(f'trying to update a key that is not in the schema {key} for state:\n{state}\nwith schema:\n{schema}')
+            else:
+                subupdate = apply_update(
+                    schema[key],
+                    state[key],
+                    branch
+                )
+
+                state[key] = subupdate
+    else:
+        schema = type_registry.expand_schema(schema)
+        state = apply_update(schema, state, update)
+
+    return state
+
+
+def apply(schema, initial, update):
+    expanded = type_registry.expand(schema)
+    state = copy.deepcopy(initial)
+    return apply_update(expanded, initial, update)
+
+
 def accumulate(current, update):
     return current + update
 
 def concatenate(current, update):
     return current + update
 
-def divide_float(value, _):
+def divide_float(value):
     half = value / 2.0
     return (half, half)
 
 # support function types for registrys?
 # def divide_int(value: int, _) -> tuple[int, int]:
-def divide_int(value, _):
+def divide_int(value):
     half = value // 2
     other_half = half
     if value % 2 == 1:
@@ -336,7 +377,7 @@ def divide_int(value, _):
     
 
 # def divide_longest(dimensions: Dimension) -> Tuple[Dimension, Dimension]:
-def divide_longest(dimensions, _):
+def divide_longest(dimensions):
     # any way to declare the required keys for this function in the registry?
     # find a way to ask a function what type its domain and codomain are
 
@@ -390,12 +431,41 @@ def replace(old_value, new_value):
 
 
 # TODO: make these work
-def serialize_dict(value):
+def serialize_dict(value, type_parameters):
     return value
 
 
-def deserialize_dict(value):
+def deserialize_dict(value, type_parameters):
     return value
+
+
+def maybe_apply(current, update, type_parameters):
+    if current is None or update is None:
+        return update
+    else:
+        maybe_type = type_registry.access(parameters[0])
+        return apply_update(maybe_type, current, update)
+
+
+def maybe_divide(value, type_parameters):
+    if value is None:
+        return [None, None]
+    else:
+        pass
+
+def maybe_serialize(value, type_parameters):
+    if value is None:
+        return NONE_SYMBOL
+    else:
+        maybe_type = type_registry.access(parameters[0])
+        return serialize(maybe_type, value)
+
+def maybe_deserialize(encoded, type_parameters):
+    if encoded == NONE_SYMBOL:
+        return None
+    else:
+        maybe_type = type_registry.access(parameters[0])
+        return deserialize(maybe_type, encoded)
 
 
 # validate the function registered is of the right type?
@@ -403,18 +473,25 @@ apply_registry.register('accumulate', accumulate)
 apply_registry.register('concatenate', concatenate)
 apply_registry.register('replace', replace)
 apply_registry.register('merge', deep_merge)
+apply_registry.register('maybe_apply', maybe_apply)
+
 divide_registry.register('divide_float', divide_float)
 divide_registry.register('divide_int', divide_int)
 divide_registry.register('divide_longest', divide_longest)
 divide_registry.register('divide_list', divide_list)
 divide_registry.register('divide_dict', divide_dict)
+divide_registry.register('maybe_divide', maybe_divide)
+
 serialize_registry.register('str', str)
 serialize_registry.register('serialize_dict', serialize_dict)
+serialize_registry.register('maybe_serialize', maybe_serialize)
+
 deserialize_registry.register('float', float)
 deserialize_registry.register('int', int)
 deserialize_registry.register('str', str)
 deserialize_registry.register('eval', eval)
 deserialize_registry.register('deserialize_dict', deserialize_dict)
+deserialize_registry.register('maybe_deserialize', maybe_deserialize)
 
 # if super type is re-registered, propagate changes to subtypes (?)
 
@@ -481,6 +558,16 @@ type_library = {
         '_divide': 'divide_dict',
         '_type_parameters': ['key', 'value'],
         '_description': 'mapping from keys of any type to values of any type'
+    },
+
+    'maybe': {
+        '_default': 'None',
+        '_apply': 'maybe_apply',
+        '_serialize': 'maybe_serialize',
+        '_deserialize': 'maybe_deserialize',
+        '_divide': 'maybe_divide',
+        '_type_parameters': ['value'],
+        '_description': 'type to represent values that could be empty'
     },
 
     'edge': {
@@ -649,8 +736,30 @@ def test_reregister_type():
     type_registry.register('int', type_library['int'], force=True)
 
 
+def test_apply_update():
+    schema = {'_type': 'cube'}
+    state = {
+        'width': 11,
+        'height': 13,
+        'depth': 44,
+    }
+    update = {
+        'depth': -5
+    }
+
+    new_state = apply(
+        schema,
+        state,
+        update
+    )
+
+    assert new_state['width'] == 11
+    assert new_state['depth'] == 39
+
+
 if __name__ == '__main__':
     test_cube()
     test_generate_default()
     test_expand_schema()
     test_reregister_type()
+    test_apply_update()
