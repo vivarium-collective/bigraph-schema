@@ -248,13 +248,9 @@ class TypeRegistry(Registry):
                     f'asking for default for {type_key} but no deserialize in {schema}')
             deserialize = deserialize_registry.access(
                 schema['_deserialize'])
-            if '_type_parameters' in schema:
-                default = deserialize(
-                    schema['_default'],
-                    schema['_type_parameters'])
-            else:
-                default = deserialize(
-                    schema['_default'])
+            default = deserialize(
+                schema['_default'],
+                schema.get('_type_parameters'))
         else:
             default = {}
             for key, subschema in schema.items():
@@ -326,10 +322,9 @@ def apply_update(schema, state, update):
 
     if '_apply' in schema:
         apply_function = apply_registry.access(schema['_apply'])
-        if '_type_parameters' in schema:
-            state = apply_function(state, update, schema['_type_parameters'])
-        else:
-            state = apply_function(state, update)
+        # TODO: make all apply/serialize/deserialize/divide functions
+        #   take the same number of arguments
+        state = apply_function(state, update, schema.get('_type_parameters'))
     elif isinstance(update, dict):
         for key, branch in update.items():
             if key not in schema:
@@ -349,25 +344,27 @@ def apply_update(schema, state, update):
     return state
 
 
+# TODO: provide an expanded form of the type registry, where everything
+#   is already pre-expanded
 def apply(schema, initial, update):
     expanded = type_registry.expand(schema)
     state = copy.deepcopy(initial)
     return apply_update(expanded, initial, update)
 
 
-def accumulate(current, update):
+def accumulate(current, update, _):
     return current + update
 
-def concatenate(current, update):
+def concatenate(current, update, _):
     return current + update
 
-def divide_float(value):
+def divide_float(value, _):
     half = value / 2.0
     return (half, half)
 
 # support function types for registrys?
 # def divide_int(value: int, _) -> tuple[int, int]:
-def divide_int(value):
+def divide_int(value, _):
     half = value // 2
     other_half = half
     if value % 2 == 1:
@@ -379,7 +376,7 @@ def divide_int(value):
     
 
 # def divide_longest(dimensions: Dimension) -> Tuple[Dimension, Dimension]:
-def divide_longest(dimensions):
+def divide_longest(dimensions, _):
     # any way to declare the required keys for this function in the registry?
     # find a way to ask a function what type its domain and codomain are
 
@@ -428,9 +425,36 @@ def divide_dict(d, parameters):
     return result
 
 
-def replace(old_value, new_value):
+def replace(old_value, new_value, _):
     return new_value
 
+
+def serialize_string(s, _):
+    return f'"{s}"'
+
+def deserialize_string(s, _):
+    if s[0] != '"' or s[-1] != '"':
+        raise Exception(f'deserializing str which requires double quotes: {s}')
+    return s[1:-1]
+
+def to_string(value, _):
+    return str(value)
+
+def deserialize_int(i, _):
+    return int(i)
+
+def deserialize_float(i, _):
+    return float(i)
+
+def evaluate(code, _):
+    return eval(code)
+
+
+def apply_tree(current, update, type_parameters):
+    pass
+
+def apply_dict(current, update, type_parameters):
+    pass
 
 # TODO: make these work
 def serialize_dict(value, type_parameters):
@@ -445,7 +469,7 @@ def maybe_apply(current, update, type_parameters):
     if current is None or update is None:
         return update
     else:
-        maybe_type = type_registry.access(parameters[0])
+        maybe_type = type_registry.access(type_parameters[0])
         return apply_update(maybe_type, current, update)
 
 
@@ -460,7 +484,7 @@ def maybe_serialize(value, type_parameters):
     if value is None:
         return NONE_SYMBOL
     else:
-        maybe_type = type_registry.access(parameters[0])
+        maybe_type = type_registry.access(type_parameters[0])
         return serialize(maybe_type, value)
 
 
@@ -468,7 +492,7 @@ def maybe_deserialize(encoded, type_parameters):
     if encoded == NONE_SYMBOL:
         return None
     else:
-        maybe_type = type_registry.access(parameters[0])
+        maybe_type = type_registry.access(type_parameters[0])
         return deserialize(maybe_type, encoded)
 
 
@@ -476,7 +500,8 @@ def maybe_deserialize(encoded, type_parameters):
 apply_registry.register('accumulate', accumulate)
 apply_registry.register('concatenate', concatenate)
 apply_registry.register('replace', replace)
-apply_registry.register('merge', deep_merge)
+apply_registry.register('apply_tree', apply_tree)
+apply_registry.register('apply_dict', apply_dict)
 apply_registry.register('maybe_apply', maybe_apply)
 
 divide_registry.register('divide_float', divide_float)
@@ -486,14 +511,15 @@ divide_registry.register('divide_list', divide_list)
 divide_registry.register('divide_dict', divide_dict)
 divide_registry.register('maybe_divide', maybe_divide)
 
-serialize_registry.register('str', str)
+serialize_registry.register('serialize_string', serialize_string)
+serialize_registry.register('to_string', to_string)
 serialize_registry.register('serialize_dict', serialize_dict)
 serialize_registry.register('maybe_serialize', maybe_serialize)
 
-deserialize_registry.register('float', float)
-deserialize_registry.register('int', int)
-deserialize_registry.register('str', str)
-deserialize_registry.register('eval', eval)
+deserialize_registry.register('float', deserialize_float)
+deserialize_registry.register('int', deserialize_int)
+deserialize_registry.register('deserialize_string', deserialize_string)
+deserialize_registry.register('evaluate', evaluate)
 deserialize_registry.register('deserialize_dict', deserialize_dict)
 deserialize_registry.register('maybe_deserialize', maybe_deserialize)
 
@@ -504,7 +530,7 @@ type_library = {
     # abstract number type
     'number': {
         '_apply': 'accumulate',
-        '_serialize': 'str',
+        '_serialize': 'to_string',
         '_description': 'abstract base type for numbers',
     },
 
@@ -526,10 +552,10 @@ type_library = {
     }, 
 
     'string': {
-        '_default': '',
+        '_default': '""',
         '_apply': 'replace',
-        '_serialize': 'str',
-        '_deserialize': 'str',
+        '_serialize': 'serialize_string',
+        '_deserialize': 'deserialize_string',
         '_divide': 'divide_int',
         '_description': '64-bit integer'
     },
@@ -537,8 +563,8 @@ type_library = {
     'list': {
         '_default': '[]',
         '_apply': 'concatenate',
-        '_serialize': 'str',
-        '_deserialize': 'eval',
+        '_serialize': 'to_string',
+        '_deserialize': 'evaluate',
         '_divide': 'divide_list',
         '_type_parameters': ['A'],
         '_description': 'general list type (or sublists)'
@@ -546,9 +572,9 @@ type_library = {
 
     'tree': {
         '_default': '{}',
-        '_apply': 'merge',
-        '_serialize': 'str',
-        '_deserialize': 'eval',
+        '_apply': 'apply_tree',
+        '_serialize': 'to_string',
+        '_deserialize': 'evaluate',
         '_divide': 'divide_dict',
         '_type_parameters': ['A'],
         '_description': 'mapping from str to some type (or nested dicts)'
@@ -556,7 +582,7 @@ type_library = {
 
     'dict': {
         '_default': '{}',
-        '_apply': 'merge',
+        '_apply': 'apply_dict',
         '_serialize': 'serialize_dict',
         '_deserialize': 'deserialize_dict',
         '_divide': 'divide_dict',

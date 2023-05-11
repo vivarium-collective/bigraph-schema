@@ -296,7 +296,7 @@ def test_validate_schema():
         'not quite int': {
             '_default': 0,
             '_apply': 'accumulate',
-            '_serialize': 'str',
+            '_serialize': 'to_string',
             '_deserialize': 'int',
             '_description': '64-bit integer'
         },
