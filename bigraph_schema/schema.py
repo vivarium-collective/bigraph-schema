@@ -1,7 +1,7 @@
 import copy
 import pprint
 from bigraph_schema.registry import registry_registry, type_schema_keys, optional_schema_keys, type_library, deep_merge, test_cube, apply_update, apply
-
+from bigraph_schema.units import units
 
 type_registry = registry_registry.access('_type')
 apply_registry = registry_registry.access('_apply')
@@ -710,13 +710,31 @@ def test_link_place():
     # assert result == merged
 
 
-if __name__ == '__main__':
-    test_cube()
-    test_validate_schema()
-    test_fill_int()
-    test_fill_cube()
-    test_establish_path()
-    test_fill_in_missing_nodes()
-    test_expected_schema()
+# def test_units():
+#     schema_meters = {
+#         'distance': {'_type': 'units[distance**2/time*mass]'}}
+#     schema_feet = {
+#         'distance': {'_type': 'units[distance]'}}
 
+#     state = {'distance': 11 * units.meter}
+#     update = {'distance': -5 * units.feet}
+
+#     new_state = apply(
+#         schema_meters,
+#         state,
+#         update
+#     )
+
+#     assert new_state['distance'] == 9.476 * units.meter
+    
+
+if __name__ == '__main__':
+    # test_cube()
+    # test_validate_schema()
+    # test_fill_int()
+    # test_fill_cube()
+    # test_establish_path()
+    # test_fill_in_missing_nodes()
+    # test_expected_schema()
+    test_units()
 

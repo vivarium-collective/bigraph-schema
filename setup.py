@@ -39,5 +39,6 @@ setup(
         "parsimonious",
         "fire",
         "pytest",
+        "pint",
     ],
 )

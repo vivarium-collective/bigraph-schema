@@ -4,6 +4,7 @@ import pytest
 from typing import Any
 
 from bigraph_schema.parse import parse_type_parameters
+from bigraph_schema.units import units
 
 NONE_SYMBOL = ''
 
@@ -496,6 +497,38 @@ def maybe_deserialize(encoded, type_parameters):
         return deserialize(maybe_type, encoded)
 
 
+# TODO: implement these
+def units_apply(current, update, type_parameters):
+    if current is None or update is None:
+        return update
+    else:
+        maybe_type = type_registry.access(type_parameters[0])
+        return apply_update(maybe_type, current, update)
+
+
+def units_divide(value, type_parameters):
+    if value is None:
+        return [None, None]
+    else:
+        pass
+
+
+def units_serialize(value, type_parameters):
+    if value is None:
+        return NONE_SYMBOL
+    else:
+        maybe_type = type_registry.access(type_parameters[0])
+        return serialize(maybe_type, value)
+
+
+def units_deserialize(encoded, type_parameters):
+    if encoded == NONE_SYMBOL:
+        return None
+    else:
+        maybe_type = type_registry.access(type_parameters[0])
+        return deserialize(maybe_type, encoded)
+
+
 # validate the function registered is of the right type?
 apply_registry.register('accumulate', accumulate)
 apply_registry.register('concatenate', concatenate)
@@ -503,6 +536,7 @@ apply_registry.register('replace', replace)
 apply_registry.register('apply_tree', apply_tree)
 apply_registry.register('apply_dict', apply_dict)
 apply_registry.register('maybe_apply', maybe_apply)
+apply_registry.register('units_apply', units_apply)
 
 divide_registry.register('divide_float', divide_float)
 divide_registry.register('divide_int', divide_int)
@@ -510,11 +544,13 @@ divide_registry.register('divide_longest', divide_longest)
 divide_registry.register('divide_list', divide_list)
 divide_registry.register('divide_dict', divide_dict)
 divide_registry.register('maybe_divide', maybe_divide)
+divide_registry.register('units_divide', units_divide)
 
 serialize_registry.register('serialize_string', serialize_string)
 serialize_registry.register('to_string', to_string)
 serialize_registry.register('serialize_dict', serialize_dict)
 serialize_registry.register('maybe_serialize', maybe_serialize)
+serialize_registry.register('units_serialize', units_serialize)
 
 deserialize_registry.register('float', deserialize_float)
 deserialize_registry.register('int', deserialize_int)
@@ -522,6 +558,7 @@ deserialize_registry.register('deserialize_string', deserialize_string)
 deserialize_registry.register('evaluate', evaluate)
 deserialize_registry.register('deserialize_dict', deserialize_dict)
 deserialize_registry.register('maybe_deserialize', maybe_deserialize)
+deserialize_registry.register('units_deserialize', units_deserialize)
 
 # if super type is re-registered, propagate changes to subtypes (?)
 
@@ -606,6 +643,16 @@ type_library = {
         },
     },
 
+    'units': {
+        '_default': '',
+        '_apply': 'units_apply',
+        '_serialize': 'units_serialize',
+        '_deserialize': 'units_deserialize',
+        '_divide': 'units_divide',
+        '_type_parameters': ['dimensionality'],
+        '_description': 'type to represent values with scientific units'
+    },
+
     # 'process': {
     #     'process': {'_type': 'process instance'},
     #     'config': {'_type': 'dict'},
@@ -617,20 +664,23 @@ type_library = {
 type_registry.register_multiple(type_library)
 
 
-supported_units = {
-    'm/s': {
-        '_default': 0.0,
-        '_apply': 'accumulate',
-        '_serialize': 'str',
-        '_deserialize': 'float',
-        '_divide': 'divide_float',
-        '_description': 'meters per second'
-    }
-}
+# supported_units = {
+#     'm/s': {
+#         '_default': 0.0,
+#         '_apply': 'accumulate',
+#         '_serialize': 'str',
+#         '_deserialize': 'float',
+#         '_divide': 'divide_float',
+#         '_description': 'meters per second'
+#     }
+# }
 
 
-for key, units in supported_units.items():
-    type_registry.register(key, units)
+# for key, units in supported_units.items():
+#     type_registry.register(key, units)
+
+def register_units(units_registry):
+    pass
 
 
 def schema_zoo():
