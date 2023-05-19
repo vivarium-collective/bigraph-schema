@@ -729,12 +729,12 @@ def test_link_place():
     
 
 if __name__ == '__main__':
-    # test_cube()
-    # test_validate_schema()
-    # test_fill_int()
-    # test_fill_cube()
-    # test_establish_path()
-    # test_fill_in_missing_nodes()
-    # test_expected_schema()
+    test_cube()
+    test_validate_schema()
+    test_fill_int()
+    test_fill_cube()
+    test_establish_path()
+    test_fill_in_missing_nodes()
+    test_expected_schema()
     test_units()
 

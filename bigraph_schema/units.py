@@ -1,10 +1,11 @@
 from pint import UnitRegistry
 
+
 units = UnitRegistry()
 
 
-def render_units_type(u):
-    dimensionality = u.dimensionality
+def render_units_type(dimensionality):
+    # dimensionality = unit.dimensionality
     unit_keys = list(dimensionality.keys())
     unit_keys.sort()
 
@@ -23,7 +24,7 @@ def render_units_type(u):
         else:
             power = -power
             if power > 1:
-                render = f'{inner_key}**{power}'
+                render = f'{inner_key}^{power}'
             else:
                 render = inner_key
             denominator.append(render)
@@ -38,9 +39,37 @@ def render_units_type(u):
     return render
 
 
+def parse_dimensionality(s):
+    numerator, denominator = s.split('/')
+    numerator_terms = numerator.split('*')
+    denominator_terms = denominator.split('*')
+
+    dimensionality = {}
+
+    for term in numerator_terms:
+        power = term.split('^')
+        exponent = 1
+        if len(power) > 1:
+            exponent = power[1]
+        dimensionality[f'[{power[0]}]'] = int(exponent)
+
+    for term in denominator_terms:
+        power = term.split('^')
+        exponent = 1
+        if len(power) > 1:
+            exponent = power[1]
+        dimensionality[f'[{power[0]}]'] = -int(exponent)
+
+    return dimensionality
+
+
 def test_units_render():
-    render = render_units_type(units.newton)
-    assert render == 'length*mass/time**2'
+    dimensionality = units.newton.dimensionality
+    render = render_units_type(dimensionality)
+    assert render == 'length*mass/time^2'
+
+    recover = parse_dimensionality(render)
+    assert recover == dimensionality
 
 
 if __name__ == '__main__':
