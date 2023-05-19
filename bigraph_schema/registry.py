@@ -4,7 +4,7 @@ import pytest
 from typing import Any
 
 from bigraph_schema.parse import parse_type_parameters
-from bigraph_schema.units import units
+from bigraph_schema.units import units, render_units_type
 
 NONE_SYMBOL = ''
 
@@ -270,10 +270,13 @@ class TypeRegistry(Registry):
         """Get an item by key from the registry."""
         typ = self.registry.get(key)
 
-        if typ is None:
-            parse = parse_type_parameters(key)
-            if parse[0] in self.registry:
-                typ = self.resolve_parameters(parse)
+        if typ is None and key is not None and key != '':
+            try:
+                parse = parse_type_parameters(key)
+                if parse[0] in self.registry:
+                    typ = self.resolve_parameters(parse)
+            except Exception as e:
+                print(f'type did not parse: {key}')
 
         return typ
 
@@ -529,6 +532,26 @@ def units_deserialize(encoded, type_parameters):
         return deserialize(maybe_type, encoded)
 
 
+def register_units(units):
+    for unit_name in units._units:
+        try:
+            unit = getattr(units, unit_name)
+        except:
+            # print(f'no unit named {unit_name}')
+            continue
+
+        dimensionality = unit.dimensionality
+        type_key = render_units_type(dimensionality)
+        if type_registry.access(type_key) is None:
+            type_registry.register(type_key, {
+                '_default': '',
+                '_apply': 'units_apply',
+                '_serialize': 'units_serialize',
+                '_deserialize': 'units_deserialize',
+                '_divide': 'units_divide',
+                '_description': 'type to represent values with scientific units'})
+
+
 # validate the function registered is of the right type?
 apply_registry.register('accumulate', accumulate)
 apply_registry.register('concatenate', concatenate)
@@ -662,25 +685,7 @@ type_library = {
 
 
 type_registry.register_multiple(type_library)
-
-
-# supported_units = {
-#     'm/s': {
-#         '_default': 0.0,
-#         '_apply': 'accumulate',
-#         '_serialize': 'str',
-#         '_deserialize': 'float',
-#         '_divide': 'divide_float',
-#         '_description': 'meters per second'
-#     }
-# }
-
-
-# for key, units in supported_units.items():
-#     type_registry.register(key, units)
-
-def register_units(units_registry):
-    pass
+register_units(units)
 
 
 def schema_zoo():

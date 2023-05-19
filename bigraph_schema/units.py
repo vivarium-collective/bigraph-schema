@@ -17,7 +17,7 @@ def render_units_type(dimensionality):
         power = dimensionality[unit_key]
         if power > 0:
             if power > 1:
-                render = f'{inner_key}**{power}'
+                render = f'{inner_key}^{power}'
             else:
                 render = inner_key
             numerator.append(render)

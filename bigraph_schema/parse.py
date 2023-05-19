@@ -16,7 +16,7 @@ parameter_grammar = Grammar(
     """
     qualified_type = type_name parameter_list? comma?
     parameter_list = square_left qualified_type+ square_right
-    type_name = ~r"[\w\d-_|/()*&^%$#@!~`+]+"
+    type_name = ~r"[\w\d-_|/()*&^%$#@!~`+.]+"
     square_left = "["
     square_right = "]"
     comma = ","
