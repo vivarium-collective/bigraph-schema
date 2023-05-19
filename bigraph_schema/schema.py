@@ -710,22 +710,22 @@ def test_link_place():
     # assert result == merged
 
 
-# def test_units():
-#     schema_meters = {
-#         'distance': {'_type': 'units[distance**2/time*mass]'}}
-#     schema_feet = {
-#         'distance': {'_type': 'units[distance]'}}
+def test_units():
+    # schema_meters = {
+    #     'distance': {'_type': 'length^2/time*mass'}}
+    schema_length = {
+        'distance': {'_type': 'length'}}
 
-#     state = {'distance': 11 * units.meter}
-#     update = {'distance': -5 * units.feet}
+    state = {'distance': 11 * units.meter}
+    update = {'distance': -5 * units.feet}
 
-#     new_state = apply(
-#         schema_meters,
-#         state,
-#         update
-#     )
+    new_state = apply(
+        schema_length,
+        state,
+        update
+    )
 
-#     assert new_state['distance'] == 9.476 * units.meter
+    assert new_state['distance'] == 9.476 * units.meter
     
 
 if __name__ == '__main__':

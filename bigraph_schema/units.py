@@ -15,6 +15,8 @@ def render_units_type(dimensionality):
     for unit_key in unit_keys:
         inner_key = unit_key.strip('[]')
         power = dimensionality[unit_key]
+        if power % 1 == 0:
+            power = int(power)
         if power > 0:
             if power > 1:
                 render = f'{inner_key}^{power}'
@@ -70,6 +72,8 @@ def test_units_render():
 
     recover = parse_dimensionality(render)
     assert recover == dimensionality
+
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':

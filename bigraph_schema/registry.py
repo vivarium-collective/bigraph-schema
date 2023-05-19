@@ -666,15 +666,15 @@ type_library = {
         },
     },
 
-    'units': {
-        '_default': '',
-        '_apply': 'units_apply',
-        '_serialize': 'units_serialize',
-        '_deserialize': 'units_deserialize',
-        '_divide': 'units_divide',
-        '_type_parameters': ['dimensionality'],
-        '_description': 'type to represent values with scientific units'
-    },
+    # 'units': {
+    #     '_default': '',
+    #     '_apply': 'units_apply',
+    #     '_serialize': 'units_serialize',
+    #     '_deserialize': 'units_deserialize',
+    #     '_divide': 'units_divide',
+    #     '_type_parameters': ['dimensionality'],
+    #     '_description': 'type to represent values with scientific units'
+    # },
 
     # 'process': {
     #     'process': {'_type': 'process instance'},
@@ -840,6 +840,8 @@ def test_apply_update():
 
     assert new_state['width'] == 11
     assert new_state['depth'] == 39
+
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':
