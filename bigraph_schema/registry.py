@@ -502,11 +502,15 @@ def maybe_deserialize(encoded, type_parameters):
 
 # TODO: implement these
 def units_apply(current, update, type_parameters):
-    if current is None or update is None:
-        return update
-    else:
-        maybe_type = type_registry.access(type_parameters[0])
-        return apply_update(maybe_type, current, update)
+    return current + update
+
+
+def units_serialize(value, type_parameters):
+    return str(value)
+
+
+def units_deserialize(encoded, type_parameters):
+    return units(encoded)
 
 
 def units_divide(value, type_parameters):
@@ -514,22 +518,6 @@ def units_divide(value, type_parameters):
         return [None, None]
     else:
         pass
-
-
-def units_serialize(value, type_parameters):
-    if value is None:
-        return NONE_SYMBOL
-    else:
-        maybe_type = type_registry.access(type_parameters[0])
-        return serialize(maybe_type, value)
-
-
-def units_deserialize(encoded, type_parameters):
-    if encoded == NONE_SYMBOL:
-        return None
-    else:
-        maybe_type = type_registry.access(type_parameters[0])
-        return deserialize(maybe_type, encoded)
 
 
 def register_units(units):
@@ -840,8 +828,6 @@ def test_apply_update():
 
     assert new_state['width'] == 11
     assert new_state['depth'] == 39
-
-    import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':

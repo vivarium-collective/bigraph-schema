@@ -711,8 +711,6 @@ def test_link_place():
 
 
 def test_units():
-    # schema_meters = {
-    #     'distance': {'_type': 'length^2/time*mass'}}
     schema_length = {
         'distance': {'_type': 'length'}}
 
