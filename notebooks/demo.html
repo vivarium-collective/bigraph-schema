@@ -15110,9 +15110,9 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h1 id="Compositional-Type-Schema">Compositional Type Schema<a class="anchor-link" href="#Compositional-Type-Schema">&#182;</a></h1><p>This tutorial explore the Compositional Type Schema (CTS) for the Bigraph Interface Protocol. CTS enables different simulators, models, and data to communicate with each other through standardized type definitions and wiring diagrams. By providing a robust type system and serializable data format, CTS makes composite simulators shareable, extendable, and easily distributed across various computer architectures.</p>
+<h1 id="Bigraph-Schema">Bigraph Schema<a class="anchor-link" href="#Bigraph-Schema">&#182;</a></h1><p>This tutorial explore the bigraph schema library. Bigraph schema enables different simulators, models, and data to communicate with each other through standardized type definitions and wiring diagrams. By providing a robust type system and serializable data format, this makes composite simulators shareable, extendable, and easily distributed across various computer architectures.</p>
 <p>We'll use the <a href="https://pypi.org/project/bigraph-schema/">bigraph-schema</a> library for validation and processing of the schema, and the <a href="https://pypi.org/project/bigraph-viz/">bigraph-viz</a> library for plotting library for visualizing the resulting simulation configuration.</p>
-<p>Bigraphs provide a powerful framework for compositional modeling due to their ability to represent complex systems through hierarchical structures and flexible reconfigurations, thus enabling the seamless composition and decomposition of system components. This notebook does not introduce the Bigraph concepts, rather it is focused on type definition and access. If you're new to the concepts of Bigraphs, check out the <a href="https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html">Bigraph Schema Basics Tutorial</a>.</p>
+<p>This notebook does not introduce the Bigraph concepts, rather it is focused on type definition and access. If you're new to the concepts of Bigraphs, check out the <a href="https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html">Bigraph Schema Basics Tutorial</a>.</p>
 
 </div>
 </div>
@@ -15159,7 +15159,7 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@dc947932f1f15692f29356215bc121d41abeba49#egg=bigraph_schema
+<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@b91909037f5c68fb57682ab65d8d9c9630779f5d#egg=bigraph_schema
 bigraph-viz==0.0.25
 </pre>
 </div>
@@ -15186,7 +15186,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[2]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">copy</span>
@@ -15203,7 +15203,7 @@ bigraph-viz==0.0.25
 <span class="c1"># register some required types</span>
 <span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;URI&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;0-000-00000-0&#39;</span><span class="p">})</span>  <span class="c1"># how do we test that something is a URI?</span>
 <span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;KISAO&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;KISAO:0000000&#39;</span><span class="p">})</span>  <span class="c1"># how do we test that something is a URI?</span>
-<span class="n">schema_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;_super&#39;</span><span class="p">)</span> <span class="c1"># TODO -- this should be default, also should use the bigraph_schema keys</span>
+<span class="n">schema_keys</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s1">&#39;_super&#39;</span><span class="p">,</span> <span class="s1">&#39;config&#39;</span><span class="p">])</span> <span class="c1"># TODO -- this should be default, also should use the bigraph_schema keys</span>
 </pre></div>
 
      </div>
@@ -15316,20 +15316,86 @@ bigraph-viz==0.0.25
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
-<pre>[&#39;hash&#39;,
- &#39;int&#39;,
- &#39;number&#39;,
- &#39;list&#39;,
+<pre>[&#39;&#39;,
+ &#39;current*length^2*time&#39;,
+ &#39;length^4*mass/time^3&#39;,
  &#39;string&#39;,
- &#39;shape&#39;,
- &#39;m/s&#39;,
- &#39;URI&#39;,
- &#39;KISAO&#39;,
- &#39;cube&#39;,
- &#39;edge&#39;,
+ &#39;length/time^2&#39;,
+ &#39;/substance&#39;,
+ &#39;substance/time&#39;,
+ &#39;length^3*mass/(current^2*time^4)&#39;,
+ &#39;length^2*mass/time^2&#39;,
+ &#39;mass/length&#39;,
+ &#39;mass&#39;,
+ &#39;substance/length^3&#39;,
+ &#39;/printing_unit&#39;,
+ &#39;length*time/mass&#39;,
+ &#39;current*time/substance&#39;,
+ &#39;length*mass/time&#39;,
+ &#39;length^2*mass/(temperature*time^2)&#39;,
+ &#39;luminosity&#39;,
+ &#39;time/length&#39;,
+ &#39;current*length^2&#39;,
+ &#39;length^2*mass/time&#39;,
+ &#39;current*time^2/(length^2*mass)&#39;,
+ &#39;temperature&#39;,
+ &#39;luminosity/length^2&#39;,
+ &#39;tree&#39;,
+ &#39;mass/(current*time^2)&#39;,
+ &#39;length&#39;,
+ &#39;/(temperature*time)&#39;,
+ &#39;time&#39;,
+ &#39;length^2*mass/(current*time^3)&#39;,
+ &#39;/length&#39;,
+ &#39;current*time/mass&#39;,
+ &#39;length*mass&#39;,
  &#39;float&#39;,
- &#39;rectangle&#39;,
- &#39;_&#39;]</pre>
+ &#39;mass/(length*time^2)&#39;,
+ &#39;length*mass/(current^2*time^2)&#39;,
+ &#39;edge&#39;,
+ &#39;dict&#39;,
+ &#39;current^2*time^4/(length^2*mass)&#39;,
+ &#39;length^2*mass/(current^2*time^2)&#39;,
+ &#39;length*temperature&#39;,
+ &#39;mass/length^1.5&#39;,
+ &#39;printing_unit&#39;,
+ &#39;time^2/length&#39;,
+ &#39;number&#39;,
+ &#39;printing_unit/length&#39;,
+ &#39;length^3/time&#39;,
+ &#39;length^2/time&#39;,
+ &#39;KISAO&#39;,
+ &#39;mass/(length*time)&#39;,
+ &#39;current^2*time^3/(length^2*mass)&#39;,
+ &#39;length^2*mass/(current*time^2)&#39;,
+ &#39;/time&#39;,
+ &#39;length^3&#39;,
+ &#39;mass/time^2&#39;,
+ &#39;length^1.5*mass/time^2&#39;,
+ &#39;current*time&#39;,
+ &#39;current^2*time^4/(length^3*mass)&#39;,
+ &#39;length^2*mass/(substance*temperature*time^2)&#39;,
+ &#39;mass/(temperature^4*time^3)&#39;,
+ &#39;length*mass/(current*time^3)&#39;,
+ &#39;length^2*mass/time^3&#39;,
+ &#39;mass/time^3&#39;,
+ &#39;length^1.5*mass/time&#39;,
+ &#39;length/mass&#39;,
+ &#39;length^2/time^2&#39;,
+ &#39;length^2*mass/(current^2*time^3)&#39;,
+ &#39;any&#39;,
+ &#39;mass/length^3&#39;,
+ &#39;current&#39;,
+ &#39;length^3/(mass*time^2)&#39;,
+ &#39;length^2&#39;,
+ &#39;list&#39;,
+ &#39;int&#39;,
+ &#39;current*length*time&#39;,
+ &#39;maybe&#39;,
+ &#39;substance&#39;,
+ &#39;length/time&#39;,
+ &#39;length*mass/time^2&#39;,
+ &#39;URI&#39;]</pre>
 </div>
 
 </div>
@@ -15381,7 +15447,7 @@ bigraph-viz==0.0.25
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
 <pre>{&#39;_apply&#39;: &#39;accumulate&#39;,
- &#39;_serialize&#39;: &#39;str&#39;,
+ &#39;_serialize&#39;: &#39;to_string&#39;,
  &#39;_description&#39;: &#39;64-bit floating point precision number&#39;,
  &#39;_default&#39;: &#39;0.0&#39;,
  &#39;_deserialize&#39;: &#39;float&#39;,
@@ -15434,7 +15500,7 @@ bigraph-viz==0.0.25
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>{ &#39;wires&#39;: { &#39;_type&#39;: &#39;hash&#39;,
+<pre>{ &#39;wires&#39;: { &#39;_type&#39;: &#39;tree[list[string]]&#39;,
              &#39;_type_parameters&#39;: { &#39;A&#39;: { &#39;_type&#39;: &#39;list&#39;,
                                           &#39;_type_parameters&#39;: { &#39;A&#39;: { &#39;_type&#39;: &#39;string&#39;}}}}}}
 </pre>
@@ -15541,159 +15607,12 @@ bigraph-viz==0.0.25
 </div>
 </div>
 
-</div><div id="cell-id=23880c98-ed1d-49e4-a4ec-7b6a9c85e187" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[9]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">vivarium.core.process</span> <span class="kn">import</span> <span class="n">Process</span>
-
-<span class="k">class</span> <span class="nc">Test</span><span class="p">(</span><span class="n">Process</span><span class="p">):</span>
-    <span class="n">defaults</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">def</span> <span class="nf">__ini__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">ports_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="s1">&#39;port&#39;</span><span class="p">:</span> <span class="s1">&#39;float&#39;</span>
-        <span class="p">}</span>
-    <span class="k">def</span> <span class="nf">next_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sync_step</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="s1">&#39;port&#39;</span><span class="p">:</span> <span class="mf">0.0</span>
-        <span class="p">}</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
-</div><div id="cell-id=db921733-93f9-487f-a4f7-8974e07b6ba7" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">process_state</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;test&#39;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">&#39;_type&#39;</span><span class="p">:</span> <span class="s1">&#39;process&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;process_location&#39;</span><span class="p">:</span> <span class="s1">&#39;???&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;config&#39;</span><span class="p">:</span> <span class="p">{}</span>
-    <span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
-</div><div id="cell-id=4e833b4d-4f46-4019-a1f6-fd78a67a8560" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">temporal_process_schema</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;_super&#39;</span><span class="p">:</span> <span class="s1">&#39;edge&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;process_location&#39;</span><span class="p">:</span> <span class="s1">&#39;URI&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;config&#39;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">&#39;update_method&#39;</span><span class="p">:</span> <span class="s1">&#39;KISAO&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;model_file&#39;</span><span class="p">:</span> <span class="s1">&#39;SBML&#39;</span><span class="p">,</span>
-    <span class="p">},</span>
-    <span class="s1">&#39;sync_step&#39;</span><span class="p">:</span> <span class="s1">&#39;float&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;_ports&#39;</span><span class="p">:</span> <span class="p">{},</span>
-    <span class="s1">&#39;_description&#39;</span><span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
-<span class="p">}</span>
-<span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s1">&#39;temporal_process&#39;</span><span class="p">,</span> <span class="n">temporal_process_schema</span><span class="p">)</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
-</div><div id="cell-id=08f3fa7c-3733-4a79-9ea3-e1f67f7c9e35" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pp</span><span class="p">(</span><span class="n">type_registry</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="s1">&#39;temporal_process&#39;</span><span class="p">))</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-
-
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-    
-    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-
-
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>{ &#39;_description&#39;: &#39;&#39;,
-  &#39;_ports&#39;: {},
-  &#39;_super&#39;: [&#39;edge&#39;],
-  &#39;config&#39;: { &#39;model_file&#39;: { &#39;_apply&#39;: &#39;replace&#39;,
-                              &#39;_default&#39;: &#39;SBML:0000000&#39;,
-                              &#39;_description&#39;: &#39;&#39;,
-                              &#39;_deserialize&#39;: &#39;str&#39;,
-                              &#39;_divide&#39;: &#39;divide_int&#39;,
-                              &#39;_serialize&#39;: &#39;str&#39;,
-                              &#39;_super&#39;: [&#39;string&#39;],
-                              &#39;model_file&#39;: { &#39;_apply&#39;: &#39;replace&#39;,
-                                              &#39;_default&#39;: &#39;&#39;,
-                                              &#39;_description&#39;: &#39;64-bit integer&#39;,
-                                              &#39;_deserialize&#39;: &#39;str&#39;,
-                                              &#39;_divide&#39;: &#39;divide_int&#39;,
-                                              &#39;_serialize&#39;: &#39;str&#39;}},
-              &#39;update_method&#39;: {&#39;_default&#39;: &#39;KISAO:0000000&#39;}},
-  &#39;process_location&#39;: {&#39;_default&#39;: &#39;0-000-00000-0&#39;},
-  &#39;sync_step&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                 &#39;_default&#39;: &#39;0.0&#39;,
-                 &#39;_description&#39;: &#39;64-bit floating point precision number&#39;,
-                 &#39;_deserialize&#39;: &#39;float&#39;,
-                 &#39;_divide&#39;: &#39;divide_float&#39;,
-                 &#39;_serialize&#39;: &#39;str&#39;,
-                 &#39;_super&#39;: [&#39;number&#39;]},
-  &#39;wires&#39;: { &#39;_apply&#39;: &#39;merge&#39;,
-             &#39;_default&#39;: &#39;{}&#39;,
-             &#39;_description&#39;: &#39;mapping from str to some type (or nested dicts)&#39;,
-             &#39;_deserialize&#39;: &#39;eval&#39;,
-             &#39;_divide&#39;: &#39;divide_dict&#39;,
-             &#39;_serialize&#39;: &#39;str&#39;,
-             &#39;_type_parameters&#39;: [&#39;A&#39;]}}
-</pre>
-</div>
-</div>
-
-</div>
-
-</div>
-
 </div><div id="cell-id=ab963a99-e045-4ccf-97c4-b2929941a83e" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[15]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">process_instance</span> <span class="o">=</span> <span class="p">{</span>
@@ -15726,7 +15645,7 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[15]:</div>
 
 
 
@@ -15736,102 +15655,67 @@ bigraph-viz==0.0.25
 <!-- Generated by graphviz version 7.1.0 (20230121.1956)
  -->
 <!-- Title: bigraph Pages: 1 -->
-<svg width="320pt" height="472pt" viewBox="0.00 0.00 329.35 485.06">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 481.06)">
+<svg width="200pt" height="310pt" viewBox="0.00 0.00 206.17 319.36">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 315.36)">
 <title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-481.06 325.35,-481.06 325.35,4 -4,4"></polygon>
+<polygon fill="white" stroke="none" points="-4,4 -4,-315.36 202.17,-315.36 202.17,4 -4,4"></polygon>
 <!-- (&amp;#39;process1&amp;#39;, &amp;#39;process_location&amp;#39;) -->
 <g id="node1" class="node">
 <title>(&#39;process1&#39;, &#39;process_location&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="81.01" cy="-227.21" rx="61.54" ry="61.54"></ellipse>
-<text text-anchor="start" x="41.51" y="-230.61" font-family="Times,serif" font-size="12.00">process_location</text>
-<text text-anchor="start" x="45.01" y="-217.61" font-family="Times,serif" font-size="12.00">0&#45;000&#45;00000&#45;1</text>
-</g>
-<!-- (&amp;#39;process1&amp;#39;, &amp;#39;config&amp;#39;) -->
-<g id="node2" class="node">
-<title>(&#39;process1&#39;, &#39;config&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="185.01" cy="-227.21" rx="24.02" ry="24.02"></ellipse>
-<text text-anchor="start" x="169.51" y="-224.11" font-family="Times,serif" font-size="12.00">config</text>
-</g>
-<!-- (&amp;#39;process1&amp;#39;, &amp;#39;config&amp;#39;, &amp;#39;model&amp;#39;) -->
-<g id="node3" class="node">
-<title>(&#39;process1&#39;, &#39;config&#39;, &#39;model&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="113.01" cy="-64.35" rx="61.54" ry="61.54"></ellipse>
-<text text-anchor="start" x="98.01" y="-67.75" font-family="Times,serif" font-size="12.00">model</text>
-<text text-anchor="start" x="73.51" y="-54.75" font-family="Times,serif" font-size="12.00">SBML:0000000</text>
-</g>
-<!-- (&amp;#39;process1&amp;#39;, &amp;#39;config&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;, &amp;#39;config&amp;#39;, &amp;#39;model&amp;#39;) -->
-<g id="edge1" class="edge">
-<title>(&#39;process1&#39;, &#39;config&#39;)&#45;&gt;(&#39;process1&#39;, &#39;config&#39;, &#39;model&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M175.3,-204.52C165.82,-183.33 150.99,-150.2 138.17,-121.58"></path>
-</g>
-<!-- (&amp;#39;process1&amp;#39;, &amp;#39;config&amp;#39;, &amp;#39;update_method&amp;#39;) -->
-<g id="node4" class="node">
-<title>(&#39;process1&#39;, &#39;config&#39;, &#39;update_method&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="257.01" cy="-64.35" rx="64.19" ry="64.19"></ellipse>
-<text text-anchor="start" x="220.51" y="-67.75" font-family="Times,serif" font-size="12.00">update_method</text>
-<text text-anchor="start" x="215.51" y="-54.75" font-family="Times,serif" font-size="12.00">KISAO:0000019</text>
-</g>
-<!-- (&amp;#39;process1&amp;#39;, &amp;#39;config&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;, &amp;#39;config&amp;#39;, &amp;#39;update_method&amp;#39;) -->
-<g id="edge2" class="edge">
-<title>(&#39;process1&#39;, &#39;config&#39;)&#45;&gt;(&#39;process1&#39;, &#39;config&#39;, &#39;update_method&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M194.72,-204.52C203.97,-183.85 218.31,-151.8 230.9,-123.67"></path>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="93.01" cy="-61.52" rx="61.54" ry="61.54"></ellipse>
+<text text-anchor="start" x="53.51" y="-64.92" font-family="Times,serif" font-size="12.00">process_location</text>
+<text text-anchor="start" x="57.01" y="-51.92" font-family="Times,serif" font-size="12.00">0&#45;000&#45;00000&#45;1</text>
 </g>
 <!-- (&amp;#39;process1&amp;#39;,) -->
-<g id="node5" class="node">
+<g id="node2" class="node">
 <title>(&#39;process1&#39;,)</title>
-<polygon fill="none" stroke="black" stroke-width="2" points="120.01,-365.73 66.01,-365.73 66.01,-329.73 120.01,-329.73 120.01,-365.73"></polygon>
-<polygon fill="none" stroke="black" stroke-width="2" points="124.01,-369.73 62.01,-369.73 62.01,-325.73 124.01,-325.73 124.01,-369.73"></polygon>
-<text text-anchor="start" x="72.01" y="-344.63" font-family="Times,serif" font-size="12.00">process1</text>
+<polygon fill="none" stroke="black" stroke-width="2" points="120.01,-200.04 66.01,-200.04 66.01,-164.04 120.01,-164.04 120.01,-200.04"></polygon>
+<polygon fill="none" stroke="black" stroke-width="2" points="124.01,-204.04 62.01,-204.04 62.01,-160.04 124.01,-160.04 124.01,-204.04"></polygon>
+<text text-anchor="start" x="72.01" y="-178.94" font-family="Times,serif" font-size="12.00">process1</text>
 </g>
 <!-- (&amp;#39;process1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;, &amp;#39;process_location&amp;#39;) -->
-<g id="edge3" class="edge">
+<g id="edge1" class="edge">
 <title>(&#39;process1&#39;,)&#45;&gt;(&#39;process1&#39;, &#39;process_location&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M90.81,-324.99C89.78,-314.83 88.5,-302.18 87.2,-289.4"></path>
-</g>
-<!-- (&amp;#39;process1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;, &amp;#39;config&amp;#39;) -->
-<g id="edge4" class="edge">
-<title>(&#39;process1&#39;,)&#45;&gt;(&#39;process1&#39;, &#39;config&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M118.52,-324.78C129.59,-314.5 142.23,-301.68 152.01,-288.73 161.09,-276.7 169.23,-261.85 175.15,-249.87"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M93.01,-159.3C93.01,-149.21 93.01,-136.65 93.01,-123.96"></path>
 </g>
 <!-- (&amp;#39;counts&amp;#39;,) -->
-<g id="node6" class="node">
+<g id="node3" class="node">
 <title>(&#39;counts&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="24.01" cy="-446.89" rx="24.02" ry="24.02"></ellipse>
-<text text-anchor="start" x="8.51" y="-443.79" font-family="Times,serif" font-size="12.00">counts</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="24.01" cy="-281.2" rx="24.02" ry="24.02"></ellipse>
+<text text-anchor="start" x="8.51" y="-278.1" font-family="Times,serif" font-size="12.00">counts</text>
 </g>
 <!-- (&amp;#39;counts&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;,) -->
-<g id="edge5" class="edge">
+<g id="edge2" class="edge">
 <title>(&#39;counts&#39;,)&#45;&gt;(&#39;process1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M36.26,-425.31C43.21,-414 52.23,-399.85 61.01,-387.73 64.22,-383.3 67.77,-378.7 71.3,-374.29"></path>
-<ellipse fill="black" stroke="black" cx="72.69" cy="-372.58" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="61.01" y="-390.73" font-family="Times,serif" font-size="10.00">counts</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M36.26,-259.61C43.21,-248.3 52.23,-234.15 61.01,-222.04 64.22,-217.6 67.77,-213.01 71.3,-208.6"></path>
+<ellipse fill="black" stroke="black" cx="72.69" cy="-206.89" rx="2" ry="2"></ellipse>
+<text text-anchor="start" x="61.01" y="-225.04" font-family="Times,serif" font-size="10.00">counts</text>
 </g>
 <!-- (&amp;#39;volume&amp;#39;,) -->
-<g id="node7" class="node">
+<g id="node4" class="node">
 <title>(&#39;volume&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="93.01" cy="-446.89" rx="27.17" ry="27.17"></ellipse>
-<text text-anchor="start" x="75.01" y="-443.79" font-family="Times,serif" font-size="12.00">volume</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="93.01" cy="-281.2" rx="27.17" ry="27.17"></ellipse>
+<text text-anchor="start" x="75.01" y="-278.1" font-family="Times,serif" font-size="12.00">volume</text>
 </g>
 <!-- (&amp;#39;volume&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;,) -->
-<g id="edge6" class="edge">
+<g id="edge3" class="edge">
 <title>(&#39;volume&#39;,)&#45;&gt;(&#39;process1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M93.01,-418.83C93.01,-405.23 93.01,-388.8 93.01,-375.27"></path>
-<ellipse fill="black" stroke="black" cx="93.01" cy="-372.93" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="93.01" y="-390.73" font-family="Times,serif" font-size="10.00">volume</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M93.01,-253.13C93.01,-239.53 93.01,-223.11 93.01,-209.58"></path>
+<ellipse fill="black" stroke="black" cx="93.01" cy="-207.24" rx="2" ry="2"></ellipse>
+<text text-anchor="start" x="93.01" y="-225.04" font-family="Times,serif" font-size="10.00">volume</text>
 </g>
 <!-- (&amp;#39;affinities&amp;#39;,) -->
-<g id="node8" class="node">
+<g id="node5" class="node">
 <title>(&#39;affinities&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="168.01" cy="-446.89" rx="30.33" ry="30.33"></ellipse>
-<text text-anchor="start" x="147.51" y="-443.79" font-family="Times,serif" font-size="12.00">affinities</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="168.01" cy="-281.2" rx="30.33" ry="30.33"></ellipse>
+<text text-anchor="start" x="147.51" y="-278.1" font-family="Times,serif" font-size="12.00">affinities</text>
 </g>
 <!-- (&amp;#39;affinities&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;,) -->
-<g id="edge7" class="edge">
+<g id="edge4" class="edge">
 <title>(&#39;affinities&#39;,)&#45;&gt;(&#39;process1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M151.57,-420.48C144.59,-410.11 136.2,-398.13 128.01,-387.73 124.49,-383.26 120.6,-378.65 116.74,-374.23"></path>
-<ellipse fill="black" stroke="black" cx="115.16" cy="-372.45" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="136.01" y="-390.73" font-family="Times,serif" font-size="10.00">affinities</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M151.57,-254.79C144.59,-244.41 136.2,-232.44 128.01,-222.04 124.49,-217.57 120.6,-212.96 116.74,-208.54"></path>
+<ellipse fill="black" stroke="black" cx="115.16" cy="-206.76" rx="2" ry="2"></ellipse>
+<text text-anchor="start" x="136.01" y="-225.04" font-family="Times,serif" font-size="10.00">affinities</text>
 </g>
 </g>
 </svg>
@@ -15861,7 +15745,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[15]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[10]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">bigraph_state</span> <span class="o">=</span> <span class="p">{</span>
@@ -15887,7 +15771,7 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[15]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[10]:</div>
 
 
 
@@ -15968,7 +15852,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[16]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">dual_process_schema</span> <span class="o">=</span> <span class="p">{</span>
@@ -16041,7 +15925,7 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[16]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[11]:</div>
 
 
 
@@ -16063,7 +15947,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[17]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;schema:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
@@ -16123,7 +16007,7 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[18]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">)</span>
@@ -16142,7 +16026,7 @@ filled instance:
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[18]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[13]:</div>
 
 
 
