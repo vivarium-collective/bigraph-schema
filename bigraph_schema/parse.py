@@ -3,20 +3,32 @@ from parsimonious.nodes import NodeVisitor
 
 
 parameter_examples = {
-    'no-parameters': 'simple',
-    'typed': 'edge[a:int|b.(x:length|y:float)]',
-    'one-parameter': 'parameterized[A]',
-    'three-parameters': 'parameterized[A,B,C]',
-    'nested-parameters': 'nested[outer[inner]]',
-    'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
+    # 'no-parameters': 'simple',
+    'typed': 'a:int|b.(x:length|y:float)',
+    'typed_parameters': 'edge[a:int|b.(x:length|y:float)]',
+    # 'one-parameter': 'parameterized[A]',
+    # 'three-parameters': 'parameterized[A,B,C]',
+    # 'nested-parameters': 'nested[outer[inner]]',
+    # 'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
 }
 
 
 parameter_grammar = Grammar(
     """
-    qualified_type = type_name parameter_list? comma?
+    qualified_type = expression parameter_list? comma?
     parameter_list = square_left qualified_type+ square_right
-    type_name = ~r"[\w\d-_|/()*&^%$#@!~`+.:]+"
+    expression = group / merge / bigraph
+    merge = bigraph (bar bigraph)+
+    bigraph = group / nest / control
+    group = paren_left expression paren_right
+    nest = control (dot bigraph)+
+    control = symbol (colon qualified_type)?
+    symbol = ~r"[\w\d-_/*&^%$#@!~`+]+"
+    dot = "."
+    colon = ":"
+    bar = "|"
+    paren_left = "("
+    paren_right = ")"
     square_left = "["
     square_right = "]"
     comma = ","
@@ -38,7 +50,28 @@ class ParameterVisitor(NodeVisitor):
     def visit_parameter_list(self, node, visit):
         return visit[1]['visit']
 
-    def visit_type_name(self, node, visit):
+    def visit_expression(self, node, visit):
+        import ipdb; ipdb.set_trace()
+        return visit[0]
+
+    def visit_merge(self, node, visit):
+        import ipdb; ipdb.set_trace()
+
+    def visit_bigraph(self, node, visit):
+        import ipdb; ipdb.set_trace()
+        return visit[0]
+
+    def visit_group(self, node, visit):
+        import ipdb; ipdb.set_trace()
+
+    def visit_nest(self, node, visit):
+        import ipdb; ipdb.set_trace()
+
+    def visit_control(self, node, visit):
+        import ipdb; ipdb.set_trace()
+        return visit[0]
+
+    def visit_symbol(self, node, visit):
         return node.text
 
     def generic_visit(self, node, visit):
