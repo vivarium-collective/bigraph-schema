@@ -73,8 +73,6 @@ def test_units_render():
     recover = parse_dimensionality(render)
     assert recover == dimensionality
 
-    import ipdb; ipdb.set_trace()
-
 
 if __name__ == '__main__':
     test_units_render()

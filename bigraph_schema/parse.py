@@ -1,10 +1,10 @@
-import fire
 from parsimonious.grammar import Grammar
 from parsimonious.nodes import NodeVisitor
 
 
-examples = {
+parameter_examples = {
     'no-parameters': 'simple',
+    'typed': 'edge[a:int|b.(x:length|y:float)]',
     'one-parameter': 'parameterized[A]',
     'three-parameters': 'parameterized[A,B,C]',
     'nested-parameters': 'nested[outer[inner]]',
@@ -16,7 +16,7 @@ parameter_grammar = Grammar(
     """
     qualified_type = type_name parameter_list? comma?
     parameter_list = square_left qualified_type+ square_right
-    type_name = ~r"[\w\d-_|/()*&^%$#@!~`+.]+"
+    type_name = ~r"[\w\d-_|/()*&^%$#@!~`+.:]+"
     square_left = "["
     square_right = "]"
     comma = ","
@@ -72,7 +72,7 @@ def render_type_parameters(type_parameters):
 
 
 def test_parse_parameters():
-    for key, example in examples.items():
+    for key, example in parameter_examples.items():
         types = parse_type_parameters(example)
 
         print(f'{key}: {example}')
@@ -82,4 +82,5 @@ def test_parse_parameters():
 
 
 if __name__ == '__main__':
-    fire.Fire(test_parse_parameters)
+    test_parse_parameters()
+

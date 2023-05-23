@@ -7,6 +7,7 @@ from typing import Any
 from bigraph_schema.parse import parse_type_parameters
 from bigraph_schema.units import units, render_units_type
 
+
 NONE_SYMBOL = ''
 
 required_schema_keys = (
@@ -105,6 +106,47 @@ def deep_merge(dct, merge_dct):
     return dct
 
 
+def get_path(tree, path):
+    if len(path) == 0:
+        return tree
+    else:
+        head = path[0]
+        if head not in tree:
+            return None
+        else:
+            return get_path(tree[head], path[1:])
+
+
+def establish_path(tree, path, top=None, cursor=()):
+    if top is None:
+        top = tree
+    if path is None or path == ():
+        return tree
+    elif len(path) == 0:
+        return tree
+    else:
+        if isinstance(path, str):
+            path = (path,)
+
+        head = path[0]
+        if head == '..':
+            if cursor == ():
+                raise Exception(
+                    f'trying to travel above the top of the tree: {path}')
+            else:
+                return establish_path(
+                    top,
+                    cursor[:-1])
+        else:
+            if head not in tree:
+                tree[head] = {}
+            return establish_path(
+                tree[head],
+                path[1:],
+                top=top,
+                cursor=cursor + (head,))
+
+
 class Registry(object):
     def __init__(self):
         """A Registry holds a collection of functions or objects."""
@@ -152,7 +194,6 @@ class Registry(object):
 
 
 class TypeRegistry(Registry):
-
     def __init__(self):
         super().__init__()
 
@@ -187,23 +228,29 @@ class TypeRegistry(Registry):
         outer_type = self.registry.get(type_name)
 
         if outer_type is None:
+            # try:
+            #     # import ipdb; ipdb.set_trace()
+            #     # TODO: parse nested types
+            #     # big = bigraph(type_name)
+            # except:
+                # import ipdb; ipdb.set_trace()
             raise ValueError(f'type {qualified_type} is looking for type {type_name} but that is not in the registry')
 
-        parameters = {}
+        type_parameters = {}
         if '_type_parameters' in outer_type:
             parameter_names = outer_type['_type_parameters']
-            resolved = [
-                self.resolve_parameters(parameter_type)
-                for parameter_type in parameter_types
-            ]
-            parameters = dict(zip(parameter_names, resolved))
+            type_parameters = {
+                parameter_name: self.resolve_parameters(parameter_type)
+                for parameter_name, parameter_type in zip(
+                    parameter_names,
+                    parameter_types)}
 
         result = {
             '_type': type_name,
         }
 
-        if parameters:
-            result['_type_parameters'] = parameters
+        if type_parameters:
+            result['_type_parameters'] = type_parameters
 
         return result
 
@@ -236,37 +283,6 @@ class TypeRegistry(Registry):
         return self.expand_schema(duplicate)
 
 
-    def generate_default(self, schema):
-        default = None
-
-        if isinstance(schema, str):
-            schema = self.access(schema)
-        elif '_type' in schema:
-            schema = self.substitute_type(schema)
-
-        if '_default' in schema:
-            if not '_deserialize' in schema:
-                raise Exception(
-                    f'asking for default for {type_key} but no deserialize in {schema}')
-            deserialize = deserialize_registry.access(
-                schema['_deserialize'])
-            default = deserialize(
-                schema['_default'],
-                schema.get('_type_parameters'))
-        else:
-            default = {}
-            for key, subschema in schema.items():
-                if key not in type_schema_keys:
-                    default[key] = self.generate_default(subschema)
-
-        return default
-        
-
-    def generate_default_type(self, type_key):
-        schema = self.access(type_key)
-        return self.generate_default(schema)
-
-
     def access(self, key):
         """Get an item by key from the registry."""
         typ = self.registry.get(key)
@@ -277,6 +293,7 @@ class TypeRegistry(Registry):
                 if parse[0] in self.registry:
                     typ = self.resolve_parameters(parse)
             except Exception as e:
+                # import ipdb; ipdb.set_trace()
                 print(f'type did not parse: {key}')
 
         return typ
@@ -308,532 +325,14 @@ class RegistryRegistry(Registry):
             return attribute_registry.access(attribute_key)
 
 
-apply_registry = Registry()
-serialize_registry = Registry()
-deserialize_registry = Registry()
-divide_registry = Registry()
-type_registry = TypeRegistry()
-
-registry_registry = RegistryRegistry()
-registry_registry.register('_type', type_registry)
-registry_registry.register('_apply', apply_registry)
-registry_registry.register('_divide', divide_registry)
-registry_registry.register('_serialize', serialize_registry)
-registry_registry.register('_deserialize', deserialize_registry)
-
-
-def apply_update(schema, state, update):
-    # expects an expanded schema
-
-    if '_apply' in schema:
-        apply_function = apply_registry.access(schema['_apply'])
-        # TODO: make all apply/serialize/deserialize/divide functions
-        #   take the same number of arguments
-        state = apply_function(state, update, schema.get('_type_parameters'))
-    elif isinstance(update, dict):
-        for key, branch in update.items():
-            if key not in schema:
-                raise Exception(f'trying to update a key that is not in the schema {key} for state:\n{state}\nwith schema:\n{schema}')
-            else:
-                subupdate = apply_update(
-                    schema[key],
-                    state[key],
-                    branch
-                )
-
-                state[key] = subupdate
-    else:
-        schema = type_registry.expand_schema(schema)
-        state = apply_update(schema, state, update)
-
-    return state
-
-
-# TODO: provide an expanded form of the type registry, where everything
-#   is already pre-expanded
-def apply(schema, initial, update):
-    expanded = type_registry.expand(schema)
-    state = copy.deepcopy(initial)
-    return apply_update(expanded, initial, update)
-
-
-def accumulate(current, update, _):
-    return current + update
-
-def concatenate(current, update, _):
-    return current + update
-
-def divide_float(value, _):
-    half = value / 2.0
-    return (half, half)
-
-# support function types for registrys?
-# def divide_int(value: int, _) -> tuple[int, int]:
-def divide_int(value, _):
-    half = value // 2
-    other_half = half
-    if value % 2 == 1:
-        other_half += 1
-    return half, other_half
-
-
-# class DivideRegistry(Registry):
-    
-
-# def divide_longest(dimensions: Dimension) -> Tuple[Dimension, Dimension]:
-def divide_longest(dimensions, _):
-    # any way to declare the required keys for this function in the registry?
-    # find a way to ask a function what type its domain and codomain are
-
-    width = dimensions['width']
-    height = dimensions['height']
-    
-    if width > height:
-        a, b = divide_int(width)
-        return [{'width': a, 'height': height}, {'width': b, 'height': height}]
-    else:
-        x, y = divide_int(height)
-        return [{'width': width, 'height': x}, {'width': width, 'height': y}]
-
-
-def divide_list(l, parameters):
-    result = [[], []]
-    divide_type = parameters[0]
-    divide = registry_registry.type_attribute(divide_type, '_divide')
-
-    for item in l:
-        if isinstance(item, list):
-            divisions = divide_list(item)
-        else:
-            divisions = divide(item)
-
-        result[0].append(divisions[0])
-        result[1].append(divisions[1])
-
-    return result
-
-
-def divide_dict(d, parameters):
-    result = [{}, {}]
-    # get the type of the values for this dict
-    divide_type = parameters[0]
-    divide = registry_registry.type_attribute(divide_type, '_divide')
-
-    for key, value in d:
-        if isinstance(value, dict):
-            divisions = divide_dict(value)
-        else:
-            divisions = divide(value)
-
-        result[0][key], result[1][key] = divisions
-
-    return result
-
-
-def replace(old_value, new_value, _):
-    return new_value
-
-
-def serialize_string(s, _):
-    return f'"{s}"'
-
-def deserialize_string(s, _):
-    if s[0] != '"' or s[-1] != '"':
-        raise Exception(f'deserializing str which requires double quotes: {s}')
-    return s[1:-1]
-
-def to_string(value, _):
-    return str(value)
-
-def deserialize_int(i, _):
-    return int(i)
-
-def deserialize_float(i, _):
-    return float(i)
-
-def evaluate(code, _):
-    return eval(code)
-
-
-def apply_tree(current, update, type_parameters):
-    pass
-
-def apply_dict(current, update, type_parameters):
-    pass
-
-# TODO: make these work
-def serialize_dict(value, type_parameters):
-    return value
-
-
-def deserialize_dict(value, type_parameters):
-    return value
-
-
-def maybe_apply(current, update, type_parameters):
-    if current is None or update is None:
-        return update
-    else:
-        maybe_type = type_registry.access(type_parameters[0])
-        return apply_update(maybe_type, current, update)
-
-
-def maybe_divide(value, type_parameters):
-    if value is None:
-        return [None, None]
-    else:
-        pass
-
-
-def maybe_serialize(value, type_parameters):
-    if value is None:
-        return NONE_SYMBOL
-    else:
-        maybe_type = type_registry.access(type_parameters[0])
-        return serialize(maybe_type, value)
-
-
-def maybe_deserialize(encoded, type_parameters):
-    if encoded == NONE_SYMBOL:
-        return None
-    else:
-        maybe_type = type_registry.access(type_parameters[0])
-        return deserialize(maybe_type, encoded)
-
-
-# TODO: implement these
-def units_apply(current, update, type_parameters):
-    return current + update
-
-
-def units_serialize(value, type_parameters):
-    return str(value)
-
-
-def units_deserialize(encoded, type_parameters):
-    return units(encoded)
-
-
-def units_divide(value, type_parameters):
-    if value is None:
-        return [None, None]
-    else:
-        pass
-
-
-def register_units(units):
-    for unit_name in units._units:
-        try:
-            unit = getattr(units, unit_name)
-        except:
-            # print(f'no unit named {unit_name}')
-            continue
-
-        dimensionality = unit.dimensionality
-        type_key = render_units_type(dimensionality)
-        if type_registry.access(type_key) is None:
-            type_registry.register(type_key, {
-                '_default': '',
-                '_apply': 'units_apply',
-                '_serialize': 'units_serialize',
-                '_deserialize': 'units_deserialize',
-                '_divide': 'units_divide',
-                '_description': 'type to represent values with scientific units'})
-
-
-# validate the function registered is of the right type?
-apply_registry.register('accumulate', accumulate)
-apply_registry.register('concatenate', concatenate)
-apply_registry.register('replace', replace)
-apply_registry.register('apply_tree', apply_tree)
-apply_registry.register('apply_dict', apply_dict)
-apply_registry.register('maybe_apply', maybe_apply)
-apply_registry.register('units_apply', units_apply)
-
-divide_registry.register('divide_float', divide_float)
-divide_registry.register('divide_int', divide_int)
-divide_registry.register('divide_longest', divide_longest)
-divide_registry.register('divide_list', divide_list)
-divide_registry.register('divide_dict', divide_dict)
-divide_registry.register('maybe_divide', maybe_divide)
-divide_registry.register('units_divide', units_divide)
-
-serialize_registry.register('serialize_string', serialize_string)
-serialize_registry.register('to_string', to_string)
-serialize_registry.register('serialize_dict', serialize_dict)
-serialize_registry.register('maybe_serialize', maybe_serialize)
-serialize_registry.register('units_serialize', units_serialize)
-
-deserialize_registry.register('float', deserialize_float)
-deserialize_registry.register('int', deserialize_int)
-deserialize_registry.register('deserialize_string', deserialize_string)
-deserialize_registry.register('evaluate', evaluate)
-deserialize_registry.register('deserialize_dict', deserialize_dict)
-deserialize_registry.register('maybe_deserialize', maybe_deserialize)
-deserialize_registry.register('units_deserialize', units_deserialize)
-
-# if super type is re-registered, propagate changes to subtypes (?)
-
-# remove shape types
-type_library = {
-    # abstract number type
-    'number': {
-        '_apply': 'accumulate',
-        '_serialize': 'to_string',
-        '_description': 'abstract base type for numbers',
-    },
-
-    'int': {
-        '_default': '0',
-        # inherit _apply and _serialize from number type
-        '_deserialize': 'int',
-        '_divide': 'divide_int',
-        '_description': '64-bit integer',
-        '_super': 'number',
-    },
-
-    'float': {
-        '_default': '0.0',
-        '_deserialize': 'float',
-        '_divide': 'divide_float',
-        '_description': '64-bit floating point precision number',
-        '_super': 'number',
-    }, 
-
-    'string': {
-        '_default': '""',
-        '_apply': 'replace',
-        '_serialize': 'serialize_string',
-        '_deserialize': 'deserialize_string',
-        '_divide': 'divide_int',
-        '_description': '64-bit integer'
-    },
-
-    'list': {
-        '_default': '[]',
-        '_apply': 'concatenate',
-        '_serialize': 'to_string',
-        '_deserialize': 'evaluate',
-        '_divide': 'divide_list',
-        '_type_parameters': ['A'],
-        '_description': 'general list type (or sublists)'
-    },
-
-    'tree': {
-        '_default': '{}',
-        '_apply': 'apply_tree',
-        '_serialize': 'to_string',
-        '_deserialize': 'evaluate',
-        '_divide': 'divide_dict',
-        '_type_parameters': ['A'],
-        '_description': 'mapping from str to some type (or nested dicts)'
-    },
-
-    'dict': {
-        '_default': '{}',
-        '_apply': 'apply_dict',
-        '_serialize': 'serialize_dict',
-        '_deserialize': 'deserialize_dict',
-        '_divide': 'divide_dict',
-        '_type_parameters': ['key', 'value'],
-        '_description': 'mapping from keys of any type to values of any type'
-    },
-
-    'maybe': {
-        '_default': 'None',
-        '_apply': 'maybe_apply',
-        '_serialize': 'maybe_serialize',
-        '_deserialize': 'maybe_deserialize',
-        '_divide': 'maybe_divide',
-        '_type_parameters': ['value'],
-        '_description': 'type to represent values that could be empty'
-    },
-
-    'edge': {
-        'wires': {
-            '_type': 'tree[list[string]]'
-        },
-    },
-
-    # 'units': {
-    #     '_default': '',
-    #     '_apply': 'units_apply',
-    #     '_serialize': 'units_serialize',
-    #     '_deserialize': 'units_deserialize',
-    #     '_divide': 'units_divide',
-    #     '_type_parameters': ['dimensionality'],
-    #     '_description': 'type to represent values with scientific units'
-    # },
-
-    # 'process': {
-    #     'process': {'_type': 'process instance'},
-    #     'config': {'_type': 'dict'},
-    #     '_super': 'edge',
-    # },
-}
-
-
-type_registry.register_multiple(type_library)
-register_units(units)
-
-
-def schema_zoo():
-    mitochondria_schema = {
-        'mitochondria': {
-            'volume': {'_type': 'float'},
-            'membrane': {
-                'surface_proteins': {'_type': 'branch[protein]'},
-                'potential': {'_type': 'microvolts'}},
-            'mass': {'_type': 'membrane?'},
-        }
-    }
-
-    cytoplasm_schema = {
-        'cytoplasm': {
-            'mitochondria': {'_type': 'branch[mitochondria]'},
-            'proteins': {'_type': 'branch[mitochondria]'},
-            'nucleus': {'_type': 'branch[mitochondria]'},
-            'transcripts': {'_type': 'branch[mitochondria]'},
-        }
-    }
-
-    cell_schema = {
-        'cell': {
-            'shape': {'_type': 'mesh'},
-            'volume': {'_type': 'mL'},
-            'temperature': {'_type': 'K'},
-        }
-    }
-
-    cell_composite = {
-        'environment': {
-            'outer_shape': {
-                '_type': 'mesh', '_value': []},
-            'cellA': {
-                'cytoplasm': {
-                    'external_ions': {'_type': 'ions'},
-                    'internal_ions': {'_type': 'ions'},
-                    'other_ions': {'_type': {
-                        '_default': 0.0,
-                        '_apply': accumulate,
-                        '_serialize': str,
-                        '_deserialize': float,
-                        '_divide': divide_float,
-                        '_description': '64-bit floating point precision number'
-                    }},
-                    'electron_transport': {
-                        '_type': 'process',
-                        '_value': 'ElectronTransport',
-                        '_ports': {
-                            'external_ions': 'ions',
-                            'internal_ions': 'ions'},
-                        '_wires': {
-                            'external_ions': ['..', 'external_ions'],
-                            'internal_ions': ['..', 'internal_ions']}
-                        }
-                    },
-                'inner_shape': {'_type': 'mesh', '_value': []},
-                '_ports': {
-                    'shape': 'mesh',
-                    'volume': 'mL',
-                    'temperature': 'K'
-                },
-                '_channel': {
-                    'shape': ['inner_shape'],
-                },
-                '_wires': {
-                    'shape': ['..', 'outer_shape']
-                }
-            }
-        }
-    }
-
-    compose({
-        'cell': {
-            'membrane': cell_schema,
-            'cytoplasm': cytoplasm_schema
-        }
-    }, {
-        
-    })
-
-
-def test_cube():
-    cube_schema = {
-        'shape': {},
-        
-        'rectangle': {
-            'width': {'_type': 'int'},
-            'height': {'_type': 'int'},
-            '_divide': 'divide_longest',
-            '_description': 'a two-dimensional value',
-            '_super': 'shape',
-        },
-        
-        # cannot override existing keys unless it is of a subtype
-        'cube': {
-            'depth': {'_type': 'int'},
-            '_super': 'rectangle',
-        },
-    }
-
-    type_registry.register_multiple(cube_schema)
-
-
-def test_generate_default():
-    int_default = type_registry.generate_default(
-        {'_type': 'int'}
-    )
-    assert int_default == 0
-
-    cube_default = type_registry.generate_default(
-        {'_type': 'cube'})
-
-    assert 'width' in cube_default
-    assert 'height' in cube_default
-    assert 'depth' in cube_default
-
-
-def test_expand_schema():
-    schema = {'_type': 'cube'}
-    expanded = type_registry.expand(schema)
-
-    assert len(schema) == 1
-    assert 'height' in expanded
-
-
 def test_reregister_type():
+    type_registry = TypeRegistry()
+    type_registry.register('A', {'_default': 'a'})
     with pytest.raises(Exception) as e:
-        type_registry.register('int', type_library['string'])
+        type_registry.register('A', {'_default': 'b'})
 
-    type_registry.register('int', type_library['string'], force=True)
-    type_registry.register('int', type_library['int'], force=True)
-
-
-def test_apply_update():
-    schema = {'_type': 'cube'}
-    state = {
-        'width': 11,
-        'height': 13,
-        'depth': 44,
-    }
-    update = {
-        'depth': -5
-    }
-
-    new_state = apply(
-        schema,
-        state,
-        update
-    )
-
-    assert new_state['width'] == 11
-    assert new_state['depth'] == 39
+    type_registry.register('A', {'_default': 'b'}, force=True)
 
 
 if __name__ == '__main__':
-    test_cube()
-    test_generate_default()
-    test_expand_schema()
     test_reregister_type()
-    test_apply_update()
