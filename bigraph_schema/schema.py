@@ -20,6 +20,8 @@ class SchemaTypes():
         self.registry_registry.register('_serialize', self.serialize_registry)
         self.registry_registry.register('_deserialize', self.deserialize_registry)
 
+        register_base_types(self)
+
 
     def validate_schema(self, schema, enforce_connections=False):
         # add ports and wires
@@ -70,6 +72,7 @@ class SchemaTypes():
         return report
 
 
+    # TODO: if its an edge, ensure ports match wires
     def validate_state(self, schema, state):
         schema = self.type_registry.substitute_type(schema)
         validation = {}
@@ -177,7 +180,7 @@ class SchemaTypes():
 
     def serialize(self, schema, state):
         if isinstance(schema, str):
-            serialize_function = serialize_registery.access(schema)
+            serialize_function = self.serialize_registery.access(schema)
             if serialize_function is None:
                 raise Exception(f'serialization function not in the registry')
             else:
@@ -590,6 +593,10 @@ base_type_library = {
         '_type_parameters': ['key', 'value'],
         '_description': 'mapping from keys of any type to values of any type'},
 
+    # TODO: add native numpy array type
+    'array': {
+        '_type_parameters': ['shape', 'element']},
+
     'maybe': {
         '_default': 'None',
         '_apply': 'apply_maybe',
@@ -600,6 +607,7 @@ base_type_library = {
         '_description': 'type to represent values that could be empty'},
 
     'edge': {
+        # TODO: do we need to have defaults informed by type parameters?
         '_default': '{"wires": {}}',
         '_apply': 'apply_edge',
         '_serialize': 'serialize_edge',
@@ -611,8 +619,7 @@ base_type_library = {
             '_type': 'tree[list[string]]'}}}
 
 
-def generate_base_types():
-    types = SchemaTypes()
+def register_base_types(types):
 
     # validate the function registered is of the right type?
     types.apply_registry.register('accumulate', accumulate)
@@ -739,10 +746,7 @@ def schema_zoo():
     })
 
 
-types = generate_base_types()
-
-
-def test_cube():
+def test_cube(types):
     cube_schema = {
         'shape': {},
         
@@ -765,7 +769,7 @@ def test_cube():
         cube_schema)
 
 
-def test_generate_default():
+def test_generate_default(types):
     int_default = types.generate_default(
         {'_type': 'int'}
     )
@@ -779,7 +783,7 @@ def test_generate_default():
     assert 'depth' in cube_default
 
 
-def test_expand_schema():
+def test_expand_schema(types):
     schema = {'_type': 'cube'}
     expanded = types.type_registry.expand(schema)
 
@@ -787,7 +791,7 @@ def test_expand_schema():
     assert 'height' in expanded
 
 
-def test_apply_update():
+def test_apply_update(types):
     schema = {'_type': 'cube'}
     state = {
         'width': 11,
@@ -827,7 +831,7 @@ def print_schema_validation(types, library, should_pass):
                 raise Exception(f'FAIL: {message}\n{declaration}\n{report}')
 
 
-def test_validate_schema():
+def test_validate_schema(types):
     # good schemas
     print_schema_validation(types, base_type_library, True)
 
@@ -870,7 +874,7 @@ def test_validate_schema():
     print_schema_validation(types, bad, False)
 
 
-def test_fill_int():
+def test_fill_int(types):
     test_schema = {
         '_type': 'int'
     }
@@ -880,7 +884,7 @@ def test_fill_int():
     assert full_state == 0
 
 
-def test_fill_cube():
+def test_fill_cube(types):
     test_schema = {
         '_type': 'cube'
     }
@@ -900,7 +904,7 @@ def test_fill_cube():
     assert full_state['depth'] == 0
 
 
-def test_fill_in_missing_nodes():
+def test_fill_in_missing_nodes(types):
     test_schema = {
         'edge 1': {
             # this could become a process_edge type
@@ -933,7 +937,7 @@ def test_fill_in_missing_nodes():
         }
     }
 
-def test_fill_in_disconnected_port():
+def test_fill_in_disconnected_port(types):
     test_schema = {
         'edge1': {
             '_type': 'edge',
@@ -946,7 +950,7 @@ def test_fill_in_disconnected_port():
     test_state = {}
 
 
-def test_fill_type_mismatch():
+def test_fill_type_mismatch(types):
     test_schema = {
         'a': {'_type': 'int', '_value': 2},
         'edge1': {
@@ -964,7 +968,7 @@ def test_fill_type_mismatch():
     }
 
 
-def test_edge_type_mismatch():
+def test_edge_type_mismatch(types):
     test_schema = {
         'edge1': {
             '_type': 'edge',
@@ -987,7 +991,7 @@ def test_edge_type_mismatch():
     }
 
 
-def test_fill_nested_store():
+def test_fill_nested_store(types):
     test_schema = {
         'edge1': {
             '_type': 'edge',
@@ -1001,7 +1005,7 @@ def test_fill_nested_store():
     }    
 
 
-def test_establish_path():
+def test_establish_path(types):
     tree = {}
     destination = establish_path(
         tree,
@@ -1020,7 +1024,7 @@ def test_establish_path():
     assert tree['some']['where']['deep']['inside']['lives']['a']['tiny']['creature']['made']['of']['light'] == destination
 
 
-def test_expected_schema():
+def test_expected_schema(types):
     # equivalent to previous schema:
 
     # expected = {
@@ -1139,7 +1143,7 @@ def test_expected_schema():
     }
 
 
-def test_link_place():
+def test_link_place(types):
     bigraph = {
         'nodes': {
             'v0': {
@@ -1251,7 +1255,7 @@ def test_link_place():
     # assert result == merged
 
 
-def test_units():
+def test_units(types):
     schema_length = {
         'distance': {'_type': 'length'}}
 
@@ -1268,15 +1272,17 @@ def test_units():
 
 
 if __name__ == '__main__':
-    test_cube()
-    test_generate_default()
-    test_expand_schema()
-    test_apply_update()
-    test_validate_schema()
-    test_fill_int()
-    test_fill_cube()
-    test_establish_path()
-    test_fill_in_missing_nodes()
-    test_expected_schema()
-    test_units()
+    types = SchemaTypes()
+
+    test_cube(types)
+    test_generate_default(types)
+    test_expand_schema(types)
+    test_apply_update(types)
+    test_validate_schema(types)
+    test_fill_int(types)
+    test_fill_cube(types)
+    test_establish_path(types)
+    test_fill_in_missing_nodes(types)
+    test_expected_schema(types)
+    test_units(types)
 
