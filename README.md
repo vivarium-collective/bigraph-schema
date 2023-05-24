@@ -27,6 +27,6 @@ To get started with bigraph-schema, check out our resources:
 * [Bigraph Schema Basics Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html): A comprehensive tutorial covering the essential aspects of the bigraph-schema library. 
 This resource will guide you through the core concepts and methods, helping you to master the basic operations.
 
-License
+## License
 
-bigraph-schema is open-source software released under the [MIT License](https://github.com/vivarium-collective/bigraph-schema/LICENSE).
+Bigraph-schema is open-source software released under the [MIT License](https://github.com/vivarium-collective/bigraph-schema/LICENSE).
