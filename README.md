@@ -1,4 +1,4 @@
-# bigraph-schema
+# Bigraph-schema
 
 [![PyPI version](https://img.shields.io/pypi/v/bigraph-schema.svg)](https://pypi.org/project/bigraph-schema/)
 [![Tutorial](https://img.shields.io/badge/tutorial-notebook-orange)](https://vivarium-collective.github.io/bigraph-schema/notebooks/demo.html)
