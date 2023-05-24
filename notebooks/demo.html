@@ -15110,9 +15110,9 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h1 id="Bigraph-Schema">Bigraph Schema<a class="anchor-link" href="#Bigraph-Schema">&#182;</a></h1><p>This tutorial explore the bigraph schema library. Bigraph schema enables different simulators, models, and data to communicate with each other through standardized type definitions and wiring diagrams. By providing a robust type system and serializable data format, this makes composite simulators shareable, extendable, and easily distributed across various computer architectures.</p>
-<p>We'll use the <a href="https://pypi.org/project/bigraph-schema/">bigraph-schema</a> library for validation and processing of the schema, and the <a href="https://pypi.org/project/bigraph-viz/">bigraph-viz</a> library for plotting library for visualizing the resulting simulation configuration.</p>
-<p>This notebook does not introduce the Bigraph concepts, rather it is focused on type definition and access. If you're new to the concepts of Bigraphs, check out the <a href="https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html">Bigraph Schema Basics Tutorial</a>.</p>
+<h1 id="Bigraph-Schema">Bigraph Schema<a class="anchor-link" href="#Bigraph-Schema">&#182;</a></h1><p>This tutorial explores the bigraph schema library. Bigraph schema enables different simulators, models, and data to communicate with each other through standardized type definitions and wiring diagrams. By providing a robust type system and serializable data format, this makes composite simulators shareable, extendable, and easily distributed across various computer architectures.</p>
+<p>This notebook uses the <a href="https://pypi.org/project/bigraph-schema/">bigraph-schema</a> library for validation and processing of the schema, and the <a href="https://pypi.org/project/bigraph-viz/">bigraph-viz</a> library for plotting library for visualizing the resulting simulation configuration.</p>
+<p>This notebook does not introduce the Bigraph concepts, rather it is focused on type definition and access.</p>
 
 </div>
 </div>
@@ -15159,7 +15159,7 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@b91909037f5c68fb57682ab65d8d9c9630779f5d#egg=bigraph_schema
+<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@56185a0decdac19d79f080489c4c9ac66967ffc4#egg=bigraph_schema
 bigraph-viz==0.0.25
 </pre>
 </div>
@@ -15186,7 +15186,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">copy</span>
@@ -15317,85 +15317,85 @@ bigraph-viz==0.0.25
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
 <pre>[&#39;&#39;,
- &#39;current*length^2*time&#39;,
- &#39;length^4*mass/time^3&#39;,
- &#39;string&#39;,
- &#39;length/time^2&#39;,
- &#39;/substance&#39;,
- &#39;substance/time&#39;,
- &#39;length^3*mass/(current^2*time^4)&#39;,
- &#39;length^2*mass/time^2&#39;,
- &#39;mass/length&#39;,
- &#39;mass&#39;,
- &#39;substance/length^3&#39;,
- &#39;/printing_unit&#39;,
- &#39;length*time/mass&#39;,
- &#39;current*time/substance&#39;,
- &#39;length*mass/time&#39;,
- &#39;length^2*mass/(temperature*time^2)&#39;,
- &#39;luminosity&#39;,
- &#39;time/length&#39;,
- &#39;current*length^2&#39;,
- &#39;length^2*mass/time&#39;,
- &#39;current*time^2/(length^2*mass)&#39;,
- &#39;temperature&#39;,
- &#39;luminosity/length^2&#39;,
- &#39;tree&#39;,
- &#39;mass/(current*time^2)&#39;,
- &#39;length&#39;,
- &#39;/(temperature*time)&#39;,
- &#39;time&#39;,
- &#39;length^2*mass/(current*time^3)&#39;,
- &#39;/length&#39;,
- &#39;current*time/mass&#39;,
- &#39;length*mass&#39;,
- &#39;float&#39;,
- &#39;mass/(length*time^2)&#39;,
- &#39;length*mass/(current^2*time^2)&#39;,
- &#39;edge&#39;,
- &#39;dict&#39;,
- &#39;current^2*time^4/(length^2*mass)&#39;,
- &#39;length^2*mass/(current^2*time^2)&#39;,
- &#39;length*temperature&#39;,
- &#39;mass/length^1.5&#39;,
- &#39;printing_unit&#39;,
- &#39;time^2/length&#39;,
- &#39;number&#39;,
- &#39;printing_unit/length&#39;,
- &#39;length^3/time&#39;,
- &#39;length^2/time&#39;,
- &#39;KISAO&#39;,
- &#39;mass/(length*time)&#39;,
- &#39;current^2*time^3/(length^2*mass)&#39;,
- &#39;length^2*mass/(current*time^2)&#39;,
- &#39;/time&#39;,
- &#39;length^3&#39;,
- &#39;mass/time^2&#39;,
- &#39;length^1.5*mass/time^2&#39;,
- &#39;current*time&#39;,
- &#39;current^2*time^4/(length^3*mass)&#39;,
- &#39;length^2*mass/(substance*temperature*time^2)&#39;,
- &#39;mass/(temperature^4*time^3)&#39;,
- &#39;length*mass/(current*time^3)&#39;,
  &#39;length^2*mass/time^3&#39;,
- &#39;mass/time^3&#39;,
- &#39;length^1.5*mass/time&#39;,
- &#39;length/mass&#39;,
- &#39;length^2/time^2&#39;,
- &#39;length^2*mass/(current^2*time^3)&#39;,
+ &#39;string&#39;,
+ &#39;mass/(temperature^4*time^3)&#39;,
+ &#39;length*time/mass&#39;,
  &#39;any&#39;,
- &#39;mass/length^3&#39;,
- &#39;current&#39;,
- &#39;length^3/(mass*time^2)&#39;,
- &#39;length^2&#39;,
- &#39;list&#39;,
- &#39;int&#39;,
- &#39;current*length*time&#39;,
- &#39;maybe&#39;,
+ &#39;number&#39;,
+ &#39;/(temperature*time)&#39;,
+ &#39;length^2/time&#39;,
+ &#39;mass/(length*time)&#39;,
+ &#39;current^2*time^4/(length^3*mass)&#39;,
+ &#39;current*length^2&#39;,
+ &#39;current*length^2*time&#39;,
+ &#39;length^3*mass/(current^2*time^4)&#39;,
  &#39;substance&#39;,
+ &#39;tree&#39;,
+ &#39;length^2/time^2&#39;,
+ &#39;time/length&#39;,
+ &#39;length^2*mass/(current^2*time^2)&#39;,
+ &#39;mass/(length*time^2)&#39;,
+ &#39;length^2*mass/(current^2*time^3)&#39;,
+ &#39;current&#39;,
+ &#39;mass/length&#39;,
  &#39;length/time&#39;,
- &#39;length*mass/time^2&#39;,
- &#39;URI&#39;]</pre>
+ &#39;length^2*mass/time&#39;,
+ &#39;list&#39;,
+ &#39;luminosity/length^2&#39;,
+ &#39;URI&#39;,
+ &#39;mass&#39;,
+ &#39;luminosity&#39;,
+ &#39;substance/length^3&#39;,
+ &#39;current*time/mass&#39;,
+ &#39;length^3&#39;,
+ &#39;length^2*mass/(temperature*time^2)&#39;,
+ &#39;current*time&#39;,
+ &#39;current^2*time^4/(length^2*mass)&#39;,
+ &#39;length*mass/time&#39;,
+ &#39;length^2*mass/time^2&#39;,
+ &#39;current*time/substance&#39;,
+ &#39;temperature&#39;,
+ &#39;length*mass/(current*time^3)&#39;,
+ &#39;length*mass&#39;,
+ &#39;length^2&#39;,
+ &#39;length/mass&#39;,
+ &#39;length^4*mass/time^3&#39;,
+ &#39;length^2*mass/(substance*temperature*time^2)&#39;,
+ &#39;substance/time&#39;,
+ &#39;mass/length^1.5&#39;,
+ &#39;int&#39;,
+ &#39;length^1.5*mass/time&#39;,
+ &#39;float&#39;,
+ &#39;time&#39;,
+ &#39;dict&#39;,
+ &#39;mass/length^3&#39;,
+ &#39;mass/time^2&#39;,
+ &#39;/length&#39;,
+ &#39;current*length*time&#39;,
+ &#39;length^3/(mass*time^2)&#39;,
+ &#39;length^3/time&#39;,
+ &#39;length*mass/(current^2*time^2)&#39;,
+ &#39;current^2*time^3/(length^2*mass)&#39;,
+ &#39;current*time^2/(length^2*mass)&#39;,
+ &#39;mass/time^3&#39;,
+ &#39;/printing_unit&#39;,
+ &#39;length^1.5*mass/time^2&#39;,
+ &#39;printing_unit&#39;,
+ &#39;edge&#39;,
+ &#39;printing_unit/length&#39;,
+ &#39;KISAO&#39;,
+ &#39;/time&#39;,
+ &#39;length/time^2&#39;,
+ &#39;length^2*mass/(current*time^3)&#39;,
+ &#39;length&#39;,
+ &#39;length*temperature&#39;,
+ &#39;length^2*mass/(current*time^2)&#39;,
+ &#39;mass/(current*time^2)&#39;,
+ &#39;/substance&#39;,
+ &#39;time^2/length&#39;,
+ &#39;maybe&#39;,
+ &#39;length*mass/time^2&#39;]</pre>
 </div>
 
 </div>
@@ -15547,188 +15547,6 @@ bigraph-viz==0.0.25
 </div>
 
 </div>
-<div id="cell-id=965f8da0-fb66-4e4f-a8c7-1386f7bb42e5" class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h2 id="Processes">Processes<a class="anchor-link" href="#Processes">&#182;</a></h2><p>Processes are a type that includes a <code>_ports</code> key, which maps to a dictionary with <code>{port_name: port_type}</code>. Here is a</p>
-
-</div>
-</div>
-</div>
-</div><div id="cell-id=e6a5b944-e2a3-43e3-af01-f1bd29631aeb" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[8]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">bigraph_schema.registry</span> <span class="kn">import</span> <span class="n">deserialize_registry</span><span class="p">,</span> <span class="n">serialize_registry</span><span class="p">,</span> <span class="n">apply_registry</span>
-
-<span class="k">def</span> <span class="nf">protocol_location_serialize</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">value</span>
-
-<span class="k">def</span> <span class="nf">protocol_location_deserialize</span><span class="p">(</span><span class="n">serialized_value</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">serialize_value</span>
-
-<span class="k">def</span> <span class="nf">protocol_location_apply</span><span class="p">(</span><span class="n">existing_value</span><span class="p">,</span> <span class="n">update</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">update</span>
-
-<span class="n">serialize_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;protocol:location&#39;</span><span class="p">,</span> <span class="n">protocol_location_serialize</span><span class="p">)</span>
-<span class="n">deserialize_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;protocol:location&#39;</span><span class="p">,</span> <span class="n">protocol_location_deserialize</span><span class="p">)</span>
-<span class="n">apply_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;protocol:location&#39;</span><span class="p">,</span> <span class="n">protocol_location_apply</span><span class="p">)</span>
-
-<span class="n">protocol_location_schema</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;:&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;_apply&#39;</span><span class="p">:</span> <span class="s1">&#39;_&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;_serialize&#39;</span><span class="p">:</span> <span class="s1">&#39;protocol:location&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;_deserialize&#39;</span><span class="p">:</span> <span class="s1">&#39;protocol:location&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;_description&#39;</span><span class="p">:</span> <span class="s1">&#39;a representation of how and where to access a process implementation&#39;</span><span class="p">,</span>
-<span class="p">}</span>
-<span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s1">&#39;protocol:location&#39;</span><span class="p">,</span> <span class="n">protocol_location_schema</span><span class="p">)</span>
-
-<span class="c1">#process schema</span>
-<span class="n">process_schema</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;_super&#39;</span><span class="p">:</span> <span class="s1">&#39;edge&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;process_location&#39;</span><span class="p">:</span> <span class="s1">&#39;protocol:location&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;config&#39;</span><span class="p">:</span> <span class="s1">&#39;hash[]&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;_description&#39;</span><span class="p">:</span> <span class="s1">&#39;The base process schema.&#39;</span><span class="p">,</span>
-<span class="p">}</span>
-<span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s1">&#39;process&#39;</span><span class="p">,</span> <span class="n">process_schema</span><span class="p">)</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
-</div><div id="cell-id=ab963a99-e045-4ccf-97c4-b2929941a83e" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[15]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">process_instance</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;process1&#39;</span><span class="p">:</span> <span class="p">{</span>
-       <span class="s1">&#39;process_location&#39;</span><span class="p">:</span> <span class="s1">&#39;0-000-00000-1&#39;</span><span class="p">,</span>
-       <span class="s1">&#39;config&#39;</span><span class="p">:</span> <span class="p">{</span>
-           <span class="s1">&#39;model&#39;</span><span class="p">:</span> <span class="s1">&#39;SBML:0000000&#39;</span><span class="p">,</span> 
-           <span class="s1">&#39;update_method&#39;</span><span class="p">:</span> <span class="s1">&#39;KISAO:0000019&#39;</span><span class="p">,</span>
-       <span class="p">},</span>
-       <span class="s1">&#39;wires&#39;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">&#39;counts&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;counts&#39;</span><span class="p">],</span>
-            <span class="s1">&#39;volume&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;volume&#39;</span><span class="p">],</span>
-            <span class="s1">&#39;affinities&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;affinities&#39;</span><span class="p">],</span>
-        <span class="p">}</span>
-    <span class="p">}</span>
-<span class="p">}</span>
-<span class="n">plot_bigraph</span><span class="p">(</span><span class="n">process_instance</span><span class="p">,</span> <span class="n">show_values</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-
-
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-    
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[15]:</div>
-
-
-
-<div class="jp-RenderedSVG jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="image/svg+xml">
-<!--?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot;?-->
-
-<!-- Generated by graphviz version 7.1.0 (20230121.1956)
- -->
-<!-- Title: bigraph Pages: 1 -->
-<svg width="200pt" height="310pt" viewBox="0.00 0.00 206.17 319.36">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 315.36)">
-<title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-315.36 202.17,-315.36 202.17,4 -4,4"></polygon>
-<!-- (&amp;#39;process1&amp;#39;, &amp;#39;process_location&amp;#39;) -->
-<g id="node1" class="node">
-<title>(&#39;process1&#39;, &#39;process_location&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="93.01" cy="-61.52" rx="61.54" ry="61.54"></ellipse>
-<text text-anchor="start" x="53.51" y="-64.92" font-family="Times,serif" font-size="12.00">process_location</text>
-<text text-anchor="start" x="57.01" y="-51.92" font-family="Times,serif" font-size="12.00">0&#45;000&#45;00000&#45;1</text>
-</g>
-<!-- (&amp;#39;process1&amp;#39;,) -->
-<g id="node2" class="node">
-<title>(&#39;process1&#39;,)</title>
-<polygon fill="none" stroke="black" stroke-width="2" points="120.01,-200.04 66.01,-200.04 66.01,-164.04 120.01,-164.04 120.01,-200.04"></polygon>
-<polygon fill="none" stroke="black" stroke-width="2" points="124.01,-204.04 62.01,-204.04 62.01,-160.04 124.01,-160.04 124.01,-204.04"></polygon>
-<text text-anchor="start" x="72.01" y="-178.94" font-family="Times,serif" font-size="12.00">process1</text>
-</g>
-<!-- (&amp;#39;process1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;, &amp;#39;process_location&amp;#39;) -->
-<g id="edge1" class="edge">
-<title>(&#39;process1&#39;,)&#45;&gt;(&#39;process1&#39;, &#39;process_location&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M93.01,-159.3C93.01,-149.21 93.01,-136.65 93.01,-123.96"></path>
-</g>
-<!-- (&amp;#39;counts&amp;#39;,) -->
-<g id="node3" class="node">
-<title>(&#39;counts&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="24.01" cy="-281.2" rx="24.02" ry="24.02"></ellipse>
-<text text-anchor="start" x="8.51" y="-278.1" font-family="Times,serif" font-size="12.00">counts</text>
-</g>
-<!-- (&amp;#39;counts&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;,) -->
-<g id="edge2" class="edge">
-<title>(&#39;counts&#39;,)&#45;&gt;(&#39;process1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M36.26,-259.61C43.21,-248.3 52.23,-234.15 61.01,-222.04 64.22,-217.6 67.77,-213.01 71.3,-208.6"></path>
-<ellipse fill="black" stroke="black" cx="72.69" cy="-206.89" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="61.01" y="-225.04" font-family="Times,serif" font-size="10.00">counts</text>
-</g>
-<!-- (&amp;#39;volume&amp;#39;,) -->
-<g id="node4" class="node">
-<title>(&#39;volume&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="93.01" cy="-281.2" rx="27.17" ry="27.17"></ellipse>
-<text text-anchor="start" x="75.01" y="-278.1" font-family="Times,serif" font-size="12.00">volume</text>
-</g>
-<!-- (&amp;#39;volume&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;,) -->
-<g id="edge3" class="edge">
-<title>(&#39;volume&#39;,)&#45;&gt;(&#39;process1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M93.01,-253.13C93.01,-239.53 93.01,-223.11 93.01,-209.58"></path>
-<ellipse fill="black" stroke="black" cx="93.01" cy="-207.24" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="93.01" y="-225.04" font-family="Times,serif" font-size="10.00">volume</text>
-</g>
-<!-- (&amp;#39;affinities&amp;#39;,) -->
-<g id="node5" class="node">
-<title>(&#39;affinities&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="168.01" cy="-281.2" rx="30.33" ry="30.33"></ellipse>
-<text text-anchor="start" x="147.51" y="-278.1" font-family="Times,serif" font-size="12.00">affinities</text>
-</g>
-<!-- (&amp;#39;affinities&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process1&amp;#39;,) -->
-<g id="edge4" class="edge">
-<title>(&#39;affinities&#39;,)&#45;&gt;(&#39;process1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M151.57,-254.79C144.59,-244.41 136.2,-232.44 128.01,-222.04 124.49,-217.57 120.6,-212.96 116.74,-208.54"></path>
-<ellipse fill="black" stroke="black" cx="115.16" cy="-206.76" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="136.01" y="-225.04" font-family="Times,serif" font-size="10.00">affinities</text>
-</g>
-</g>
-</svg>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
 <div id="cell-id=ad02fcd2-e0b1-49bb-b58b-492a3474120e" class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
@@ -15745,7 +15563,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[10]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[8]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">bigraph_state</span> <span class="o">=</span> <span class="p">{</span>
@@ -15771,7 +15589,7 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[10]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[8]:</div>
 
 
 
@@ -15852,17 +15670,17 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[20]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">dual_process_schema</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;process1&#39;</span><span class="p">:</span> <span class="p">{</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">dual_edge_schema</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;edge1&#39;</span><span class="p">:</span> <span class="p">{</span>
         <span class="s1">&#39;_ports&#39;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;float&#39;</span><span class="p">,</span>
             <span class="s1">&#39;port2&#39;</span><span class="p">:</span> <span class="s1">&#39;int&#39;</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">},</span>
-    <span class="s1">&#39;process2&#39;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s1">&#39;edge2&#39;</span><span class="p">:</span> <span class="p">{</span>
         <span class="s1">&#39;_ports&#39;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;float&#39;</span><span class="p">,</span>
             <span class="s1">&#39;port2&#39;</span><span class="p">:</span> <span class="s1">&#39;int&#39;</span><span class="p">,</span>
@@ -15871,35 +15689,35 @@ bigraph-viz==0.0.25
 <span class="p">}</span>    
 
 <span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s1">&#39;dual_process&#39;</span><span class="p">,</span>
-    <span class="n">dual_process_schema</span><span class="p">,</span>
+    <span class="s1">&#39;dual_edge&#39;</span><span class="p">,</span>
+    <span class="n">dual_edge_schema</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">schema</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;store1&#39;</span><span class="p">:</span> <span class="s1">&#39;dual_process&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;process3&#39;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s1">&#39;store1&#39;</span><span class="p">:</span> <span class="s1">&#39;dual_edge&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;edge3&#39;</span><span class="p">:</span> <span class="p">{</span>
         <span class="s1">&#39;_ports&#39;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;dual_process&#39;</span>
+            <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;dual_edge&#39;</span>
         <span class="p">}</span>
     <span class="p">}</span>
 <span class="p">}</span>
 
 <span class="n">instance</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;store1&#39;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">&#39;process1&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;edge1&#39;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s1">&#39;wires&#39;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;store1.1&#39;</span><span class="p">,</span>
                 <span class="s1">&#39;port2&#39;</span><span class="p">:</span> <span class="s1">&#39;store1.2&#39;</span><span class="p">,</span>
             <span class="p">}</span>
         <span class="p">},</span>
-        <span class="s1">&#39;process2&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;edge2&#39;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s1">&#39;wires&#39;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;store1.1&#39;</span><span class="p">,</span>
                 <span class="s1">&#39;port2&#39;</span><span class="p">:</span> <span class="s1">&#39;store1.2&#39;</span><span class="p">,</span>
             <span class="p">}</span>
         <span class="p">}</span>
     <span class="p">},</span>
-    <span class="s1">&#39;process3&#39;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s1">&#39;edge3&#39;</span><span class="p">:</span> <span class="p">{</span>
         <span class="s1">&#39;wires&#39;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;store1&#39;</span><span class="p">,</span>
         <span class="p">}</span>
@@ -15925,15 +15743,15 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[11]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[20]:</div>
 
 
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
-<pre>{&#39;store1&#39;: {&#39;process1&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}},
-  &#39;process2&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}}},
- &#39;process3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_process&#39;}}}</pre>
+<pre>{&#39;store1&#39;: {&#39;edge1&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}},
+  &#39;edge2&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}}},
+ &#39;edge3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_edge&#39;}}}</pre>
 </div>
 
 </div>
@@ -15947,7 +15765,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[21]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;schema:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
@@ -15974,23 +15792,22 @@ bigraph-viz==0.0.25
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
 <pre>schema:
- {&#39;process3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_process&#39;}}, &#39;store1&#39;: &#39;dual_process&#39;}
+ {&#39;edge3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_edge&#39;}}, &#39;store1&#39;: &#39;dual_edge&#39;}
 
 instance:
- { &#39;process3&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1&#39;}},
-  &#39;store1&#39;: { &#39;process1&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}},
-              &#39;process2&#39;: { &#39;wires&#39;: { &#39;port1&#39;: &#39;store1.1&#39;,
-                                       &#39;port2&#39;: &#39;store1.2&#39;}}}}
+ { &#39;edge3&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1&#39;}},
+  &#39;store1&#39;: { &#39;edge1&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}},
+              &#39;edge2&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}}}}
 
 filled schema:
- { &#39;process3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_process&#39;}},
-  &#39;store1&#39;: { &#39;process1&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}},
-              &#39;process2&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}}}}
+ { &#39;edge3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_edge&#39;}},
+  &#39;store1&#39;: { &#39;edge1&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}},
+              &#39;edge2&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}}}}
 
 filled instance:
- { &#39;process3&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1&#39;}},
-  &#39;store1&#39;: { &#39;process1&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}},
-              &#39;process2&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}},
+ { &#39;edge3&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1&#39;}},
+  &#39;store1&#39;: { &#39;edge1&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}},
+              &#39;edge2&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}},
               &#39;store1.1&#39;: 0.0,
               &#39;store1.2&#39;: 0}}
 
@@ -16007,10 +15824,10 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[23]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">,</span> <span class="n">collapse_processes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">remove_process_place_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 
      </div>
@@ -16026,7 +15843,7 @@ filled instance:
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[13]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[23]:</div>
 
 
 
@@ -16036,101 +15853,83 @@ filled instance:
 <!-- Generated by graphviz version 7.1.0 (20230121.1956)
  -->
 <!-- Title: bigraph Pages: 1 -->
-<svg width="281pt" height="241pt" viewBox="0.00 0.00 289.00 248.19">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 244.19)">
+<svg width="208pt" height="186pt" viewBox="0.00 0.00 214.16 191.19">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 187.19)">
 <title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-244.19 285,-244.19 285,4 -4,4"></polygon>
+<polygon fill="white" stroke="none" points="-4,4 -4,-187.19 210.16,-187.19 210.16,4 -4,4"></polygon>
 <!-- (&amp;#39;store1&amp;#39;,) -->
 <g id="node1" class="node">
 <title>(&#39;store1&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="143" cy="-213.41" rx="22.59" ry="22.59"></ellipse>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="143" cy="-213.41" rx="26.56" ry="26.56"></ellipse>
-<text text-anchor="start" x="128.5" y="-210.31" font-family="Times,serif" font-size="12.00">store1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="120.66" cy="-156.41" rx="22.59" ry="22.59"></ellipse>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="120.66" cy="-156.41" rx="26.56" ry="26.56"></ellipse>
+<text text-anchor="start" x="106.16" y="-153.31" font-family="Times,serif" font-size="12.00">store1</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;) -->
 <g id="node2" class="node">
 <title>(&#39;store1&#39;, &#39;store1.1&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="143" cy="-111.32" rx="28.14" ry="28.14"></ellipse>
-<text text-anchor="start" x="124" y="-108.22" font-family="Times,serif" font-size="12.00">store1.1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="120.66" cy="-65.32" rx="28.14" ry="28.14"></ellipse>
+<text text-anchor="start" x="101.66" y="-62.22" font-family="Times,serif" font-size="12.00">store1.1</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;) -->
 <g id="edge3" class="edge">
 <title>(&#39;store1&#39;,)&#45;&gt;(&#39;store1&#39;, &#39;store1.1&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M143,-186.11C143,-171.98 143,-154.56 143,-140.19"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M120.66,-129.16C120.66,-118.18 120.66,-105.4 120.66,-94.24"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;) -->
 <g id="node3" class="node">
 <title>(&#39;store1&#39;, &#39;store1.2&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="68" cy="-111.32" rx="28.14" ry="28.14"></ellipse>
-<text text-anchor="start" x="49" y="-108.22" font-family="Times,serif" font-size="12.00">store1.2</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="45.66" cy="-65.32" rx="28.14" ry="28.14"></ellipse>
+<text text-anchor="start" x="26.66" y="-62.22" font-family="Times,serif" font-size="12.00">store1.2</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;) -->
 <g id="edge4" class="edge">
 <title>(&#39;store1&#39;,)&#45;&gt;(&#39;store1&#39;, &#39;store1.2&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M127.09,-191.18C114.71,-174.66 97.56,-151.77 84.92,-134.9"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M103.64,-135.19C91.8,-121.13 76.03,-102.39 63.92,-88.01"></path>
 </g>
-<!-- (&amp;#39;store1&amp;#39;, &amp;#39;process1&amp;#39;) -->
+<!-- (&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="node4" class="node">
-<title>(&#39;store1&#39;, &#39;process1&#39;)</title>
-<polygon fill="none" stroke="black" stroke-width="2" points="54,-36 0,-36 0,0 54,0 54,-36"></polygon>
-<text text-anchor="start" x="6" y="-14.9" font-family="Times,serif" font-size="12.00">process1</text>
+<title>(&#39;store1&#39;, &#39;edge1&#39;)</title>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="45.66" cy="-0.5" rx="0.5" ry="0.5"></ellipse>
+<text text-anchor="start" x="16.16" y="-4.4" font-family="Times,serif" font-size="12.00">edge1</text>
 </g>
-<!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;process1&amp;#39;) -->
-<g id="edge1" class="edge">
-<title>(&#39;store1&#39;,)&#45;&gt;(&#39;store1&#39;, &#39;process1&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M117.8,-203.47C91.42,-192.7 51.11,-171.91 31,-139.63 11.27,-107.98 17.04,-62.02 22.39,-36.96"></path>
-</g>
-<!-- (&amp;#39;store1&amp;#39;, &amp;#39;process2&amp;#39;) -->
+<!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
+<!-- (&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="node5" class="node">
-<title>(&#39;store1&#39;, &#39;process2&#39;)</title>
-<polygon fill="none" stroke="black" stroke-width="2" points="189,-36 135,-36 135,0 189,0 189,-36"></polygon>
-<text text-anchor="start" x="141" y="-14.9" font-family="Times,serif" font-size="12.00">process2</text>
+<title>(&#39;store1&#39;, &#39;edge2&#39;)</title>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="120.66" cy="-0.5" rx="0.5" ry="0.5"></ellipse>
+<text text-anchor="start" x="91.16" y="-4.4" font-family="Times,serif" font-size="12.00">edge2</text>
 </g>
-<!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;process2&amp;#39;) -->
-<g id="edge2" class="edge">
-<title>(&#39;store1&#39;,)&#45;&gt;(&#39;store1&#39;, &#39;process2&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M157.67,-190.2C165.97,-176.3 175.55,-157.66 180,-139.63 189.12,-102.68 190.37,-90.89 181,-54 179.5,-48.1 176.79,-42.12 173.87,-36.82"></path>
-</g>
-<!-- (&amp;#39;process3&amp;#39;,) -->
+<!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
+<!-- (&amp;#39;edge3&amp;#39;,) -->
 <g id="node6" class="node">
-<title>(&#39;process3&#39;,)</title>
-<polygon fill="none" stroke="black" stroke-width="2" points="281,-129.32 227,-129.32 227,-93.32 281,-93.32 281,-129.32"></polygon>
-<text text-anchor="start" x="233" y="-108.22" font-family="Times,serif" font-size="12.00">process3</text>
+<title>(&#39;edge3&#39;,)</title>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="205.66" cy="-65.32" rx="0.5" ry="0.5"></ellipse>
+<text text-anchor="start" x="176.16" y="-69.22" font-family="Times,serif" font-size="12.00">edge3</text>
 </g>
-<!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;process3&amp;#39;,) -->
+<!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;edge3&amp;#39;,) -->
 <g id="edge9" class="edge">
-<title>(&#39;store1&#39;,)&#45;&gt;(&#39;process3&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M166.94,-200.45C181.26,-192.6 199.26,-181.44 213,-168.63 223.8,-158.57 233.61,-145.31 240.93,-134.18"></path>
-<ellipse fill="black" stroke="black" cx="242.16" cy="-132.29" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="222" y="-160.63" font-family="Times,serif" font-size="10.00">port1</text>
+<title>(&#39;store1&#39;,)&#45;&gt;(&#39;edge3&#39;,)</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M142.34,-139.52C157.15,-127.93 176.58,-111.22 190.66,-93.63 198.5,-83.83 204.45,-69.36 205.49,-66.73"></path>
 </g>
-<!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;process1&amp;#39;) -->
+<!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="edge5" class="edge">
-<title>(&#39;store1&#39;, &#39;store1.1&#39;)&#45;&gt;(&#39;store1&#39;, &#39;process1&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M120.63,-92.71C101.42,-77.59 73.69,-55.75 53.39,-39.78"></path>
-<ellipse fill="black" stroke="black" cx="51.66" cy="-38.41" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="85" y="-57" font-family="Times,serif" font-size="10.00">port1</text>
+<title>(&#39;store1&#39;, &#39;store1.1&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge1&#39;)</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M98.97,-46C78.89,-29.06 51.42,-5.87 46.45,-1.67"></path>
 </g>
-<!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;process2&amp;#39;) -->
+<!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="edge7" class="edge">
-<title>(&#39;store1&#39;, &#39;store1.1&#39;)&#45;&gt;(&#39;store1&#39;, &#39;process2&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M148.7,-82.92C151.44,-69.75 154.69,-54.15 157.29,-41.66"></path>
-<ellipse fill="black" stroke="black" cx="157.77" cy="-39.31" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="155" y="-57" font-family="Times,serif" font-size="10.00">port1</text>
+<title>(&#39;store1&#39;, &#39;store1.1&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge2&#39;)</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M120.66,-36.36C120.66,-21.52 120.66,-5.58 120.66,-1.82"></path>
 </g>
-<!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;process1&amp;#39;) -->
+<!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="edge6" class="edge">
-<title>(&#39;store1&#39;, &#39;store1.2&#39;)&#45;&gt;(&#39;store1&#39;, &#39;process1&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M46.64,-92.11C39.32,-84.55 31.97,-75.17 28,-65 25.11,-57.61 24.31,-49.02 24.42,-41.28"></path>
-<ellipse fill="black" stroke="black" cx="24.5" cy="-39.09" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="28" y="-57" font-family="Times,serif" font-size="10.00">port2</text>
+<title>(&#39;store1&#39;, &#39;store1.2&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge1&#39;)</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M45.66,-36.36C45.66,-21.52 45.66,-5.58 45.66,-1.82"></path>
 </g>
-<!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;process2&amp;#39;) -->
+<!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="edge8" class="edge">
-<title>(&#39;store1&#39;, &#39;store1.2&#39;)&#45;&gt;(&#39;store1&#39;, &#39;process2&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M87.93,-90.95C103.27,-76.06 124.43,-55.5 140.2,-40.17"></path>
-<ellipse fill="black" stroke="black" cx="141.89" cy="-38.53" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="124" y="-57" font-family="Times,serif" font-size="10.00">port2</text>
+<title>(&#39;store1&#39;, &#39;store1.2&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge2&#39;)</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M67.35,-46C87.43,-29.06 114.9,-5.87 119.87,-1.67"></path>
 </g>
 </g>
 </svg>
@@ -16150,7 +15949,7 @@ filled instance:
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h2 id="Update">Update<a class="anchor-link" href="#Update">&#182;</a></h2>
+<h2 id="Update-(TODO)">Update (TODO)<a class="anchor-link" href="#Update-(TODO)">&#182;</a></h2>
 </div>
 </div>
 </div>
