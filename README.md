@@ -1,7 +1,7 @@
 # Bigraph-schema
 
 [![PyPI version](https://img.shields.io/pypi/v/bigraph-schema.svg)](https://pypi.org/project/bigraph-schema/)
-[![Tutorial](https://img.shields.io/badge/tutorial-notebook-orange)](https://vivarium-collective.github.io/bigraph-schema/notebooks/demo.html)
+[![Tutorial](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/bigraph-schema/notebooks/demo.html)
 
 Welcome to `bigraph-schema` – a library providing a serializable type schema for compositional systems biology 
 simulations. This library is an integral component of the broader Process Bigraph project, which seeks to create an 
