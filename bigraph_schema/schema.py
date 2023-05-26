@@ -1,5 +1,6 @@
 import copy
 import pprint
+import pytest
 
 from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path
 from bigraph_schema.units import units, render_units_type, parse_dimensionality
@@ -746,7 +747,7 @@ def schema_zoo():
     })
 
 
-def test_cube(types):
+def test_cube(base_types):
     cube_schema = {
         'shape': {},
         
@@ -765,17 +766,24 @@ def test_cube(types):
         },
     }
 
-    types.type_registry.register_multiple(
+    base_types.type_registry.register_multiple(
         cube_schema)
 
+    return base_types
 
-def test_generate_default(types):
-    int_default = types.generate_default(
+
+@pytest.fixture
+def cube_types(base_types):
+    return test_cube(base_types)
+
+
+def test_generate_default(cube_types):
+    int_default = cube_types.generate_default(
         {'_type': 'int'}
     )
     assert int_default == 0
 
-    cube_default = types.generate_default(
+    cube_default = cube_types.generate_default(
         {'_type': 'cube'})
 
     assert 'width' in cube_default
@@ -783,15 +791,15 @@ def test_generate_default(types):
     assert 'depth' in cube_default
 
 
-def test_expand_schema(types):
+def test_expand_schema(cube_types):
     schema = {'_type': 'cube'}
-    expanded = types.type_registry.expand(schema)
+    expanded = cube_types.type_registry.expand(schema)
 
     assert len(schema) == 1
     assert 'height' in expanded
 
 
-def test_apply_update(types):
+def test_apply_update(cube_types):
     schema = {'_type': 'cube'}
     state = {
         'width': 11,
@@ -802,7 +810,7 @@ def test_apply_update(types):
         'depth': -5
     }
 
-    new_state = types.apply(
+    new_state = cube_types.apply(
         schema,
         state,
         update
@@ -831,9 +839,9 @@ def print_schema_validation(types, library, should_pass):
                 raise Exception(f'FAIL: {message}\n{declaration}\n{report}')
 
 
-def test_validate_schema(types):
+def test_validate_schema(base_types):
     # good schemas
-    print_schema_validation(types, base_type_library, True)
+    print_schema_validation(base_types, base_type_library, True)
 
     good = {
         'not quite int': {
@@ -870,21 +878,21 @@ def test_validate_schema(types):
 
     # test for ports and wires mismatch
 
-    print_schema_validation(types, good, True)
-    print_schema_validation(types, bad, False)
+    print_schema_validation(base_types, good, True)
+    print_schema_validation(base_types, bad, False)
 
 
-def test_fill_int(types):
+def test_fill_int(base_types):
     test_schema = {
         '_type': 'int'
     }
 
-    full_state = types.fill(test_schema)
+    full_state = base_types.fill(test_schema)
 
     assert full_state == 0
 
 
-def test_fill_cube(types):
+def test_fill_cube(cube_types):
     test_schema = {
         '_type': 'cube'
     }
@@ -893,7 +901,7 @@ def test_fill_cube(types):
         'height': 5,
     }
 
-    full_state = types.fill(
+    full_state = cube_types.fill(
         test_schema,
         state=partial_state)
 
@@ -904,7 +912,7 @@ def test_fill_cube(types):
     assert full_state['depth'] == 0
 
 
-def test_fill_in_missing_nodes(types):
+def test_fill_in_missing_nodes(base_types):
     test_schema = {
         'edge 1': {
             # this could become a process_edge type
@@ -923,7 +931,7 @@ def test_fill_in_missing_nodes(types):
         }
     }
 
-    filled = types.fill(
+    filled = base_types.fill(
         test_schema,
         test_state
     )
@@ -937,7 +945,7 @@ def test_fill_in_missing_nodes(types):
         }
     }
 
-def test_fill_in_disconnected_port(types):
+def test_fill_in_disconnected_port(base_types):
     test_schema = {
         'edge1': {
             '_type': 'edge',
@@ -950,7 +958,7 @@ def test_fill_in_disconnected_port(types):
     test_state = {}
 
 
-def test_fill_type_mismatch(types):
+def test_fill_type_mismatch(base_types):
     test_schema = {
         'a': {'_type': 'int', '_value': 2},
         'edge1': {
@@ -968,7 +976,7 @@ def test_fill_type_mismatch(types):
     }
 
 
-def test_edge_type_mismatch(types):
+def test_edge_type_mismatch(base_types):
     test_schema = {
         'edge1': {
             '_type': 'edge',
@@ -991,7 +999,7 @@ def test_edge_type_mismatch(types):
     }
 
 
-def test_fill_nested_store(types):
+def test_fill_nested_store(base_types):
     test_schema = {
         'edge1': {
             '_type': 'edge',
@@ -1005,7 +1013,7 @@ def test_fill_nested_store(types):
     }    
 
 
-def test_establish_path(types):
+def test_establish_path(base_types):
     tree = {}
     destination = establish_path(
         tree,
@@ -1024,7 +1032,7 @@ def test_establish_path(types):
     assert tree['some']['where']['deep']['inside']['lives']['a']['tiny']['creature']['made']['of']['light'] == destination
 
 
-def test_expected_schema(types):
+def test_expected_schema(base_types):
     # equivalent to previous schema:
 
     # expected = {
@@ -1080,7 +1088,7 @@ def test_expected_schema(types):
         },
     }    
 
-    types.type_registry.register(
+    base_types.type_registry.register(
         'dual_process',
         dual_process_schema,
     )
@@ -1116,7 +1124,7 @@ def test_expected_schema(types):
         },
     }
     
-    outcome = types.fill(test_schema, test_state)
+    outcome = base_types.fill(test_schema, test_state)
 
     assert outcome == {
         'process3': {
@@ -1143,7 +1151,7 @@ def test_expected_schema(types):
     }
 
 
-def test_link_place(types):
+def test_link_place(base_types):
     bigraph = {
         'nodes': {
             'v0': {
@@ -1251,24 +1259,28 @@ def test_link_place(types):
                 'e0.1': ['v4'],
                 'e0.2': ['v4', 'v5']}}}
 
-    result = types.link_place(placegraph, hypergraph)
+    result = base_types.link_place(placegraph, hypergraph)
     # assert result == merged
 
 
-def test_units(types):
+def test_units(base_types):
     schema_length = {
         'distance': {'_type': 'length'}}
 
     state = {'distance': 11 * units.meter}
     update = {'distance': -5 * units.feet}
 
-    new_state = types.apply(
+    new_state = base_types.apply(
         schema_length,
         state,
         update
     )
 
     assert new_state['distance'] == 9.476 * units.meter
+
+@pytest.fixture
+def base_types():
+    return SchemaTypes()
 
 
 if __name__ == '__main__':
