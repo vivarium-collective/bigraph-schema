@@ -3,13 +3,13 @@ from parsimonious.nodes import NodeVisitor
 
 
 parameter_examples = {
-    # 'no-parameters': 'simple',
-    'typed': 'a:field[yellow,tree,snake]|b.(x:length|y:cloud)',
-    'typed_parameters': 'edge[a:int|b.(x:length|y:float),v[zz:float|xx:what]]|okay',
-    # 'one-parameter': 'parameterized[A]',
-    # 'three-parameters': 'parameterized[A,B,C]',
-    # 'nested-parameters': 'nested[outer[inner]]',
-    # 'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
+    'no-parameters': 'simple',
+    'typed': 'a:field[yellow,tree,snake]|b.(x:earth|y:cloud|z:sky)',
+    'typed_parameters': 'edge[a:int|b.(x:length|y:float),v[zz:float|xx:what]]',
+    'one-parameter': 'parameterized[A]',
+    'three-parameters': 'parameterized[A,B,C]',
+    'nested-parameters': 'nested[outer[inner]]',
+    'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
 }
 
 
@@ -40,77 +40,49 @@ parameter_grammar = Grammar(
 
 
 class ParameterVisitor(NodeVisitor):
-    # def visit_qualified_type(self, node, visit):
-    #     outer_type = visit[0]
-    #     parameters = []
-    #     if len(visit[1]['visit']) > 0:
-    #         parameters = visit[1]['visit'][0]
-
-    #     return [outer_type, parameters]
-
     def visit_expression(self, node, visit):
-        import ipdb; ipdb.set_trace()
-        return {
-            'node': node,
-            'visit': visit,
-        }
+        return visit[0]
 
     def visit_merge(self, node, visit):
-        import ipdb; ipdb.set_trace()
-        return {
-            'node': node,
-            'visit': visit,
-        }
+        head = [visit[0]]
+        tail = [
+            tree['visit'][1]
+            for tree in visit[1]['visit']]
+
+        merge = {}
+        for tree in head + tail:
+            merge.update(tree)
+
+        return merge
 
     def visit_tree(self, node, visit):
-        import ipdb; ipdb.set_trace()
-        return {
-            'node': node,
-            'visit': visit,
-        }
+        return visit[0]
 
     def visit_bigraph(self, node, visit):
-        import ipdb; ipdb.set_trace()
-        return {
-            'node': node,
-            'visit': visit,
-        }
+        return visit[0]
 
     def visit_group(self, node, visit):
-        import ipdb; ipdb.set_trace()
-        return {
-            'node': node,
-            'visit': visit,
-        }
+        return visit[1]
 
     def visit_nest(self, node, visit):
-        import ipdb; ipdb.set_trace()
-        return {
-            'node': node,
-            'visit': visit,
-        }
+        return {visit[0]: visit[2]}
 
     def visit_control(self, node, visit):
-        import ipdb; ipdb.set_trace()
-        return {
-            'node': node,
-            'visit': visit,
-        }
+        return {visit[0]: visit[2]}
 
     def visit_type_name(self, node, visit):
-        import ipdb; ipdb.set_trace()
-
         type_name = visit[0]
         type_parameters = visit[1]['visit']
-
-        return [type_name, type_parameters]
+        if len(type_parameters) > 0:
+            type_parameters = type_parameters[0]
+            return [type_name, type_parameters]
+        else:
+            return type_name
 
     def visit_parameter_list(self, node, visit):
-        import ipdb; ipdb.set_trace()
-
-        first_type = [visit[1]['visit'][0]['visit'][0]]
+        first_type = [visit[1]]
         rest_types = [
-            inner['visit'][1]['visit'][0]['visit'][0]
+            inner['visit'][1]
             for inner in visit[2]['visit']]
 
         parameters = first_type + rest_types
@@ -137,7 +109,11 @@ def parse_type_parameters(expression):
 
 def render_type_parameters(type_parameters):
     # inverse of parse_type_parameters
-    type_name, parameters = type_parameters
+    parameters = []
+    if isinstance(type_parameters, str):
+        type_name = type_parameters
+    else:
+        type_name, parameters = type_parameters
     parameters_render = ','.join([
         render_type_parameters(parameter)
         for parameter in parameters
