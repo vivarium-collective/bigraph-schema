@@ -602,6 +602,7 @@ base_type_library = {
         '_serialize': 'serialize_dict',
         '_deserialize': 'deserialize_dict',
         '_divide': 'divide_dict',
+        # TODO: create assignable type parameters?
         '_type_parameters': ['key', 'value'],
         '_description': 'mapping from keys of any type to values of any type'},
 
@@ -1190,6 +1191,9 @@ def test_link_place(base_types):
                     'e0-2': 'v4'}},
             'e1': {
                 '_type': 'edge[e1-0:int|e2-0:int]',
+                '_ports': {
+                    'e1-0': 'int'
+                    'e2-0': 'int'}
                 'wires': {
                     'e1-0': 'v3',
                     'e1-1': 'v1'}},
