@@ -107,6 +107,26 @@ def parse_type_parameters(expression):
     return type_parameters
 
 
+def render_expression(expression):
+    if isinstance(expression, str):
+        return expression
+    elif isinstance(expression, list):
+        type_name, parameters = expression
+        render = ','.join([
+            render_expression(parameter)
+            for parameter in parameters])
+        return f'{type_name}[{render}]'
+    elif isinstance(expression, dict):
+        parts = []
+        for key, tree in expression.items():
+            render = render_expression(tree)
+            if isinstance(tree, dict):
+                parts.append(f'{key}.({render})')
+            else:
+                parts.append(f'{key}:{render}')
+        return '|'.join(parts)
+        
+
 def render_type_parameters(type_parameters):
     # inverse of parse_type_parameters
     parameters = []
@@ -133,7 +153,7 @@ def test_parse_parameters():
         print(f'{key}: {example}')
         if types:
             print(types)
-            print(render_type_parameters(types))
+            print(render_expression(types))
 
 
 if __name__ == '__main__':
