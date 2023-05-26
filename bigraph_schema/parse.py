@@ -4,12 +4,12 @@ from parsimonious.nodes import NodeVisitor
 
 parameter_examples = {
     'no-parameters': 'simple',
-    'typed': 'a:field[yellow,tree,snake]|b.(x:earth|y:cloud|z:sky)',
-    'typed_parameters': 'edge[a:int|b.(x:length|y:float),v[zz:float|xx:what]]',
     'one-parameter': 'parameterized[A]',
     'three-parameters': 'parameterized[A,B,C]',
     'nested-parameters': 'nested[outer[inner]]',
     'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
+    'typed': 'a:field[yellow,tree,snake]|b.(x:earth|y:cloud|z:sky)',
+    'typed_parameters': 'edge[a:int|b.(x:length|y:float),v[zz:float|xx:what]]',
 }
 
 
@@ -24,7 +24,7 @@ parameter_grammar = Grammar(
     control = symbol colon type_name
     type_name = symbol parameter_list?
     parameter_list = square_left expression (comma expression)* square_right
-    symbol = ~r"[\w\d-_/*&^%$#@!~`+]+"
+    symbol = ~r"[\w\d-_/*&^%$#@!~`+(). ]+"
     dot = "."
     colon = ":"
     bar = "|"
@@ -99,7 +99,7 @@ class ParameterVisitor(NodeVisitor):
         }
 
 
-def parse_type_parameters(expression):
+def parse_expression(expression):
     parse = parameter_grammar.parse(expression)
     visitor = ParameterVisitor()
     type_parameters = visitor.visit(parse)
@@ -125,30 +125,11 @@ def render_expression(expression):
             else:
                 parts.append(f'{key}:{render}')
         return '|'.join(parts)
-        
-
-def render_type_parameters(type_parameters):
-    # inverse of parse_type_parameters
-    parameters = []
-    if isinstance(type_parameters, str):
-        type_name = type_parameters
-    else:
-        type_name, parameters = type_parameters
-    parameters_render = ','.join([
-        render_type_parameters(parameter)
-        for parameter in parameters
-    ])
-
-    render = type_name
-    if len(parameters) > 0:
-        render = f'{render}[{parameters_render}]'
-
-    return render
 
 
 def test_parse_parameters():
     for key, example in parameter_examples.items():
-        types = parse_type_parameters(example)
+        types = parse_expression(example)
 
         print(f'{key}: {example}')
         if types:

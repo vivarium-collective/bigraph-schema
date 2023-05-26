@@ -2,6 +2,7 @@ import copy
 import pprint
 import pytest
 
+from bigraph_schema.parse import parse_expression
 from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path
 from bigraph_schema.units import units, render_units_type, parse_dimensionality
 
@@ -31,34 +32,45 @@ class SchemaTypes():
         # declared ports are equivalent to the presence of a process
         #   where the ports need to be looked up
 
-        if not isinstance(schema, dict):
-            return f'schema is not a dict: {schema}'
-
         report = {}
 
-        schema_keys = set([])
-        branches = set([])
+        if schema is None:
+            report = 'schema cannot be None'
 
-        for key, value in schema.items():
-            if key == '_type':
-                typ = self.type_registry.access(value)
-                if typ is None:
-                    report[key] = f'type: {value} is not in the registry'
-            elif key in type_schema_keys:
-                schema_keys.add(key)
-                registry = self.registry_registry.access(key)
-                if registry is None:
-                    # deserialize and serialize back and check it is equal
-                    pass
+        elif isinstance(schema, str):
+            typ = self.type_registry.access(schema)
+            if typ is None:
+                report = f'type: {schema} is not in the registry'
+
+        elif isinstance(schema, dict):
+            report = {}
+
+            schema_keys = set([])
+            branches = set([])
+
+            for key, value in schema.items():
+                if key == '_type':
+                    typ = self.type_registry.access(value)
+                    if typ is None:
+                        report[key] = f'type: {value} is not in the registry'
+                elif key in type_schema_keys:
+                    schema_keys.add(key)
+                    registry = self.registry_registry.access(key)
+                    if registry is None:
+                        # deserialize and serialize back and check it is equal
+                        pass
+                    else:
+                        element = registry.access(value)
+                        if element is None:
+                            report[key] = f'no entry in the {key} registry for: {value}'
                 else:
-                    element = registry.access(value)
-                    if element is None:
-                        report[key] = f'no entry in the {key} registry for: {value}'
-            else:
-                branches.add(key)
-                branch_report = self.validate_schema(value)
-                if len(branch_report) > 0:
-                    report[key] = branch_report
+                    branches.add(key)
+                    branch_report = self.validate_schema(value)
+                    if len(branch_report) > 0:
+                        report[key] = branch_report
+
+        return report
+
 
         # # We will need this when building states to check to see if we are
         # # trying to instantiate an abstract type, but we can still register
@@ -70,7 +82,6 @@ class SchemaTypes():
         #             if not key in optional_schema_keys:
         #                 report[key] = f'missing required key: {key} for declaring atomic type'
 
-        return report
 
 
     # TODO: if its an edge, ensure ports match wires
@@ -616,8 +627,7 @@ base_type_library = {
         '_divide': 'divide_edge',
         '_type_parameters': ['ports'],
         '_description': 'hyperedges in the bigraph, with ports as a type parameter',
-        'wires': {
-            '_type': 'tree[list[string]]'}}}
+        'wires': 'tree[list[string]]'}}
 
 
 def register_base_types(types):
@@ -857,8 +867,8 @@ def test_validate_schema(base_types):
                 '_value': 2
             },
             'edge1': {
-                '_type': 'edge',
-                # '_type': 'edge[a:int]',
+                '_type': 'edge[a:int]',
+                # '_type': 'edge',
                 # '_ports': {
                 #     '1': {'_type': 'int'},
                 # },
@@ -916,7 +926,7 @@ def test_fill_in_missing_nodes(base_types):
     test_schema = {
         'edge 1': {
             # this could become a process_edge type
-            '_type': 'edge',
+            '_type': 'edge[port A:float]',
             '_ports': {
                 'port A': {'_type': 'float'},
             },
@@ -1220,9 +1230,9 @@ def test_link_place(base_types):
                 'v3': {}}},
         'v4': {
             'v5': {}},
-        'e0': {},
-        'e1': {},
-        'e2': {}}
+        'e0': 'int',
+        'e1': 'int',
+        'e2': 'int'}
 
     hypergraph = {
         'e0': {

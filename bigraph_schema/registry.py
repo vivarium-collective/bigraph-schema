@@ -4,7 +4,7 @@ import collections
 import pytest
 from typing import Any
 
-from bigraph_schema.parse import parse_type_parameters
+from bigraph_schema.parse import parse_expression
 from bigraph_schema.units import units, render_units_type
 
 
@@ -224,17 +224,23 @@ class TypeRegistry(Registry):
 
 
     def resolve_parameters(self, qualified_type):
-        type_name, parameter_types = qualified_type
+        if isinstance(qualified_type, str):
+            type_name = qualified_type
+            parameter_types = []
+        elif isinstance(qualified_type, dict):
+            return {
+                key: self.resolve_parameters(branch)
+                for key, branch in qualified_type.items()}
+        else:
+            type_name, parameter_types = qualified_type
         outer_type = self.registry.get(type_name)
 
         if outer_type is None:
-            # try:
-            #     # import ipdb; ipdb.set_trace()
-            #     # TODO: parse nested types
-            #     # big = bigraph(type_name)
-            # except:
-                # import ipdb; ipdb.set_trace()
-            raise ValueError(f'type {qualified_type} is looking for type {type_name} but that is not in the registry')
+            try:
+                outer_type = parse_expression(type_name)
+            except:
+                import ipdb; ipdb.set_trace()
+                raise ValueError(f'type {qualified_type} is looking for type {type_name} but that is not in the registry')
 
         type_parameters = {}
         if '_type_parameters' in outer_type:
@@ -289,11 +295,11 @@ class TypeRegistry(Registry):
 
         if typ is None and key is not None and key != '':
             try:
-                parse = parse_type_parameters(key)
+                parse = parse_expression(key)
                 if parse[0] in self.registry:
                     typ = self.resolve_parameters(parse)
             except Exception as e:
-                # import ipdb; ipdb.set_trace()
+                import ipdb; ipdb.set_trace()
                 print(f'type did not parse: {key}')
 
         return typ
