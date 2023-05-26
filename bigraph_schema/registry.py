@@ -299,7 +299,7 @@ class TypeRegistry(Registry):
                 if parse[0] in self.registry:
                     typ = self.resolve_parameters(parse)
             except Exception as e:
-                import ipdb; ipdb.set_trace()
+                # import ipdb; ipdb.set_trace()
                 print(f'type did not parse: {key}')
 
         return typ

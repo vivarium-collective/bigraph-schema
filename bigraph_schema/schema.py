@@ -1192,8 +1192,8 @@ def test_link_place(base_types):
             'e1': {
                 '_type': 'edge[e1-0:int|e2-0:int]',
                 '_ports': {
-                    'e1-0': 'int'
-                    'e2-0': 'int'}
+                    'e1-0': 'int',
+                    'e2-0': 'int'},
                 'wires': {
                     'e1-0': 'v3',
                     'e1-1': 'v1'}},

@@ -34,8 +34,8 @@ def render_units_type(dimensionality):
     render = '*'.join(numerator)
     if len(denominator) > 0:
         render_denominator = '*'.join(denominator)
-        if len(denominator) > 1:
-            render_denominator = f'({render_denominator})'
+        # if len(denominator) > 1:
+        #     render_denominator = f'({render_denominator})'
         render = f'{render}/{render_denominator}'
 
     return render
