@@ -4,8 +4,22 @@ from pint import UnitRegistry
 units = UnitRegistry()
 
 
+def render_power(original_power):
+    negative = original_power < 0
+    power = abs(original_power)
+    int_part = int(power)
+    root_part = power % 1
+
+    if root_part != 0.0:
+        render = str(root_part)[2:]
+        render = f'{int_part}_{render}'
+    else:
+        render = str(int_part)
+
+    return render
+
+
 def render_units_type(dimensionality):
-    # dimensionality = unit.dimensionality
     unit_keys = list(dimensionality.keys())
     unit_keys.sort()
 
@@ -15,30 +29,42 @@ def render_units_type(dimensionality):
     for unit_key in unit_keys:
         inner_key = unit_key.strip('[]')
         power = dimensionality[unit_key]
-        if power % 1 == 0:
-            power = int(power)
-        if power > 0:
-            if power > 1:
-                render = f'{inner_key}^{power}'
-            else:
-                render = inner_key
-            numerator.append(render)
-        else:
+        negative = False
+        
+        if power < 0:
+            negative = True
             power = -power
-            if power > 1:
-                render = f'{inner_key}^{power}'
-            else:
-                render = inner_key
+
+        if power == 1:
+            render = inner_key
+        else:
+            render = f'{inner_key}^{render_power(power)}'
+
+        if negative:
             denominator.append(render)
+        else:
+            numerator.append(render)
 
     render = '*'.join(numerator)
     if len(denominator) > 0:
         render_denominator = '*'.join(denominator)
-        # if len(denominator) > 1:
-        #     render_denominator = f'({render_denominator})'
         render = f'{render}/{render_denominator}'
 
     return render
+
+
+def parse_power(s):
+    if s is None:
+        return 1
+    elif '_' in s:
+        parts = s.split('_')
+        if len(parts) > 1:
+            base, residue = parts
+            return int(base) + (float(residue) / 10.0)
+        else:
+            return int(parts)
+    else:
+        return int(s)
 
 
 def parse_dimensionality(s):
@@ -49,18 +75,18 @@ def parse_dimensionality(s):
     dimensionality = {}
 
     for term in numerator_terms:
-        power = term.split('^')
-        exponent = 1
-        if len(power) > 1:
-            exponent = power[1]
-        dimensionality[f'[{power[0]}]'] = int(exponent)
+        base = term.split('^')
+        exponent = None
+        if len(base) > 1:
+            exponent = base[1]
+        dimensionality[f'[{base[0]}]'] = parse_power(exponent)
 
     for term in denominator_terms:
         power = term.split('^')
-        exponent = 1
+        exponent = None
         if len(power) > 1:
             exponent = power[1]
-        dimensionality[f'[{power[0]}]'] = -int(exponent)
+        dimensionality[f'[{power[0]}]'] = -parse_power(exponent)
 
     return dimensionality
 
@@ -68,14 +94,35 @@ def parse_dimensionality(s):
 def test_units_render():
     dimensionality = units.newton.dimensionality
     render = render_units_type(dimensionality)
-    assert render == 'length*mass/time^2'
-
     recover = parse_dimensionality(render)
+
+    print(f'original: {dimensionality}')
+    print(f'render: {render}')
+    print(f'parsed: {recover}')
+
+    assert render == 'length*mass/time^2'
+    assert recover == dimensionality
+
+
+def test_roots_cycle():
+    dimensionality = {
+        '[length]': 1.5,
+        '[time]': 3,
+        '[mass]': -2.5,
+    }
+    render = render_units_type(dimensionality)
+    recover = parse_dimensionality(render)
+
+    print(f'original: {dimensionality}')
+    print(f'render: {render}')
+    print(f'parsed: {recover}')
+
+    assert render == 'length^1_5*time^3/mass^2_5'
     assert recover == dimensionality
 
 
 if __name__ == '__main__':
     test_units_render()
-
+    test_roots_cycle()
 
 

@@ -121,25 +121,16 @@ class SchemaTypes():
 
     def generate_default(self, schema):
         default = None
+        found = self.type_registry.access(schema)
 
-        if isinstance(schema, str):
-            schema = self.type_registry.access(schema)
-        elif '_type' in schema:
-            schema = self.type_registry.substitute_type(schema)
-
-        if '_default' in schema:
-            if not '_deserialize' in schema:
+        if '_default' in found:
+            if not '_deserialize' in found:
                 raise Exception(
-                    f'asking for default for {type_key} but no deserialize in {schema}')
-            deserialize_function = self.deserialize_registry.access(
-                schema['_deserialize'])
-            default = deserialize_function(
-                schema['_default'],
-                schema.get('_type_parameters'),
-                self)
+                    f'asking for default for {type_key} but no deserialize in {found}')
+            default = self.deserialize(found, found['_default'])
         else:
             default = {}
-            for key, subschema in schema.items():
+            for key, subschema in found.items():
                 if key not in type_schema_keys:
                     default[key] = self.generate_default(subschema)
 
@@ -194,14 +185,45 @@ class SchemaTypes():
         if isinstance(schema, str):
             serialize_function = self.serialize_registery.access(schema)
             if serialize_function is None:
-                raise Exception(f'serialization function not in the registry')
+                raise Exception(
+                    f'serialize function not in the registry: {schema}')
             else:
                 return serialize_function(
                     state,
-                    type_parameters,
+                    schema['_resolved'],
                     self)
-        # else:
-        #     for key, subschema in schema:
+        else:
+            tree = {
+                key: self.serialize(subschema, state.get(key))
+                for key, subschema in schema}
+            return repr(tree)
+                
+
+    def deserialize(self, schema, encoded):
+        found = self.type_registry.access(schema)
+
+        if '_deserialize' in found:
+            deserialize = found['_deserialize']
+            if isinstance(deserialize, str):
+                deserialize_function = self.deserialize_registry.access(
+                    deserialize)
+            else:
+                deserialize_function = deserialize
+
+            if deserialize_function is None:
+                raise Exception(
+                    f'deserialize function not in the registry: {deserialize}')
+
+            return deserialize_function(
+                encoded,
+                found.get('_resolved', {}),
+                self)
+        else:
+            tree = eval(encoded)
+            
+            return {
+                key: self.deserialize(schema.get(key), branch)
+                for key, branch in tree.items()}
 
 
     def fill_ports(self, schema, wires=None, state=None, top=None, path=()):
@@ -215,6 +237,9 @@ class SchemaTypes():
 
         more_wires = state.get('wires', {})
         wires = deep_merge(wires, more_wires)
+
+        if schema is None:
+            import ipdb; ipdb.set_trace()
 
         for port_key, port_schema in schema.items():
             if port_key in wires:
@@ -261,7 +286,7 @@ class SchemaTypes():
         return state
 
 
-    def fill_state(self, schema, state=None, top=None, path=(), type_key=None, context=None):
+    def fill_state(self, original_schema, state=None, top=None, path=(), type_key=None, context=None):
         # if a port is disconnected, build a store
         # for it under the '_open' key in the current
         # node
@@ -269,10 +294,19 @@ class SchemaTypes():
         # inform the user that they have disconnected
         # ports somehow
 
+        if original_schema is None:
+            import ipdb; ipdb.set_trace()
+            return None
+
         if top is None:
             top = state
 
-        schema = self.type_registry.substitute_type(schema)
+        # schema = self.type_registry.substitute_type(schema)
+        schema = self.type_registry.access(original_schema)
+
+        if schema is None:
+            import ipdb; ipdb.set_trace()
+            return None
 
         if state is None:
             if '_default' in schema:
@@ -285,24 +319,28 @@ class SchemaTypes():
                 f'schema cannot be a str: {str}'
             )
 
-        for key, subschema in schema.items():
-            if key == '_ports':
-                wires = state.get('wires', {})
-                state = self.fill_ports(
-                    subschema,
-                    wires=wires,
-                    state=state,
-                    top=top,
-                    path=path)
-
-            elif key not in type_schema_keys:
-                subpath = path + (key,)
-                if isinstance(state, dict):
-                    state[key] = self.fill_state(
+        if isinstance(schema, list):
+            found = self.type_registry.access(schema)
+            state = self.fill_state(found, state, top, path, type_key, context)
+        else:
+            for key, subschema in schema.items():
+                if key == '_ports':
+                    wires = state.get('wires', {})
+                    state = self.fill_ports(
                         subschema,
-                        state=state.get(key),
+                        wires=wires,
+                        state=state,
                         top=top,
-                        path=subpath)
+                        path=path)
+
+                elif key not in type_schema_keys:
+                    subpath = path + (key,)
+                    if isinstance(state, dict):
+                        state[key] = self.fill_state(
+                            subschema,
+                            state=state.get(key),
+                            top=top,
+                            path=subpath)
         
         return state
 
@@ -435,9 +473,10 @@ def divide_tree(tree, type_parameters, types):
     result = [{}, {}]
     # get the type of the values for this dict
     divide_type = type_parameters['leaf']
-    divide_function = types.registry_registry.type_attribute(
-        divide_type,
-        '_divide')
+    divide_function = divide_type['_divide']
+    # divide_function = types.registry_registry.type_attribute(
+    #     divide_type,
+    #     '_divide')
 
     for key, value in tree:
         if isinstance(value, dict):
@@ -558,7 +597,7 @@ base_type_library = {
     'int': {
         '_default': '0',
         # inherit _apply and _serialize from number type
-        '_deserialize': 'int',
+        '_deserialize': 'deserialize_int',
         '_divide': 'divide_int',
         '_description': '64-bit integer',
         '_super': 'number',},
@@ -662,7 +701,7 @@ def register_base_types(types):
     types.serialize_registry.register('serialize_edge', serialize_edge)
 
     types.deserialize_registry.register('float', deserialize_float)
-    types.deserialize_registry.register('int', deserialize_int)
+    types.deserialize_registry.register('deserialize_int', deserialize_int)
     types.deserialize_registry.register('deserialize_string', deserialize_string)
     types.deserialize_registry.register('evaluate', evaluate)
     types.deserialize_registry.register('deserialize_tree', deserialize_tree)
@@ -760,7 +799,8 @@ def schema_zoo():
 
 def test_cube(base_types):
     cube_schema = {
-        'shape': {},
+        'shape': {
+            '_description': 'abstract shape type'},
         
         'rectangle': {
             'width': {'_type': 'int'},
@@ -792,6 +832,7 @@ def test_generate_default(cube_types):
     int_default = cube_types.generate_default(
         {'_type': 'int'}
     )
+
     assert int_default == 0
 
     cube_default = cube_types.generate_default(
@@ -800,6 +841,15 @@ def test_generate_default(cube_types):
     assert 'width' in cube_default
     assert 'height' in cube_default
     assert 'depth' in cube_default
+
+    nested_default = cube_types.generate_default(
+        {'a': 'int',
+         'b': {
+             'c': 'float',
+             'd': 'cube'},
+         'e': 'string'})
+
+    assert nested_default['b']['d']['width'] == 0
 
 
 def test_expand_schema(cube_types):
@@ -859,7 +909,7 @@ def test_validate_schema(base_types):
             '_default': 0,
             '_apply': 'accumulate',
             '_serialize': 'to_string',
-            '_deserialize': 'int',
+            '_deserialize': 'deserialize_int',
             '_description': '64-bit integer'
         },
         'ports match': {
@@ -928,9 +978,9 @@ def test_fill_in_missing_nodes(base_types):
         'edge 1': {
             # this could become a process_edge type
             '_type': 'edge[port A:float]',
-            '_ports': {
-                'port A': {'_type': 'float'},
-            },
+            # '_ports': {
+            #     'port A': {'_type': 'float'},
+            # },
         }
     }
 
@@ -1085,6 +1135,7 @@ def test_expected_schema(base_types):
     # }
 
     dual_process_schema = {
+        # 'process1': 'edge[port1:float|port2:int]',
         'process1': {
             '_ports': {
                 'port1': 'float',
@@ -1097,7 +1148,7 @@ def test_expected_schema(base_types):
                 'port2': 'int',
             },
         },
-    }    
+    }
 
     base_types.type_registry.register(
         'dual_process',
@@ -1105,6 +1156,7 @@ def test_expected_schema(base_types):
     )
 
     test_schema = {
+        # 'store1': 'process1:edge[port1:float|port2:int]|process2[port1:float|port2:int]',
         'store1': 'dual_process',
         'process3': {
             '_ports': {

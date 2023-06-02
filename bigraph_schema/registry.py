@@ -2,6 +2,7 @@ import copy
 import random
 import collections
 import pytest
+import traceback
 from typing import Any
 
 from bigraph_schema.parse import parse_expression
@@ -223,44 +224,6 @@ class TypeRegistry(Registry):
         super().register(key, item, alternate_keys, force)
 
 
-    def resolve_parameters(self, qualified_type):
-        if isinstance(qualified_type, str):
-            type_name = qualified_type
-            parameter_types = []
-        elif isinstance(qualified_type, dict):
-            return {
-                key: self.resolve_parameters(branch)
-                for key, branch in qualified_type.items()}
-        else:
-            type_name, parameter_types = qualified_type
-        outer_type = self.registry.get(type_name)
-
-        if outer_type is None:
-            try:
-                outer_type = parse_expression(type_name)
-            except:
-                import ipdb; ipdb.set_trace()
-                raise ValueError(f'type {qualified_type} is looking for type {type_name} but that is not in the registry')
-
-        type_parameters = {}
-        if '_type_parameters' in outer_type:
-            parameter_names = outer_type['_type_parameters']
-            type_parameters = {
-                parameter_name: self.resolve_parameters(parameter_type)
-                for parameter_name, parameter_type in zip(
-                    parameter_names,
-                    parameter_types)}
-
-        result = {
-            '_type': type_name,
-        }
-
-        if type_parameters:
-            result['_type_parameters'] = type_parameters
-
-        return result
-
-
     def substitute_type(self, schema):
         if isinstance(schema, str):
             schema = self.access(schema)
@@ -289,20 +252,65 @@ class TypeRegistry(Registry):
         return self.expand_schema(duplicate)
 
 
-    def access(self, key):
-        """Get an item by key from the registry."""
-        typ = self.registry.get(key)
+    def resolve_parameters(self, type_parameters, schema):
+        return {
+            type_parameter: self.access(
+                schema.get(f'_{type_parameter}'))
+            for type_parameter in type_parameters}
 
-        if typ is None and key is not None and key != '':
-            try:
-                parse = parse_expression(key)
-                if parse[0] in self.registry:
-                    typ = self.resolve_parameters(parse)
-            except Exception as e:
-                # import ipdb; ipdb.set_trace()
-                print(f'type did not parse: {key}')
 
-        return typ
+    def access(self, schema):
+        """Retrieve all types in the schema"""
+
+        found = None
+        # parameters = {}
+
+        if isinstance(schema, dict):
+            if '_default' in schema:
+                return schema
+            elif '_type' in schema:
+                found = self.access(schema['_type'])
+                if '_type_parameters' in found:
+                    for type_parameter in found['_type_parameters']:
+                        found[f'_{type_parameter}'] = self.access(type_parameter)
+                    
+                    found['_bindings'] = {
+                        type_parameter: found[f'_{type_parameter}']
+                        for type_parameter in found['_type_parameters']}
+            else:
+                found = {
+                   key: self.access(branch)
+                   for key, branch in schema.items()}
+        elif isinstance(schema, list):
+            bindings = []
+            if len(schema) > 1:
+                schema, bindings = schema
+            else:
+                schema = schema[0]
+            found = self.access(schema)
+            if len(bindings) > 0:
+                for type_parameter, binding in zip(
+                    found['_type_parameters'],
+                    bindings):
+
+                    found[f'_{type_parameter}'] = self.access(binding)
+                    
+                found['_bindings'] = dict(zip(
+                    found['_type_parameters'],
+                    bindings))
+        elif isinstance(schema, str):
+            found = self.registry.get(schema)
+
+            if found is None and schema is not None and schema != '':
+                try:
+                    parse = parse_expression(schema)
+                    if parse != schema:
+                        found = self.access(parse)
+                except Exception:
+                    print(f'type did not parse: {schema}')
+                    traceback.print_exc()
+                    
+        return found
 
 
     def lookup(type_key, attribute):
