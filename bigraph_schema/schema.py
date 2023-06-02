@@ -21,7 +21,7 @@ class SchemaTypes():
         self.registry_registry.register('_divide', self.divide_registry)
         self.registry_registry.register('_serialize', self.serialize_registry)
         self.registry_registry.register('_deserialize', self.deserialize_registry)
-
+        
         register_base_types(self)
 
 
@@ -226,6 +226,11 @@ class SchemaTypes():
                 for key, branch in tree.items()}
 
 
+    def divide(self, schema, state, ratios=(0.5, 0.5)):
+        # TODO: implement
+        return state
+
+
     def fill_ports(self, schema, wires=None, state=None, top=None, path=()):
         # deal with wires
         if wires is None:
@@ -387,7 +392,10 @@ def accumulate(current, update, type_parameters, types):
 def concatenate(current, update, type_parameters, types):
     return current + update
 
-def divide_float(value, type_parameters, types):
+# support dividing by ratios?
+# ---> divide_float({...}, [0.1, 0.3, 0.6])
+
+def divide_float(value, ratios, type_parameters, types):
     half = value / 2.0
     return (half, half)
 
@@ -625,6 +633,11 @@ base_type_library = {
         '_divide': 'divide_list',
         '_type_parameters': ['element'],
         '_description': 'general list type (or sublists)'},
+
+    # {'_type': 'tree':
+    #  '_leaf': {
+    #      '_type': 'list',
+    #      '_element': 'string'}
 
     'tree': {
         '_default': '{}',
@@ -977,10 +990,11 @@ def test_fill_in_missing_nodes(base_types):
     test_schema = {
         'edge 1': {
             # this could become a process_edge type
-            '_type': 'edge[port A:float]',
-            # '_ports': {
-            #     'port A': {'_type': 'float'},
-            # },
+            # '_type': 'edge[port A:float]',
+            '_type': 'edge',
+            '_ports': {
+                'port A': {'_type': 'float'},
+            },
         }
     }
 
@@ -1343,6 +1357,83 @@ def test_units(base_types):
     )
 
     assert new_state['distance'] == 9.476 * units.meter
+
+
+# is this a lens?
+def test_project(cube_types):
+    schema = {
+        'edge1': {
+            '_type': 'edge',
+            '_ports': {
+                '1': 'int',
+                '2': 'float',
+                '3': 'string',
+                '4': 'tree[int]'}},
+        'a0': {
+            'a0.0': 'int',
+            'a0.1': 'float',
+            'a0.2': {
+                'a0.2.0': 'string'}},
+        'a1': 'tree[int]'}
+
+    path_format = {
+        '1': 'a0>a0.0',
+        '2': 'a0>a0.1',
+        '3': 'a0>a0.2>a0.2.0'}
+
+    # TODO: support separate schema/instance, and 
+    #   instances with '_type' and type paramter keys
+    # TODO: support overriding various type methods
+    instance = {
+        'edge1': {
+            # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
+            '_type': 'edge',
+            '_ports': {
+                '1': 'int',
+                '2': 'float',
+                '3': 'string',
+                '4': 'tree[int]'},
+
+            'wires': {
+                '1': ['a0', 'a0.0'],
+                '2': ['a0', 'a0.1'],
+                '3': ['a0', 'a0.2', 'a0.2.0'],
+                '4': ['a1']}},
+        'a1': {
+            '_type': 'tree[int]',
+            'branch1': {
+                'branch2': 11,
+                'branch3': 22},
+            'branch4': 44}}
+
+    instance = cube_types.fill(schema, instance)
+    
+    # TODO: does project require the schema?
+    states = cube_types.project(schema, instance, ['edge1'])
+    update = cube_types.inverse(schema, states, ['edge1'])
+
+    assert update == {}
+
+    updated_instance = cube_types.apply(
+        schema,
+        instance,
+        update)
+
+    add_update = {
+        '4': {
+            '_add': {
+                'branch5': 55}}}
+
+    inverted_update = cube_types.inverse(
+        schema,
+        add_update,
+        ['edge1'])
+
+    added_branch = cube_types.apply(
+        schema,
+        inverted_update,
+        ['edge1'])
+
 
 @pytest.fixture
 def base_types():

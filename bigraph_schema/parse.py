@@ -10,7 +10,7 @@ parameter_examples = {
     'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
     'typed': 'a:field[yellow,tree,snake]|b.(x:earth|y:cloud|z:sky)',
     'typed_parameters': 'edge[a:int|b.(x:length|y:float),v[zz:float|xx:what]]',
-    'units_type': ''
+    'units_type': 'length^2*mass/time^1_5',
 }
 
 
