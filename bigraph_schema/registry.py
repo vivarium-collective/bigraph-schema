@@ -31,6 +31,7 @@ optional_schema_keys = (
 type_schema_keys = required_schema_keys + optional_schema_keys
 
 overridable_schema_keys = (
+    '_type',
     '_default',
     '_apply',
     '_serialize',
@@ -52,6 +53,13 @@ concatenate_schema_keys = (
 )
 
 
+def non_schema_keys(schema):
+    return [
+        element
+        for element in schema.keys()
+        if not element.startswith('_')]
+
+            
 def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
     """Recursively merge type definitions, never overwrite.
     Args:
@@ -82,8 +90,8 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
                 dct[k].extend(merge_dct[k])
         else:
             raise ValueError(
-                f'cannot merge types at path {path + (k,)}: '
-                f'{dct} overwrites {k} from {merge_dct}'
+                f'cannot merge types at path {path + (k,)}:\n'
+                f'{dct}\noverwrites \'{k}\' from\n{merge_dct}'
             )
             
     return dct
@@ -202,54 +210,37 @@ class TypeRegistry(Registry):
         self.register('any', {})
 
 
-    def register(self, key, item, alternate_keys=tuple(), force=False):
-        item = copy.deepcopy(item)
-        if isinstance(item, dict):
-            supers = item.get('_super', ['any']) # list of immediate supers
+    def register(self, key, schema, alternate_keys=tuple(), force=False):
+        schema = copy.deepcopy(schema)
+        if isinstance(schema, dict):
+            supers = schema.get('_super', ['any']) # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
-                item['_super'] = supers
+                schema['_super'] = supers
             for su in supers:
                 assert isinstance(
                     su, str), f"super for {key} must be a string, not {su}"
             self.supers[key] = supers
+
             for su in supers:
                 su_type = self.registry.get(su, {})
-                new_item = copy.deepcopy(su_type)
-                item = type_merge(
-                    new_item,
-                    item,
+                new_schema = copy.deepcopy(su_type)
+                schema = type_merge(
+                    new_schema,
+                    schema,
                     merge_supers=False)
 
-        super().register(key, item, alternate_keys, force)
+            for subkey, original_subschema in schema.items():
+                if not subkey in type_schema_keys:
+                    subschema = self.access(original_subschema)
+                    if subschema is None:
+                        raise Exception(f'trying to register a new type ({key}), but it depends on a type ({subkey}) which is not in the registry')
+                    else:
+                        schema[subkey] = subschema
+        else:
+            raise Exception(f'all type definitions must be dicts with the following keys: {type_schema_keys}\nnot: {schema}')
 
-
-    def substitute_type(self, schema):
-        if isinstance(schema, str):
-            schema = self.access(schema)
-            if schema is None:
-                raise Exception(f'trying to substitute a type that is unrecognized {schema}')
-        elif '_type' in schema:
-            type_key = schema['_type']
-            type_schema = copy.deepcopy(self.access(type_key))
-            schema = deep_merge(type_schema, schema)
-
-        return schema
-
-
-    def expand_schema(self, schema):
-        # make this only show the types at the leaves
-
-        step = self.substitute_type(schema)
-        for key, subschema in step.items():
-            if key not in type_schema_keys:
-                step[key] = self.expand_schema(subschema)
-        return step
-        
-
-    def expand(self, schema):
-        duplicate = copy.deepcopy(schema)
-        return self.expand_schema(duplicate)
+        super().register(key, schema, alternate_keys, force)
 
 
     def resolve_parameters(self, type_parameters, schema):
@@ -271,16 +262,20 @@ class TypeRegistry(Registry):
             elif '_type' in schema:
                 found = self.access(schema['_type'])
                 if '_type_parameters' in found:
-                    for type_parameter in found['_type_parameters']:
-                        found[f'_{type_parameter}'] = self.access(type_parameter)
+                    # for type_parameter in found['_type_parameters']:
+                    #     parameter_key = f'_{type_parameter}'
+                    #     if not parameter_key in found:
+                    #         found[parameter_key] = self.access(type_parameter)
                     
-                    found['_bindings'] = {
-                        type_parameter: found[f'_{type_parameter}']
-                        for type_parameter in found['_type_parameters']}
+                    if not '_bindings' in found:
+                        found['_bindings'] = {
+                            type_parameter: found[f'_{type_parameter}']
+                            for type_parameter in found['_type_parameters']}
             else:
                 found = {
                    key: self.access(branch)
                    for key, branch in schema.items()}
+
         elif isinstance(schema, list):
             bindings = []
             if len(schema) > 1:
@@ -289,15 +284,13 @@ class TypeRegistry(Registry):
                 schema = schema[0]
             found = self.access(schema)
             if len(bindings) > 0:
-                for type_parameter, binding in zip(
-                    found['_type_parameters'],
-                    bindings):
-
-                    found[f'_{type_parameter}'] = self.access(binding)
-                    
                 found['_bindings'] = dict(zip(
                     found['_type_parameters'],
                     bindings))
+
+                for type_parameter, binding in found['_bindings'].items():
+                    found[f'_{type_parameter}'] = self.access(binding)
+
         elif isinstance(schema, str):
             found = self.registry.get(schema)
 

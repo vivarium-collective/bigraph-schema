@@ -3,7 +3,7 @@ import pprint
 import pytest
 
 from bigraph_schema.parse import parse_expression
-from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path
+from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path, non_schema_keys
 from bigraph_schema.units import units, render_units_type, parse_dimensionality
 
 
@@ -25,6 +25,10 @@ class SchemaTypes():
         register_base_types(self)
 
 
+    def access(self, type_key):
+        return self.type_registry.access(type_key)
+
+
     def validate_schema(self, schema, enforce_connections=False):
         # add ports and wires
         # validate ports are wired to a matching type,
@@ -38,7 +42,7 @@ class SchemaTypes():
             report = 'schema cannot be None'
 
         elif isinstance(schema, str):
-            typ = self.type_registry.access(schema)
+            typ = self.access(schema)
             if typ is None:
                 report = f'type: {schema} is not in the registry'
 
@@ -50,7 +54,7 @@ class SchemaTypes():
 
             for key, value in schema.items():
                 if key == '_type':
-                    typ = self.type_registry.access(value)
+                    typ = self.access(value)
                     if typ is None:
                         report[key] = f'type: {value} is not in the registry'
                 elif key in type_schema_keys:
@@ -85,8 +89,8 @@ class SchemaTypes():
 
 
     # TODO: if its an edge, ensure ports match wires
-    def validate_state(self, schema, state):
-        schema = self.type_registry.substitute_type(schema)
+    def validate_state(self, original_schema, state):
+        schema = self.access(original_schema)
         validation = {}
 
         if '_serialize' in schema:
@@ -119,9 +123,9 @@ class SchemaTypes():
         return validation
 
 
-    def generate_default(self, schema):
+    def default(self, schema):
         default = None
-        found = self.type_registry.access(schema)
+        found = self.access(schema)
 
         if '_default' in found:
             if not '_deserialize' in found:
@@ -132,26 +136,19 @@ class SchemaTypes():
             default = {}
             for key, subschema in found.items():
                 if key not in type_schema_keys:
-                    default[key] = self.generate_default(subschema)
+                    default[key] = self.default(subschema)
 
         return default
         
 
-    def generate_default_type(self, type_key):
-        schema = self.type_registry.access(type_key)
-        return self.generate_default(schema)
-
-
     def apply_update(self, schema, state, update):
-        # expects an expanded schema
-
         if '_apply' in schema:
             apply_function = self.apply_registry.access(schema['_apply'])
             
             state = apply_function(
                 state,
                 update,
-                schema.get('_type_parameters'),
+                schema.get('_bindings'),
                 self)
 
         elif isinstance(update, dict):
@@ -167,18 +164,16 @@ class SchemaTypes():
                     state[key] = subupdate
 
         else:
-            schema = self.type_registry.expand_schema(schema)
+            schema = self.access(schema)
             state = self.apply_update(schema, state, update)
 
         return state
 
 
-    # TODO: provide an expanded form of the type registry, where everything
-    #   is already pre-expanded
-    def apply(self, schema, initial, update):
-        expanded = self.type_registry.expand(schema)
+    def apply(self, original_schema, initial, update):
+        schema = self.access(original_schema)
         state = copy.deepcopy(initial)
-        return self.apply_update(expanded, initial, update)
+        return self.apply_update(schema, initial, update)
 
 
     def serialize(self, schema, state):
@@ -200,7 +195,7 @@ class SchemaTypes():
                 
 
     def deserialize(self, schema, encoded):
-        found = self.type_registry.access(schema)
+        found = self.access(schema)
 
         if '_deserialize' in found:
             deserialize = found['_deserialize']
@@ -243,9 +238,7 @@ class SchemaTypes():
         more_wires = state.get('wires', {})
         wires = deep_merge(wires, more_wires)
 
-        if schema is None:
-            import ipdb; ipdb.set_trace()
-
+        import ipdb; ipdb.set_trace()
         for port_key, port_schema in schema.items():
             if port_key in wires:
                 subwires = wires[port_key]
@@ -282,7 +275,7 @@ class SchemaTypes():
                         #     port_schema,
                         #     destination[destination_key])
                     else:
-                        destination[destination_key] = self.generate_default(
+                        destination[destination_key] = self.default(
                             port_schema)
             else:
                 # handle unconnected ports
@@ -291,69 +284,53 @@ class SchemaTypes():
         return state
 
 
-    def fill_state(self, original_schema, state=None, top=None, path=(), type_key=None, context=None):
+    def fill_state(self, schema, state=None, top=None, path=(), type_key=None, context=None):
         # if a port is disconnected, build a store
         # for it under the '_open' key in the current
-        # node
+        # node (?)
 
         # inform the user that they have disconnected
         # ports somehow
 
-        if original_schema is None:
-            import ipdb; ipdb.set_trace()
+        if schema is None:
             return None
-
+        if state is None:
+            state = self.default(schema)
         if top is None:
             top = state
 
-        # schema = self.type_registry.substitute_type(schema)
-        schema = self.type_registry.access(original_schema)
+        if '_ports' in schema:
+            wires = state.get('wires', {})
+            state = self.fill_ports(
+                schema['_ports'],
+                wires=wires,
+                state=state,
+                top=top,
+                path=path)
 
-        if schema is None:
-            import ipdb; ipdb.set_trace()
-            return None
-
-        if state is None:
-            if '_default' in schema:
-                state = self.generate_default(schema)
-            else:
-                state = {}
-
-        if isinstance(schema, str):
-            raise Exception(
-                f'schema cannot be a str: {str}'
-            )
-
-        if isinstance(schema, list):
-            found = self.type_registry.access(schema)
-            state = self.fill_state(found, state, top, path, type_key, context)
+        branches = non_schema_keys(schema)
+        if len(branches) > 0 and not isinstance(state, dict):
+            raise Exception(f'schema has branches\n{schema}\nbut state is a leaf\n{state}')
         else:
-            for key, subschema in schema.items():
-                if key == '_ports':
-                    wires = state.get('wires', {})
-                    state = self.fill_ports(
-                        subschema,
-                        wires=wires,
-                        state=state,
-                        top=top,
-                        path=path)
-
-                elif key not in type_schema_keys:
-                    subpath = path + (key,)
-                    if isinstance(state, dict):
-                        state[key] = self.fill_state(
-                            subschema,
-                            state=state.get(key),
-                            top=top,
-                            path=subpath)
-        
+            for branch in branches:
+                subpath = path + (branch,)
+                state[branch] = self.fill_state(
+                    schema[branch],
+                    state=state.get(branch),
+                    top=top,
+                    path=subpath)
+            
         return state
 
 
-    def fill(self, schema, state=None):
+    def fill(self, original_schema, state=None):
         if state is not None:
             state = copy.deepcopy(state)
-        return self.fill_state(schema, state=state)
+        schema = self.access(original_schema)
+
+        return self.fill_state(
+            schema,
+            state=state)
 
 
     def link_place(self, place, link):
@@ -386,22 +363,22 @@ class SchemaTypes():
         return {}
 
 
-def accumulate(current, update, type_parameters, types):
+def accumulate(current, update, bindings, types):
     return current + update
 
-def concatenate(current, update, type_parameters, types):
+def concatenate(current, update, bindings, types):
     return current + update
 
 # support dividing by ratios?
 # ---> divide_float({...}, [0.1, 0.3, 0.6])
 
-def divide_float(value, ratios, type_parameters, types):
+def divide_float(value, ratios, bindings, types):
     half = value / 2.0
     return (half, half)
 
 # support function types for registrys?
 # def divide_int(value: int, _) -> tuple[int, int]:
-def divide_int(value, type_parameters, types):
+def divide_int(value, bindings, types):
     half = value // 2
     other_half = half
     if value % 2 == 1:
@@ -413,7 +390,7 @@ def divide_int(value, type_parameters, types):
     
 
 # def divide_longest(dimensions: Dimension) -> Tuple[Dimension, Dimension]:
-def divide_longest(dimensions, type_parameters, types):
+def divide_longest(dimensions, bindings, types):
     # any way to declare the required keys for this function in the registry?
     # find a way to ask a function what type its domain and codomain are
 
@@ -428,18 +405,16 @@ def divide_longest(dimensions, type_parameters, types):
         return [{'width': width, 'height': x}, {'width': width, 'height': y}]
 
 
-def divide_list(l, type_parameters, types):
+def divide_list(l, bindings, types):
     result = [[], []]
-    divide_type = type_parameters['element']
-    divide = types.registry_registry.type_attribute(
-        divide_type,
-        '_divide')
-
+    divide_type = bindings['element']
+    divide = divide_type['_divide']
+    
     for item in l:
         if isinstance(item, list):
-            divisions = divide_list(item)
+            divisions = divide_list(item, bindings, types)
         else:
-            divisions = divide(item)
+            divisions = divide(item, divide_type, types)
 
         result[0].append(divisions[0])
         result[1].append(divisions[1])
@@ -447,40 +422,40 @@ def divide_list(l, type_parameters, types):
     return result
 
 
-def replace(old_value, new_value, type_parameters, types):
+def replace(old_value, new_value, bindings, types):
     return new_value
 
 
-def serialize_string(s, type_parameters, types):
+def serialize_string(s, bindings, types):
     return f'"{s}"'
 
-def deserialize_string(s, type_parameters, types):
+def deserialize_string(s, bindings, types):
     if s[0] != '"' or s[-1] != '"':
         raise Exception(f'deserializing str which requires double quotes: {s}')
     return s[1:-1]
 
 
-def to_string(value, type_parameters, types):
+def to_string(value, bindings, types):
     return str(value)
 
-def deserialize_int(i, type_parameters, types):
+def deserialize_int(i, bindings, types):
     return int(i)
 
-def deserialize_float(i, type_parameters, types):
+def deserialize_float(i, bindings, types):
     return float(i)
 
-def evaluate(code, type_parameters, types):
+def evaluate(code, bindings, types):
     return eval(code)
 
 
 # TODO: make these work
-def apply_tree(current, update, type_parameters, types):
+def apply_tree(current, update, bindings, types):
     pass
 
-def divide_tree(tree, type_parameters, types):
+def divide_tree(tree, bindings, types):
     result = [{}, {}]
     # get the type of the values for this dict
-    divide_type = type_parameters['leaf']
+    divide_type = bindings['leaf']
     divide_function = divide_type['_divide']
     # divide_function = types.registry_registry.type_attribute(
     #     divide_type,
@@ -496,82 +471,79 @@ def divide_tree(tree, type_parameters, types):
 
     return result
 
-def serialize_tree(value, type_parameters, types):
+def serialize_tree(value, bindings, types):
     return value
 
-def deserialize_tree(value, type_parameters, types):
+def deserialize_tree(value, bindings, types):
     return value
 
 
-def apply_dict(current, update, type_parameters, types):
+def apply_dict(current, update, bindings, types):
     pass
 
-def divide_dict(value, type_parameters, types):
+def divide_dict(value, bindings, types):
     return value
 
-def serialize_dict(value, type_parameters, types):
+def serialize_dict(value, bindings, types):
     return value
 
-def deserialize_dict(value, type_parameters, types):
+def deserialize_dict(value, bindings, types):
     return value
 
 
-def apply_maybe(current, update, type_parameters, types):
+def apply_maybe(current, update, bindings, types):
     if current is None or update is None:
         return update
     else:
-        maybe_type = types.type_registry.access(
-            type_parameters[0])
-        return apply_update(maybe_type, current, update)
+        value_type = bindings['value']
+        return types.apply(value_type, current, update)
 
-def divide_maybe(value, type_parameters):
+def divide_maybe(value, bindings):
     if value is None:
         return [None, None]
     else:
         pass
 
-def serialize_maybe(value, type_parameters, types):
+def serialize_maybe(value, bindings, types):
     if value is None:
         return NONE_SYMBOL
     else:
-        maybe_type = types.type_registry.access(
-            type_parameters[0])
-        return serialize(maybe_type, value)
+        value_type = bindings['value']
+        return serialize(value_type, value)
 
-def deserialize_maybe(encoded, type_parameters, types):
+def deserialize_maybe(encoded, bindings, types):
     if encoded == NONE_SYMBOL:
         return None
     else:
-        maybe_type = types.type_registry.access(
-            type_parameters[0])
-        return deserialize(maybe_type, encoded)
+        value_type = bindings['value']
+        return deserialize(value_type, encoded)
 
 
 # TODO: deal with all the different unit types
-def apply_units(current, update, type_parameters, types):
+def apply_units(current, update, bindings, types):
     return current + update
 
-def serialize_units(value, type_parameters, types):
+def serialize_units(value, bindings, types):
     return str(value)
 
-def deserialize_units(encoded, type_parameters, types):
+def deserialize_units(encoded, bindings, types):
     return units(encoded)
 
-def divide_units(value, type_parameters, types):
+def divide_units(value, bindings, types):
     return [value, value]
 
 
 # TODO: implement edge handling
-def apply_edge(current, update, type_parameters, types):
+def apply_edge(current, update, bindings, types):
     return current + update
 
-def serialize_edge(value, type_parameters, types):
+def serialize_edge(value, bindings, types):
     return str(value)
 
-def deserialize_edge(encoded, type_parameters, types):
+def deserialize_edge(encoded, bindings, types):
     return encoded
 
-def divide_edge(value, type_parameters, types):
+def divide_edge(value, bindings, types):
     return [value, value]
 
 
@@ -598,11 +570,13 @@ def register_units(types, units):
 base_type_library = {
     # abstract number type
     'number': {
+        '_type': 'number',
         '_apply': 'accumulate',
         '_serialize': 'to_string',
         '_description': 'abstract base type for numbers'},
 
     'int': {
+        '_type': 'int',
         '_default': '0',
         # inherit _apply and _serialize from number type
         '_deserialize': 'deserialize_int',
@@ -611,6 +585,7 @@ base_type_library = {
         '_super': 'number',},
 
     'float': {
+        '_type': 'float',
         '_default': '0.0',
         '_deserialize': 'float',
         '_divide': 'divide_float',
@@ -618,6 +593,7 @@ base_type_library = {
         '_super': 'number',}, 
 
     'string': {
+        '_type': 'string',
         '_default': '""',
         '_apply': 'replace',
         '_serialize': 'serialize_string',
@@ -626,6 +602,7 @@ base_type_library = {
         '_description': '64-bit integer'},
 
     'list': {
+        '_type': 'list',
         '_default': '[]',
         '_apply': 'concatenate',
         '_serialize': 'to_string',
@@ -640,6 +617,7 @@ base_type_library = {
     #      '_element': 'string'}
 
     'tree': {
+        '_type': 'tree',
         '_default': '{}',
         '_apply': 'apply_tree',
         '_serialize': 'serialize_tree',
@@ -649,6 +627,7 @@ base_type_library = {
         '_description': 'mapping from str to some type (or nested dicts)'},
 
     'dict': {
+        '_type': 'dict',
         '_default': '{}',
         '_apply': 'apply_dict',
         '_serialize': 'serialize_dict',
@@ -660,9 +639,11 @@ base_type_library = {
 
     # TODO: add native numpy array type
     'array': {
+        '_type': 'array',
         '_type_parameters': ['shape', 'element']},
 
     'maybe': {
+        '_type': 'maybe',
         '_default': 'None',
         '_apply': 'apply_maybe',
         '_serialize': 'serialize_maybe',
@@ -673,6 +654,7 @@ base_type_library = {
 
     'edge': {
         # TODO: do we need to have defaults informed by type parameters?
+        '_type': 'edge',
         '_default': '{"wires": {}}',
         '_apply': 'apply_edge',
         '_serialize': 'serialize_edge',
@@ -813,20 +795,23 @@ def schema_zoo():
 def test_cube(base_types):
     cube_schema = {
         'shape': {
+            '_type': 'shape',
             '_description': 'abstract shape type'},
         
         'rectangle': {
-            'width': {'_type': 'int'},
-            'height': {'_type': 'int'},
+            '_type': 'rectangle',
             '_divide': 'divide_longest',
             '_description': 'a two-dimensional value',
             '_super': 'shape',
+            'width': {'_type': 'int'},
+            'height': {'_type': 'int'},
         },
         
         # cannot override existing keys unless it is of a subtype
         'cube': {
-            'depth': {'_type': 'int'},
+            '_type': 'cube',
             '_super': 'rectangle',
+            'depth': {'_type': 'int'},
         },
     }
 
@@ -842,20 +827,20 @@ def cube_types(base_types):
 
 
 def test_generate_default(cube_types):
-    int_default = cube_types.generate_default(
+    int_default = cube_types.default(
         {'_type': 'int'}
     )
 
     assert int_default == 0
 
-    cube_default = cube_types.generate_default(
+    cube_default = cube_types.default(
         {'_type': 'cube'})
 
     assert 'width' in cube_default
     assert 'height' in cube_default
     assert 'depth' in cube_default
 
-    nested_default = cube_types.generate_default(
+    nested_default = cube_types.default(
         {'a': 'int',
          'b': {
              'c': 'float',
@@ -863,14 +848,6 @@ def test_generate_default(cube_types):
          'e': 'string'})
 
     assert nested_default['b']['d']['width'] == 0
-
-
-def test_expand_schema(cube_types):
-    schema = {'_type': 'cube'}
-    expanded = cube_types.type_registry.expand(schema)
-
-    assert len(schema) == 1
-    assert 'height' in expanded
 
 
 def test_apply_update(cube_types):
@@ -1006,6 +983,8 @@ def test_fill_in_missing_nodes(base_types):
         }
     }
 
+    import ipdb; ipdb.set_trace()
+
     filled = base_types.fill(
         test_schema,
         test_state
@@ -1019,6 +998,7 @@ def test_fill_in_missing_nodes(base_types):
             }
         }
     }
+
 
 def test_fill_in_disconnected_port(base_types):
     test_schema = {
@@ -1445,13 +1425,12 @@ if __name__ == '__main__':
 
     test_cube(types)
     test_generate_default(types)
-    test_expand_schema(types)
     test_apply_update(types)
     test_validate_schema(types)
     test_fill_int(types)
     test_fill_cube(types)
     test_establish_path(types)
-    test_fill_in_missing_nodes(types)
     test_expected_schema(types)
     test_units(types)
+    test_fill_in_missing_nodes(types)
 
