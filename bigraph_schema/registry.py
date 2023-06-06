@@ -156,6 +156,14 @@ def establish_path(tree, path, top=None, cursor=()):
                 cursor=cursor + (head,))
 
 
+def set_path(tree, path, value, top=None, cursor=None):
+    final = path[-1]
+    towards = path[:-1]
+    destination = establish_path(tree, towards)
+    destination[final] = value
+    return tree
+
+
 class Registry(object):
     def __init__(self):
         """A Registry holds a collection of functions or objects."""

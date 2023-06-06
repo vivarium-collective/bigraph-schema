@@ -3,7 +3,7 @@ import pprint
 import pytest
 
 from bigraph_schema.parse import parse_expression
-from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path, non_schema_keys
+from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path, set_path, non_schema_keys
 from bigraph_schema.units import units, render_units_type, parse_dimensionality
 
 
@@ -337,6 +337,118 @@ class SchemaTypes():
             schema,
             state=state)
 
+
+    def ports_and_wires(self, schema, instance, edge_path):
+        found = self.access(schema)
+
+        edge_schema = get_path(found, edge_path)
+        ports = edge_schema.get('_ports')
+        edge_state = get_path(instance, edge_path)
+        wires = edge_state.get('wires')
+        
+        return ports, wires
+    
+
+    def project_state(self, schema, wires, instance, path):
+        result = {}
+        if isinstance(wires, str):
+            wires = [wires]
+        if isinstance(wires, list):
+            result = get_path(instance, path + wires)
+        elif isinstance(wires, dict):
+            result = {
+                port_key: self.project_state(
+                    schema[port_key],
+                    wires[port_key],
+                    instance,
+                    path)
+                for port_key in wires}
+        else:
+            raise Exception(f'trying to project state with these ports:\n{ports}\nbut not sure what these wires are:\n{wires}')
+
+        return result
+        
+
+    def project(self, schema, instance, edge_path=()):
+        '''
+        project the state of the current instance into a form
+        the edge expects, based on its ports
+        '''
+
+        if schema is None:
+            return None
+        if instance is None:
+            instance = self.default(schema)
+
+        ports, wires = self.ports_and_wires(schema, instance, edge_path=edge_path)
+
+        if ports is None:
+            return None
+        if wires is None:
+            return None
+
+        return self.project_state(
+            ports,
+            wires,
+            instance,
+            edge_path[:-1])
+
+
+    def invert_state(self, ports, wires, path, states):
+        result = {}
+
+        if isinstance(wires, str):
+            wires = [wires]
+
+        if isinstance(wires, list):
+            destination = path + wires
+            result = set_path(
+                result,
+                destination,
+                states)
+
+        elif isinstance(wires, dict):
+            branches = [
+                self.invert_state(
+                    ports.get(key),
+                    wires[key],
+                    path,
+                    states.get(key))
+                for key in wires.keys()]
+            result = {}
+            for branch in branches:
+                deep_merge(result, branch)
+        else:
+            raise Exception(
+                f'inverting state\n  {state}\naccording to ports schema\n  {schema}\nbut wires are not recognized\n  {wires}')
+
+        return result
+
+    def invert(self, schema, instance, edge_path, states):
+        '''
+        given states from the perspective of an edge (through
+          it's ports), produce states aligned to the tree
+          the wires point to
+        '''
+
+        if schema is None:
+            return None
+        if instance is None:
+            instance = self.default(schema)
+
+        ports, wires = self.ports_and_wires(schema, instance, edge_path)
+
+        if ports is None:
+            return None
+        if wires is None:
+            return None
+
+        return self.invert_state(
+            ports,
+            wires,
+            edge_path[:-1],
+            states)
+        
 
     def link_place(self, place, link):
         pass
@@ -1411,7 +1523,6 @@ def test_project(cube_types):
                 '3': ['a0', 'a0.2', 'a0.2.0'],
                 '4': ['a1']}},
         'a1': {
-            '_type': 'tree[int]',
             'branch1': {
                 'branch2': 11,
                 'branch3': 22},
@@ -1420,30 +1531,48 @@ def test_project(cube_types):
     instance = cube_types.fill(schema, instance)
     
     # TODO: does project require the schema?
-    states = cube_types.project(schema, instance, ['edge1'])
-    update = cube_types.inverse(schema, states, ['edge1'])
+    states = cube_types.project(
+        schema,
+        instance,
+        ['edge1'])
 
-    assert update == {}
+    update = cube_types.invert(
+        schema,
+        instance,
+        ['edge1'],
+        states)
+
+    assert update == {
+        'a0': {
+            'a0.0': 0,
+            'a0.1': 0.0,
+            'a0.2': {
+                'a0.2.0': ''}},
+        'a1': {
+            'branch1': {
+                'branch2': 11,
+                'branch3': 22},
+            'branch4': 44}}
 
     updated_instance = cube_types.apply(
         schema,
         instance,
         update)
 
-    add_update = {
-        '4': {
-            '_add': {
-                'branch5': 55}}}
+    # add_update = {
+    #     '4': {
+    #         '_add': {
+    #             'branch5': 55}}}
 
-    inverted_update = cube_types.inverse(
-        schema,
-        add_update,
-        ['edge1'])
+    # inverted_update = cube_types.invert(
+    #     schema,
+    #     add_update,
+    #     ['edge1'])
 
-    added_branch = cube_types.apply(
-        schema,
-        inverted_update,
-        ['edge1'])
+    # added_branch = cube_types.apply(
+    #     schema,
+    #     inverted_update,
+    #     ['edge1'])
 
 
 if __name__ == '__main__':
@@ -1461,4 +1590,4 @@ if __name__ == '__main__':
     test_fill_in_missing_nodes(types)
     test_fill_from_parse(types)
     test_serialize_deserialize(types)
-    # test_project(types)
+    test_project(types)
