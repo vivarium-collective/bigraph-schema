@@ -1602,7 +1602,25 @@ def test_project(cube_types):
         instance,
         inverted_update)
 
-    import ipdb; ipdb.set_trace()
+    assert added_branch == {
+        'a0': {
+            'a0.0': 0,
+            'a0.1': 0.0,
+            'a0.2': {
+                'a0.2.0': ''}},
+        'a1': {
+            'branch1': {
+                'branch2': 22,
+                'branch3': 44},
+            'branch4': 88,
+            'branch5': 55,
+            'branch6': 111},
+        'edge1': {
+            'wires': {
+                '1': ['a0', 'a0.0'],
+                '2': ['a0', 'a0.1'],
+                '3': ['a0', 'a0.2', 'a0.2.0'],
+                '4': ['a1']}}}
 
 
 if __name__ == '__main__':
