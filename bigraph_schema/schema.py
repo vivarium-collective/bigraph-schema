@@ -151,6 +151,10 @@ class SchemaTypes():
                 schema.get('_bindings'),
                 self)
 
+        elif isinstance(schema, str) or isinstance(schema, list):
+            schema = self.access(schema)
+            state = self.apply_update(schema, state, update)
+
         elif isinstance(update, dict):
             for key, branch in update.items():
                 if key not in schema:
@@ -162,10 +166,8 @@ class SchemaTypes():
                         branch)
 
                     state[key] = subupdate
-
         else:
-            schema = self.access(schema)
-            state = self.apply_update(schema, state, update)
+            raise Exception(f'trying to apply update\n  {update}\nto state\n  {state}\nwith schema\n{schema}, but the update is not a dict')
 
         return state
 
@@ -415,6 +417,12 @@ class SchemaTypes():
                     path,
                     states.get(key))
                 for key in wires.keys()]
+
+            branches = [
+                branch
+                for branch in branches
+                if branch is not None and list(branch)[0][1] is not None]
+
             result = {}
             for branch in branches:
                 deep_merge(result, branch)
@@ -424,11 +432,13 @@ class SchemaTypes():
 
         return result
 
+
     def invert(self, schema, instance, edge_path, states):
         '''
         given states from the perspective of an edge (through
           it's ports), produce states aligned to the tree
-          the wires point to
+          the wires point to.
+          (inverse of project)
         '''
 
         if schema is None:
@@ -467,20 +477,18 @@ class SchemaTypes():
         return {}
 
 
-    def query(self, schema, state, redex):
+    def query(self, schema, instance, redex):
         subschema = {}
         return subschema
 
 
-    def substitute(self, schema, state, reactum):
-        return state
-
-
-    def react(self, schema, redex, reactum):
+    def react(self, schema, instance, redex, reactum):
         return {}
 
 
 def accumulate(current, update, bindings, types):
+    if update is None:
+        import ipdb; ipdb.set_trace()
     return current + update
 
 def concatenate(current, update, bindings, types):
@@ -567,7 +575,26 @@ def evaluate(code, bindings, types):
 
 # TODO: make these work
 def apply_tree(current, update, bindings, types):
-    pass
+    if isinstance(update, dict):
+        if current is None:
+            current = {}
+        for key, branch in update.items():
+            if key == '_add':
+                current.update(branch)
+            else:
+                current[key] = apply_tree(
+                    current.get(key),
+                    branch,
+                    bindings,
+                    types)
+
+        return current
+    else:
+        leaf_type = bindings['leaf']
+        if current is None:
+            current = types.default(leaf_type)
+        return types.apply(leaf_type, current, update)
+
 
 def divide_tree(tree, bindings, types):
     result = [{}, {}]
@@ -1492,6 +1519,8 @@ def test_serialize_deserialize(cube_types):
 def test_project(cube_types):
     schema = {
         'edge1': {
+            # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
+            # '_type': 'edge',
             '_type': 'edge',
             '_ports': {
                 '1': 'int',
@@ -1515,8 +1544,6 @@ def test_project(cube_types):
     # TODO: support overriding various type methods
     instance = {
         'edge1': {
-            # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
-            # '_type': 'edge',
             'wires': {
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
@@ -1530,7 +1557,6 @@ def test_project(cube_types):
 
     instance = cube_types.fill(schema, instance)
     
-    # TODO: does project require the schema?
     states = cube_types.project(
         schema,
         instance,
@@ -1559,20 +1585,24 @@ def test_project(cube_types):
         instance,
         update)
 
-    # add_update = {
-    #     '4': {
-    #         '_add': {
-    #             'branch5': 55}}}
+    add_update = {
+        '4': {
+            '_add': {
+                'branch5': 55},
+            'branch6': 111}}
 
-    # inverted_update = cube_types.invert(
-    #     schema,
-    #     add_update,
-    #     ['edge1'])
+    inverted_update = cube_types.invert(
+        schema,
+        instance,
+        ['edge1'],
+        add_update)
 
-    # added_branch = cube_types.apply(
-    #     schema,
-    #     inverted_update,
-    #     ['edge1'])
+    added_branch = cube_types.apply(
+        schema,
+        instance,
+        inverted_update)
+
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':

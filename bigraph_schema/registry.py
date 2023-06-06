@@ -157,6 +157,8 @@ def establish_path(tree, path, top=None, cursor=()):
 
 
 def set_path(tree, path, value, top=None, cursor=None):
+    if value is None:
+        return None
     final = path[-1]
     towards = path[:-1]
     destination = establish_path(tree, towards)
