@@ -1153,58 +1153,44 @@ def test_fill_from_parse(base_types):
                 'port A': ['a']}}}
 
 
-def test_fill_in_disconnected_port(base_types):
-    test_schema = {
-        'edge1': {
-            '_type': 'edge',
-            '_ports': {
-                '1': {'_type': 'float'}}}}
+# def test_fill_in_disconnected_port(base_types):
+#     test_schema = {
+#         'edge1': {
+#             '_type': 'edge',
+#             '_ports': {
+#                 '1': {'_type': 'float'}}}}
 
-    test_state = {}
-
-
-def test_fill_type_mismatch(base_types):
-    test_schema = {
-        'a': {'_type': 'int', '_value': 2},
-        'edge1': {
-            '_type': 'edge',
-            '_ports': {
-                '1': {'_type': 'float'},
-                '2': {'_type': 'float'}},
-            'wires': {
-                '1': ['..', 'a'],
-                '2': ['a']},
-            'a': 5}}
+#     test_state = {}
 
 
-def test_edge_type_mismatch(base_types):
-    test_schema = {
-        'edge1': {
-            '_type': 'edge',
-            '_ports': {
-                '1': {'_type': 'float'}},
-            'wires': {
-                '1': ['..', 'a']}},
-        'edge2': {
-            '_type': 'edge',
-            '_ports': {
-                '1': {'_type': 'int'}},
-            'wires': {
-                '1': ['..', 'a']}}}
+# def test_fill_type_mismatch(base_types):
+#     test_schema = {
+#         'a': {'_type': 'int', '_value': 2},
+#         'edge1': {
+#             '_type': 'edge',
+#             '_ports': {
+#                 '1': {'_type': 'float'},
+#                 '2': {'_type': 'float'}},
+#             'wires': {
+#                 '1': ['..', 'a'],
+#                 '2': ['a']},
+#             'a': 5}}
 
 
-def test_fill_nested_store(base_types):
-    test_schema = {
-        'edge1': {
-            '_type': 'edge',
-            '_ports': {
-                '1': {'_type': 'float'},
-            },
-            'wires': {
-                '1': ['somewhere', 'down', 'this', 'path']
-            },
-        },
-    }    
+# def test_edge_type_mismatch(base_types):
+#     test_schema = {
+#         'edge1': {
+#             '_type': 'edge',
+#             '_ports': {
+#                 '1': {'_type': 'float'}},
+#             'wires': {
+#                 '1': ['..', 'a']}},
+#         'edge2': {
+#             '_type': 'edge',
+#             '_ports': {
+#                 '1': {'_type': 'int'}},
+#             'wires': {
+#                 '1': ['..', 'a']}}}
 
 
 def test_establish_path(base_types):
@@ -1269,13 +1255,8 @@ def test_expected_schema(base_types):
 
     dual_process_schema = {
         'process1': 'edge[port1:float|port2:int]',
-        # 'process1': {
-        #     '_ports': {
-        #         'port1': 'float',
-        #         'port2': 'int',
-        #     },
-        # },
         'process2': {
+            '_type': 'edge',
             '_ports': {
                 'port1': 'float',
                 'port2': 'int',
@@ -1343,56 +1324,36 @@ def test_expected_schema(base_types):
 
 
 def test_link_place(base_types):
+    # TODO: this form is more fundamental than the compressed/inline dict form,
+    #   and we should probably derive that from this form
+
     bigraph = {
         'nodes': {
-            'v0': {
-                '_type': 'int',
-                '_value': 0},
-            'v1': {
-                '_type': 'int',
-                '_value': 1},
-            'v2': {
-                '_type': 'int',
-                '_value': 2},
-            'v3': {
-                '_type': 'int',
-                '_value': 3},
-            'v4': {
-                '_type': 'int',
-                '_value': 4},
-            'v5': {
-                '_type': 'int',
-                '_value': 5},
-            'e0': {
-                '_type': 'edge[e0-0:int|e0-1:int|e0-2:int]',
-                'wires': {
-                    'e0-0': 'v0',
-                    'e0-1': 'v1',
-                    'e0-2': 'v4'}},
+            'v0': 'int',
+            'v1': 'int',
+            'v2': 'int',
+            'v3': 'int',
+            'v4': 'int',
+            'v5': 'int',
+            'e0': 'edge[e0-0:int|e0-1:int|e0-2:int]',
             'e1': {
-                '_type': 'edge[e1-0:int|e2-0:int]',
+                '_type': 'edge',
                 '_ports': {
                     'e1-0': 'int',
-                    'e2-0': 'int'},
-                'wires': {
-                    'e1-0': 'v3',
-                    'e1-1': 'v1'}},
+                    'e2-0': 'int'}},
             'e2': {
-                '_type': 'edge[e2-0:int|e2-1:int|e2-2:int]',
-                'wires': {
-                    'e2-0': 'v3',
-                    'e2-1': 'v4',
-                    'e2-2': 'v5'}}},
+                '_type': 'edge[e2-0:int|e2-1:int|e2-2:int]'}},
+
         'place': {
-            'v0': {
-                'v1': {},
-                'v2': {
-                    'v3': {}}},
-            'v4': {
-                'v5': {}},
-            'e0': {},
-            'e1': {},
-            'e2': {}},
+            'v0': None,
+            'v1': 'v0',
+            'v2': 'v0',
+            'v3': 'v2',
+            'v4': None,
+            'v5': 'v4',
+            'e0': None,
+            'e1': None,
+            'e2': None},
 
         'link': {
             'e0': {
@@ -1405,20 +1366,41 @@ def test_link_place(base_types):
             'e2': {
                 'e2-0': 'v3',
                 'e2-1': 'v4',
+                'e2-2': 'v5'}},
+
+        'state': {
+            'v0': '1',
+            'v1': '1',
+            'v2': '2',
+            'v3': '3',
+            'v4': '5',
+            'v5': '8',
+            'e0': {
+                'wires': {
+                    'e0-0': 'v0',
+                    'e0-1': 'v1',
+                    'e0-2': 'v4'}},
+            'e1': {
+                'wires': {
+                    'e1-0': 'v3',
+                    'e1-1': 'v1'}},
+            'e2': {
+                'e2-0': 'v3',
+                'e2-1': 'v4',
                 'e2-2': 'v5'}}}
 
-    placegraph = {
+    placegraph = { # schema
         'v0': {
-            'v1': {},
+            'v1': int,
             'v2': {
-                'v3': {}}},
+                'v3': int}},
         'v4': {
-            'v5': {}},
-        'e0': 'int',
-        'e1': 'int',
-        'e2': 'int'}
+            'v5': int},
+        'e0': 'edge',
+        'e1': 'edge',
+        'e2': 'edge'}
 
-    hypergraph = {
+    hypergraph = { # edges
         'e0': {
             'e0-0': 'v0',
             'e0-1': 'v1',
