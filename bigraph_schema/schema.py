@@ -238,7 +238,6 @@ class SchemaTypes():
         more_wires = state.get('wires', {})
         wires = deep_merge(wires, more_wires)
 
-        import ipdb; ipdb.set_trace()
         for port_key, port_schema in schema.items():
             if port_key in wires:
                 subwires = wires[port_key]
@@ -611,11 +610,6 @@ base_type_library = {
         '_type_parameters': ['element'],
         '_description': 'general list type (or sublists)'},
 
-    # {'_type': 'tree':
-    #  '_leaf': {
-    #      '_type': 'list',
-    #      '_element': 'string'}
-
     'tree': {
         '_type': 'tree',
         '_default': '{}',
@@ -939,8 +933,9 @@ def test_fill_int(base_types):
     }
 
     full_state = base_types.fill(test_schema)
+    direct_state = base_types.fill('int')
 
-    assert full_state == 0
+    assert full_state == direct_state == 0
 
 
 def test_fill_cube(cube_types):
@@ -966,11 +961,9 @@ def test_fill_cube(cube_types):
 def test_fill_in_missing_nodes(base_types):
     test_schema = {
         'edge 1': {
-            # this could become a process_edge type
-            # '_type': 'edge[port A:float]',
             '_type': 'edge',
             '_ports': {
-                'port A': {'_type': 'float'},
+                'port A': 'float' # {'_type': 'float'},
             },
         }
     }
@@ -983,7 +976,29 @@ def test_fill_in_missing_nodes(base_types):
         }
     }
 
-    import ipdb; ipdb.set_trace()
+    filled = base_types.fill(
+        test_schema,
+        test_state
+    )
+
+    assert filled == {
+        'a': 0.0,
+        'edge 1': {
+            'wires': {
+                'port A': ['a']
+            }
+        }
+    }
+
+
+def test_fill_from_parse(base_types):
+    test_schema = {
+        'edge 1': 'edge[port A:float]'}
+
+    test_state = {
+        'edge 1': {
+            'wires': {
+                'port A': ['a']}}}
 
     filled = base_types.fill(
         test_schema,
@@ -1433,4 +1448,4 @@ if __name__ == '__main__':
     test_expected_schema(types)
     test_units(types)
     test_fill_in_missing_nodes(types)
-
+    test_fill_from_parse(types)

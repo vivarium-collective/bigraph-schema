@@ -254,7 +254,6 @@ class TypeRegistry(Registry):
         """Retrieve all types in the schema"""
 
         found = None
-        # parameters = {}
 
         if isinstance(schema, dict):
             if '_default' in schema:
@@ -262,15 +261,17 @@ class TypeRegistry(Registry):
             elif '_type' in schema:
                 found = self.access(schema['_type'])
                 if '_type_parameters' in found:
-                    # for type_parameter in found['_type_parameters']:
-                    #     parameter_key = f'_{type_parameter}'
-                    #     if not parameter_key in found:
-                    #         found[parameter_key] = self.access(type_parameter)
-                    
-                    if not '_bindings' in found:
-                        found['_bindings'] = {
-                            type_parameter: found[f'_{type_parameter}']
-                            for type_parameter in found['_type_parameters']}
+                    found = copy.deepcopy(found)
+                    found = deep_merge(found, schema)
+
+                    for type_parameter in found['_type_parameters']:
+                        parameter_key = f'_{type_parameter}'
+                        if parameter_key in found:
+                            if not '_bindings' in found:
+                                found['_bindings'] = {}
+                            found['_bindings'][parameter_key] = found[parameter_key]
+                        elif '_bindings' in found and type_parameter in found['_bindings']:
+                            found[parameter_key] = found['_bindings'][parameter_key]
             else:
                 found = {
                    key: self.access(branch)
@@ -283,7 +284,9 @@ class TypeRegistry(Registry):
             else:
                 schema = schema[0]
             found = self.access(schema)
+
             if len(bindings) > 0:
+                found = found.copy()
                 found['_bindings'] = dict(zip(
                     found['_type_parameters'],
                     bindings))
