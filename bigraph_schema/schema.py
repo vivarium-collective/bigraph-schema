@@ -3,7 +3,7 @@ import pprint
 import pytest
 
 from bigraph_schema.parse import parse_expression
-from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path, set_path, non_schema_keys
+from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path, set_path, remove_path, non_schema_keys
 from bigraph_schema.units import units, render_units_type, parse_dimensionality
 
 
@@ -581,6 +581,8 @@ def apply_tree(current, update, bindings, types):
         for key, branch in update.items():
             if key == '_add':
                 current.update(branch)
+            elif key == '_remove':
+                current = remove_path(current, branch)
             else:
                 current[key] = apply_tree(
                     current.get(key),
@@ -1290,12 +1292,6 @@ def test_expected_schema(base_types):
         # 'store1': 'process1:edge[port1:float|port2:int]|process2[port1:float|port2:int]',
         'store1': 'dual_process',
         'process3': 'edge[dual_process]'}
-    #     'process3': {
-    #         '_ports': {
-    #             'port1': 'dual_process'
-    #         }
-    #     }
-    # }
 
     test_state = {
         'store1': {
@@ -1587,9 +1583,14 @@ def test_project(cube_types):
 
     add_update = {
         '4': {
+            'branch6': 111,
+            'branch1': {
+                '_add': {
+                    'branch7': 4444},
+                '_remove': ['branch2']},
             '_add': {
                 'branch5': 55},
-            'branch6': 111}}
+            '_remove': ['branch4']}}
 
     inverted_update = cube_types.invert(
         schema,
@@ -1597,12 +1598,12 @@ def test_project(cube_types):
         ['edge1'],
         add_update)
 
-    added_branch = cube_types.apply(
+    modified_branch = cube_types.apply(
         schema,
         instance,
         inverted_update)
 
-    assert added_branch == {
+    assert modified_branch == {
         'a0': {
             'a0.0': 0,
             'a0.1': 0.0,
@@ -1610,9 +1611,8 @@ def test_project(cube_types):
                 'a0.2.0': ''}},
         'a1': {
             'branch1': {
-                'branch2': 22,
+                'branch7': 4444,
                 'branch3': 44},
-            'branch4': 88,
             'branch5': 55,
             'branch6': 111},
         'edge1': {

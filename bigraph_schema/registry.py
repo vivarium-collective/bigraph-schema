@@ -166,6 +166,16 @@ def set_path(tree, path, value, top=None, cursor=None):
     return tree
 
 
+def remove_path(tree, path):
+    if path is None or len(path) == 0:
+        return None
+
+    upon = get_path(tree, path[:-1])
+    if upon is not None:
+        del upon[path[-1]]
+    return tree
+
+
 class Registry(object):
     def __init__(self):
         """A Registry holds a collection of functions or objects."""
