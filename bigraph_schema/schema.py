@@ -177,20 +177,26 @@ class SchemaTypes():
 
 
     def serialize(self, schema, state):
-        if isinstance(schema, str):
-            serialize_function = self.serialize_registery.access(schema)
+        found = self.access(schema)
+        if '_serialize' in found:
+            serialize_function = self.serialize_registry.access(
+                found['_serialize'])
+
             if serialize_function is None:
                 raise Exception(
                     f'serialize function not in the registry: {schema}')
             else:
                 return serialize_function(
                     state,
-                    schema['_resolved'],
+                    found.get('_bindings'),
                     self)
         else:
             tree = {
-                key: self.serialize(subschema, state.get(key))
-                for key, subschema in schema}
+                key: self.serialize(
+                    schema[key],
+                    state.get(key))
+                for key in non_schema_keys(schema)}
+
             return repr(tree)
                 
 
@@ -211,7 +217,7 @@ class SchemaTypes():
 
             return deserialize_function(
                 encoded,
-                found.get('_resolved', {}),
+                found.get('_bindings'),
                 self)
         else:
             tree = eval(encoded)
@@ -540,7 +546,7 @@ def serialize_edge(value, bindings, types):
     return str(value)
 
 def deserialize_edge(encoded, bindings, types):
-    return encoded
+    return eval(encoded)
 
 def divide_edge(value, bindings, types):
     return [value, value]
@@ -816,6 +822,11 @@ def test_cube(base_types):
 
 
 @pytest.fixture
+def base_types():
+    return SchemaTypes()
+
+
+@pytest.fixture
 def cube_types(base_types):
     return test_cube(base_types)
 
@@ -963,32 +974,22 @@ def test_fill_in_missing_nodes(base_types):
         'edge 1': {
             '_type': 'edge',
             '_ports': {
-                'port A': 'float' # {'_type': 'float'},
-            },
-        }
-    }
+                'port A': 'float'}}}
 
     test_state = {
         'edge 1': {
             'wires': {
-                'port A': ['a'],
-            }
-        }
-    }
+                'port A': ['a']}}}
 
     filled = base_types.fill(
         test_schema,
-        test_state
-    )
+        test_state)
 
     assert filled == {
         'a': 0.0,
         'edge 1': {
             'wires': {
-                'port A': ['a']
-            }
-        }
-    }
+                'port A': ['a']}}}
 
 
 def test_fill_from_parse(base_types):
@@ -1002,17 +1003,13 @@ def test_fill_from_parse(base_types):
 
     filled = base_types.fill(
         test_schema,
-        test_state
-    )
+        test_state)
 
     assert filled == {
         'a': 0.0,
         'edge 1': {
             'wires': {
-                'port A': ['a']
-            }
-        }
-    }
+                'port A': ['a']}}}
 
 
 def test_fill_in_disconnected_port(base_types):
@@ -1020,10 +1017,7 @@ def test_fill_in_disconnected_port(base_types):
         'edge1': {
             '_type': 'edge',
             '_ports': {
-                '1': {'_type': 'float'},
-            },
-        }
-    }
+                '1': {'_type': 'float'}}}}
 
     test_state = {}
 
@@ -1035,15 +1029,11 @@ def test_fill_type_mismatch(base_types):
             '_type': 'edge',
             '_ports': {
                 '1': {'_type': 'float'},
-                '2': {'_type': 'float'}
-            },
+                '2': {'_type': 'float'}},
             'wires': {
                 '1': ['..', 'a'],
-                '2': ['a'],
-            },
-            'a': 5
-        },
-    }
+                '2': ['a']},
+            'a': 5}}
 
 
 def test_edge_type_mismatch(base_types):
@@ -1051,22 +1041,15 @@ def test_edge_type_mismatch(base_types):
         'edge1': {
             '_type': 'edge',
             '_ports': {
-                '1': {'_type': 'float'},
-            },
+                '1': {'_type': 'float'}},
             'wires': {
-                '1': ['..', 'a']
-            },
-        },
+                '1': ['..', 'a']}},
         'edge2': {
             '_type': 'edge',
             '_ports': {
-                '1': {'_type': 'int'},
-            },
+                '1': {'_type': 'int'}},
             'wires': {
-                '1': ['..', 'a']
-            },
-        },
-    }
+                '1': ['..', 'a']}}}
 
 
 def test_fill_nested_store(base_types):
@@ -1144,13 +1127,13 @@ def test_expected_schema(base_types):
     # }
 
     dual_process_schema = {
-        # 'process1': 'edge[port1:float|port2:int]',
-        'process1': {
-            '_ports': {
-                'port1': 'float',
-                'port2': 'int',
-            },
-        },
+        'process1': 'edge[port1:float|port2:int]',
+        # 'process1': {
+        #     '_ports': {
+        #         'port1': 'float',
+        #         'port2': 'int',
+        #     },
+        # },
         'process2': {
             '_ports': {
                 'port1': 'float',
@@ -1167,12 +1150,13 @@ def test_expected_schema(base_types):
     test_schema = {
         # 'store1': 'process1:edge[port1:float|port2:int]|process2[port1:float|port2:int]',
         'store1': 'dual_process',
-        'process3': {
-            '_ports': {
-                'port1': 'dual_process'
-            }
-        }
-    }
+        'process3': 'edge[dual_process]'}
+    #     'process3': {
+    #         '_ports': {
+    #             'port1': 'dual_process'
+    #         }
+    #     }
+    # }
 
     test_state = {
         'store1': {
@@ -1354,6 +1338,44 @@ def test_units(base_types):
     assert new_state['distance'] == 9.476 * units.meter
 
 
+def test_serialize_deserialize(cube_types):
+    schema = {
+        'edge1': {
+            # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
+            '_type': 'edge',
+            '_ports': {
+                '1': 'int',
+                '2': 'float',
+                '3': 'string',
+                '4': 'tree[int]'}},
+        'a0': {
+            'a0.0': 'int',
+            'a0.1': 'float',
+            'a0.2': {
+                'a0.2.0': 'string'}},
+        'a1': 'tree[int]'}
+
+    instance = {
+        'edge1': {
+            'wires': {
+                '1': ['a0', 'a0.0'],
+                '2': ['a0', 'a0.1'],
+                '3': ['a0', 'a0.2', 'a0.2.0'],
+                '4': ['a1']}},
+        'a1': {
+            'branch1': {
+                'branch2': 11,
+                'branch3': 22},
+            'branch4': 44}}
+    
+    instance = cube_types.fill(schema, instance)
+
+    encoded = cube_types.serialize(schema, instance)
+    decoded = cube_types.deserialize(schema, encoded)
+
+    assert instance == decoded
+
+
 # is this a lens?
 def test_project(cube_types):
     schema = {
@@ -1377,18 +1399,12 @@ def test_project(cube_types):
         '3': 'a0>a0.2>a0.2.0'}
 
     # TODO: support separate schema/instance, and 
-    #   instances with '_type' and type paramter keys
+    #   instances with '_type' and type parameter keys
     # TODO: support overriding various type methods
     instance = {
         'edge1': {
             # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
-            '_type': 'edge',
-            '_ports': {
-                '1': 'int',
-                '2': 'float',
-                '3': 'string',
-                '4': 'tree[int]'},
-
+            # '_type': 'edge',
             'wires': {
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
@@ -1430,11 +1446,6 @@ def test_project(cube_types):
         ['edge1'])
 
 
-@pytest.fixture
-def base_types():
-    return SchemaTypes()
-
-
 if __name__ == '__main__':
     types = SchemaTypes()
 
@@ -1449,3 +1460,5 @@ if __name__ == '__main__':
     test_units(types)
     test_fill_in_missing_nodes(types)
     test_fill_from_parse(types)
+    test_serialize_deserialize(types)
+    # test_project(types)
