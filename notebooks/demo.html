@@ -15727,17 +15727,19 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[40]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[44]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">dual_edge_schema</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;edge1&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;_type&#39;</span><span class="p">:</span> <span class="s1">&#39;edge&#39;</span><span class="p">,</span>
         <span class="s1">&#39;_ports&#39;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;float&#39;</span><span class="p">,</span>
             <span class="s1">&#39;port2&#39;</span><span class="p">:</span> <span class="s1">&#39;int&#39;</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">},</span>
     <span class="s1">&#39;edge2&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;_type&#39;</span><span class="p">:</span> <span class="s1">&#39;edge&#39;</span><span class="p">,</span>
         <span class="s1">&#39;_ports&#39;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;float&#39;</span><span class="p">,</span>
             <span class="s1">&#39;port2&#39;</span><span class="p">:</span> <span class="s1">&#39;int&#39;</span><span class="p">,</span>
@@ -15745,14 +15747,12 @@ TODO: how do we register new types, serializers, deserializers, etc?
     <span class="p">},</span>
 <span class="p">}</span>    
 
-<span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s1">&#39;dual_edge&#39;</span><span class="p">,</span>
-    <span class="n">dual_edge_schema</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;dual_edge&#39;</span><span class="p">,</span> <span class="n">dual_edge_schema</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="n">schema</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;store1&#39;</span><span class="p">:</span> <span class="s1">&#39;dual_edge&#39;</span><span class="p">,</span>
     <span class="s1">&#39;edge3&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;_type&#39;</span><span class="p">:</span> <span class="s1">&#39;edge&#39;</span><span class="p">,</span>
         <span class="s1">&#39;_ports&#39;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s1">&#39;port1&#39;</span><span class="p">:</span> <span class="s1">&#39;dual_edge&#39;</span>
         <span class="p">}</span>
@@ -15781,7 +15781,6 @@ TODO: how do we register new types, serializers, deserializers, etc?
     <span class="p">},</span>
 <span class="p">}</span>
 <span class="n">filled_instance</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">instance</span><span class="p">)</span>
-
 <span class="n">filled_schema</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
 </pre></div>
 
@@ -15795,12 +15794,12 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[38]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[45]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;schema:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;instance:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">instance</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;filled schema:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">filled_schema</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="c1"># print(f&#39;filled schema:\n {pf(filled_schema)}\n&#39;)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;filled instance:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
 </pre></div>
 
@@ -15822,98 +15821,13 @@ TODO: how do we register new types, serializers, deserializers, etc?
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
 <pre>schema:
- {&#39;edge3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_edge&#39;}}, &#39;store1&#39;: &#39;dual_edge&#39;}
+ { &#39;edge3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_edge&#39;}, &#39;_type&#39;: &#39;edge&#39;},
+  &#39;store1&#39;: &#39;dual_edge&#39;}
 
 instance:
  { &#39;edge3&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1&#39;}},
   &#39;store1&#39;: { &#39;edge1&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}},
               &#39;edge2&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}}}}
-
-filled schema:
- { &#39;edge3&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;edge1&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                                                                      &#39;_default&#39;: &#39;0.0&#39;,
-                                                                      &#39;_description&#39;: &#39;64-bit &#39;
-                                                                                      &#39;floating &#39;
-                                                                                      &#39;point &#39;
-                                                                                      &#39;precision &#39;
-                                                                                      &#39;number&#39;,
-                                                                      &#39;_deserialize&#39;: &#39;float&#39;,
-                                                                      &#39;_divide&#39;: &#39;divide_float&#39;,
-                                                                      &#39;_serialize&#39;: &#39;to_string&#39;,
-                                                                      &#39;_super&#39;: [ &#39;number&#39;],
-                                                                      &#39;_type&#39;: &#39;float&#39;},
-                                                           &#39;port2&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                                                                      &#39;_default&#39;: &#39;0&#39;,
-                                                                      &#39;_description&#39;: &#39;64-bit &#39;
-                                                                                      &#39;integer&#39;,
-                                                                      &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
-                                                                      &#39;_divide&#39;: &#39;divide_int&#39;,
-                                                                      &#39;_serialize&#39;: &#39;to_string&#39;,
-                                                                      &#39;_super&#39;: [ &#39;number&#39;],
-                                                                      &#39;_type&#39;: &#39;int&#39;}}},
-                                    &#39;edge2&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                                                                      &#39;_default&#39;: &#39;0.0&#39;,
-                                                                      &#39;_description&#39;: &#39;64-bit &#39;
-                                                                                      &#39;floating &#39;
-                                                                                      &#39;point &#39;
-                                                                                      &#39;precision &#39;
-                                                                                      &#39;number&#39;,
-                                                                      &#39;_deserialize&#39;: &#39;float&#39;,
-                                                                      &#39;_divide&#39;: &#39;divide_float&#39;,
-                                                                      &#39;_serialize&#39;: &#39;to_string&#39;,
-                                                                      &#39;_super&#39;: [ &#39;number&#39;],
-                                                                      &#39;_type&#39;: &#39;float&#39;},
-                                                           &#39;port2&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                                                                      &#39;_default&#39;: &#39;0&#39;,
-                                                                      &#39;_description&#39;: &#39;64-bit &#39;
-                                                                                      &#39;integer&#39;,
-                                                                      &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
-                                                                      &#39;_divide&#39;: &#39;divide_int&#39;,
-                                                                      &#39;_serialize&#39;: &#39;to_string&#39;,
-                                                                      &#39;_super&#39;: [ &#39;number&#39;],
-                                                                      &#39;_type&#39;: &#39;int&#39;}}}}}},
-  &#39;store1&#39;: { &#39;edge1&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                                                &#39;_default&#39;: &#39;0.0&#39;,
-                                                &#39;_description&#39;: &#39;64-bit &#39;
-                                                                &#39;floating &#39;
-                                                                &#39;point &#39;
-                                                                &#39;precision &#39;
-                                                                &#39;number&#39;,
-                                                &#39;_deserialize&#39;: &#39;float&#39;,
-                                                &#39;_divide&#39;: &#39;divide_float&#39;,
-                                                &#39;_serialize&#39;: &#39;to_string&#39;,
-                                                &#39;_super&#39;: [&#39;number&#39;],
-                                                &#39;_type&#39;: &#39;float&#39;},
-                                     &#39;port2&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                                                &#39;_default&#39;: &#39;0&#39;,
-                                                &#39;_description&#39;: &#39;64-bit &#39;
-                                                                &#39;integer&#39;,
-                                                &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
-                                                &#39;_divide&#39;: &#39;divide_int&#39;,
-                                                &#39;_serialize&#39;: &#39;to_string&#39;,
-                                                &#39;_super&#39;: [&#39;number&#39;],
-                                                &#39;_type&#39;: &#39;int&#39;}}},
-              &#39;edge2&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                                                &#39;_default&#39;: &#39;0.0&#39;,
-                                                &#39;_description&#39;: &#39;64-bit &#39;
-                                                                &#39;floating &#39;
-                                                                &#39;point &#39;
-                                                                &#39;precision &#39;
-                                                                &#39;number&#39;,
-                                                &#39;_deserialize&#39;: &#39;float&#39;,
-                                                &#39;_divide&#39;: &#39;divide_float&#39;,
-                                                &#39;_serialize&#39;: &#39;to_string&#39;,
-                                                &#39;_super&#39;: [&#39;number&#39;],
-                                                &#39;_type&#39;: &#39;float&#39;},
-                                     &#39;port2&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
-                                                &#39;_default&#39;: &#39;0&#39;,
-                                                &#39;_description&#39;: &#39;64-bit &#39;
-                                                                &#39;integer&#39;,
-                                                &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
-                                                &#39;_divide&#39;: &#39;divide_int&#39;,
-                                                &#39;_serialize&#39;: &#39;to_string&#39;,
-                                                &#39;_super&#39;: [&#39;number&#39;],
-                                                &#39;_type&#39;: &#39;int&#39;}}}}}
 
 filled instance:
  { &#39;edge3&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1&#39;}},
@@ -15935,10 +15849,10 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[39]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[47]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">,</span> <span class="n">collapse_processes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">remove_process_place_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">,</span> <span class="n">remove_process_place_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 
      </div>
@@ -15954,7 +15868,7 @@ filled instance:
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[39]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[47]:</div>
 
 
 
@@ -15964,82 +15878,87 @@ filled instance:
 <!-- Generated by graphviz version 7.1.0 (20230121.1956)
  -->
 <!-- Title: bigraph Pages: 1 -->
-<svg width="208pt" height="178pt" viewBox="0.00 0.00 214.29 183.19">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 179.19)">
+<svg width="259pt" height="212pt" viewBox="0.00 0.00 266.09 218.19">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 214.19)">
 <title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-179.19 210.29,-179.19 210.29,4 -4,4"></polygon>
+<polygon fill="white" stroke="none" points="-4,4 -4,-214.19 262.09,-214.19 262.09,4 -4,4"></polygon>
 <!-- (&amp;#39;store1&amp;#39;,) -->
 <g id="node1" class="node">
 <title>(&#39;store1&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="120.79" cy="-152.41" rx="22.56" ry="22.56"></ellipse>
-<text text-anchor="start" x="106.29" y="-149.31" font-family="Times,serif" font-size="12.00">store1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="120.09" cy="-187.41" rx="22.56" ry="22.56"></ellipse>
+<text text-anchor="start" x="105.59" y="-184.31" font-family="Times,serif" font-size="12.00">store1</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;) -->
 <g id="node2" class="node">
 <title>(&#39;store1&#39;, &#39;store1.1&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="120.79" cy="-65.32" rx="28.14" ry="28.14"></ellipse>
-<text text-anchor="start" x="101.79" y="-62.22" font-family="Times,serif" font-size="12.00">store1.1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="120.09" cy="-100.32" rx="28.14" ry="28.14"></ellipse>
+<text text-anchor="start" x="101.09" y="-97.22" font-family="Times,serif" font-size="12.00">store1.1</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;) -->
 <g id="edge3" class="edge">
 <title>(&#39;store1&#39;,)&#45;&gt;(&#39;store1&#39;, &#39;store1.1&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M120.79,-129.05C120.79,-118.42 120.79,-105.59 120.79,-94.31"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M120.09,-164.05C120.09,-153.42 120.09,-140.59 120.09,-129.31"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;) -->
 <g id="node3" class="node">
 <title>(&#39;store1&#39;, &#39;store1.2&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="45.79" cy="-65.32" rx="28.14" ry="28.14"></ellipse>
-<text text-anchor="start" x="26.79" y="-62.22" font-family="Times,serif" font-size="12.00">store1.2</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="45.09" cy="-100.32" rx="28.14" ry="28.14"></ellipse>
+<text text-anchor="start" x="26.09" y="-97.22" font-family="Times,serif" font-size="12.00">store1.2</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;) -->
 <g id="edge4" class="edge">
 <title>(&#39;store1&#39;,)&#45;&gt;(&#39;store1&#39;, &#39;store1.2&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M105.97,-134.6C94.02,-121.04 77.14,-101.89 64.3,-87.32"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M105.27,-169.6C93.32,-156.04 76.44,-136.89 63.6,-122.32"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="node4" class="node">
 <title>(&#39;store1&#39;, &#39;edge1&#39;)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="45.79" cy="-0.5" rx="0.5" ry="0.5"></ellipse>
-<text text-anchor="start" x="16.29" y="-4.4" font-family="Times,serif" font-size="12.00">edge1</text>
+<polygon fill="none" stroke="black" stroke-width="2" points="72.09,-36 18.09,-36 18.09,0 72.09,0 72.09,-36"></polygon>
+<text text-anchor="start" x="30.59" y="-14.9" font-family="Times,serif" font-size="12.00">edge1</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="node5" class="node">
 <title>(&#39;store1&#39;, &#39;edge2&#39;)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="120.79" cy="-0.5" rx="0.5" ry="0.5"></ellipse>
-<text text-anchor="start" x="91.29" y="-4.4" font-family="Times,serif" font-size="12.00">edge2</text>
+<polygon fill="none" stroke="black" stroke-width="2" points="147.09,-36 93.09,-36 93.09,0 147.09,0 147.09,-36"></polygon>
+<text text-anchor="start" x="105.59" y="-14.9" font-family="Times,serif" font-size="12.00">edge2</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <!-- (&amp;#39;edge3&amp;#39;,) -->
 <g id="node6" class="node">
 <title>(&#39;edge3&#39;,)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="205.79" cy="-65.32" rx="0.5" ry="0.5"></ellipse>
-<text text-anchor="start" x="176.29" y="-69.22" font-family="Times,serif" font-size="12.00">edge3</text>
+<polygon fill="none" stroke="black" stroke-width="2" points="258.09,-118.32 204.09,-118.32 204.09,-82.32 258.09,-82.32 258.09,-118.32"></polygon>
+<text text-anchor="start" x="216.59" y="-97.22" font-family="Times,serif" font-size="12.00">edge3</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;edge3&amp;#39;,) -->
 <g id="edge9" class="edge">
 <title>(&#39;store1&#39;,)&#45;&gt;(&#39;edge3&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M139.71,-138.83C154.85,-128.1 175.92,-111.6 190.79,-93.63 198.79,-83.96 204.61,-69.39 205.63,-66.74"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M137.92,-172.74C155.81,-159.03 183.57,-137.74 204.15,-121.97"></path>
+<ellipse fill="black" stroke="black" cx="205.92" cy="-120.62" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="edge5" class="edge">
 <title>(&#39;store1&#39;, &#39;store1.1&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge1&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M99.1,-46C79.02,-29.06 51.55,-5.87 46.58,-1.67"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M100.78,-78.63C89.84,-66.92 76.18,-52.3 65.13,-40.46"></path>
+<ellipse fill="black" stroke="black" cx="63.5" cy="-38.71" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="edge7" class="edge">
 <title>(&#39;store1&#39;, &#39;store1.1&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge2&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M120.79,-36.36C120.79,-21.52 120.79,-5.58 120.79,-1.82"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M120.09,-71.23C120.09,-61.61 120.09,-50.97 120.09,-41.82"></path>
+<ellipse fill="black" stroke="black" cx="120.09" cy="-39.41" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="edge6" class="edge">
 <title>(&#39;store1&#39;, &#39;store1.2&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge1&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M45.79,-36.36C45.79,-21.52 45.79,-5.58 45.79,-1.82"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M45.09,-71.23C45.09,-61.61 45.09,-50.97 45.09,-41.82"></path>
+<ellipse fill="black" stroke="black" cx="45.09" cy="-39.41" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="edge8" class="edge">
 <title>(&#39;store1&#39;, &#39;store1.2&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge2&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M67.48,-46C87.56,-29.06 115.03,-5.87 120,-1.67"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M64.4,-78.63C75.34,-66.92 89,-52.3 100.05,-40.46"></path>
+<ellipse fill="black" stroke="black" cx="101.68" cy="-38.71" rx="2" ry="2"></ellipse>
 </g>
 </g>
 </svg>
@@ -16059,10 +15978,325 @@ filled instance:
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h2 id="Update-(TODO)">Update (TODO)<a class="anchor-link" href="#Update-(TODO)">&#182;</a></h2>
+<h2 id="Update">Update<a class="anchor-link" href="#Update">&#182;</a></h2>
 </div>
 </div>
 </div>
+</div><div id="cell-id=5635ed86-9996-4648-b1d6-973a666bfd06" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[87]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">place_schema</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;_type&#39;</span><span class="p">:</span> <span class="s1">&#39;tree[float]&#39;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">place_state1</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;node1&#39;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="s1">&#39;node2&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;node2.1&#39;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span>
+        <span class="s1">&#39;node2.2&#39;</span><span class="p">:</span> <span class="mf">2.1</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">plot_bigraph</span><span class="p">(</span><span class="n">place_state1</span><span class="p">,</span> <span class="n">show_values</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[87]:</div>
+
+
+
+<div class="jp-RenderedSVG jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="image/svg+xml">
+<!--?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot;?-->
+
+<!-- Generated by graphviz version 7.1.0 (20230121.1956)
+ -->
+<!-- Title: bigraph Pages: 1 -->
+<svg width="173pt" height="160pt" viewBox="0.00 0.00 178.10 164.21">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 160.21)">
+<title>bigraph</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-160.21 174.1,-160.21 174.1,4 -4,4"></polygon>
+<!-- (&amp;#39;node1&amp;#39;,) -->
+<g id="node1" class="node">
+<title>(&#39;node1&#39;,)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="26.87" cy="-129.34" rx="26.74" ry="26.74"></ellipse>
+<text text-anchor="start" x="11.87" y="-132.74" font-family="Times,serif" font-size="12.00">node1</text>
+<text text-anchor="start" x="18.87" y="-119.74" font-family="Times,serif" font-size="12.00">1.0</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,) -->
+<g id="node2" class="node">
+<title>(&#39;node2&#39;,)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="94.87" cy="-129.34" rx="23.29" ry="23.29"></ellipse>
+<text text-anchor="start" x="79.87" y="-126.24" font-family="Times,serif" font-size="12.00">node2</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
+<g id="node3" class="node">
+<title>(&#39;node2&#39;, &#39;node2.1&#39;)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="52.87" cy="-33.23" rx="33.47" ry="33.47"></ellipse>
+<text text-anchor="start" x="33.37" y="-36.63" font-family="Times,serif" font-size="12.00">node2.1</text>
+<text text-anchor="start" x="44.87" y="-23.63" font-family="Times,serif" font-size="12.00">2.0</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
+<g id="edge1" class="edge">
+<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.1&#39;)</title>
+<path fill="none" stroke="black" stroke-width="2" d="M85.55,-107.45C79.94,-94.89 72.71,-78.68 66.47,-64.71"></path>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.2&amp;#39;) -->
+<g id="node4" class="node">
+<title>(&#39;node2&#39;, &#39;node2.2&#39;)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="136.87" cy="-33.23" rx="33.47" ry="33.47"></ellipse>
+<text text-anchor="start" x="117.37" y="-36.63" font-family="Times,serif" font-size="12.00">node2.2</text>
+<text text-anchor="start" x="128.87" y="-23.63" font-family="Times,serif" font-size="12.00">2.1</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.2&amp;#39;) -->
+<g id="edge2" class="edge">
+<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.2&#39;)</title>
+<path fill="none" stroke="black" stroke-width="2" d="M104.19,-107.45C109.8,-94.89 117.03,-78.68 123.27,-64.71"></path>
+</g>
+</g>
+</svg>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div><div id="cell-id=d5e899b0-00e7-4c48-ac3a-eb12afad36c4" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[88]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">update</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;node1&#39;</span><span class="p">:</span> <span class="mf">5.1</span><span class="p">,</span>
+    <span class="s1">&#39;node2&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;node2.1&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">5.0</span><span class="p">,</span>
+        <span class="c1"># &#39;node2.2&#39;: -2.0</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">place_state2</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+    <span class="n">place_schema</span><span class="p">,</span>
+    <span class="n">place_state1</span><span class="p">,</span>
+    <span class="n">update</span>
+<span class="p">)</span>
+<span class="n">plot_bigraph</span><span class="p">(</span><span class="n">place_state2</span><span class="p">,</span> <span class="n">show_values</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[88]:</div>
+
+
+
+<div class="jp-RenderedSVG jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="image/svg+xml">
+<!--?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot;?-->
+
+<!-- Generated by graphviz version 7.1.0 (20230121.1956)
+ -->
+<!-- Title: bigraph Pages: 1 -->
+<svg width="173pt" height="160pt" viewBox="0.00 0.00 178.10 164.21">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 160.21)">
+<title>bigraph</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-160.21 174.1,-160.21 174.1,4 -4,4"></polygon>
+<!-- (&amp;#39;node1&amp;#39;,) -->
+<g id="node1" class="node">
+<title>(&#39;node1&#39;,)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="26.87" cy="-129.34" rx="26.74" ry="26.74"></ellipse>
+<text text-anchor="start" x="11.87" y="-132.74" font-family="Times,serif" font-size="12.00">node1</text>
+<text text-anchor="start" x="18.87" y="-119.74" font-family="Times,serif" font-size="12.00">6.1</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,) -->
+<g id="node2" class="node">
+<title>(&#39;node2&#39;,)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="94.87" cy="-129.34" rx="23.29" ry="23.29"></ellipse>
+<text text-anchor="start" x="79.87" y="-126.24" font-family="Times,serif" font-size="12.00">node2</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
+<g id="node3" class="node">
+<title>(&#39;node2&#39;, &#39;node2.1&#39;)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="52.87" cy="-33.23" rx="33.47" ry="33.47"></ellipse>
+<text text-anchor="start" x="33.37" y="-36.63" font-family="Times,serif" font-size="12.00">node2.1</text>
+<text text-anchor="start" x="43.37" y="-23.63" font-family="Times,serif" font-size="12.00">&#45;3.0</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
+<g id="edge1" class="edge">
+<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.1&#39;)</title>
+<path fill="none" stroke="black" stroke-width="2" d="M85.55,-107.45C79.94,-94.89 72.71,-78.68 66.47,-64.71"></path>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.2&amp;#39;) -->
+<g id="node4" class="node">
+<title>(&#39;node2&#39;, &#39;node2.2&#39;)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="136.87" cy="-33.23" rx="33.47" ry="33.47"></ellipse>
+<text text-anchor="start" x="117.37" y="-36.63" font-family="Times,serif" font-size="12.00">node2.2</text>
+<text text-anchor="start" x="128.87" y="-23.63" font-family="Times,serif" font-size="12.00">2.1</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.2&amp;#39;) -->
+<g id="edge2" class="edge">
+<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.2&#39;)</title>
+<path fill="none" stroke="black" stroke-width="2" d="M104.19,-107.45C109.8,-94.89 117.03,-78.68 123.27,-64.71"></path>
+</g>
+</g>
+</svg>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div><div id="cell-id=9cfe4fab-62be-4921-8037-fa45a0a3617e" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[90]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">update</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;_remove&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;node1&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;node2&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;_remove&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;node2.2&#39;</span><span class="p">],</span>
+        <span class="s1">&#39;node2.3&#39;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="s1">&#39;node2.4&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;node2.2.1&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">2.0</span><span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+<span class="c1"># update = {</span>
+<span class="c1">#     &#39;_remove&#39;: [[&#39;node1&#39;], [&#39;node2&#39;, &#39;node2.2&#39;],],</span>
+<span class="c1"># }</span>
+
+<span class="n">place_state3</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+    <span class="n">place_schema</span><span class="p">,</span>
+    <span class="n">place_state2</span><span class="p">,</span>
+    <span class="n">update</span>
+<span class="p">)</span>
+<span class="n">plot_bigraph</span><span class="p">(</span><span class="n">place_state2</span><span class="p">,</span> <span class="n">show_values</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[90]:</div>
+
+
+
+<div class="jp-RenderedSVG jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="image/svg+xml">
+<!--?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot;?-->
+
+<!-- Generated by graphviz version 7.1.0 (20230121.1956)
+ -->
+<!-- Title: bigraph Pages: 1 -->
+<svg width="238pt" height="265pt" viewBox="0.00 0.00 244.83 272.45">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 268.45)">
+<title>bigraph</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-268.45 240.83,-268.45 240.83,4 -4,4"></polygon>
+<!-- (&amp;#39;node2&amp;#39;,) -->
+<g id="node1" class="node">
+<title>(&#39;node2&#39;,)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="117.23" cy="-241.06" rx="23.29" ry="23.29"></ellipse>
+<text text-anchor="start" x="102.23" y="-237.96" font-family="Times,serif" font-size="12.00">node2</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
+<g id="node2" class="node">
+<title>(&#39;node2&#39;, &#39;node2.1&#39;)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="33.23" cy="-148.43" rx="33.47" ry="33.47"></ellipse>
+<text text-anchor="start" x="13.73" y="-151.83" font-family="Times,serif" font-size="12.00">node2.1</text>
+<text text-anchor="start" x="23.73" y="-138.83" font-family="Times,serif" font-size="12.00">&#45;3.0</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
+<g id="edge2" class="edge">
+<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.1&#39;)</title>
+<path fill="none" stroke="black" stroke-width="2" d="M101.43,-223.01C88.6,-209.17 70.34,-189.46 55.94,-173.93"></path>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.3&amp;#39;) -->
+<g id="node3" class="node">
+<title>(&#39;node2&#39;, &#39;node2.3&#39;)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="117.23" cy="-148.43" rx="33.47" ry="33.47"></ellipse>
+<text text-anchor="start" x="97.73" y="-151.83" font-family="Times,serif" font-size="12.00">node2.3</text>
+<text text-anchor="start" x="109.23" y="-138.83" font-family="Times,serif" font-size="12.00">0.5</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.3&amp;#39;) -->
+<g id="edge3" class="edge">
+<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.3&#39;)</title>
+<path fill="none" stroke="black" stroke-width="2" d="M117.23,-217.19C117.23,-206.7 117.23,-194.07 117.23,-182.56"></path>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;) -->
+<g id="node4" class="node">
+<title>(&#39;node2&#39;, &#39;node2.4&#39;)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="197.23" cy="-148.43" rx="28.87" ry="28.87"></ellipse>
+<text text-anchor="start" x="177.73" y="-145.33" font-family="Times,serif" font-size="12.00">node2.4</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;) -->
+<g id="edge4" class="edge">
+<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.4&#39;)</title>
+<path fill="none" stroke="black" stroke-width="2" d="M132.66,-222.58C145.64,-207.87 164.27,-186.77 178.19,-171.01"></path>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;, &amp;#39;node2.2.1&amp;#39;) -->
+<g id="node5" class="node">
+<title>(&#39;node2&#39;, &#39;node2.4&#39;, &#39;node2.2.1&#39;)</title>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="197.23" cy="-39.6" rx="39.7" ry="39.7"></ellipse>
+<text text-anchor="start" x="173.23" y="-43" font-family="Times,serif" font-size="12.00">node2.2.1</text>
+<text text-anchor="start" x="187.73" y="-30" font-family="Times,serif" font-size="12.00">&#45;2.0</text>
+</g>
+<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;, &amp;#39;node2.2.1&amp;#39;) -->
+<g id="edge1" class="edge">
+<title>(&#39;node2&#39;, &#39;node2.4&#39;)&#45;&gt;(&#39;node2&#39;, &#39;node2.4&#39;, &#39;node2.2.1&#39;)</title>
+<path fill="none" stroke="black" stroke-width="2" d="M197.23,-118.8C197.23,-106.93 197.23,-92.97 197.23,-80.15"></path>
+</g>
+</g>
+</svg>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
 </div>
 <div id="cell-id=028bc593-068d-4020-937a-4c9c39c31d9a" class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper">
