@@ -29,4 +29,4 @@ This resource will guide you through the core concepts and methods, helping you 
 
 ## License
 
-Bigraph-schema is open-source software released under the [MIT License](https://github.com/vivarium-collective/bigraph-schema/LICENSE).
+Bigraph-schema is open-source software released under the [Apache 2 License](https://github.com/vivarium-collective/bigraph-schema/LICENSE).

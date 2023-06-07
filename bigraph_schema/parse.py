@@ -1,3 +1,9 @@
+"""
+=====
+Parse
+=====
+"""
+
 from parsimonious.grammar import Grammar
 from parsimonious.nodes import NodeVisitor
 
@@ -140,4 +146,3 @@ def test_parse_parameters():
 
 if __name__ == '__main__':
     test_parse_parameters()
-

@@ -1,10 +1,18 @@
+"""
+======
+Schema
+======
+"""
+
 import copy
 import pprint
 import pytest
 
-from bigraph_schema.parse import parse_expression
-from bigraph_schema.registry import Registry, TypeRegistry, RegistryRegistry, type_schema_keys, optional_schema_keys, deep_merge, get_path, establish_path, set_path, remove_path, non_schema_keys
-from bigraph_schema.units import units, render_units_type, parse_dimensionality
+from bigraph_schema.registry import (
+    Registry, TypeRegistry, RegistryRegistry, type_schema_keys, deep_merge, get_path,
+    establish_path, set_path, remove_path, non_schema_keys
+)
+from bigraph_schema.units import units, render_units_type
 
 
 class SchemaTypes():
@@ -24,10 +32,8 @@ class SchemaTypes():
         
         register_base_types(self)
 
-
     def access(self, type_key):
         return self.type_registry.access(type_key)
-
 
     def validate_schema(self, schema, enforce_connections=False):
         # add ports and wires
@@ -75,7 +81,6 @@ class SchemaTypes():
 
         return report
 
-
         # # We will need this when building states to check to see if we are
         # # trying to instantiate an abstract type, but we can still register
         # # register abstract types so it is not invalid
@@ -85,7 +90,6 @@ class SchemaTypes():
         #         for key in undeclared:
         #             if not key in optional_schema_keys:
         #                 report[key] = f'missing required key: {key} for declaring atomic type'
-
 
 
     # TODO: if its an edge, ensure ports match wires
@@ -122,7 +126,6 @@ class SchemaTypes():
 
         return validation
 
-
     def default(self, schema):
         default = None
         found = self.access(schema)
@@ -139,7 +142,6 @@ class SchemaTypes():
                     default[key] = self.default(subschema)
 
         return default
-        
 
     def apply_update(self, schema, state, update):
         if '_apply' in schema:
@@ -171,12 +173,10 @@ class SchemaTypes():
 
         return state
 
-
     def apply(self, original_schema, initial, update):
         schema = self.access(original_schema)
         state = copy.deepcopy(initial)
         return self.apply_update(schema, initial, update)
-
 
     def serialize(self, schema, state):
         found = self.access(schema)
@@ -200,7 +200,6 @@ class SchemaTypes():
                 for key in non_schema_keys(schema)}
 
             return repr(tree)
-                
 
     def deserialize(self, schema, encoded):
         found = self.access(schema)
@@ -228,11 +227,9 @@ class SchemaTypes():
                 key: self.deserialize(schema.get(key), branch)
                 for key, branch in tree.items()}
 
-
     def divide(self, schema, state, ratios=(0.5, 0.5)):
         # TODO: implement
         return state
-
 
     def fill_ports(self, schema, wires=None, state=None, top=None, path=()):
         # deal with wires
@@ -290,7 +287,6 @@ class SchemaTypes():
 
         return state
 
-
     def fill_state(self, schema, state=None, top=None, path=(), type_key=None, context=None):
         # if a port is disconnected, build a store
         # for it under the '_open' key in the current
@@ -329,7 +325,6 @@ class SchemaTypes():
             
         return state
 
-
     def fill(self, original_schema, state=None):
         if state is not None:
             state = copy.deepcopy(state)
@@ -338,7 +333,6 @@ class SchemaTypes():
         return self.fill_state(
             schema,
             state=state)
-
 
     def ports_and_wires(self, schema, instance, edge_path):
         found = self.access(schema)
@@ -349,7 +343,6 @@ class SchemaTypes():
         wires = edge_state.get('wires')
         
         return ports, wires
-    
 
     def project_state(self, schema, wires, instance, path):
         result = {}
@@ -369,7 +362,6 @@ class SchemaTypes():
             raise Exception(f'trying to project state with these ports:\n{ports}\nbut not sure what these wires are:\n{wires}')
 
         return result
-        
 
     def project(self, schema, instance, edge_path=()):
         '''
@@ -394,7 +386,6 @@ class SchemaTypes():
             wires,
             instance,
             edge_path[:-1])
-
 
     def invert_state(self, ports, wires, path, states):
         result = {}
@@ -432,7 +423,6 @@ class SchemaTypes():
 
         return result
 
-
     def invert(self, schema, instance, edge_path, states):
         '''
         given states from the perspective of an edge (through
@@ -458,29 +448,23 @@ class SchemaTypes():
             wires,
             edge_path[:-1],
             states)
-        
 
     def link_place(self, place, link):
         pass
 
-
     def compose(self, a, b):
         pass
-
 
     # maybe vivarium?
     def hydrate(self, schema):
         return {}
-    
 
     def dehydrate(self, schema):
         return {}
 
-
     def query(self, schema, instance, redex):
         subschema = {}
         return subschema
-
 
     def react(self, schema, instance, redex, reactum):
         return {}
@@ -491,15 +475,18 @@ def accumulate(current, update, bindings, types):
         import ipdb; ipdb.set_trace()
     return current + update
 
+
 def concatenate(current, update, bindings, types):
     return current + update
 
 # support dividing by ratios?
 # ---> divide_float({...}, [0.1, 0.3, 0.6])
 
+
 def divide_float(value, ratios, bindings, types):
     half = value / 2.0
     return (half, half)
+
 
 # support function types for registrys?
 # def divide_int(value: int, _) -> tuple[int, int]:
@@ -511,10 +498,6 @@ def divide_int(value, bindings, types):
     return half, other_half
 
 
-# class DivideRegistry(Registry):
-    
-
-# def divide_longest(dimensions: Dimension) -> Tuple[Dimension, Dimension]:
 def divide_longest(dimensions, bindings, types):
     # any way to declare the required keys for this function in the registry?
     # find a way to ask a function what type its domain and codomain are
@@ -554,6 +537,7 @@ def replace(old_value, new_value, bindings, types):
 def serialize_string(s, bindings, types):
     return f'"{s}"'
 
+
 def deserialize_string(s, bindings, types):
     if s[0] != '"' or s[-1] != '"':
         raise Exception(f'deserializing str which requires double quotes: {s}')
@@ -563,11 +547,14 @@ def deserialize_string(s, bindings, types):
 def to_string(value, bindings, types):
     return str(value)
 
+
 def deserialize_int(i, bindings, types):
     return int(i)
 
+
 def deserialize_float(i, bindings, types):
     return float(i)
+
 
 def evaluate(code, bindings, types):
     return eval(code)
@@ -617,8 +604,10 @@ def divide_tree(tree, bindings, types):
 
     return result
 
+
 def serialize_tree(value, bindings, types):
     return value
+
 
 def deserialize_tree(value, bindings, types):
     return value
@@ -627,11 +616,14 @@ def deserialize_tree(value, bindings, types):
 def apply_dict(current, update, bindings, types):
     pass
 
+
 def divide_dict(value, bindings, types):
     return value
 
+
 def serialize_dict(value, bindings, types):
     return value
+
 
 def deserialize_dict(value, bindings, types):
     return value
@@ -644,11 +636,13 @@ def apply_maybe(current, update, bindings, types):
         value_type = bindings['value']
         return types.apply(value_type, current, update)
 
+
 def divide_maybe(value, bindings):
     if value is None:
         return [None, None]
     else:
         pass
+
 
 def serialize_maybe(value, bindings, types):
     if value is None:
@@ -656,6 +650,7 @@ def serialize_maybe(value, bindings, types):
     else:
         value_type = bindings['value']
         return serialize(value_type, value)
+
 
 def deserialize_maybe(encoded, bindings, types):
     if encoded == NONE_SYMBOL:
@@ -669,11 +664,14 @@ def deserialize_maybe(encoded, bindings, types):
 def apply_units(current, update, bindings, types):
     return current + update
 
+
 def serialize_units(value, bindings, types):
     return str(value)
 
+
 def deserialize_units(encoded, bindings, types):
     return units(encoded)
+
 
 def divide_units(value, bindings, types):
     return [value, value]
@@ -683,11 +681,14 @@ def divide_units(value, bindings, types):
 def apply_edge(current, update, bindings, types):
     return current + update
 
+
 def serialize_edge(value, bindings, types):
     return str(value)
 
+
 def deserialize_edge(encoded, bindings, types):
     return eval(encoded)
+
 
 def divide_edge(value, bindings, types):
     return [value, value]

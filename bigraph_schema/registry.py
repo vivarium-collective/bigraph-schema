@@ -1,12 +1,15 @@
+"""
+========
+Registry
+========
+"""
+
 import copy
-import random
 import collections
 import pytest
 import traceback
-from typing import Any
 
 from bigraph_schema.parse import parse_expression
-from bigraph_schema.units import units, render_units_type
 
 
 NONE_SYMBOL = ''
@@ -229,7 +232,6 @@ class TypeRegistry(Registry):
         self.supers = {}
         self.register('any', {})
 
-
     def register(self, key, schema, alternate_keys=tuple(), force=False):
         schema = copy.deepcopy(schema)
         if isinstance(schema, dict):
@@ -262,13 +264,11 @@ class TypeRegistry(Registry):
 
         super().register(key, schema, alternate_keys, force)
 
-
     def resolve_parameters(self, type_parameters, schema):
         return {
             type_parameter: self.access(
                 schema.get(f'_{type_parameter}'))
             for type_parameter in type_parameters}
-
 
     def access(self, schema):
         """Retrieve all types in the schema"""
@@ -328,10 +328,8 @@ class TypeRegistry(Registry):
                     
         return found
 
-
-    def lookup(type_key, attribute):
+    def lookup(self, type_key, attribute):
         return self.access(type_key).get(attribute)
-
 
     # description should come from type
     def is_descendent(self, key, ancestor):
