@@ -1,7 +1,7 @@
 """
-=====
-Parse
-=====
+======================
+Parse Bigraph Notation
+======================
 """
 
 from parsimonious.grammar import Grammar

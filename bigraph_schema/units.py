@@ -2,6 +2,8 @@
 =====
 Units
 =====
+
+Register all of the unit types from the pint unit registry
 """
 
 from pint import UnitRegistry
@@ -10,8 +12,7 @@ from pint import UnitRegistry
 units = UnitRegistry()
 
 
-def render_power(original_power):
-    negative = original_power < 0
+def render_coefficient(original_power):
     power = abs(original_power)
     int_part = int(power)
     root_part = power % 1
@@ -44,7 +45,7 @@ def render_units_type(dimensionality):
         if power == 1:
             render = inner_key
         else:
-            render = f'{inner_key}^{render_power(power)}'
+            render = f'{inner_key}^{render_coefficient(power)}'
 
         if negative:
             denominator.append(render)
@@ -59,7 +60,7 @@ def render_units_type(dimensionality):
     return render
 
 
-def parse_power(s):
+def parse_coefficient(s):
     if s is None:
         return 1
     elif '_' in s:
@@ -85,14 +86,14 @@ def parse_dimensionality(s):
         exponent = None
         if len(base) > 1:
             exponent = base[1]
-        dimensionality[f'[{base[0]}]'] = parse_power(exponent)
+        dimensionality[f'[{base[0]}]'] = parse_coefficient(exponent)
 
     for term in denominator_terms:
         power = term.split('^')
         exponent = None
         if len(power) > 1:
             exponent = power[1]
-        dimensionality[f'[{power[0]}]'] = -parse_power(exponent)
+        dimensionality[f'[{power[0]}]'] = -parse_coefficient(exponent)
 
     return dimensionality
 

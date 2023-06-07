@@ -197,6 +197,7 @@ class Registry(object):
 
                 This may be useful if you want to be able to look up an
                 item in the registry under multiple keys.
+            force (bool): Force the registration, overriding existing keys. False by default.
         """
         keys = [key]
         keys.extend(alternate_keys)
@@ -332,12 +333,12 @@ class TypeRegistry(Registry):
         return self.access(type_key).get(attribute)
 
     # description should come from type
-    def is_descendent(self, key, ancestor):
+    def is_descendant(self, key, ancestor):
         for sup in self.supers.get(key, []):
             if sup == ancestor:
                 return True
             else:
-                found = self.is_descendent(sup, ancestor)
+                found = self.is_descendant(sup, ancestor)
                 if found:
                     return True
         return False

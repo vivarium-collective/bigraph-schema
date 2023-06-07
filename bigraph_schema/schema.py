@@ -1092,13 +1092,8 @@ def test_fill_int(base_types):
 
 
 def test_fill_cube(cube_types):
-    test_schema = {
-        '_type': 'cube'
-    }
-
-    partial_state = {
-        'height': 5,
-    }
+    test_schema = {'_type': 'cube'}
+    partial_state = {'height': 5}
 
     full_state = cube_types.fill(
         test_schema,
