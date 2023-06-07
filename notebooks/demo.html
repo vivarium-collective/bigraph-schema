@@ -15112,7 +15112,7 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
 <h1 id="Bigraph-Schema">Bigraph Schema<a class="anchor-link" href="#Bigraph-Schema">&#182;</a></h1><p>This tutorial explores the bigraph schema library. Bigraph schema enables different simulators, models, and data to communicate with each other through standardized type definitions and wiring diagrams. By providing a robust type system and serializable data format, this makes composite simulators shareable, extendable, and easily distributed across various computer architectures.</p>
 <p>This notebook uses the <a href="https://pypi.org/project/bigraph-schema/">bigraph-schema</a> library for validation and processing of the schema, and the <a href="https://pypi.org/project/bigraph-viz/">bigraph-viz</a> library for plotting library for visualizing the resulting simulation configuration.</p>
-<p>This notebook does not introduce the Bigraph concepts, rather it is focused on type definition and access.</p>
+<p>This notebook does not go into the Bigraph framework, rather it is focused on type definition and access. For an introduction to Bigraphs and Process Bigraphs see <a href="https://vivarium-collective.github.io/process-bigraph/notebooks/process-bigraphs.html">this notebook</a></p>
 
 </div>
 </div>
@@ -15134,7 +15134,7 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[1]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[28]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># !pip install bigraph-schema</span>
@@ -15159,8 +15159,8 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@56185a0decdac19d79f080489c4c9ac66967ffc4#egg=bigraph_schema
-bigraph-viz==0.0.25
+<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@9abc774c7de0b66b3bff490cac000bc03944bd39#egg=bigraph_schema
+bigraph-viz==0.0.29
 </pre>
 </div>
 </div>
@@ -15176,7 +15176,7 @@ bigraph-viz==0.0.25
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h3 id="Imports">Imports<a class="anchor-link" href="#Imports">&#182;</a></h3><p>We will use the <code>validate_schema</code> method to check our schemas, <code>fill</code> method to fill in missing details to prepare the schema for simulation, and the <code>type_registry</code> object to access different schemas and register new ones.</p>
+<h3 id="Imports">Imports<a class="anchor-link" href="#Imports">&#182;</a></h3><p>The main class from bigraph_schema is <code>SchemaTypes</code>, which handles the different schemas and provides methods for their manipulation. We will use the <code>SchemaTypes.validate_schema</code> method to check our schemas, <code>SchemaTypes.access</code> method to fill in missing details to prepare the schema for simulation, and the <code>SchemaTypes.type_registry</code> object to access different schemas and register new ones.</p>
 
 </div>
 </div>
@@ -15186,23 +15186,32 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[2]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[29]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">copy</span>
-<span class="kn">from</span> <span class="nn">bigraph_schema</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">validate_schema</span><span class="p">,</span> 
-    <span class="n">validate_state</span><span class="p">,</span> 
-    <span class="n">fill</span><span class="p">,</span> 
-    <span class="n">type_registry</span>
-<span class="p">)</span>
-<span class="kn">from</span> <span class="nn">bigraph_schema.registry</span> <span class="kn">import</span> <span class="n">type_schema_keys</span>  <span class="c1"># Can&#39;t add to this because its a tuple</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">bigraph_schema</span> <span class="kn">import</span> <span class="n">SchemaTypes</span>
 <span class="kn">from</span> <span class="nn">bigraph_viz</span> <span class="kn">import</span> <span class="n">plot_bigraph</span><span class="p">,</span> <span class="n">pf</span><span class="p">,</span> <span class="n">pp</span>
 <span class="kn">from</span> <span class="nn">bigraph_viz.dict_utils</span> <span class="kn">import</span> <span class="n">schema_keys</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+</div><div id="cell-id=a2d6adb0-8678-4f59-a027-5296b755c1df" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[30]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">types</span> <span class="o">=</span> <span class="n">SchemaTypes</span><span class="p">()</span>
 
 <span class="c1"># register some required types</span>
-<span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;URI&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;0-000-00000-0&#39;</span><span class="p">})</span>  <span class="c1"># how do we test that something is a URI?</span>
-<span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;KISAO&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;KISAO:0000000&#39;</span><span class="p">})</span>  <span class="c1"># how do we test that something is a URI?</span>
+<span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;URI&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;0-000-00000-0&#39;</span><span class="p">})</span>  <span class="c1"># how do we test that something is a URI?</span>
+<span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;KISAO&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;KISAO:0000000&#39;</span><span class="p">})</span>  <span class="c1"># how do we test that something is a URI?</span>
 <span class="n">schema_keys</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s1">&#39;_super&#39;</span><span class="p">,</span> <span class="s1">&#39;config&#39;</span><span class="p">])</span> <span class="c1"># TODO -- this should be default, also should use the bigraph_schema keys</span>
 </pre></div>
 
@@ -15229,10 +15238,12 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[3]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[31]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">type_schema_keys</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">bigraph_schema.registry</span> <span class="kn">import</span> <span class="n">type_schema_keys</span>
+
+<span class="n">type_schema_keys</span>
 </pre></div>
 
      </div>
@@ -15248,7 +15259,7 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[3]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[31]:</div>
 
 
 
@@ -15291,10 +15302,10 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[4]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[32]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">type_registry</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
 </pre></div>
 
      </div>
@@ -15310,92 +15321,94 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[4]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[32]:</div>
 
 
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
 <pre>[&#39;&#39;,
- &#39;length^2*mass/time^3&#39;,
- &#39;string&#39;,
- &#39;mass/(temperature^4*time^3)&#39;,
- &#39;length*time/mass&#39;,
- &#39;any&#39;,
- &#39;number&#39;,
- &#39;/(temperature*time)&#39;,
- &#39;length^2/time&#39;,
- &#39;mass/(length*time)&#39;,
- &#39;current^2*time^4/(length^3*mass)&#39;,
- &#39;current*length^2&#39;,
- &#39;current*length^2*time&#39;,
- &#39;length^3*mass/(current^2*time^4)&#39;,
- &#39;substance&#39;,
- &#39;tree&#39;,
- &#39;length^2/time^2&#39;,
- &#39;time/length&#39;,
- &#39;length^2*mass/(current^2*time^2)&#39;,
- &#39;mass/(length*time^2)&#39;,
- &#39;length^2*mass/(current^2*time^3)&#39;,
- &#39;current&#39;,
- &#39;mass/length&#39;,
- &#39;length/time&#39;,
- &#39;length^2*mass/time&#39;,
- &#39;list&#39;,
- &#39;luminosity/length^2&#39;,
- &#39;URI&#39;,
- &#39;mass&#39;,
- &#39;luminosity&#39;,
- &#39;substance/length^3&#39;,
- &#39;current*time/mass&#39;,
- &#39;length^3&#39;,
- &#39;length^2*mass/(temperature*time^2)&#39;,
- &#39;current*time&#39;,
- &#39;current^2*time^4/(length^2*mass)&#39;,
- &#39;length*mass/time&#39;,
- &#39;length^2*mass/time^2&#39;,
- &#39;current*time/substance&#39;,
- &#39;temperature&#39;,
- &#39;length*mass/(current*time^3)&#39;,
- &#39;length*mass&#39;,
- &#39;length^2&#39;,
- &#39;length/mass&#39;,
- &#39;length^4*mass/time^3&#39;,
- &#39;length^2*mass/(substance*temperature*time^2)&#39;,
- &#39;substance/time&#39;,
- &#39;mass/length^1.5&#39;,
- &#39;int&#39;,
- &#39;length^1.5*mass/time&#39;,
- &#39;float&#39;,
- &#39;time&#39;,
- &#39;dict&#39;,
- &#39;mass/length^3&#39;,
- &#39;mass/time^2&#39;,
- &#39;/length&#39;,
- &#39;current*length*time&#39;,
- &#39;length^3/(mass*time^2)&#39;,
- &#39;length^3/time&#39;,
- &#39;length*mass/(current^2*time^2)&#39;,
- &#39;current^2*time^3/(length^2*mass)&#39;,
- &#39;current*time^2/(length^2*mass)&#39;,
- &#39;mass/time^3&#39;,
- &#39;/printing_unit&#39;,
- &#39;length^1.5*mass/time^2&#39;,
- &#39;printing_unit&#39;,
- &#39;edge&#39;,
- &#39;printing_unit/length&#39;,
  &#39;KISAO&#39;,
- &#39;/time&#39;,
- &#39;length/time^2&#39;,
- &#39;length^2*mass/(current*time^3)&#39;,
+ &#39;mass/temperature^4*time^3&#39;,
+ &#39;any&#39;,
+ &#39;printing_unit/length&#39;,
+ &#39;length^2*mass/current^2*time^3&#39;,
+ &#39;list&#39;,
+ &#39;substance/time&#39;,
+ &#39;URI&#39;,
+ &#39;length^3/mass*time^2&#39;,
+ &#39;current*length^2*time&#39;,
+ &#39;printing_unit&#39;,
+ &#39;length^0_5*mass^0_5/time&#39;,
  &#39;length&#39;,
- &#39;length*temperature&#39;,
- &#39;length^2*mass/(current*time^2)&#39;,
- &#39;mass/(current*time^2)&#39;,
- &#39;/substance&#39;,
+ &#39;length^2*mass/current*time^2&#39;,
  &#39;time^2/length&#39;,
+ &#39;length^2*mass/time^2&#39;,
+ &#39;mass/length*time&#39;,
+ &#39;length^2*mass/time&#39;,
+ &#39;length*time/mass&#39;,
+ &#39;length/mass&#39;,
  &#39;maybe&#39;,
- &#39;length*mass/time^2&#39;]</pre>
+ &#39;length/time&#39;,
+ &#39;number&#39;,
+ &#39;mass&#39;,
+ &#39;mass/length^3&#39;,
+ &#39;luminosity&#39;,
+ &#39;int&#39;,
+ &#39;string&#39;,
+ &#39;current*time/substance&#39;,
+ &#39;mass/time^3&#39;,
+ &#39;float&#39;,
+ &#39;mass/time^2&#39;,
+ &#39;time/length&#39;,
+ &#39;current^2*time^4/length^2*mass&#39;,
+ &#39;current*time^2/length^2*mass&#39;,
+ &#39;length^2/time^2&#39;,
+ &#39;edge&#39;,
+ &#39;current*time&#39;,
+ &#39;array&#39;,
+ &#39;tree&#39;,
+ &#39;current&#39;,
+ &#39;time&#39;,
+ &#39;length^4*mass/time^3&#39;,
+ &#39;length^1_5*mass^0_5/time^2&#39;,
+ &#39;length^0_5*mass^0_5&#39;,
+ &#39;length^2*mass/current*time^3&#39;,
+ &#39;length*mass/current*time^3&#39;,
+ &#39;length/time^2&#39;,
+ &#39;length^2*mass/time^3&#39;,
+ &#39;current^2*time^3/length^2*mass&#39;,
+ &#39;mass^0_5/length^1_5&#39;,
+ &#39;/substance&#39;,
+ &#39;length^2/time&#39;,
+ &#39;mass^0_5/length^0_5*time&#39;,
+ &#39;mass/length&#39;,
+ &#39;length^3&#39;,
+ &#39;temperature&#39;,
+ &#39;length*mass/current^2*time^2&#39;,
+ &#39;length^1_5*mass^0_5/time&#39;,
+ &#39;length^2*mass/temperature*time^2&#39;,
+ &#39;/length&#39;,
+ &#39;current*time/mass&#39;,
+ &#39;/temperature*time&#39;,
+ &#39;current*length*time&#39;,
+ &#39;/time&#39;,
+ &#39;luminosity/length^2&#39;,
+ &#39;length*mass/time^2&#39;,
+ &#39;substance&#39;,
+ &#39;mass/current*time^2&#39;,
+ &#39;length^2*mass/current^2*time^2&#39;,
+ &#39;length^3*mass/current^2*time^4&#39;,
+ &#39;length^3/time&#39;,
+ &#39;current^2*time^4/length^3*mass&#39;,
+ &#39;dict&#39;,
+ &#39;substance/length^3&#39;,
+ &#39;current*length^2&#39;,
+ &#39;length^2&#39;,
+ &#39;length^2*mass/substance*temperature*time^2&#39;,
+ &#39;/printing_unit&#39;,
+ &#39;length*temperature&#39;,
+ &#39;mass/length*time^2&#39;]</pre>
 </div>
 
 </div>
@@ -15421,10 +15434,10 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[5]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[33]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">type_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="s1">&#39;float&#39;</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="s1">&#39;float&#39;</span><span class="p">)</span>
 </pre></div>
 
      </div>
@@ -15440,13 +15453,14 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[5]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[33]:</div>
 
 
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
-<pre>{&#39;_apply&#39;: &#39;accumulate&#39;,
+<pre>{&#39;_type&#39;: &#39;float&#39;,
+ &#39;_apply&#39;: &#39;accumulate&#39;,
  &#39;_serialize&#39;: &#39;to_string&#39;,
  &#39;_description&#39;: &#39;64-bit floating point precision number&#39;,
  &#39;_default&#39;: &#39;0.0&#39;,
@@ -15468,7 +15482,7 @@ bigraph-viz==0.0.25
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h3 id="Expand-a-type-to-show-all-subtypes">Expand a type to show all subtypes<a class="anchor-link" href="#Expand-a-type-to-show-all-subtypes">&#182;</a></h3>
+<h3 id="Use-access-to-expand-a-type-and-show-subtypes">Use access to expand a type and show subtypes<a class="anchor-link" href="#Use-access-to-expand-a-type-and-show-subtypes">&#182;</a></h3>
 </div>
 </div>
 </div>
@@ -15477,10 +15491,10 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[6]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[34]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pp</span><span class="p">(</span><span class="n">type_registry</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="s1">&#39;edge&#39;</span><span class="p">))</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pp</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="s1">&#39;edge&#39;</span><span class="p">))</span>
 </pre></div>
 
      </div>
@@ -15500,9 +15514,39 @@ bigraph-viz==0.0.25
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>{ &#39;wires&#39;: { &#39;_type&#39;: &#39;tree[list[string]]&#39;,
-             &#39;_type_parameters&#39;: { &#39;A&#39;: { &#39;_type&#39;: &#39;list&#39;,
-                                          &#39;_type_parameters&#39;: { &#39;A&#39;: { &#39;_type&#39;: &#39;string&#39;}}}}}}
+<pre>{ &#39;_apply&#39;: &#39;apply_edge&#39;,
+  &#39;_default&#39;: &#39;{&#34;wires&#34;: {}}&#39;,
+  &#39;_description&#39;: &#39;hyperedges in the bigraph, with ports as a type parameter&#39;,
+  &#39;_deserialize&#39;: &#39;deserialize_edge&#39;,
+  &#39;_divide&#39;: &#39;divide_edge&#39;,
+  &#39;_serialize&#39;: &#39;serialize_edge&#39;,
+  &#39;_type&#39;: &#39;edge&#39;,
+  &#39;_type_parameters&#39;: [&#39;ports&#39;],
+  &#39;wires&#39;: { &#39;_apply&#39;: &#39;apply_tree&#39;,
+             &#39;_bindings&#39;: {&#39;leaf&#39;: [&#39;list&#39;, [&#39;string&#39;]]},
+             &#39;_default&#39;: &#39;{}&#39;,
+             &#39;_description&#39;: &#39;mapping from str to some type (or nested dicts)&#39;,
+             &#39;_deserialize&#39;: &#39;deserialize_tree&#39;,
+             &#39;_divide&#39;: &#39;divide_tree&#39;,
+             &#39;_leaf&#39;: { &#39;_apply&#39;: &#39;concatenate&#39;,
+                        &#39;_bindings&#39;: {&#39;element&#39;: &#39;string&#39;},
+                        &#39;_default&#39;: &#39;[]&#39;,
+                        &#39;_description&#39;: &#39;general list type (or sublists)&#39;,
+                        &#39;_deserialize&#39;: &#39;evaluate&#39;,
+                        &#39;_divide&#39;: &#39;divide_list&#39;,
+                        &#39;_element&#39;: { &#39;_apply&#39;: &#39;replace&#39;,
+                                      &#39;_default&#39;: &#39;&#34;&#34;&#39;,
+                                      &#39;_description&#39;: &#39;64-bit integer&#39;,
+                                      &#39;_deserialize&#39;: &#39;deserialize_string&#39;,
+                                      &#39;_divide&#39;: &#39;divide_int&#39;,
+                                      &#39;_serialize&#39;: &#39;serialize_string&#39;,
+                                      &#39;_type&#39;: &#39;string&#39;},
+                        &#39;_serialize&#39;: &#39;to_string&#39;,
+                        &#39;_type&#39;: &#39;list&#39;,
+                        &#39;_type_parameters&#39;: [&#39;element&#39;]},
+             &#39;_serialize&#39;: &#39;serialize_tree&#39;,
+             &#39;_type&#39;: &#39;tree&#39;,
+             &#39;_type_parameters&#39;: [&#39;leaf&#39;]}}
 </pre>
 </div>
 </div>
@@ -15528,7 +15572,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[7]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[35]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">sbml_schema</span> <span class="o">=</span> <span class="p">{</span>
@@ -15537,7 +15581,7 @@ bigraph-viz==0.0.25
     <span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;SBML:0000000&#39;</span><span class="p">,</span>
     <span class="s1">&#39;_description&#39;</span><span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
 <span class="p">}</span>
-<span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+<span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
     <span class="s1">&#39;SBML&#39;</span><span class="p">,</span> <span class="n">sbml_schema</span><span class="p">)</span>
 </pre></div>
 
@@ -15563,7 +15607,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[8]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[36]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">bigraph_state</span> <span class="o">=</span> <span class="p">{</span>
@@ -15589,7 +15633,7 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[8]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[36]:</div>
 
 
 
@@ -15599,48 +15643,46 @@ bigraph-viz==0.0.25
 <!-- Generated by graphviz version 7.1.0 (20230121.1956)
  -->
 <!-- Title: bigraph Pages: 1 -->
-<svg width="185pt" height="167pt" viewBox="0.00 0.00 190.10 172.21">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 168.21)">
+<svg width="173pt" height="160pt" viewBox="0.00 0.00 178.10 164.21">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 160.21)">
 <title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-168.21 186.1,-168.21 186.1,4 -4,4"></polygon>
+<polygon fill="white" stroke="none" points="-4,4 -4,-160.21 174.1,-160.21 174.1,4 -4,4"></polygon>
 <!-- (&amp;#39;node1&amp;#39;,) -->
 <g id="node1" class="node">
 <title>(&#39;node1&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="30.87" cy="-133.34" rx="26.76" ry="26.76"></ellipse>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="30.87" cy="-133.34" rx="30.74" ry="30.74"></ellipse>
-<text text-anchor="start" x="15.87" y="-136.74" font-family="Times,serif" font-size="12.00">node1</text>
-<text text-anchor="start" x="22.87" y="-123.74" font-family="Times,serif" font-size="12.00">1.0</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="26.87" cy="-129.34" rx="26.74" ry="26.74"></ellipse>
+<text text-anchor="start" x="11.87" y="-132.74" font-family="Times,serif" font-size="12.00">node1</text>
+<text text-anchor="start" x="18.87" y="-119.74" font-family="Times,serif" font-size="12.00">1.0</text>
 </g>
 <!-- (&amp;#39;node2&amp;#39;,) -->
 <g id="node2" class="node">
 <title>(&#39;node2&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="106.87" cy="-133.34" rx="23.3" ry="23.3"></ellipse>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="106.87" cy="-133.34" rx="27.29" ry="27.29"></ellipse>
-<text text-anchor="start" x="91.87" y="-130.24" font-family="Times,serif" font-size="12.00">node2</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="94.87" cy="-129.34" rx="23.29" ry="23.29"></ellipse>
+<text text-anchor="start" x="79.87" y="-126.24" font-family="Times,serif" font-size="12.00">node2</text>
 </g>
 <!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
 <g id="node3" class="node">
 <title>(&#39;node2&#39;, &#39;node2.1&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="64.87" cy="-33.23" rx="33.47" ry="33.47"></ellipse>
-<text text-anchor="start" x="45.37" y="-36.63" font-family="Times,serif" font-size="12.00">node2.1</text>
-<text text-anchor="start" x="56.87" y="-23.63" font-family="Times,serif" font-size="12.00">2.0</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="52.87" cy="-33.23" rx="33.47" ry="33.47"></ellipse>
+<text text-anchor="start" x="33.37" y="-36.63" font-family="Times,serif" font-size="12.00">node2.1</text>
+<text text-anchor="start" x="44.87" y="-23.63" font-family="Times,serif" font-size="12.00">2.0</text>
 </g>
 <!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
 <g id="edge1" class="edge">
 <title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.1&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M96.16,-107.33C90.62,-94.39 83.81,-78.47 77.96,-64.81"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M85.55,-107.45C79.94,-94.89 72.71,-78.68 66.47,-64.71"></path>
 </g>
 <!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.2&amp;#39;) -->
 <g id="node4" class="node">
 <title>(&#39;node2&#39;, &#39;node2.2&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="148.87" cy="-33.23" rx="33.47" ry="33.47"></ellipse>
-<text text-anchor="start" x="129.37" y="-36.63" font-family="Times,serif" font-size="12.00">node2.2</text>
-<text text-anchor="start" x="140.87" y="-23.63" font-family="Times,serif" font-size="12.00">2.1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="136.87" cy="-33.23" rx="33.47" ry="33.47"></ellipse>
+<text text-anchor="start" x="117.37" y="-36.63" font-family="Times,serif" font-size="12.00">node2.2</text>
+<text text-anchor="start" x="128.87" y="-23.63" font-family="Times,serif" font-size="12.00">2.1</text>
 </g>
 <!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.2&amp;#39;) -->
 <g id="edge2" class="edge">
 <title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.2&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M117.58,-107.33C123.12,-94.39 129.93,-78.47 135.78,-64.81"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M104.19,-107.45C109.8,-94.89 117.03,-78.68 123.27,-64.71"></path>
 </g>
 </g>
 </svg>
@@ -15670,7 +15712,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[20]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[37]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">dual_edge_schema</span> <span class="o">=</span> <span class="p">{</span>
@@ -15688,7 +15730,7 @@ bigraph-viz==0.0.25
     <span class="p">},</span>
 <span class="p">}</span>    
 
-<span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+<span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
     <span class="s1">&#39;dual_edge&#39;</span><span class="p">,</span>
     <span class="n">dual_edge_schema</span><span class="p">,</span>
 <span class="p">)</span>
@@ -15723,10 +15765,9 @@ bigraph-viz==0.0.25
         <span class="p">}</span>
     <span class="p">},</span>
 <span class="p">}</span>
-<span class="n">filled_instance</span> <span class="o">=</span> <span class="n">fill</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">instance</span><span class="p">)</span>
+<span class="n">filled_instance</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">instance</span><span class="p">)</span>
 
-
-<span class="n">filled_schema</span> <span class="o">=</span> <span class="n">type_registry</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+<span class="n">filled_schema</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
 <span class="n">filled_schema</span>
 </pre></div>
 
@@ -15743,15 +15784,76 @@ bigraph-viz==0.0.25
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[20]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[37]:</div>
 
 
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
-<pre>{&#39;store1&#39;: {&#39;edge1&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}},
-  &#39;edge2&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}}},
- &#39;edge3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_edge&#39;}}}</pre>
+<pre>{&#39;store1&#39;: {&#39;edge1&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: {&#39;_type&#39;: &#39;float&#39;,
+     &#39;_apply&#39;: &#39;accumulate&#39;,
+     &#39;_serialize&#39;: &#39;to_string&#39;,
+     &#39;_description&#39;: &#39;64-bit floating point precision number&#39;,
+     &#39;_default&#39;: &#39;0.0&#39;,
+     &#39;_deserialize&#39;: &#39;float&#39;,
+     &#39;_divide&#39;: &#39;divide_float&#39;,
+     &#39;_super&#39;: [&#39;number&#39;]},
+    &#39;port2&#39;: {&#39;_type&#39;: &#39;int&#39;,
+     &#39;_apply&#39;: &#39;accumulate&#39;,
+     &#39;_serialize&#39;: &#39;to_string&#39;,
+     &#39;_description&#39;: &#39;64-bit integer&#39;,
+     &#39;_default&#39;: &#39;0&#39;,
+     &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
+     &#39;_divide&#39;: &#39;divide_int&#39;,
+     &#39;_super&#39;: [&#39;number&#39;]}}},
+  &#39;edge2&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: {&#39;_type&#39;: &#39;float&#39;,
+     &#39;_apply&#39;: &#39;accumulate&#39;,
+     &#39;_serialize&#39;: &#39;to_string&#39;,
+     &#39;_description&#39;: &#39;64-bit floating point precision number&#39;,
+     &#39;_default&#39;: &#39;0.0&#39;,
+     &#39;_deserialize&#39;: &#39;float&#39;,
+     &#39;_divide&#39;: &#39;divide_float&#39;,
+     &#39;_super&#39;: [&#39;number&#39;]},
+    &#39;port2&#39;: {&#39;_type&#39;: &#39;int&#39;,
+     &#39;_apply&#39;: &#39;accumulate&#39;,
+     &#39;_serialize&#39;: &#39;to_string&#39;,
+     &#39;_description&#39;: &#39;64-bit integer&#39;,
+     &#39;_default&#39;: &#39;0&#39;,
+     &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
+     &#39;_divide&#39;: &#39;divide_int&#39;,
+     &#39;_super&#39;: [&#39;number&#39;]}}}},
+ &#39;edge3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: {&#39;edge1&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: {&#39;_type&#39;: &#39;float&#39;,
+       &#39;_apply&#39;: &#39;accumulate&#39;,
+       &#39;_serialize&#39;: &#39;to_string&#39;,
+       &#39;_description&#39;: &#39;64-bit floating point precision number&#39;,
+       &#39;_default&#39;: &#39;0.0&#39;,
+       &#39;_deserialize&#39;: &#39;float&#39;,
+       &#39;_divide&#39;: &#39;divide_float&#39;,
+       &#39;_super&#39;: [&#39;number&#39;]},
+      &#39;port2&#39;: {&#39;_type&#39;: &#39;int&#39;,
+       &#39;_apply&#39;: &#39;accumulate&#39;,
+       &#39;_serialize&#39;: &#39;to_string&#39;,
+       &#39;_description&#39;: &#39;64-bit integer&#39;,
+       &#39;_default&#39;: &#39;0&#39;,
+       &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
+       &#39;_divide&#39;: &#39;divide_int&#39;,
+       &#39;_super&#39;: [&#39;number&#39;]}}},
+    &#39;edge2&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: {&#39;_type&#39;: &#39;float&#39;,
+       &#39;_apply&#39;: &#39;accumulate&#39;,
+       &#39;_serialize&#39;: &#39;to_string&#39;,
+       &#39;_description&#39;: &#39;64-bit floating point precision number&#39;,
+       &#39;_default&#39;: &#39;0.0&#39;,
+       &#39;_deserialize&#39;: &#39;float&#39;,
+       &#39;_divide&#39;: &#39;divide_float&#39;,
+       &#39;_super&#39;: [&#39;number&#39;]},
+      &#39;port2&#39;: {&#39;_type&#39;: &#39;int&#39;,
+       &#39;_apply&#39;: &#39;accumulate&#39;,
+       &#39;_serialize&#39;: &#39;to_string&#39;,
+       &#39;_description&#39;: &#39;64-bit integer&#39;,
+       &#39;_default&#39;: &#39;0&#39;,
+       &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
+       &#39;_divide&#39;: &#39;divide_int&#39;,
+       &#39;_super&#39;: [&#39;number&#39;]}}}}}}}</pre>
 </div>
 
 </div>
@@ -15765,7 +15867,7 @@ bigraph-viz==0.0.25
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[21]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[38]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;schema:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
@@ -15800,9 +15902,90 @@ instance:
               &#39;edge2&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1.1&#39;, &#39;port2&#39;: &#39;store1.2&#39;}}}}
 
 filled schema:
- { &#39;edge3&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;dual_edge&#39;}},
-  &#39;store1&#39;: { &#39;edge1&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}},
-              &#39;edge2&#39;: {&#39;_ports&#39;: {&#39;port1&#39;: &#39;float&#39;, &#39;port2&#39;: &#39;int&#39;}}}}
+ { &#39;edge3&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;edge1&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
+                                                                      &#39;_default&#39;: &#39;0.0&#39;,
+                                                                      &#39;_description&#39;: &#39;64-bit &#39;
+                                                                                      &#39;floating &#39;
+                                                                                      &#39;point &#39;
+                                                                                      &#39;precision &#39;
+                                                                                      &#39;number&#39;,
+                                                                      &#39;_deserialize&#39;: &#39;float&#39;,
+                                                                      &#39;_divide&#39;: &#39;divide_float&#39;,
+                                                                      &#39;_serialize&#39;: &#39;to_string&#39;,
+                                                                      &#39;_super&#39;: [ &#39;number&#39;],
+                                                                      &#39;_type&#39;: &#39;float&#39;},
+                                                           &#39;port2&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
+                                                                      &#39;_default&#39;: &#39;0&#39;,
+                                                                      &#39;_description&#39;: &#39;64-bit &#39;
+                                                                                      &#39;integer&#39;,
+                                                                      &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
+                                                                      &#39;_divide&#39;: &#39;divide_int&#39;,
+                                                                      &#39;_serialize&#39;: &#39;to_string&#39;,
+                                                                      &#39;_super&#39;: [ &#39;number&#39;],
+                                                                      &#39;_type&#39;: &#39;int&#39;}}},
+                                    &#39;edge2&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
+                                                                      &#39;_default&#39;: &#39;0.0&#39;,
+                                                                      &#39;_description&#39;: &#39;64-bit &#39;
+                                                                                      &#39;floating &#39;
+                                                                                      &#39;point &#39;
+                                                                                      &#39;precision &#39;
+                                                                                      &#39;number&#39;,
+                                                                      &#39;_deserialize&#39;: &#39;float&#39;,
+                                                                      &#39;_divide&#39;: &#39;divide_float&#39;,
+                                                                      &#39;_serialize&#39;: &#39;to_string&#39;,
+                                                                      &#39;_super&#39;: [ &#39;number&#39;],
+                                                                      &#39;_type&#39;: &#39;float&#39;},
+                                                           &#39;port2&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
+                                                                      &#39;_default&#39;: &#39;0&#39;,
+                                                                      &#39;_description&#39;: &#39;64-bit &#39;
+                                                                                      &#39;integer&#39;,
+                                                                      &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
+                                                                      &#39;_divide&#39;: &#39;divide_int&#39;,
+                                                                      &#39;_serialize&#39;: &#39;to_string&#39;,
+                                                                      &#39;_super&#39;: [ &#39;number&#39;],
+                                                                      &#39;_type&#39;: &#39;int&#39;}}}}}},
+  &#39;store1&#39;: { &#39;edge1&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
+                                                &#39;_default&#39;: &#39;0.0&#39;,
+                                                &#39;_description&#39;: &#39;64-bit &#39;
+                                                                &#39;floating &#39;
+                                                                &#39;point &#39;
+                                                                &#39;precision &#39;
+                                                                &#39;number&#39;,
+                                                &#39;_deserialize&#39;: &#39;float&#39;,
+                                                &#39;_divide&#39;: &#39;divide_float&#39;,
+                                                &#39;_serialize&#39;: &#39;to_string&#39;,
+                                                &#39;_super&#39;: [&#39;number&#39;],
+                                                &#39;_type&#39;: &#39;float&#39;},
+                                     &#39;port2&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
+                                                &#39;_default&#39;: &#39;0&#39;,
+                                                &#39;_description&#39;: &#39;64-bit &#39;
+                                                                &#39;integer&#39;,
+                                                &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
+                                                &#39;_divide&#39;: &#39;divide_int&#39;,
+                                                &#39;_serialize&#39;: &#39;to_string&#39;,
+                                                &#39;_super&#39;: [&#39;number&#39;],
+                                                &#39;_type&#39;: &#39;int&#39;}}},
+              &#39;edge2&#39;: { &#39;_ports&#39;: { &#39;port1&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
+                                                &#39;_default&#39;: &#39;0.0&#39;,
+                                                &#39;_description&#39;: &#39;64-bit &#39;
+                                                                &#39;floating &#39;
+                                                                &#39;point &#39;
+                                                                &#39;precision &#39;
+                                                                &#39;number&#39;,
+                                                &#39;_deserialize&#39;: &#39;float&#39;,
+                                                &#39;_divide&#39;: &#39;divide_float&#39;,
+                                                &#39;_serialize&#39;: &#39;to_string&#39;,
+                                                &#39;_super&#39;: [&#39;number&#39;],
+                                                &#39;_type&#39;: &#39;float&#39;},
+                                     &#39;port2&#39;: { &#39;_apply&#39;: &#39;accumulate&#39;,
+                                                &#39;_default&#39;: &#39;0&#39;,
+                                                &#39;_description&#39;: &#39;64-bit &#39;
+                                                                &#39;integer&#39;,
+                                                &#39;_deserialize&#39;: &#39;deserialize_int&#39;,
+                                                &#39;_divide&#39;: &#39;divide_int&#39;,
+                                                &#39;_serialize&#39;: &#39;to_string&#39;,
+                                                &#39;_super&#39;: [&#39;number&#39;],
+                                                &#39;_type&#39;: &#39;int&#39;}}}}}
 
 filled instance:
  { &#39;edge3&#39;: {&#39;wires&#39;: {&#39;port1&#39;: &#39;store1&#39;}},
@@ -15824,7 +16007,7 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[23]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[39]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">,</span> <span class="n">collapse_processes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">remove_process_place_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -15843,7 +16026,7 @@ filled instance:
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[23]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[39]:</div>
 
 
 
@@ -15853,83 +16036,82 @@ filled instance:
 <!-- Generated by graphviz version 7.1.0 (20230121.1956)
  -->
 <!-- Title: bigraph Pages: 1 -->
-<svg width="208pt" height="186pt" viewBox="0.00 0.00 214.16 191.19">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 187.19)">
+<svg width="208pt" height="178pt" viewBox="0.00 0.00 214.29 183.19">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 179.19)">
 <title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-187.19 210.16,-187.19 210.16,4 -4,4"></polygon>
+<polygon fill="white" stroke="none" points="-4,4 -4,-179.19 210.29,-179.19 210.29,4 -4,4"></polygon>
 <!-- (&amp;#39;store1&amp;#39;,) -->
 <g id="node1" class="node">
 <title>(&#39;store1&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="120.66" cy="-156.41" rx="22.59" ry="22.59"></ellipse>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="120.66" cy="-156.41" rx="26.56" ry="26.56"></ellipse>
-<text text-anchor="start" x="106.16" y="-153.31" font-family="Times,serif" font-size="12.00">store1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="120.79" cy="-152.41" rx="22.56" ry="22.56"></ellipse>
+<text text-anchor="start" x="106.29" y="-149.31" font-family="Times,serif" font-size="12.00">store1</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;) -->
 <g id="node2" class="node">
 <title>(&#39;store1&#39;, &#39;store1.1&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="120.66" cy="-65.32" rx="28.14" ry="28.14"></ellipse>
-<text text-anchor="start" x="101.66" y="-62.22" font-family="Times,serif" font-size="12.00">store1.1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="120.79" cy="-65.32" rx="28.14" ry="28.14"></ellipse>
+<text text-anchor="start" x="101.79" y="-62.22" font-family="Times,serif" font-size="12.00">store1.1</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;) -->
 <g id="edge3" class="edge">
 <title>(&#39;store1&#39;,)&#45;&gt;(&#39;store1&#39;, &#39;store1.1&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M120.66,-129.16C120.66,-118.18 120.66,-105.4 120.66,-94.24"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M120.79,-129.05C120.79,-118.42 120.79,-105.59 120.79,-94.31"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;) -->
 <g id="node3" class="node">
 <title>(&#39;store1&#39;, &#39;store1.2&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="45.66" cy="-65.32" rx="28.14" ry="28.14"></ellipse>
-<text text-anchor="start" x="26.66" y="-62.22" font-family="Times,serif" font-size="12.00">store1.2</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="45.79" cy="-65.32" rx="28.14" ry="28.14"></ellipse>
+<text text-anchor="start" x="26.79" y="-62.22" font-family="Times,serif" font-size="12.00">store1.2</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;) -->
 <g id="edge4" class="edge">
 <title>(&#39;store1&#39;,)&#45;&gt;(&#39;store1&#39;, &#39;store1.2&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M103.64,-135.19C91.8,-121.13 76.03,-102.39 63.92,-88.01"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M105.97,-134.6C94.02,-121.04 77.14,-101.89 64.3,-87.32"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="node4" class="node">
 <title>(&#39;store1&#39;, &#39;edge1&#39;)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="45.66" cy="-0.5" rx="0.5" ry="0.5"></ellipse>
-<text text-anchor="start" x="16.16" y="-4.4" font-family="Times,serif" font-size="12.00">edge1</text>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="45.79" cy="-0.5" rx="0.5" ry="0.5"></ellipse>
+<text text-anchor="start" x="16.29" y="-4.4" font-family="Times,serif" font-size="12.00">edge1</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="node5" class="node">
 <title>(&#39;store1&#39;, &#39;edge2&#39;)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="120.66" cy="-0.5" rx="0.5" ry="0.5"></ellipse>
-<text text-anchor="start" x="91.16" y="-4.4" font-family="Times,serif" font-size="12.00">edge2</text>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="120.79" cy="-0.5" rx="0.5" ry="0.5"></ellipse>
+<text text-anchor="start" x="91.29" y="-4.4" font-family="Times,serif" font-size="12.00">edge2</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <!-- (&amp;#39;edge3&amp;#39;,) -->
 <g id="node6" class="node">
 <title>(&#39;edge3&#39;,)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="205.66" cy="-65.32" rx="0.5" ry="0.5"></ellipse>
-<text text-anchor="start" x="176.16" y="-69.22" font-family="Times,serif" font-size="12.00">edge3</text>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="205.79" cy="-65.32" rx="0.5" ry="0.5"></ellipse>
+<text text-anchor="start" x="176.29" y="-69.22" font-family="Times,serif" font-size="12.00">edge3</text>
 </g>
 <!-- (&amp;#39;store1&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;edge3&amp;#39;,) -->
 <g id="edge9" class="edge">
 <title>(&#39;store1&#39;,)&#45;&gt;(&#39;edge3&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M142.34,-139.52C157.15,-127.93 176.58,-111.22 190.66,-93.63 198.5,-83.83 204.45,-69.36 205.49,-66.73"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M139.71,-138.83C154.85,-128.1 175.92,-111.6 190.79,-93.63 198.79,-83.96 204.61,-69.39 205.63,-66.74"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="edge5" class="edge">
 <title>(&#39;store1&#39;, &#39;store1.1&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge1&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M98.97,-46C78.89,-29.06 51.42,-5.87 46.45,-1.67"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M99.1,-46C79.02,-29.06 51.55,-5.87 46.58,-1.67"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="edge7" class="edge">
 <title>(&#39;store1&#39;, &#39;store1.1&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge2&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M120.66,-36.36C120.66,-21.52 120.66,-5.58 120.66,-1.82"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M120.79,-36.36C120.79,-21.52 120.79,-5.58 120.79,-1.82"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge1&amp;#39;) -->
 <g id="edge6" class="edge">
 <title>(&#39;store1&#39;, &#39;store1.2&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge1&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M45.66,-36.36C45.66,-21.52 45.66,-5.58 45.66,-1.82"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M45.79,-36.36C45.79,-21.52 45.79,-5.58 45.79,-1.82"></path>
 </g>
 <!-- (&amp;#39;store1&amp;#39;, &amp;#39;store1.2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;store1&amp;#39;, &amp;#39;edge2&amp;#39;) -->
 <g id="edge8" class="edge">
 <title>(&#39;store1&#39;, &#39;store1.2&#39;)&#45;&gt;(&#39;store1&#39;, &#39;edge2&#39;)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M67.35,-46C87.43,-29.06 114.9,-5.87 119.87,-1.67"></path>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M67.48,-46C87.56,-29.06 115.03,-5.87 120,-1.67"></path>
 </g>
 </g>
 </svg>
