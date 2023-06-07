@@ -180,8 +180,9 @@ def remove_path(tree, path):
 
 
 class Registry(object):
+    """A Registry holds a collection of functions or objects."""
+
     def __init__(self):
-        """A Registry holds a collection of functions or objects."""
         self.registry = {}
         self.main_keys = set([])
 
@@ -227,6 +228,10 @@ class Registry(object):
 
 
 class TypeRegistry(Registry):
+    """Type Registry
+
+    Holds type schema in one object for easy access
+    """
     def __init__(self):
         super().__init__()
 
@@ -236,7 +241,7 @@ class TypeRegistry(Registry):
     def register(self, key, schema, alternate_keys=tuple(), force=False):
         schema = copy.deepcopy(schema)
         if isinstance(schema, dict):
-            supers = schema.get('_super', ['any']) # list of immediate supers
+            supers = schema.get('_super', ['any'])  # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
                 schema['_super'] = supers
@@ -257,11 +262,13 @@ class TypeRegistry(Registry):
                 if not subkey in type_schema_keys:
                     subschema = self.access(original_subschema)
                     if subschema is None:
-                        raise Exception(f'trying to register a new type ({key}), but it depends on a type ({subkey}) which is not in the registry')
+                        raise Exception(f'trying to register a new type ({key}), '
+                                        f'but it depends on a type ({subkey}) which is not in the registry')
                     else:
                         schema[subkey] = subschema
         else:
-            raise Exception(f'all type definitions must be dicts with the following keys: {type_schema_keys}\nnot: {schema}')
+            raise Exception(f'all type definitions must be dicts '
+                            f'with the following keys: {type_schema_keys}\nnot: {schema}')
 
         super().register(key, schema, alternate_keys, force)
 

@@ -15,7 +15,9 @@ from bigraph_schema.registry import (
 from bigraph_schema.units import units, render_units_type
 
 
-class SchemaTypes():
+class SchemaTypes:
+    """Handles type schemas and their operation"""
+
     def __init__(self):
         self.apply_registry = Registry()
         self.serialize_registry = Registry()
@@ -91,7 +93,6 @@ class SchemaTypes():
         #             if not key in optional_schema_keys:
         #                 report[key] = f'missing required key: {key} for declaring atomic type'
 
-
     # TODO: if its an edge, ensure ports match wires
     def validate_state(self, original_schema, state):
         schema = self.access(original_schema)
@@ -160,7 +161,8 @@ class SchemaTypes():
         elif isinstance(update, dict):
             for key, branch in update.items():
                 if key not in schema:
-                    raise Exception(f'trying to update a key that is not in the schema {key} for state:\n{state}\nwith schema:\n{schema}')
+                    raise Exception(f'trying to update a key that is not in the schema {key} '
+                                    f'for state:\n{state}\nwith schema:\n{schema}')
                 else:
                     subupdate = self.apply_update(
                         schema[key],
@@ -169,7 +171,8 @@ class SchemaTypes():
 
                     state[key] = subupdate
         else:
-            raise Exception(f'trying to apply update\n  {update}\nto state\n  {state}\nwith schema\n{schema}, but the update is not a dict')
+            raise Exception(f'trying to apply update\n  {update}\nto state\n  {state}\nwith '
+                            f'schema\n{schema}, but the update is not a dict')
 
         return state
 
