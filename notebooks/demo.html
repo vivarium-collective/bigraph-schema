@@ -15134,7 +15134,7 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[28]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[1]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># !pip install bigraph-schema</span>
@@ -15159,7 +15159,7 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@9abc774c7de0b66b3bff490cac000bc03944bd39#egg=bigraph_schema
+<pre>-e git+https://github.com/vivarium-collective/bigraph-schema.git@3d378723574a5f8d8ea8e5b14d506d73bb80f5dd#egg=bigraph_schema
 bigraph-viz==0.0.29
 </pre>
 </div>
@@ -15185,48 +15185,12 @@ bigraph-viz==0.0.29
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[29]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">bigraph_schema</span> <span class="kn">import</span> <span class="n">SchemaTypes</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">bigraph_schema</span> <span class="kn">import</span> <span class="n">TypeSystem</span>
 <span class="kn">from</span> <span class="nn">bigraph_viz</span> <span class="kn">import</span> <span class="n">plot_bigraph</span><span class="p">,</span> <span class="n">pf</span><span class="p">,</span> <span class="n">pp</span>
 <span class="kn">from</span> <span class="nn">bigraph_viz.dict_utils</span> <span class="kn">import</span> <span class="n">schema_keys</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
-</div>
-<div id="cell-id=2c406a4e-fc25-4d72-9ac2-213bd032c604" class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h3 id="Registry">Registry<a class="anchor-link" href="#Registry">&#182;</a></h3><p>The main class for working with bigraph_schema is <code>SchemaTypes</code>, which handles the different type schemas and provides methods for their manipulation. We will use <code>SchemaTypes.validate_schema</code> to check our schemas, <code>SchemaTypes.access</code> to fill in missing details to prepare the schema for simulation, and <code>SchemaTypes.type_registry</code> to access different schemas and register new ones. <code>SchemaTypes</code> also has <code>SchemaTypes.serialize_registry</code> for the types' serialization methods, <code>SchemaTypes.deserialize_registry</code> for the types' deserialization methods, <code>SchemaTypes.apply_registry</code> for applying updates to types, etc.</p>
-<span style="color:red">
-TODO: how do we register new types, serializers, deserializers, etc?
-</span>
-
-</div>
-</div>
-</div>
-</div><div id="cell-id=a2d6adb0-8678-4f59-a027-5296b755c1df" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[30]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">types</span> <span class="o">=</span> <span class="n">SchemaTypes</span><span class="p">()</span>
-
-<span class="c1"># register some required types. TODO -- remove this?</span>
-<span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;URI&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;0-000-00000-0&#39;</span><span class="p">})</span>
-<span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;KISAO&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;KISAO:0000000&#39;</span><span class="p">})</span>
-<span class="n">schema_keys</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s1">&#39;_super&#39;</span><span class="p">,</span> <span class="s1">&#39;config&#39;</span><span class="p">])</span>
 </pre></div>
 
      </div>
@@ -15241,23 +15205,25 @@ TODO: how do we register new types, serializers, deserializers, etc?
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h2 id="Type-System">Type System<a class="anchor-link" href="#Type-System">&#182;</a></h2><p>A type system comprises a set of rules and constraints that govern the organization, interaction, and manipulation of data types, facilitating efficient and error-free compositional modeling by guaranteeing compatibility and seamless communication between various components within a simulation.</p>
-<p>Schemas serve as a formalized framework for defining and organizing types, providing explicit specifications for data representation, validation, and transformation. In a schema, types are characterized by specific <code>schema_keys</code> associated with type definitions, encompassing default values, serialization/deserialization methods, and additional metadata. The <code>schema_keys</code> encompass the following attributes:</p>
+<h2 id="Type-System">Type System<a class="anchor-link" href="#Type-System">&#182;</a></h2><p>A type system comprises a set of rules and constraints that govern the organization, interaction, and manipulation of bigraph nodes, facilitating efficient and error-free compositional modeling by guaranteeing compatibility and seamless communication between various components within a simulation.</p>
+<p>The main class for working with bigraph_schema is <code>SchemaTypes</code>, which handles the different type schemas and provides methods for their manipulation. We will use <code>SchemaTypes.validate_schema</code> to check our schemas, <code>SchemaTypes.access</code> to fill in missing details to prepare the schema for simulation, and <code>SchemaTypes.type_registry</code> to access different schemas and register new ones.</p>
+<p><em>Schemas</em> serve as a formalized framework for defining and organizing types, providing explicit specifications for data representation, validation, and transformation. In a schema, types are characterized by specific <code>schema_keys</code> associated with type definitions, encompassing default values, serialization/deserialization methods, and additional metadata. The <code>schema_keys</code> encompass the following attributes. We will see specific instances of these below.</p>
+<span style="color:red">
+TODO: how do we register new types, serializers, deserializers, etc?
+</span>
 
 </div>
 </div>
 </div>
-</div><div id="cell-id=ecb4d869-066a-4205-a11f-1e774282a35e" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+</div><div id="cell-id=a2d6adb0-8678-4f59-a027-5296b755c1df" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[31]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[3]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">bigraph_schema.registry</span> <span class="kn">import</span> <span class="n">type_schema_keys</span>
-
-<span class="n">type_schema_keys</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">types</span> <span class="o">=</span> <span class="n">TypeSystem</span><span class="p">()</span>
 </pre></div>
 
      </div>
@@ -15265,37 +15231,21 @@ TODO: how do we register new types, serializers, deserializers, etc?
 </div>
 </div>
 
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div><div id="cell-id=ecb4d869-066a-4205-a11f-1e774282a35e" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[30]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># from bigraph_schema.registry import type_schema_keys</span>
+<span class="c1"># type_schema_keys</span>
+</pre></div>
 
-
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-    
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[31]:</div>
-
-
-
-
-<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
-<pre>(&#39;_default&#39;,
- &#39;_apply&#39;,
- &#39;_serialize&#39;,
- &#39;_deserialize&#39;,
- &#39;_type&#39;,
- &#39;_value&#39;,
- &#39;_divide&#39;,
- &#39;_description&#39;,
- &#39;_ports&#39;,
- &#39;_type_parameters&#39;,
- &#39;_super&#39;)</pre>
+     </div>
 </div>
-
 </div>
-
-</div>
-
 </div>
 
 </div>
@@ -15306,7 +15256,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
 <h2 id="Type-Registry">Type Registry<a class="anchor-link" href="#Type-Registry">&#182;</a></h2><p>A type registry is used to store and manage schema definitions related to various simulation modules, streamlining the process of accessing, extending, and reusing type information across different components.</p>
-<h3 id="List-current-types">List current types<a class="anchor-link" href="#List-current-types">&#182;</a></h3><p>The names of the current types available in the registry can be easily printed:</p>
+<p>The names of types available in the given registry can be printed:</p>
 
 </div>
 </div>
@@ -15316,7 +15266,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[32]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[5]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
@@ -15335,94 +15285,92 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[32]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[5]:</div>
 
 
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
 <pre>[&#39;&#39;,
- &#39;KISAO&#39;,
- &#39;mass/temperature^4*time^3&#39;,
- &#39;any&#39;,
- &#39;printing_unit/length&#39;,
- &#39;length^2*mass/current^2*time^3&#39;,
- &#39;list&#39;,
- &#39;substance/time&#39;,
- &#39;URI&#39;,
- &#39;length^3/mass*time^2&#39;,
- &#39;current*length^2*time&#39;,
- &#39;printing_unit&#39;,
- &#39;length^0_5*mass^0_5/time&#39;,
- &#39;length&#39;,
- &#39;length^2*mass/current*time^2&#39;,
  &#39;time^2/length&#39;,
- &#39;length^2*mass/time^2&#39;,
- &#39;mass/length*time&#39;,
- &#39;length^2*mass/time&#39;,
- &#39;length*time/mass&#39;,
- &#39;length/mass&#39;,
- &#39;maybe&#39;,
- &#39;length/time&#39;,
- &#39;number&#39;,
- &#39;mass&#39;,
- &#39;mass/length^3&#39;,
- &#39;luminosity&#39;,
- &#39;int&#39;,
- &#39;string&#39;,
- &#39;current*time/substance&#39;,
- &#39;mass/time^3&#39;,
- &#39;float&#39;,
- &#39;mass/time^2&#39;,
- &#39;time/length&#39;,
- &#39;current^2*time^4/length^2*mass&#39;,
- &#39;current*time^2/length^2*mass&#39;,
- &#39;length^2/time^2&#39;,
- &#39;edge&#39;,
- &#39;current*time&#39;,
- &#39;array&#39;,
- &#39;tree&#39;,
- &#39;current&#39;,
- &#39;time&#39;,
- &#39;length^4*mass/time^3&#39;,
- &#39;length^1_5*mass^0_5/time^2&#39;,
- &#39;length^0_5*mass^0_5&#39;,
- &#39;length^2*mass/current*time^3&#39;,
- &#39;length*mass/current*time^3&#39;,
- &#39;length/time^2&#39;,
- &#39;length^2*mass/time^3&#39;,
- &#39;current^2*time^3/length^2*mass&#39;,
- &#39;mass^0_5/length^1_5&#39;,
- &#39;/substance&#39;,
- &#39;length^2/time&#39;,
- &#39;mass^0_5/length^0_5*time&#39;,
- &#39;mass/length&#39;,
- &#39;length^3&#39;,
- &#39;temperature&#39;,
- &#39;length*mass/current^2*time^2&#39;,
- &#39;length^1_5*mass^0_5/time&#39;,
- &#39;length^2*mass/temperature*time^2&#39;,
- &#39;/length&#39;,
- &#39;current*time/mass&#39;,
- &#39;/temperature*time&#39;,
- &#39;current*length*time&#39;,
  &#39;/time&#39;,
- &#39;luminosity/length^2&#39;,
- &#39;length*mass/time^2&#39;,
- &#39;substance&#39;,
- &#39;mass/current*time^2&#39;,
- &#39;length^2*mass/current^2*time^2&#39;,
- &#39;length^3*mass/current^2*time^4&#39;,
+ &#39;length/time^2&#39;,
+ &#39;printing_unit/length&#39;,
  &#39;length^3/time&#39;,
- &#39;current^2*time^4/length^3*mass&#39;,
+ &#39;length^2/time^2&#39;,
+ &#39;any&#39;,
+ &#39;current*length^2*time&#39;,
+ &#39;length^3/mass*time^2&#39;,
+ &#39;mass&#39;,
+ &#39;length^2*mass/temperature*time^2&#39;,
+ &#39;int&#39;,
+ &#39;mass/temperature^4*time^3&#39;,
+ &#39;/substance&#39;,
+ &#39;luminosity/length^2&#39;,
+ &#39;length^2*mass/current*time^3&#39;,
+ &#39;length^2*mass/time&#39;,
+ &#39;mass/length*time^2&#39;,
+ &#39;length^3&#39;,
+ &#39;length*mass/current*time^3&#39;,
+ &#39;length^1_5*mass^0_5/time&#39;,
  &#39;dict&#39;,
+ &#39;luminosity&#39;,
+ &#39;length*time/mass&#39;,
+ &#39;length*mass/time^2&#39;,
+ &#39;tree&#39;,
+ &#39;string&#39;,
+ &#39;current*time^2/length^2*mass&#39;,
+ &#39;current&#39;,
  &#39;substance/length^3&#39;,
+ &#39;length^2*mass/time^3&#39;,
+ &#39;length^4*mass/time^3&#39;,
+ &#39;mass/time^3&#39;,
+ &#39;length^0_5*mass^0_5/time&#39;,
+ &#39;current*time&#39;,
+ &#39;mass^0_5/length^0_5*time&#39;,
+ &#39;current*time/mass&#39;,
+ &#39;length^1_5*mass^0_5/time^2&#39;,
+ &#39;mass/length^3&#39;,
+ &#39;/printing_unit&#39;,
+ &#39;maybe&#39;,
+ &#39;mass/length*time&#39;,
+ &#39;time&#39;,
+ &#39;length/time&#39;,
+ &#39;array&#39;,
+ &#39;list&#39;,
+ &#39;float&#39;,
+ &#39;current^2*time^4/length^2*mass&#39;,
+ &#39;length^2*mass/substance*temperature*time^2&#39;,
+ &#39;temperature&#39;,
+ &#39;current^2*time^4/length^3*mass&#39;,
+ &#39;current*time/substance&#39;,
+ &#39;/length&#39;,
+ &#39;length&#39;,
+ &#39;substance/time&#39;,
+ &#39;length*mass/current^2*time^2&#39;,
+ &#39;current*length*time&#39;,
+ &#39;length^2/time&#39;,
+ &#39;length^3*mass/current^2*time^4&#39;,
+ &#39;mass/length&#39;,
+ &#39;mass/current*time^2&#39;,
+ &#39;mass^0_5/length^1_5&#39;,
+ &#39;current^2*time^3/length^2*mass&#39;,
+ &#39;length^2*mass/current^2*time^3&#39;,
+ &#39;substance&#39;,
+ &#39;length^2*mass/time^2&#39;,
+ &#39;time/length&#39;,
+ &#39;/temperature*time&#39;,
  &#39;current*length^2&#39;,
  &#39;length^2&#39;,
- &#39;length^2*mass/substance*temperature*time^2&#39;,
- &#39;/printing_unit&#39;,
  &#39;length*temperature&#39;,
- &#39;mass/length*time^2&#39;]</pre>
+ &#39;edge&#39;,
+ &#39;mass/time^2&#39;,
+ &#39;printing_unit&#39;,
+ &#39;length^2*mass/current^2*time^2&#39;,
+ &#39;length^2*mass/current*time^2&#39;,
+ &#39;number&#39;,
+ &#39;length^0_5*mass^0_5&#39;,
+ &#39;length/mass&#39;]</pre>
 </div>
 
 </div>
@@ -15438,7 +15386,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h3 id="Accessing-a-type">Accessing a type<a class="anchor-link" href="#Accessing-a-type">&#182;</a></h3><p>Types can be accessed from the registry by their name:</p>
+<h3 id="Accessing-a-type">Accessing a type<a class="anchor-link" href="#Accessing-a-type">&#182;</a></h3><p>Type schemas can be accessed from the registry by their name. Here the <code>float</code> types shows that it uses an <code>accumulate</code> apply method, a <code>to_string</code> serialize method, that its default value is <code>0.0</code>, and that it inherits from (its super is) the <code>number</code> type.</p>
 
 </div>
 </div>
@@ -15448,10 +15396,11 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[33]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[27]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="s1">&#39;float&#39;</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">float_schema</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="s1">&#39;float&#39;</span><span class="p">)</span>
+<span class="n">float_schema</span>
 </pre></div>
 
      </div>
@@ -15467,7 +15416,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[33]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[27]:</div>
 
 
 
@@ -15490,13 +15439,168 @@ TODO: how do we register new types, serializers, deserializers, etc?
 </div>
 
 </div>
+<div id="cell-id=a45e1f94-93ce-4edb-972a-838e2356dba4" class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<h3 id="Accessing-schema-methods">Accessing schema methods<a class="anchor-link" href="#Accessing-schema-methods">&#182;</a></h3><p>The <code>apply</code>, <code>serialize</code>, <code>deserialize</code>, <code>divide</code> methods of a type are accessed by the type system through their respective registries.</p>
+
+</div>
+</div>
+</div>
+</div><div id="cell-id=628f5529-3cac-4f43-b808-6d4b0a931a37" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[36]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># here showing the method specified by the `float` type</span>
+<span class="n">apply_method</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">apply_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">float_schema</span><span class="p">[</span><span class="s1">&#39;_apply&#39;</span><span class="p">])</span>
+<span class="n">serialize_method</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">serialize_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">float_schema</span><span class="p">[</span><span class="s1">&#39;_serialize&#39;</span><span class="p">])</span>
+<span class="n">deserialize_method</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">deserialize_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">float_schema</span><span class="p">[</span><span class="s1">&#39;_deserialize&#39;</span><span class="p">])</span>
+<span class="n">divide_method</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">divide_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">float_schema</span><span class="p">[</span><span class="s1">&#39;_divide&#39;</span><span class="p">])</span>
+<span class="n">default_value</span> <span class="o">=</span> <span class="n">float_schema</span><span class="p">[</span><span class="s1">&#39;_default&#39;</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;default: </span><span class="si">{</span><span class="n">default_value</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="c1"># print(f&#39;default: {serialize_method(default_value)}&#39;)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;after apply: </span><span class="si">{</span><span class="n">apply_method</span><span class="p">(</span><span class="n">default_value</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
+<pre>default: 0.0
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr">
+<pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">TypeError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[36], line 10</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span> <span style="color: rgb(0,135,0)">print</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">default: </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>default_value<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">&#39;</span>)
+<span class="ansi-green-intense-fg ansi-bold">      9</span> <span style="color: rgb(95,135,135)"># print(f&#39;default: {serialize_method(default_value)}&#39;)</span>
+<span class="ansi-green-fg">---&gt; 10</span> <span style="color: rgb(0,135,0)">print</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">after apply: </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>apply_method(default_value,<span style="color: rgb(188,188,188)"> </span><span style="color: rgb(98,98,98)">1.0</span>)<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">&#39;</span>)
+
+<span class="ansi-red-fg">TypeError</span>: accumulate() missing 2 required positional arguments: &#39;bindings&#39; and &#39;types&#39;</pre>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div><div id="cell-id=b341f31f-1297-4d96-955a-ed4bfbe54673" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[34]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">help</span><span class="p">(</span><span class="n">serialize_method</span><span class="p">)</span>  <span class="c1"># TODO -- bindings, types should be optional</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
+<pre>Help on function to_string in module bigraph_schema.schema:
+
+to_string(value, bindings, types)
+
+</pre>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div><div id="cell-id=41064ea9-e973-4964-a111-948e7bbe112f" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[37]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">help</span><span class="p">(</span><span class="n">apply_method</span><span class="p">)</span>  <span class="c1"># TODO -- bindings, types should be optional</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
+<pre>Help on function accumulate in module bigraph_schema.schema:
+
+accumulate(current, update, bindings, types)
+
+</pre>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
 <div id="cell-id=d20e9721-64d2-453b-88dc-2cf9f39bb4ed" class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h3 id="Use-access-to-expand-a-type-and-show-subtypes">Use access to expand a type and show subtypes<a class="anchor-link" href="#Use-access-to-expand-a-type-and-show-subtypes">&#182;</a></h3><p>Nested types have types within types. Here showing an <code>edge</code> type, which has wires that have their own types.</p>
+<h3 id="Use-access-to-expand-a-composite-type">Use access to expand a composite type<a class="anchor-link" href="#Use-access-to-expand-a-composite-type">&#182;</a></h3><p>Nested types have types within types. Here showing an <code>edge</code> type, which has wires that have their own types.</p>
 
 </div>
 </div>
@@ -15506,7 +15610,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[34]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[7]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pp</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="s1">&#39;edge&#39;</span><span class="p">))</span>
@@ -15570,6 +15674,22 @@ TODO: how do we register new types, serializers, deserializers, etc?
 
 </div>
 
+</div><div id="cell-id=82d94a35-f075-441e-8565-b990454b8e0d" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[&nbsp;]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
 </div>
 <div id="cell-id=67ceab4d-5d49-40d4-91fc-582f8cfe4ede" class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper">
@@ -15577,27 +15697,128 @@ TODO: how do we register new types, serializers, deserializers, etc?
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h3 id="Register-a-new-type">Register a new type<a class="anchor-link" href="#Register-a-new-type">&#182;</a></h3><p>You can add new types to the type registry using  <code>type_registry.register(type_name:str, type_schema:dict)</code>:</p>
+<h3 id="Register-a-new-type-schema">Register a new type schema<a class="anchor-link" href="#Register-a-new-type-schema">&#182;</a></h3><p>You can add new types to the type registry using  <code>type_registry.register(type_name:str, type_schema:dict)</code>:</p>
 
 </div>
 </div>
 </div>
-</div><div id="cell-id=bb254b26-9f3d-4fe3-8a61-839f31b976b7" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
+</div><div id="cell-id=3b5a31fa-9bbb-4e9e-9096-1a82f7d7f775" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[35]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[39]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">sbml_schema</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;_super&#39;</span><span class="p">:</span> <span class="s1">&#39;string&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;model_file&#39;</span><span class="p">:</span> <span class="s1">&#39;string&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="s1">&#39;SBML:0000000&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;_description&#39;</span><span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">foursquare_schema</span> <span class="o">=</span> <span class="p">{</span>
+     <span class="c1"># &#39;_type&#39;: &#39;foursquare&#39;,</span>
+     <span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="s1">&#39;union[bool,foursquare]&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;01&#39;</span><span class="p">:</span> <span class="s1">&#39;union[bool,foursquare]&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;10&#39;</span><span class="p">:</span> <span class="s1">&#39;union[bool,foursquare]&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="s1">&#39;union[bool,foursquare]&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;01&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;10&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+     <span class="s1">&#39;_description&#39;</span><span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
 <span class="p">}</span>
 <span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s1">&#39;SBML&#39;</span><span class="p">,</span> <span class="n">sbml_schema</span><span class="p">)</span>
+    <span class="s1">&#39;foursquare&#39;</span><span class="p">,</span> <span class="n">foursquare_schema</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
+<pre>type did not parse: union[bool,foursquare]
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr">
+<pre>Traceback (most recent call last):
+  File &#34;/Users/eranagmon/code/bigraph-schema/bigraph_schema/registry.py&#34;, line 332, in access
+    found = self.access(parse)
+  File &#34;/Users/eranagmon/code/bigraph-schema/bigraph_schema/registry.py&#34;, line 317, in access
+    found = found.copy()
+AttributeError: &#39;NoneType&#39; object has no attribute &#39;copy&#39;
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr">
+<pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">Exception</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[39], line 10</span>
+<span class="ansi-green-intense-fg ansi-bold">      1</span> foursquare_schema <span style="color: rgb(98,98,98)">=</span> {
+<span class="ansi-green-intense-fg ansi-bold">      2</span>      <span style="color: rgb(95,135,135)"># &#39;_type&#39;: &#39;foursquare&#39;,</span>
+<span class="ansi-green-intense-fg ansi-bold">      3</span>      <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">00</span><span style="color: rgb(175,0,0)">&#39;</span>: <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">union[bool,foursquare]</span><span style="color: rgb(175,0,0)">&#39;</span>,
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span>      <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">_description</span><span style="color: rgb(175,0,0)">&#39;</span>: <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">&#39;</span>,
+<span class="ansi-green-intense-fg ansi-bold">      9</span> }
+<span class="ansi-green-fg">---&gt; 10</span> <span class="ansi-yellow-bg">types</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">type_registry</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">register</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">     11</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">foursquare</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">foursquare_schema</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">~/code/bigraph-schema/bigraph_schema/registry.py:265</span>, in <span class="ansi-cyan-fg">TypeRegistry.register</span><span class="ansi-blue-fg">(self, key, schema, alternate_keys, force)</span>
+<span class="ansi-green-intense-fg ansi-bold">    263</span> subschema <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>access(original_subschema)
+<span class="ansi-green-intense-fg ansi-bold">    264</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> subschema <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-fg">--&gt; 265</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">trying to register a new type (</span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>key<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">), </span><span style="color: rgb(175,0,0)">&#39;</span>
+<span class="ansi-green-intense-fg ansi-bold">    266</span>                     <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">but it depends on a type (</span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>subkey<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">) which is not in the registry</span><span style="color: rgb(175,0,0)">&#39;</span>)
+<span class="ansi-green-intense-fg ansi-bold">    267</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    268</span>     schema[subkey] <span style="color: rgb(98,98,98)">=</span> subschema
+
+<span class="ansi-red-fg">Exception</span>: trying to register a new type (foursquare), but it depends on a type (00) which is not in the registry</pre>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div><div id="cell-id=330d0e0a-8b49-481b-a475-425d87cd8a9f" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[&nbsp;]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+</div><div id="cell-id=53c421fb-fd36-46a1-adde-b3dadfa99fe6" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[&nbsp;]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span>
 </pre></div>
 
      </div>
@@ -15612,7 +15833,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h2 id="State">State<a class="anchor-link" href="#State">&#182;</a></h2><p>A state is the particular set of values that populate a bigraph structure, adhering to a predefined schema. The state is essential for understanding a system's behavior, as it encapsulates the current conditions and predicts future evolution based on the governing equations or rules. As the system evolves over time, the state transitions through various bigraphical configurations.</p>
+<h2 id="Instance">Instance<a class="anchor-link" href="#Instance">&#182;</a></h2><p>An instances is the particular set of values that populate a bigraph structure, adhering to a given schema. An instance encapsulates the current conditions and predicts future evolution based on the governing equations or rules. As the system evolves over time, the state transitions through various bigraphical configurations.</p>
 
 </div>
 </div>
@@ -15622,7 +15843,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[36]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[9]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">bigraph_state</span> <span class="o">=</span> <span class="p">{</span>
@@ -15648,7 +15869,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[36]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[9]:</div>
 
 
 
@@ -15727,7 +15948,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[44]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[10]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">dual_edge_schema</span> <span class="o">=</span> <span class="p">{</span>
@@ -15794,7 +16015,7 @@ TODO: how do we register new types, serializers, deserializers, etc?
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[45]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;schema:</span><span class="se">\n</span><span class="s1"> </span><span class="si">{</span><span class="n">pf</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
@@ -15849,7 +16070,7 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[47]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">filled_instance</span><span class="p">,</span> <span class="n">remove_process_place_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -15868,7 +16089,7 @@ filled instance:
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[47]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[12]:</div>
 
 
 
@@ -15987,7 +16208,7 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[87]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">place_schema</span> <span class="o">=</span> <span class="p">{</span>
@@ -16017,7 +16238,7 @@ filled instance:
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[87]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[13]:</div>
 
 
 
@@ -16084,7 +16305,7 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[88]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">update</span> <span class="o">=</span> <span class="p">{</span>
@@ -16116,7 +16337,7 @@ filled instance:
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[88]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
 
 
 
@@ -16183,20 +16404,23 @@ filled instance:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[90]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[15]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">update</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;_remove&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;node1&#39;</span><span class="p">],</span>
-    <span class="s1">&#39;node2&#39;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">&#39;_remove&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;node2.2&#39;</span><span class="p">],</span>
-        <span class="s1">&#39;node2.3&#39;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
-        <span class="s1">&#39;node2.4&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;node2.2.1&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">2.0</span><span class="p">}</span>
-    <span class="p">}</span>
-<span class="p">}</span>
-<span class="c1"># update = {</span>
-<span class="c1">#     &#39;_remove&#39;: [[&#39;node1&#39;], [&#39;node2&#39;, &#39;node2.2&#39;],],</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># update = {</span>
+<span class="c1">#     &#39;_remove&#39;: [&#39;node1&#39;],</span>
+<span class="c1">#     &#39;node2&#39;: {</span>
+<span class="c1">#         &#39;_remove&#39;: [&#39;node2.2&#39;],</span>
+<span class="c1">#         &#39;node2.3&#39;: 0.5,</span>
+<span class="c1">#         &#39;node2.4&#39;: {&#39;node2.2.1&#39;: -2.0}</span>
+<span class="c1">#     }</span>
 <span class="c1"># }</span>
+<span class="n">update</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;_remove&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">[</span><span class="s1">&#39;node1&#39;</span><span class="p">],</span> 
+        <span class="p">[</span><span class="s1">&#39;node2&#39;</span><span class="p">,</span> <span class="s1">&#39;node2.2&#39;</span><span class="p">],</span>
+    <span class="p">],</span>
+<span class="p">}</span>
 
 <span class="n">place_state3</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
     <span class="n">place_schema</span><span class="p">,</span>
@@ -16217,80 +16441,78 @@ filled instance:
 
 
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputArea-child">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[90]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 
 
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr">
+<pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">TypeError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[15], line 16</span>
+<span class="ansi-green-intense-fg ansi-bold">      1</span> <span style="color: rgb(95,135,135)"># update = {</span>
+<span class="ansi-green-intense-fg ansi-bold">      2</span> <span style="color: rgb(95,135,135)">#     &#39;_remove&#39;: [&#39;node1&#39;],</span>
+<span class="ansi-green-intense-fg ansi-bold">      3</span> <span style="color: rgb(95,135,135)">#     &#39;node2&#39;: {</span>
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">      7</span> <span style="color: rgb(95,135,135)">#     }</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span> <span style="color: rgb(95,135,135)"># }</span>
+<span class="ansi-green-intense-fg ansi-bold">      9</span> update <span style="color: rgb(98,98,98)">=</span> {
+<span class="ansi-green-intense-fg ansi-bold">     10</span>     <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">_remove</span><span style="color: rgb(175,0,0)">&#39;</span>: [
+<span class="ansi-green-intense-fg ansi-bold">     11</span>         [<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">node1</span><span style="color: rgb(175,0,0)">&#39;</span>], 
+<span class="ansi-green-intense-fg ansi-bold">     12</span>         [<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">node2</span><span style="color: rgb(175,0,0)">&#39;</span>, <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">node2.2</span><span style="color: rgb(175,0,0)">&#39;</span>],
+<span class="ansi-green-intense-fg ansi-bold">     13</span>     ],
+<span class="ansi-green-intense-fg ansi-bold">     14</span> }
+<span class="ansi-green-fg">---&gt; 16</span> place_state3 <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">types</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">apply</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">     17</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">place_schema</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     18</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">place_state2</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     19</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">update</span>
+<span class="ansi-green-intense-fg ansi-bold">     20</span> <span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     21</span> plot_bigraph(place_state2, show_values<span style="color: rgb(98,98,98)">=</span><span class="ansi-bold" style="color: rgb(0,135,0)">True</span>)
 
-<div class="jp-RenderedSVG jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="image/svg+xml">
-<!--?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot;?-->
+File <span class="ansi-green-fg">~/code/bigraph-schema/bigraph_schema/schema.py:182</span>, in <span class="ansi-cyan-fg">TypeSystem.apply</span><span class="ansi-blue-fg">(self, original_schema, initial, update)</span>
+<span class="ansi-green-intense-fg ansi-bold">    180</span> schema <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>access(original_schema)
+<span class="ansi-green-intense-fg ansi-bold">    181</span> state <span style="color: rgb(98,98,98)">=</span> copy<span style="color: rgb(98,98,98)">.</span>deepcopy(initial)
+<span class="ansi-green-fg">--&gt; 182</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">apply_update</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">schema</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">initial</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">update</span><span class="ansi-yellow-bg">)</span>
 
-<!-- Generated by graphviz version 7.1.0 (20230121.1956)
- -->
-<!-- Title: bigraph Pages: 1 -->
-<svg width="238pt" height="265pt" viewBox="0.00 0.00 244.83 272.45">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 268.45)">
-<title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-268.45 240.83,-268.45 240.83,4 -4,4"></polygon>
-<!-- (&amp;#39;node2&amp;#39;,) -->
-<g id="node1" class="node">
-<title>(&#39;node2&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="117.23" cy="-241.06" rx="23.29" ry="23.29"></ellipse>
-<text text-anchor="start" x="102.23" y="-237.96" font-family="Times,serif" font-size="12.00">node2</text>
-</g>
-<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
-<g id="node2" class="node">
-<title>(&#39;node2&#39;, &#39;node2.1&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="33.23" cy="-148.43" rx="33.47" ry="33.47"></ellipse>
-<text text-anchor="start" x="13.73" y="-151.83" font-family="Times,serif" font-size="12.00">node2.1</text>
-<text text-anchor="start" x="23.73" y="-138.83" font-family="Times,serif" font-size="12.00">&#45;3.0</text>
-</g>
-<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.1&amp;#39;) -->
-<g id="edge2" class="edge">
-<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.1&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M101.43,-223.01C88.6,-209.17 70.34,-189.46 55.94,-173.93"></path>
-</g>
-<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.3&amp;#39;) -->
-<g id="node3" class="node">
-<title>(&#39;node2&#39;, &#39;node2.3&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="117.23" cy="-148.43" rx="33.47" ry="33.47"></ellipse>
-<text text-anchor="start" x="97.73" y="-151.83" font-family="Times,serif" font-size="12.00">node2.3</text>
-<text text-anchor="start" x="109.23" y="-138.83" font-family="Times,serif" font-size="12.00">0.5</text>
-</g>
-<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.3&amp;#39;) -->
-<g id="edge3" class="edge">
-<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.3&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M117.23,-217.19C117.23,-206.7 117.23,-194.07 117.23,-182.56"></path>
-</g>
-<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;) -->
-<g id="node4" class="node">
-<title>(&#39;node2&#39;, &#39;node2.4&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="197.23" cy="-148.43" rx="28.87" ry="28.87"></ellipse>
-<text text-anchor="start" x="177.73" y="-145.33" font-family="Times,serif" font-size="12.00">node2.4</text>
-</g>
-<!-- (&amp;#39;node2&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;) -->
-<g id="edge4" class="edge">
-<title>(&#39;node2&#39;,)&#45;&gt;(&#39;node2&#39;, &#39;node2.4&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M132.66,-222.58C145.64,-207.87 164.27,-186.77 178.19,-171.01"></path>
-</g>
-<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;, &amp;#39;node2.2.1&amp;#39;) -->
-<g id="node5" class="node">
-<title>(&#39;node2&#39;, &#39;node2.4&#39;, &#39;node2.2.1&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="197.23" cy="-39.6" rx="39.7" ry="39.7"></ellipse>
-<text text-anchor="start" x="173.23" y="-43" font-family="Times,serif" font-size="12.00">node2.2.1</text>
-<text text-anchor="start" x="187.73" y="-30" font-family="Times,serif" font-size="12.00">&#45;2.0</text>
-</g>
-<!-- (&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;node2&amp;#39;, &amp;#39;node2.4&amp;#39;, &amp;#39;node2.2.1&amp;#39;) -->
-<g id="edge1" class="edge">
-<title>(&#39;node2&#39;, &#39;node2.4&#39;)&#45;&gt;(&#39;node2&#39;, &#39;node2.4&#39;, &#39;node2.2.1&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M197.23,-118.8C197.23,-106.93 197.23,-92.97 197.23,-80.15"></path>
-</g>
-</g>
-</svg>
+File <span class="ansi-green-fg">~/code/bigraph-schema/bigraph_schema/schema.py:151</span>, in <span class="ansi-cyan-fg">TypeSystem.apply_update</span><span class="ansi-blue-fg">(self, schema, state, update)</span>
+<span class="ansi-green-intense-fg ansi-bold">    148</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">_apply</span><span style="color: rgb(175,0,0)">&#39;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> schema:
+<span class="ansi-green-intense-fg ansi-bold">    149</span>     apply_function <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>apply_registry<span style="color: rgb(98,98,98)">.</span>access(schema[<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">_apply</span><span style="color: rgb(175,0,0)">&#39;</span>])
+<span class="ansi-green-fg">--&gt; 151</span>     state <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">apply_function</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">    152</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">state</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    153</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">update</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    154</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">schema</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">get</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">_bindings</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    155</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    157</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">isinstance</span>(schema, <span style="color: rgb(0,135,0)">str</span>) <span class="ansi-bold" style="color: rgb(175,0,255)">or</span> <span style="color: rgb(0,135,0)">isinstance</span>(schema, <span style="color: rgb(0,135,0)">list</span>):
+<span class="ansi-green-intense-fg ansi-bold">    158</span>     schema <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>access(schema)
 
+File <span class="ansi-green-fg">~/code/bigraph-schema/bigraph_schema/schema.py:575</span>, in <span class="ansi-cyan-fg">apply_tree</span><span class="ansi-blue-fg">(current, update, bindings, types)</span>
+<span class="ansi-green-intense-fg ansi-bold">    573</span>     current<span style="color: rgb(98,98,98)">.</span>update(branch)
+<span class="ansi-green-intense-fg ansi-bold">    574</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> key <span style="color: rgb(98,98,98)">==</span> <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">_remove</span><span style="color: rgb(175,0,0)">&#39;</span>:
+<span class="ansi-green-fg">--&gt; 575</span>     current <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">remove_path</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">current</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">branch</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    576</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    577</span>     current[key] <span style="color: rgb(98,98,98)">=</span> apply_tree(
+<span class="ansi-green-intense-fg ansi-bold">    578</span>         current<span style="color: rgb(98,98,98)">.</span>get(key),
+<span class="ansi-green-intense-fg ansi-bold">    579</span>         branch,
+<span class="ansi-green-intense-fg ansi-bold">    580</span>         bindings,
+<span class="ansi-green-intense-fg ansi-bold">    581</span>         types)
+
+File <span class="ansi-green-fg">~/code/bigraph-schema/bigraph_schema/registry.py:176</span>, in <span class="ansi-cyan-fg">remove_path</span><span class="ansi-blue-fg">(tree, path)</span>
+<span class="ansi-green-intense-fg ansi-bold">    173</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> path <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(175,0,255)">or</span> <span style="color: rgb(0,135,0)">len</span>(path) <span style="color: rgb(98,98,98)">==</span> <span style="color: rgb(98,98,98)">0</span>:
+<span class="ansi-green-intense-fg ansi-bold">    174</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+<span class="ansi-green-fg">--&gt; 176</span> upon <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">get_path</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">tree</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">path</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">-</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">1</span><span class="ansi-yellow-bg">]</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    177</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> upon <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    178</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">del</span> upon[path[<span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">1</span>]]
+
+File <span class="ansi-green-fg">~/code/bigraph-schema/bigraph_schema/registry.py:126</span>, in <span class="ansi-cyan-fg">get_path</span><span class="ansi-blue-fg">(tree, path)</span>
+<span class="ansi-green-intense-fg ansi-bold">    124</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    125</span>     head <span style="color: rgb(98,98,98)">=</span> path[<span style="color: rgb(98,98,98)">0</span>]
+<span class="ansi-green-fg">--&gt; 126</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-yellow-bg">head</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">not</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">in</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">tree</span>:
+<span class="ansi-green-intense-fg ansi-bold">    127</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+<span class="ansi-green-intense-fg ansi-bold">    128</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+
+<span class="ansi-red-fg">TypeError</span>: unhashable type: &#39;list&#39;</pre>
 </div>
-
 </div>
 
 </div>
