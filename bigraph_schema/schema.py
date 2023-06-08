@@ -15,7 +15,7 @@ from bigraph_schema.registry import (
 from bigraph_schema.units import units, render_units_type
 
 
-class SchemaTypes:
+class TypeSystem:
     """Handles type schemas and their operation"""
 
     def __init__(self):
@@ -968,7 +968,7 @@ def test_cube(base_types):
 
 @pytest.fixture
 def base_types():
-    return SchemaTypes()
+    return TypeSystem()
 
 
 @pytest.fixture
@@ -1605,7 +1605,7 @@ def test_project(cube_types):
 
 
 if __name__ == '__main__':
-    types = SchemaTypes()
+    types = TypeSystem()
 
     test_cube(types)
     test_generate_default(types)

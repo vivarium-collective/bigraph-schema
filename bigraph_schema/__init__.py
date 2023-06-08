@@ -1,1 +1,1 @@
-from bigraph_schema.schema import SchemaTypes
+from bigraph_schema.schema import TypeSystem
