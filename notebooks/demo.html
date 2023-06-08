@@ -15707,7 +15707,7 @@ accumulate(current, update, bindings, types)
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[39]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[79]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">foursquare_schema</span> <span class="o">=</span> <span class="p">{</span>
@@ -15716,7 +15716,7 @@ accumulate(current, update, bindings, types)
      <span class="s1">&#39;01&#39;</span><span class="p">:</span> <span class="s1">&#39;union[bool,foursquare]&#39;</span><span class="p">,</span>
      <span class="s1">&#39;10&#39;</span><span class="p">:</span> <span class="s1">&#39;union[bool,foursquare]&#39;</span><span class="p">,</span>
      <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="s1">&#39;union[bool,foursquare]&#39;</span><span class="p">,</span>
-     <span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;01&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;10&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+     <span class="s1">&#39;_default&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;01&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;10&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
      <span class="s1">&#39;_description&#39;</span><span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
 <span class="p">}</span>
 <span class="n">types</span><span class="o">.</span><span class="n">type_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
@@ -15752,9 +15752,9 @@ accumulate(current, update, bindings, types)
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr">
 <pre>Traceback (most recent call last):
   File &#34;/Users/eranagmon/code/bigraph-schema/bigraph_schema/registry.py&#34;, line 332, in access
-    found = self.access(parse)
+    except Exception:
   File &#34;/Users/eranagmon/code/bigraph-schema/bigraph_schema/registry.py&#34;, line 317, in access
-    found = found.copy()
+    found[&#39;_bindings&#39;] = dict(zip(
 AttributeError: &#39;NoneType&#39; object has no attribute &#39;copy&#39;
 </pre>
 </div>
@@ -15768,7 +15768,7 @@ AttributeError: &#39;NoneType&#39; object has no attribute &#39;copy&#39;
 <pre>
 <span class="ansi-red-fg">---------------------------------------------------------------------------</span>
 <span class="ansi-red-fg">Exception</span>                                 Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[39], line 10</span>
+Cell <span class="ansi-green-fg">In[79], line 10</span>
 <span class="ansi-green-intense-fg ansi-bold">      1</span> foursquare_schema <span style="color: rgb(98,98,98)">=</span> {
 <span class="ansi-green-intense-fg ansi-bold">      2</span>      <span style="color: rgb(95,135,135)"># &#39;_type&#39;: &#39;foursquare&#39;,</span>
 <span class="ansi-green-intense-fg ansi-bold">      3</span>      <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">00</span><span style="color: rgb(175,0,0)">&#39;</span>: <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">union[bool,foursquare]</span><span style="color: rgb(175,0,0)">&#39;</span>,
@@ -15794,15 +15794,71 @@ File <span class="ansi-green-fg">~/code/bigraph-schema/bigraph_schema/registry.p
 
 </div>
 
-</div><div id="cell-id=330d0e0a-8b49-481b-a475-425d87cd8a9f" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
+</div><div id="cell-id=d015fb38-4661-43ba-86a2-124ac3e422b9" class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[&nbsp;]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[85]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">arr</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">half_size</span> <span class="o">=</span> <span class="n">size</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="k">if</span> <span class="s1">&#39;00&#39;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">render</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;00&#39;</span><span class="p">],</span> <span class="n">arr</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">+</span> <span class="n">half_size</span><span class="p">,</span> <span class="n">half_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s1">&#39;01&#39;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">render</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;01&#39;</span><span class="p">],</span> <span class="n">arr</span><span class="p">,</span> <span class="n">x</span> <span class="o">+</span> <span class="n">half_size</span><span class="p">,</span> <span class="n">y</span> <span class="o">+</span> <span class="n">half_size</span><span class="p">,</span> <span class="n">half_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s1">&#39;10&#39;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">render</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;10&#39;</span><span class="p">],</span> <span class="n">arr</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">half_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s1">&#39;11&#39;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">render</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;11&#39;</span><span class="p">],</span> <span class="n">arr</span><span class="p">,</span> <span class="n">x</span> <span class="o">+</span> <span class="n">half_size</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">half_size</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">arr</span><span class="p">[</span><span class="n">y</span><span class="p">:</span><span class="n">y</span><span class="o">+</span><span class="n">size</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span><span class="n">x</span><span class="o">+</span><span class="n">size</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">data</span> <span class="k">else</span> <span class="mi">1</span>  <span class="c1"># Change to &#39;0 if data else 1&#39; to make True values black</span>
+
+<span class="k">def</span> <span class="nf">find_depth</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mi">1</span> <span class="o">+</span> <span class="nb">max</span><span class="p">(</span><span class="n">find_depth</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">data</span><span class="p">)</span>
+    <span class="k">return</span> <span class="mi">0</span>
+
+<span class="k">def</span> <span class="nf">plot_foursquare</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">out_dir</span><span class="o">=</span><span class="s1">&#39;out&#39;</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">depth</span> <span class="o">=</span> <span class="n">find_depth</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">depth</span>
+    <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">size</span><span class="p">,</span> <span class="n">size</span><span class="p">))</span>
+    <span class="n">render</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">arr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span> <span class="n">interpolation</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">filename</span><span class="p">:</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">fig_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="n">filename</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">fig_path</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;png&#39;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="c1"># TODO: get this to register as a type</span>
+<span class="n">example</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> 
+    <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> 
+        <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> 
+            <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> 
+                <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> 
+                    <span class="s1">&#39;11&#39;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s1">&#39;00&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> 
+                    <span class="p">},</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">},</span>
+    <span class="p">},</span>
+<span class="p">}</span>
+
+<span class="n">plot_foursquare</span><span class="p">(</span><span class="n">example</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">&quot;example.png&quot;</span><span class="p">)</span>
 </pre></div>
 
      </div>
@@ -15810,20 +15866,30 @@ File <span class="ansi-green-fg">~/code/bigraph-schema/bigraph_schema/registry.p
 </div>
 </div>
 
-</div><div id="cell-id=53c421fb-fd36-46a1-adde-b3dadfa99fe6" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[&nbsp;]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span>
-</pre></div>
 
-     </div>
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+
+
+<div class="jp-RenderedImage jp-OutputArea-output ">
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYUAAAGFCAYAAAASI+9IAAAAOXRFWHRTb2Z0d2FyZQBNYXRwbG90bGliIHZlcnNpb24zLjcuMSwgaHR0cHM6Ly9tYXRwbG90bGliLm9yZy/bCgiHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAAFPElEQVR4nO3dsYrCUBRF0bwh///Ld7pdKRhFXsC1Sklxus2FENfMzAEAx3H87R4AwH2IAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAkHP3AADes9Z6+Psn/4jgUgAgogBARAGAiAIAEQUA4u0jgBt59kbRI5+8ZfSMSwGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCAPGZC4CLrnyK4qpvfLriCpcCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIOfuAcBvWmvtnvC2mdk94WtcCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEDO3QPgLtZauyf8lJnZPYEHXAoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAg56sPrrW+uQO2m5ndE2A7lwIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCIAgARBQAiCgBEFACIKAAQUQAgogBARAGAiAIAEQUAIgoARBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAIgoABBRACCiAEBEAYCcrz44M9/cAcANuBQAiCgAEFEAIKIAQEQBgIgCABEFACIKAEQUAMg/bbgcETXe3Y4AAAAASUVORK5CYII="
+class="
+"
+>
 </div>
+
 </div>
+
+</div>
+
 </div>
 
 </div>
