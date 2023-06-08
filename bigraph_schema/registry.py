@@ -94,8 +94,7 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
         else:
             raise ValueError(
                 f'cannot merge types at path {path + (k,)}:\n'
-                f'{dct}\noverwrites \'{k}\' from\n{merge_dct}'
-            )
+                f'{dct}\noverwrites \'{k}\' from\n{merge_dct}')
             
     return dct
 

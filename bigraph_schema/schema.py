@@ -347,7 +347,7 @@ class TypeSystem:
         
         return ports, wires
 
-    def project_state(self, schema, wires, instance, path):
+    def view_state(self, schema, wires, instance, path):
         result = {}
         if isinstance(wires, str):
             wires = [wires]
@@ -355,7 +355,7 @@ class TypeSystem:
             result = get_path(instance, path + wires)
         elif isinstance(wires, dict):
             result = {
-                port_key: self.project_state(
+                port_key: self.view_state(
                     schema[port_key],
                     wires[port_key],
                     instance,
@@ -366,7 +366,7 @@ class TypeSystem:
 
         return result
 
-    def project(self, schema, instance, edge_path=()):
+    def view(self, schema, instance, edge_path=()):
         '''
         project the state of the current instance into a form
         the edge expects, based on its ports
@@ -384,13 +384,13 @@ class TypeSystem:
         if wires is None:
             return None
 
-        return self.project_state(
+        return self.view_state(
             ports,
             wires,
             instance,
             edge_path[:-1])
 
-    def invert_state(self, ports, wires, path, states):
+    def project_state(self, ports, wires, path, states):
         result = {}
 
         if isinstance(wires, str):
@@ -405,7 +405,7 @@ class TypeSystem:
 
         elif isinstance(wires, dict):
             branches = [
-                self.invert_state(
+                self.project_state(
                     ports.get(key),
                     wires[key],
                     path,
@@ -426,12 +426,12 @@ class TypeSystem:
 
         return result
 
-    def invert(self, schema, instance, edge_path, states):
+    def project(self, schema, instance, edge_path, states):
         '''
         given states from the perspective of an edge (through
           it's ports), produce states aligned to the tree
           the wires point to.
-          (inverse of project)
+          (inverse of view)
         '''
 
         if schema is None:
@@ -446,7 +446,7 @@ class TypeSystem:
         if wires is None:
             return None
 
-        return self.invert_state(
+        return self.project_state(
             ports,
             wires,
             edge_path[:-1],
@@ -1534,12 +1534,12 @@ def test_project(cube_types):
 
     instance = cube_types.fill(schema, instance)
     
-    states = cube_types.project(
+    states = cube_types.view(
         schema,
         instance,
         ['edge1'])
 
-    update = cube_types.invert(
+    update = cube_types.project(
         schema,
         instance,
         ['edge1'],
@@ -1573,7 +1573,7 @@ def test_project(cube_types):
                 'branch5': 55},
             '_remove': ['branch4']}}
 
-    inverted_update = cube_types.invert(
+    inverted_update = cube_types.project(
         schema,
         instance,
         ['edge1'],
