@@ -1,8 +1,7 @@
-import re
 from setuptools import setup, find_packages
 
 
-VERSION = '0.0.12'
+VERSION = '0.0.13'
 
 
 with open("README.md", "r") as readme:
@@ -36,7 +35,7 @@ setup(
     python_requires=">=3.6",
     install_requires=[
         # List your package dependencies here
-        'bigraphs',
+        # 'bigraphs',
         "parsimonious",
         "fire",
         "pytest",

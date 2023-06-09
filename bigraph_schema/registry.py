@@ -1,12 +1,16 @@
+"""
+========
+Registry
+========
+"""
+
+import inspect
 import copy
-import random
 import collections
 import pytest
 import traceback
-from typing import Any
 
 from bigraph_schema.parse import parse_expression
-from bigraph_schema.units import units, render_units_type
 
 
 NONE_SYMBOL = ''
@@ -91,8 +95,7 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
         else:
             raise ValueError(
                 f'cannot merge types at path {path + (k,)}:\n'
-                f'{dct}\noverwrites \'{k}\' from\n{merge_dct}'
-            )
+                f'{dct}\noverwrites \'{k}\' from\n{merge_dct}')
             
     return dct
 
@@ -177,10 +180,13 @@ def remove_path(tree, path):
 
 
 class Registry(object):
-    def __init__(self):
-        """A Registry holds a collection of functions or objects."""
+    """A Registry holds a collection of functions or objects."""
+
+    def __init__(self, function_keys=None):
+        function_keys = function_keys or []
         self.registry = {}
         self.main_keys = set([])
+        self.function_keys = set(function_keys)
 
     def register(self, key, item, alternate_keys=tuple(), force=False):
         """Add an item to the registry.
@@ -194,7 +200,17 @@ class Registry(object):
 
                 This may be useful if you want to be able to look up an
                 item in the registry under multiple keys.
+            force (bool): Force the registration, overriding existing keys. False by default.
         """
+
+        # check that registered function have the required function keys
+        if callable(item) and self.function_keys:
+            sig = inspect.signature(item)
+            sig_keys = set(sig.parameters.keys())
+            assert all(
+                key in self.function_keys for key in sig_keys), f"Function '{item.__name__}' keys {sig_keys} are not all " \
+                                                                f"in the function_keys {self.function_keys}"
+
         keys = [key]
         keys.extend(alternate_keys)
         for registry_key in keys:
@@ -223,17 +239,20 @@ class Registry(object):
 
 
 class TypeRegistry(Registry):
+    """Type Registry
+
+    Holds type schema in one object for easy access
+    """
     def __init__(self):
         super().__init__()
 
         self.supers = {}
         self.register('any', {})
 
-
     def register(self, key, schema, alternate_keys=tuple(), force=False):
         schema = copy.deepcopy(schema)
         if isinstance(schema, dict):
-            supers = schema.get('_super', ['any']) # list of immediate supers
+            supers = schema.get('_super', ['any'])  # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
                 schema['_super'] = supers
@@ -254,21 +273,21 @@ class TypeRegistry(Registry):
                 if not subkey in type_schema_keys:
                     subschema = self.access(original_subschema)
                     if subschema is None:
-                        raise Exception(f'trying to register a new type ({key}), but it depends on a type ({subkey}) which is not in the registry')
+                        raise Exception(f'trying to register a new type ({key}), '
+                                        f'but it depends on a type ({subkey}) which is not in the registry')
                     else:
                         schema[subkey] = subschema
         else:
-            raise Exception(f'all type definitions must be dicts with the following keys: {type_schema_keys}\nnot: {schema}')
+            raise Exception(f'all type definitions must be dicts '
+                            f'with the following keys: {type_schema_keys}\nnot: {schema}')
 
         super().register(key, schema, alternate_keys, force)
-
 
     def resolve_parameters(self, type_parameters, schema):
         return {
             type_parameter: self.access(
                 schema.get(f'_{type_parameter}'))
             for type_parameter in type_parameters}
-
 
     def access(self, schema):
         """Retrieve all types in the schema"""
@@ -328,18 +347,16 @@ class TypeRegistry(Registry):
                     
         return found
 
-
-    def lookup(type_key, attribute):
+    def lookup(self, type_key, attribute):
         return self.access(type_key).get(attribute)
 
-
     # description should come from type
-    def is_descendent(self, key, ancestor):
+    def is_descendant(self, key, ancestor):
         for sup in self.supers.get(key, []):
             if sup == ancestor:
                 return True
             else:
-                found = self.is_descendent(sup, ancestor)
+                found = self.is_descendant(sup, ancestor)
                 if found:
                     return True
         return False
