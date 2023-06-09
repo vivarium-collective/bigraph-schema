@@ -544,87 +544,6 @@ def register_base_types(types):
     return types
 
 
-def schema_zoo():
-    mitochondria_schema = {
-        'mitochondria': {
-            'volume': {'_type': 'float'},
-            'membrane': {
-                'surface_proteins': {'_type': 'tree[protein]'},
-                'potential': {'_type': 'microvolts'}},
-            'mass': {'_type': 'membrane?'},
-        }
-    }
-
-    cytoplasm_schema = {
-        'cytoplasm': {
-            'mitochondria': {'_type': 'tree[mitochondria]'},
-            'proteins': {'_type': 'tree[mitochondria]'},
-            'nucleus': {'_type': 'tree[mitochondria]'},
-            'transcripts': {'_type': 'tree[mitochondria]'},
-        }
-    }
-
-    cell_schema = {
-        'cell': {
-            'shape': {'_type': 'mesh'},
-            'volume': {'_type': 'mL'},
-            'temperature': {'_type': 'K'},
-        }
-    }
-
-    cell_composite = {
-        'environment': {
-            'outer_shape': {
-                '_type': 'mesh', '_value': []},
-            'cellA': {
-                'cytoplasm': {
-                    'external_ions': {'_type': 'ions'},
-                    'internal_ions': {'_type': 'ions'},
-                    'other_ions': {'_type': {
-                        '_default': 0.0,
-                        '_apply': accumulate,
-                        '_serialize': str,
-                        '_deserialize': float,
-                        '_divide': divide_float,
-                        '_description': '64-bit floating point precision number'
-                    }},
-                    'electron_transport': {
-                        '_type': 'process',
-                        '_value': 'ElectronTransport',
-                        '_ports': {
-                            'external_ions': 'ions',
-                            'internal_ions': 'ions'},
-                        '_wires': {
-                            'external_ions': ['..', 'external_ions'],
-                            'internal_ions': ['..', 'internal_ions']}
-                        }
-                    },
-                'inner_shape': {'_type': 'mesh', '_value': []},
-                '_ports': {
-                    'shape': 'mesh',
-                    'volume': 'mL',
-                    'temperature': 'K'
-                },
-                '_channel': {
-                    'shape': ['inner_shape'],
-                },
-                '_wires': {
-                    'shape': ['..', 'outer_shape']
-                }
-            }
-        }
-    }
-
-    compose({
-        'cell': {
-            'membrane': cell_schema,
-            'cytoplasm': cytoplasm_schema
-        }
-    }, {
-        
-    })
-
-
 def test_cube(base_types):
     cube_schema = {
         'shape': {
@@ -1292,6 +1211,82 @@ def test_project(cube_types):
                 '4': ['a1']}}}
 
 
+def test_foursquare(types):
+    # TODO: need union type and self-referential types (foursquare)
+    foursquare_schema = {
+        '_type': 'foursquare',
+        '00': 'union[bool,foursquare]',
+        '01': 'union[bool,foursquare]',
+        '10': 'union[bool,foursquare]',
+        '11': 'union[bool,foursquare]',
+        '_default': {
+            '00': False,
+            '01': False,
+            '10': False,
+            '11': False
+        },
+        '_description': '',
+    }
+    types.type_registry.register(
+        'foursquare', foursquare_schema)
+
+    example = {
+        '00': True,
+        '11': {
+            '00': True,
+            '11': {
+                '00': True,
+                '11': {
+                    '00': True,
+                    '11': {
+                        '00': True,
+                        '11': {
+                            '00': True,
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    example_full = {
+        '_type': 'foursquare',
+        '00': {
+            '_value': True,
+            '_type': 'bool'},
+        '11': {
+            '_type': 'foursquare',
+            '00': {
+                '_value': True,
+                '_type': 'bool'},
+            '11': {
+                '_type': 'foursquare',
+                '00': {
+                    '_value': True,
+                    '_type': 'bool'},
+                '11': {
+                    '_type': 'foursquare',
+                    '00': {
+                        '_value': True,
+                        '_type': 'bool'},
+                    '11': {
+                        '_type': 'foursquare',
+                        '00': {
+                            '_value': True,
+                            '_type': 'bool'},
+                        '11': {
+                            '_type': 'foursquare',
+                            '00': {
+                                '_value': True,
+                                '_type': 'bool'},
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+
 if __name__ == '__main__':
     types = TypeSystem()
 
@@ -1308,3 +1303,4 @@ if __name__ == '__main__':
     test_fill_from_parse(types)
     test_serialize_deserialize(types)
     test_project(types)
+    test_foursquare(types)
