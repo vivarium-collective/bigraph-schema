@@ -4,6 +4,7 @@ Registry
 ========
 """
 
+import inspect
 import copy
 import collections
 import pytest
@@ -181,9 +182,11 @@ def remove_path(tree, path):
 class Registry(object):
     """A Registry holds a collection of functions or objects."""
 
-    def __init__(self):
+    def __init__(self, function_keys=None):
+        function_keys = function_keys or []
         self.registry = {}
         self.main_keys = set([])
+        self.function_keys = set(function_keys)
 
     def register(self, key, item, alternate_keys=tuple(), force=False):
         """Add an item to the registry.
@@ -199,6 +202,15 @@ class Registry(object):
                 item in the registry under multiple keys.
             force (bool): Force the registration, overriding existing keys. False by default.
         """
+
+        # check that registered function have the required function keys
+        if callable(item) and self.function_keys:
+            sig = inspect.signature(item)
+            sig_keys = set(sig.parameters.keys())
+            assert all(
+                key in self.function_keys for key in sig_keys), f"Function '{item.__name__}' keys {sig_keys} are not all " \
+                                                                f"in the function_keys {self.function_keys}"
+
         keys = [key]
         keys.extend(alternate_keys)
         for registry_key in keys:

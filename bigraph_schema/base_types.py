@@ -98,31 +98,51 @@ base_type_library = {
         '_divide': 'divide_edge',
         '_type_parameters': ['ports'],
         '_description': 'hyperedges in the bigraph, with ports as a type parameter',
-        'wires': 'tree[list[string]]'}}
+        'wires': 'tree[list[string]]'
+    },
+
+    # TODO -- this should support any type
+    'union': {
+        '_type': 'union',
+        '_default': 'None',
+        # '_apply': 'apply_maybe',
+        # '_serialize': 'serialize_maybe',
+        # '_deserialize': 'deserialize_maybe',
+        # '_divide': 'divide_maybe',
+        '_type_parameters': ['value'],
+        # '_description': 'type to represent values that could be empty'
+    },
+}
 
 
-def accumulate(current, update, bindings, types):
+#################
+# Apply methods #
+#################
+
+def accumulate(current, update, bindings=None, types=None):
     if update is None:
-        import ipdb; ipdb.set_trace()
+        return current
     return current + update
 
 
-def concatenate(current, update, bindings, types):
+def concatenate(current, update, bindings=None, types=None):
     return current + update
 
 
+##################
+# Divide methods #
+##################
 # support dividing by ratios?
 # ---> divide_float({...}, [0.1, 0.3, 0.6])
 
-
-def divide_float(value, ratios, bindings, types):
+def divide_float(value, ratios, bindings=None, types=None):
     half = value / 2.0
     return (half, half)
 
 
 # support function types for registrys?
 # def divide_int(value: int, _) -> tuple[int, int]:
-def divide_int(value, bindings, types):
+def divide_int(value, bindings=None, types=None):
     half = value // 2
     other_half = half
     if value % 2 == 1:
@@ -130,7 +150,7 @@ def divide_int(value, bindings, types):
     return half, other_half
 
 
-def divide_longest(dimensions, bindings, types):
+def divide_longest(dimensions, bindings=None, types=None):
     # any way to declare the required keys for this function in the registry?
     # find a way to ask a function what type its domain and codomain are
 
@@ -162,34 +182,51 @@ def divide_list(l, bindings, types):
     return result
 
 
-def replace(old_value, new_value, bindings, types):
-    return new_value
+def replace(current, update, bindings=None, types=None):
+    return update
 
 
-def serialize_string(s, bindings, types):
-    return f'"{s}"'
+#####################
+# Serialize methods #
+#####################
+
+def serialize_string(value, bindings=None, types=None):
+    return f'"{value}"'
 
 
-def deserialize_string(s, bindings, types):
-    if s[0] != '"' or s[-1] != '"':
-        raise Exception(f'deserializing str which requires double quotes: {s}')
-    return s[1:-1]
+def deserialize_string(serialized, bindings=None, types=None):
+    if serialized[0] != '"' or serialized[-1] != '"':
+        raise Exception(f'deserializing str which requires double quotes: {serialized}')
+    return serialized[1:-1]
 
 
-def to_string(value, bindings, types):
+def to_string(value, bindings=None, types=None):
     return str(value)
 
 
-def deserialize_int(i, bindings, types):
-    return int(i)
+#######################
+# Deserialize methods #
+#######################
+
+def deserialize_int(serialized, bindings=None, types=None):
+    return int(serialized)
 
 
-def deserialize_float(i, bindings, types):
-    return float(i)
+def deserialize_float(serialized, bindings=None, types=None):
+    return float(serialized)
 
 
-def evaluate(code, bindings, types):
-    return eval(code)
+def evaluate(serialized, bindings=None, types=None):
+    return eval(serialized)
+
+
+
+
+
+
+
+# In Progress?
+##############
 
 
 # TODO: make these work
@@ -237,28 +274,28 @@ def divide_tree(tree, bindings, types):
     return result
 
 
-def serialize_tree(value, bindings, types):
+def serialize_tree(value, bindings=None, types=None):
     return value
 
 
-def deserialize_tree(value, bindings, types):
-    return value
+def deserialize_tree(serialized, bindings=None, types=None):
+    return serialized
 
 
-def apply_dict(current, update, bindings, types):
+def apply_dict(current, update, bindings=None, types=None):
     pass
 
 
-def divide_dict(value, bindings, types):
+def divide_dict(value, bindings=None, types=None):
     return value
 
 
-def serialize_dict(value, bindings, types):
+def serialize_dict(value, bindings=None, types=None):
     return value
 
 
-def deserialize_dict(value, bindings, types):
-    return value
+def deserialize_dict(serialized, bindings=None, types=None):
+    return serialized
 
 
 def apply_maybe(current, update, bindings, types):
@@ -284,12 +321,12 @@ def serialize_maybe(value, bindings, types):
         return serialize(value_type, value)
 
 
-def deserialize_maybe(encoded, bindings, types):
-    if encoded == NONE_SYMBOL:
+def deserialize_maybe(serialized, bindings, types):
+    if serialized == NONE_SYMBOL:
         return None
     else:
         value_type = bindings['value']
-        return deserialize(value_type, encoded)
+        return deserialize(value_type, serialized)
 
 
 # TODO: deal with all the different unit types
@@ -301,8 +338,8 @@ def serialize_units(value, bindings, types):
     return str(value)
 
 
-def deserialize_units(encoded, bindings, types):
-    return units(encoded)
+def deserialize_units(serialized, bindings, types):
+    return units(serialized)
 
 
 def divide_units(value, bindings, types):
@@ -318,8 +355,8 @@ def serialize_edge(value, bindings, types):
     return str(value)
 
 
-def deserialize_edge(encoded, bindings, types):
-    return eval(encoded)
+def deserialize_edge(serialized, bindings, types):
+    return eval(serialized)
 
 
 def divide_edge(value, bindings, types):

@@ -24,10 +24,10 @@ class TypeSystem:
     """Handles type schemas and their operation"""
 
     def __init__(self):
-        self.apply_registry = Registry()
-        self.serialize_registry = Registry()
-        self.deserialize_registry = Registry()
-        self.divide_registry = Registry()
+        self.apply_registry = Registry(function_keys=['current', 'update', 'bindings', 'types'])
+        self.serialize_registry = Registry(function_keys=['value', 'bindings', 'types'])
+        self.deserialize_registry = Registry(function_keys=['serialized', 'bindings', 'types'])
+        self.divide_registry = Registry()  # TODO enforce keys for divider methods
         self.type_registry = TypeRegistry()
 
         self.registry_registry = RegistryRegistry()
