@@ -1127,6 +1127,8 @@ def test_project(cube_types):
     #   instances with '_type' and type parameter keys
     # TODO: support overriding various type methods
     instance = {
+        'a0': {
+            'a0.0': 11},
         'edge1': {
             'wires': {
                 '1': ['a0', 'a0.0'],
@@ -1140,7 +1142,7 @@ def test_project(cube_types):
             'branch4': 44}}
 
     instance = cube_types.fill(schema, instance)
-    
+
     states = cube_types.view(
         schema,
         instance,
@@ -1154,7 +1156,7 @@ def test_project(cube_types):
 
     assert update == {
         'a0': {
-            'a0.0': 0,
+            'a0.0': 11,
             'a0.1': 0.0,
             'a0.2': {
                 'a0.2.0': ''}},
@@ -1164,6 +1166,7 @@ def test_project(cube_types):
                 'branch3': 22},
             'branch4': 44}}
 
+    # TODO: make sure apply does not mutate instance
     updated_instance = cube_types.apply(
         schema,
         instance,
@@ -1303,4 +1306,9 @@ if __name__ == '__main__':
     test_fill_from_parse(types)
     test_serialize_deserialize(types)
     test_project(types)
+<<<<<<< HEAD
     test_foursquare(types)
+=======
+# ship in a bottle from above looming menacingly in a dark and stormy night unfolding from everywhere the ship is large and detailed and glorious in its expansive beauty
+
+>>>>>>> 295d5c7092b6d51e35680c6185fccb7ce48d02aa
