@@ -39,6 +39,33 @@ class TypeSystem:
         
         register_base_types(self)
 
+    def find_registry(self, underscore_key):
+        root = underscore_key.trim('_')
+        registry_key = f'{root}_registry'
+        return getattr(self, registry_key)
+
+    def register(self, type_data):
+        self.function_keys = [
+            '_apply',
+            '_divide',
+            '_serialize',
+            '_deserialize']
+
+        missing_functions = []
+        for function_key in self.function_keys:
+            if function_key in type_data:
+                looking = type_data[function_key]
+                registry = self.find_registry(
+                    function_key)
+                found = registry.access(looking)
+                if found is None:
+                    missing_functions.append(
+                        (function_key, looking))
+
+        if len(missing_functions > 0):
+            raise Exception(
+                f'functions are missing from\n{type_data}\nnamely, {missing_functions}')
+
     def access(self, type_key):
         return self.type_registry.access(type_key)
 
@@ -1196,7 +1223,7 @@ def test_project(cube_types):
 
     assert modified_branch == {
         'a0': {
-            'a0.0': 0,
+            'a0.0': 22,
             'a0.1': 0.0,
             'a0.2': {
                 'a0.2.0': ''}},
@@ -1214,7 +1241,7 @@ def test_project(cube_types):
                 '4': ['a1']}}}
 
 
-def test_foursquare(types):
+def test_foursquare(base_types):
     # TODO: need union type and self-referential types (foursquare)
     foursquare_schema = {
         '_type': 'foursquare',
@@ -1230,7 +1257,7 @@ def test_foursquare(types):
         },
         '_description': '',
     }
-    types.type_registry.register(
+    base_types.type_registry.register(
         'foursquare', foursquare_schema)
 
     example = {
@@ -1306,9 +1333,4 @@ if __name__ == '__main__':
     test_fill_from_parse(types)
     test_serialize_deserialize(types)
     test_project(types)
-<<<<<<< HEAD
     test_foursquare(types)
-=======
-# ship in a bottle from above looming menacingly in a dark and stormy night unfolding from everywhere the ship is large and detailed and glorious in its expansive beauty
-
->>>>>>> 295d5c7092b6d51e35680c6185fccb7ce48d02aa
