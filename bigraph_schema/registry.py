@@ -13,8 +13,6 @@ import traceback
 from bigraph_schema.parse import parse_expression
 
 
-NONE_SYMBOL = ''
-
 required_schema_keys = (
     '_default',
     '_apply',
@@ -295,7 +293,7 @@ class TypeRegistry(Registry):
         found = None
 
         if isinstance(schema, dict):
-            if '_default' in schema:
+            if '_description' in schema:
                 return schema
             elif '_type' in schema:
                 found = self.access(schema['_type'])

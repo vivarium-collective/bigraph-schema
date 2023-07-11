@@ -166,7 +166,7 @@ class TypeSystem:
         if '_default' in found:
             if not '_deserialize' in found:
                 raise Exception(
-                    f'asking for default for {type_key} but no deserialize in {found}')
+                    f'asking for default but no deserialize in {found}')
             default = self.deserialize(found, found['_default'])
         else:
             default = {}
