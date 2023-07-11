@@ -1224,14 +1224,7 @@ def test_project(cube_types):
 
     instance = cube_types.fill(schema, instance)
     
-<<<<<<< HEAD:bigraph_schema/schema.py
-    import ipdb; ipdb.set_trace()
-
-    # TODO: project --> view, invert --> project?
-    states = cube_types.project(
-=======
     states = cube_types.view(
->>>>>>> 1e949a5a1b31a44a06970a20a871f7f89b9dbf2b:bigraph_schema/type_system.py
         schema,
         instance,
         ['edge1'])
