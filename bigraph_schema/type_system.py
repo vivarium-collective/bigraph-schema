@@ -39,6 +39,33 @@ class TypeSystem:
         
         register_base_types(self)
 
+    def find_registry(self, underscore_key):
+        root = underscore_key.trim('_')
+        registry_key = f'{root}_registry'
+        return getattr(self, registry_key)
+
+    def register(self, type_data):
+        self.function_keys = [
+            '_apply',
+            '_divide',
+            '_serialize',
+            '_deserialize']
+
+        missing_functions = []
+        for function_key in self.function_keys:
+            if function_key in type_data:
+                looking = type_data[function_key]
+                registry = self.find_registry(
+                    function_key)
+                found = registry.access(looking)
+                if found is None:
+                    missing_functions.append(
+                        (function_key, looking))
+
+        if len(missing_functions > 0):
+            raise Exception(
+                f'functions are missing from\n{type_data}\nnamely, {missing_functions}')
+
     def access(self, type_key):
         return self.type_registry.access(type_key)
 
@@ -542,87 +569,6 @@ def register_base_types(types):
     register_units(types, units)
 
     return types
-
-
-def schema_zoo():
-    mitochondria_schema = {
-        'mitochondria': {
-            'volume': {'_type': 'float'},
-            'membrane': {
-                'surface_proteins': {'_type': 'tree[protein]'},
-                'potential': {'_type': 'microvolts'}},
-            'mass': {'_type': 'membrane?'},
-        }
-    }
-
-    cytoplasm_schema = {
-        'cytoplasm': {
-            'mitochondria': {'_type': 'tree[mitochondria]'},
-            'proteins': {'_type': 'tree[mitochondria]'},
-            'nucleus': {'_type': 'tree[mitochondria]'},
-            'transcripts': {'_type': 'tree[mitochondria]'},
-        }
-    }
-
-    cell_schema = {
-        'cell': {
-            'shape': {'_type': 'mesh'},
-            'volume': {'_type': 'mL'},
-            'temperature': {'_type': 'K'},
-        }
-    }
-
-    cell_composite = {
-        'environment': {
-            'outer_shape': {
-                '_type': 'mesh', '_value': []},
-            'cellA': {
-                'cytoplasm': {
-                    'external_ions': {'_type': 'ions'},
-                    'internal_ions': {'_type': 'ions'},
-                    'other_ions': {'_type': {
-                        '_default': 0.0,
-                        '_apply': accumulate,
-                        '_serialize': str,
-                        '_deserialize': float,
-                        '_divide': divide_float,
-                        '_description': '64-bit floating point precision number'
-                    }},
-                    'electron_transport': {
-                        '_type': 'process',
-                        '_value': 'ElectronTransport',
-                        '_ports': {
-                            'external_ions': 'ions',
-                            'internal_ions': 'ions'},
-                        '_wires': {
-                            'external_ions': ['..', 'external_ions'],
-                            'internal_ions': ['..', 'internal_ions']}
-                        }
-                    },
-                'inner_shape': {'_type': 'mesh', '_value': []},
-                '_ports': {
-                    'shape': 'mesh',
-                    'volume': 'mL',
-                    'temperature': 'K'
-                },
-                '_channel': {
-                    'shape': ['inner_shape'],
-                },
-                '_wires': {
-                    'shape': ['..', 'outer_shape']
-                }
-            }
-        }
-    }
-
-    compose({
-        'cell': {
-            'membrane': cell_schema,
-            'cytoplasm': cytoplasm_schema
-        }
-    }, {
-        
-    })
 
 
 def test_cube(base_types):
@@ -1223,7 +1169,7 @@ def test_project(cube_types):
             'branch4': 44}}
 
     instance = cube_types.fill(schema, instance)
-    
+
     states = cube_types.view(
         schema,
         instance,
@@ -1277,7 +1223,7 @@ def test_project(cube_types):
 
     assert modified_branch == {
         'a0': {
-            'a0.0': 0,
+            'a0.0': 22,
             'a0.1': 0.0,
             'a0.2': {
                 'a0.2.0': ''}},
@@ -1293,6 +1239,82 @@ def test_project(cube_types):
                 '2': ['a0', 'a0.1'],
                 '3': ['a0', 'a0.2', 'a0.2.0'],
                 '4': ['a1']}}}
+
+
+def test_foursquare(base_types):
+    # TODO: need union type and self-referential types (foursquare)
+    foursquare_schema = {
+        '_type': 'foursquare',
+        '00': 'union[bool,foursquare]',
+        '01': 'union[bool,foursquare]',
+        '10': 'union[bool,foursquare]',
+        '11': 'union[bool,foursquare]',
+        '_default': {
+            '00': False,
+            '01': False,
+            '10': False,
+            '11': False
+        },
+        '_description': '',
+    }
+    base_types.type_registry.register(
+        'foursquare', foursquare_schema)
+
+    example = {
+        '00': True,
+        '11': {
+            '00': True,
+            '11': {
+                '00': True,
+                '11': {
+                    '00': True,
+                    '11': {
+                        '00': True,
+                        '11': {
+                            '00': True,
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    example_full = {
+        '_type': 'foursquare',
+        '00': {
+            '_value': True,
+            '_type': 'bool'},
+        '11': {
+            '_type': 'foursquare',
+            '00': {
+                '_value': True,
+                '_type': 'bool'},
+            '11': {
+                '_type': 'foursquare',
+                '00': {
+                    '_value': True,
+                    '_type': 'bool'},
+                '11': {
+                    '_type': 'foursquare',
+                    '00': {
+                        '_value': True,
+                        '_type': 'bool'},
+                    '11': {
+                        '_type': 'foursquare',
+                        '00': {
+                            '_value': True,
+                            '_type': 'bool'},
+                        '11': {
+                            '_type': 'foursquare',
+                            '00': {
+                                '_value': True,
+                                '_type': 'bool'},
+                        },
+                    },
+                },
+            },
+        },
+    }
 
 
 if __name__ == '__main__':
@@ -1311,5 +1333,4 @@ if __name__ == '__main__':
     test_fill_from_parse(types)
     test_serialize_deserialize(types)
     test_project(types)
-# ship in a bottle from above looming menacingly in a dark and stormy night unfolding from everywhere the ship is large and detailed and glorious in its expansive beauty
-
+    test_foursquare(types)
