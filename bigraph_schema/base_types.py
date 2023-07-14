@@ -98,7 +98,7 @@ base_type_library = {
         '_divide': 'divide_edge',
         '_type_parameters': ['ports'],
         '_description': 'hyperedges in the bigraph, with ports as a type parameter',
-        'wires': 'tree[list[string]]'
+        'wires': 'tree[list[string]]',
     },
 
     # TODO -- this should support any type

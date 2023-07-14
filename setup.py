@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 
-VERSION = '0.0.13'
+VERSION = '0.0.14'
 
 
 with open("README.md", "r") as readme:
@@ -35,7 +35,7 @@ setup(
     python_requires=">=3.6",
     install_requires=[
         # List your package dependencies here
-        # 'bigraphs',
+        # "bigraph",
         "parsimonious",
         "fire",
         "pytest",
