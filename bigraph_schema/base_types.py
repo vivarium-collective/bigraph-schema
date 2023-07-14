@@ -8,6 +8,9 @@ from bigraph_schema.registry import remove_path
 from bigraph_schema.units import units
 
 
+NONE_SYMBOL = 'None'
+
+
 base_type_library = {
     # abstract number type
     'number': {
@@ -100,6 +103,8 @@ base_type_library = {
         '_description': 'hyperedges in the bigraph, with ports as a type parameter',
         'wires': 'tree[list[string]]',
     },
+
+    'wires': 'tree[list[string]]',
 
     # TODO -- this should support any type
     'union': {
@@ -326,7 +331,7 @@ def deserialize_maybe(serialized, bindings, types):
         return None
     else:
         value_type = bindings['value']
-        return deserialize(value_type, serialized)
+        return types.deserialize(value_type, serialized)
 
 
 # TODO: deal with all the different unit types
