@@ -104,6 +104,8 @@ base_type_library = {
         'wires': 'tree[list[string]]'
     },
 
+    'wires': 'tree[list[string]]',
+
     # TODO -- this should support any type
     'union': {
         '_type': 'union',

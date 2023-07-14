@@ -248,7 +248,10 @@ class TypeRegistry(Registry):
         self.register('any', {})
 
     def register(self, key, schema, alternate_keys=tuple(), force=False):
+        if isinstance(schema, str):
+            schema = self.access(schema)
         schema = copy.deepcopy(schema)
+
         if isinstance(schema, dict):
             supers = schema.get('_super', ['any'])  # list of immediate supers
             if isinstance(supers, str):
@@ -276,8 +279,9 @@ class TypeRegistry(Registry):
                     else:
                         schema[subkey] = subschema
         else:
-            raise Exception(f'all type definitions must be dicts '
-                            f'with the following keys: {type_schema_keys}\nnot: {schema}')
+            raise Exception(
+                f'all type definitions must be dicts '
+                f'with the following keys: {type_schema_keys}\nnot: {schema}')
 
         super().register(key, schema, alternate_keys, force)
 
@@ -297,10 +301,12 @@ class TypeRegistry(Registry):
                 return schema
             elif '_type' in schema:
                 found = self.access(schema['_type'])
-                if '_type_parameters' in found:
+
+                if '_default' in schema or '_type_parameters' in found:
                     found = copy.deepcopy(found)
                     found = deep_merge(found, schema)
 
+                if '_type_parameters' in found:
                     for type_parameter in found['_type_parameters']:
                         parameter_key = f'_{type_parameter}'
                         if parameter_key in found:

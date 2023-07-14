@@ -193,8 +193,9 @@ class TypeSystem:
         elif isinstance(update, dict):
             for key, branch in update.items():
                 if key not in schema:
-                    raise Exception(f'trying to update a key that is not in the schema {key} '
-                                    f'for state:\n{state}\nwith schema:\n{schema}')
+                    raise Exception(
+                        f'trying to update a key that is not in the schema'
+                        f'for state: {key}\n{state}\nwith schema:\n{schema}')
                 else:
                     subupdate = self.apply_update(
                         schema[key],
@@ -262,11 +263,13 @@ class TypeSystem:
                 key: self.deserialize(schema.get(key), branch)
                 for key, branch in tree.items()}
 
+
     def divide(self, schema, state, ratios=(0.5, 0.5)):
         # TODO: implement
         return state
 
-    def fill_ports(self, schema, wires=None, state=None, top=None, path=()):
+
+    def fill_ports(self, schema, wires=None, state=None, top=None, path=None):
         # deal with wires
         if wires is None:
             wires = {}
@@ -274,6 +277,8 @@ class TypeSystem:
             state = {}
         if top is None:
             top = state
+        if path is None:
+            path = []
 
         more_wires = state.get('wires', {})
         wires = deep_merge(wires, more_wires)
@@ -282,12 +287,13 @@ class TypeSystem:
             if port_key in wires:
                 subwires = wires[port_key]
                 if isinstance(subwires, dict):
-                    state[port_key] = fill_ports(
-                        port_schema,
-                        wires=subwires,
-                        state=state.get(port_key),
-                        top=top,
-                        path=path)
+                    if isinstance(state, dict):
+                        state[port_key] = fill_ports(
+                            port_schema,
+                            wires=subwires,
+                            state=state.get(port_key),
+                            top=top,
+                            path=path)
                 else:
                     if isinstance(subwires, str):
                         subwires = (subwires,)
@@ -322,7 +328,7 @@ class TypeSystem:
 
         return state
 
-    def fill_state(self, schema, state=None, top=None, path=(), type_key=None, context=None):
+    def fill_state(self, schema, state=None, top=None, path=None, type_key=None, context=None):
         # if a port is disconnected, build a store
         # for it under the '_open' key in the current
         # node (?)
@@ -336,6 +342,8 @@ class TypeSystem:
             state = self.default(schema)
         if top is None:
             top = state
+        if path is None:
+            path = []
 
         if '_ports' in schema:
             wires = state.get('wires', {})
@@ -347,18 +355,18 @@ class TypeSystem:
                 path=path)
 
         branches = non_schema_keys(schema)
-        if len(branches) > 0 and not isinstance(state, dict):
-            raise Exception(f'schema has branches\n{schema}\nbut state is a leaf\n{state}')
-        else:
+
+        if isinstance(state, dict):
             for branch in branches:
-                subpath = path + (branch,)
+                subpath = path + [branch]
                 state[branch] = self.fill_state(
                     schema[branch],
                     state=state.get(branch),
                     top=top,
                     path=subpath)
-            
+
         return state
+
 
     def fill(self, original_schema, state=None):
         if state is not None:
@@ -368,6 +376,7 @@ class TypeSystem:
         return self.fill_state(
             schema,
             state=state)
+
 
     def ports_and_wires(self, schema, instance, edge_path):
         found = self.access(schema)
@@ -379,26 +388,28 @@ class TypeSystem:
         
         return ports, wires
 
-    def view_state(self, schema, wires, instance, path):
+
+    def view_state(self, schema, wires, path, instance):
         result = {}
         if isinstance(wires, str):
             wires = [wires]
-        if isinstance(wires, list):
-            result = get_path(instance, path + wires)
+        if isinstance(wires, (list, tuple)):
+            result = get_path(instance, list(path) + list(wires))
         elif isinstance(wires, dict):
             result = {
                 port_key: self.view_state(
                     schema[port_key],
                     wires[port_key],
-                    instance,
-                    path)
+                    path,
+                    instance)
                 for port_key in wires}
         else:
-            raise Exception(f'trying to project state with these ports:\n{ports}\nbut not sure what these wires are:\n{wires}')
+            raise Exception(f'trying to project state with these ports:\n{schema}\nbut not sure what these wires are:\n{wires}')
 
         return result
 
-    def view(self, schema, instance, edge_path=()):
+
+    def view(self, schema, instance, edge_path=None):
         '''
         project the state of the current instance into a form
         the edge expects, based on its ports
@@ -408,6 +419,8 @@ class TypeSystem:
             return None
         if instance is None:
             instance = self.default(schema)
+        if edge_path is None:
+            edge_path = []
 
         ports, wires = self.ports_and_wires(schema, instance, edge_path=edge_path)
 
@@ -419,8 +432,9 @@ class TypeSystem:
         return self.view_state(
             ports,
             wires,
-            instance,
-            edge_path[:-1])
+            edge_path[:-1],
+            instance)
+
 
     def project_state(self, ports, wires, path, states):
         result = {}
@@ -429,7 +443,7 @@ class TypeSystem:
             wires = [wires]
 
         if isinstance(wires, list):
-            destination = path + wires
+            destination = list(path) + wires
             result = set_path(
                 result,
                 destination,
@@ -458,6 +472,7 @@ class TypeSystem:
 
         return result
 
+
     def project(self, schema, instance, edge_path, states):
         '''
         given states from the perspective of an edge (through
@@ -484,22 +499,19 @@ class TypeSystem:
             edge_path[:-1],
             states)
 
+
     def link_place(self, place, link):
         pass
+
 
     def compose(self, a, b):
         pass
 
-    # maybe vivarium?
-    def hydrate(self, schema):
-        return {}
-
-    def dehydrate(self, schema):
-        return {}
 
     def query(self, schema, instance, redex):
         subschema = {}
         return subschema
+
 
     def react(self, schema, instance, redex, reactum):
         return {}
