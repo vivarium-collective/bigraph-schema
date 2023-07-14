@@ -154,7 +154,7 @@ def establish_path(tree, path, top=None, cursor=()):
                 tree[head],
                 path[1:],
                 top=top,
-                cursor=cursor + (head,))
+                cursor=tuple(cursor) + (head,))
 
 
 def set_path(tree, path, value, top=None, cursor=None):
