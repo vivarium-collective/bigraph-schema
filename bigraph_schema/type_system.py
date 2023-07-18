@@ -8,7 +8,7 @@ import copy
 import pprint
 import pytest
 
-from bigraph_schema.base_types import base_type_library, accumulate, concatenate, divide_float, divide_int, \
+from bigraph_schema.base_types import base_type_library, set_apply, accumulate, concatenate, divide_float, divide_int, \
     divide_longest, divide_list, replace, serialize_string, deserialize_string, to_string, deserialize_int, \
     deserialize_float, evaluate, apply_tree, divide_tree, serialize_tree, deserialize_tree, apply_dict, divide_dict, \
     serialize_dict, deserialize_dict, apply_maybe, divide_maybe, serialize_maybe, deserialize_maybe, apply_units, \
@@ -541,6 +541,7 @@ def register_base_types(types):
 
     # validate the function registered is of the right type?
     types.apply_registry.register('accumulate', accumulate)
+    types.apply_registry.register('set', set_apply)
     types.apply_registry.register('concatenate', concatenate)
     types.apply_registry.register('replace', replace)
     types.apply_registry.register('apply_tree', apply_tree)

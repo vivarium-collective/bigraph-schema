@@ -130,6 +130,10 @@ def accumulate(current, update, bindings=None, types=None):
     return current + update
 
 
+def set_apply(current, update, bindings=None, types=None):
+    return update
+
+
 def concatenate(current, update, bindings=None, types=None):
     return current + update
 
