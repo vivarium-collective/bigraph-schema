@@ -389,7 +389,7 @@ class TypeSystem:
         return ports, wires
 
 
-    def view_state(self, schema, wires, path, instance):
+    def view(self, schema, wires, path, instance):
         result = {}
         if isinstance(wires, str):
             wires = [wires]
@@ -397,7 +397,7 @@ class TypeSystem:
             result = get_path(instance, list(path) + list(wires))
         elif isinstance(wires, dict):
             result = {
-                port_key: self.view_state(
+                port_key: self.view(
                     schema[port_key],
                     wires[port_key],
                     path,
@@ -409,7 +409,7 @@ class TypeSystem:
         return result
 
 
-    def view(self, schema, instance, edge_path=None):
+    def view_edge(self, schema, instance, edge_path=None):
         '''
         project the state of the current instance into a form
         the edge expects, based on its ports
@@ -429,14 +429,14 @@ class TypeSystem:
         if wires is None:
             return None
 
-        return self.view_state(
+        return self.view(
             ports,
             wires,
             edge_path[:-1],
             instance)
 
 
-    def project_state(self, ports, wires, path, states):
+    def project(self, ports, wires, path, states):
         result = {}
 
         if isinstance(wires, str):
@@ -451,7 +451,7 @@ class TypeSystem:
 
         elif isinstance(wires, dict):
             branches = [
-                self.project_state(
+                self.project(
                     ports.get(key),
                     wires[key],
                     path,
@@ -473,7 +473,7 @@ class TypeSystem:
         return result
 
 
-    def project(self, schema, instance, edge_path, states):
+    def project_edge(self, schema, instance, edge_path, states):
         '''
         given states from the perspective of an edge (through
           it's ports), produce states aligned to the tree
@@ -493,7 +493,7 @@ class TypeSystem:
         if wires is None:
             return None
 
-        return self.project_state(
+        return self.project(
             ports,
             wires,
             edge_path[:-1],
@@ -1182,12 +1182,12 @@ def test_project(cube_types):
 
     instance = cube_types.fill(schema, instance)
 
-    states = cube_types.view(
+    states = cube_types.view_edge(
         schema,
         instance,
         ['edge1'])
 
-    update = cube_types.project(
+    update = cube_types.project_edge(
         schema,
         instance,
         ['edge1'],
@@ -1222,7 +1222,7 @@ def test_project(cube_types):
                 'branch5': 55},
             '_remove': ['branch4']}}
 
-    inverted_update = cube_types.project(
+    inverted_update = cube_types.project_edge(
         schema,
         instance,
         ['edge1'],
