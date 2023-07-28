@@ -288,7 +288,7 @@ class TypeSystem:
                 subwires = wires[port_key]
                 if isinstance(subwires, dict):
                     if isinstance(state, dict):
-                        state[port_key] = fill_ports(
+                        state[port_key] = self.fill_ports(
                             port_schema,
                             wires=subwires,
                             state=state.get(port_key),
