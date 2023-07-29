@@ -409,7 +409,7 @@ class TypeSystem:
         return result
 
 
-    def view_edge(self, schema, instance, edge_path=None):
+    def view_edge(self, schema, instance, edge_path=None, ports_key=None):
         '''
         project the state of the current instance into a form
         the edge expects, based on its ports
@@ -422,12 +422,19 @@ class TypeSystem:
         if edge_path is None:
             edge_path = []
 
-        ports, wires = self.ports_and_wires(schema, instance, edge_path=edge_path)
+        ports, wires = self.ports_and_wires(
+            schema,
+            instance,
+            edge_path=edge_path)
 
         if ports is None:
             return None
         if wires is None:
             return None
+
+        if ports_key is not None:
+            ports = ports[ports_key]
+            wires = wires[ports_key]
 
         return self.view(
             ports,
@@ -473,7 +480,7 @@ class TypeSystem:
         return result
 
 
-    def project_edge(self, schema, instance, edge_path, states):
+    def project_edge(self, schema, instance, edge_path, states, ports_key=None):
         '''
         given states from the perspective of an edge (through
           it's ports), produce states aligned to the tree
@@ -492,6 +499,10 @@ class TypeSystem:
             return None
         if wires is None:
             return None
+
+        if ports_key is not None:
+            ports = ports[ports_key]
+            wires = wires[ports_key]
 
         return self.project(
             ports,
