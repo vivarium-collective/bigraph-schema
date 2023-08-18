@@ -209,10 +209,52 @@ class TypeSystem:
 
         return state
 
+
     def apply(self, original_schema, initial, update):
         schema = self.access(original_schema)
         state = copy.deepcopy(initial)
         return self.apply_update(schema, initial, update)
+
+
+    def set_update(self, schema, state, update):
+        if '_apply' in schema:
+            apply_function = self.apply_registry.access('set')
+            
+            state = apply_function(
+                state,
+                update,
+                schema.get('_bindings'),
+                self)
+
+        elif isinstance(schema, str) or isinstance(schema, list):
+            schema = self.access(schema)
+            state = self.set_update(schema, state, update)
+
+        elif isinstance(update, dict):
+            for key, branch in update.items():
+                if key not in schema:
+                    raise Exception(
+                        f'trying to update a key that is not in the schema'
+                        f'for state: {key}\n{state}\nwith schema:\n{schema}')
+                else:
+                    subupdate = self.set_update(
+                        schema[key],
+                        state[key],
+                        branch)
+
+                    state[key] = subupdate
+        else:
+            raise Exception(f'trying to apply update\n  {update}\nto state\n  {state}\nwith '
+                            f'schema\n{schema}, but the update is not a dict')
+
+        return state
+
+
+    def set(self, original_schema, initial, update):
+        schema = self.access(original_schema)
+        state = copy.deepcopy(initial)
+        return self.set_update(schema, initial, update)
+
 
     def serialize(self, schema, state):
         found = self.access(schema)
@@ -396,13 +438,17 @@ class TypeSystem:
         if isinstance(wires, (list, tuple)):
             result = get_path(instance, list(path) + list(wires))
         elif isinstance(wires, dict):
-            result = {
-                port_key: self.view(
-                    schema[port_key],
-                    wires[port_key],
-                    path,
-                    instance)
-                for port_key in wires}
+            result = {}
+            for port_key in wires:
+                if port_key in instance:
+                    inner_view = self.view(
+                        schema[port_key],
+                        wires[port_key],
+                        path,
+                        instance)
+
+                    if inner_view:
+                        result[port_key] = inner_view
         else:
             raise Exception(f'trying to project state with these ports:\n{schema}\nbut not sure what these wires are:\n{wires}')
 

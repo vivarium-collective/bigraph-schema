@@ -13,26 +13,25 @@ import traceback
 from bigraph_schema.parse import parse_expression
 
 
-required_schema_keys = (
+required_schema_keys = set([
     '_default',
     '_apply',
     '_serialize',
     '_deserialize',
-)
+    '_divide',
+])
 
-optional_schema_keys = (
+optional_schema_keys = set([
     '_type',
     '_value',
-    '_divide',
     '_description',
-    '_ports',
     '_type_parameters',
     '_super',
-)
+])
 
-type_schema_keys = required_schema_keys + optional_schema_keys
+type_schema_keys = required_schema_keys | optional_schema_keys
 
-overridable_schema_keys = (
+overridable_schema_keys = set([
     '_type',
     '_default',
     '_apply',
@@ -41,7 +40,9 @@ overridable_schema_keys = (
     '_value',
     '_divide',
     '_description',
-)
+])
+
+nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
 
 merge_schema_keys = (
     '_ports',
@@ -301,8 +302,14 @@ class TypeRegistry(Registry):
                 return schema
             elif '_type' in schema:
                 found = self.access(schema['_type'])
+                found_keys = overridable_schema_keys & schema.keys()
 
-                if '_default' in schema or '_type_parameters' in found:
+                if found_keys or '_type_parameters' in found:
+                    bad_keys = schema.keys() & nonoverridable_schema_keys
+                    if bad_keys:
+                        raise Exception(
+                            f'trying to override a non-overridable key: {bad_keys}')
+
                     found = copy.deepcopy(found)
                     found = deep_merge(found, schema)
 
