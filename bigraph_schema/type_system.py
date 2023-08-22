@@ -204,8 +204,9 @@ class TypeSystem:
 
                     state[key] = subupdate
         else:
-            raise Exception(f'trying to apply update\n  {update}\nto state\n  {state}\nwith '
-                            f'schema\n{schema}, but the update is not a dict')
+            raise Exception(
+                f'trying to apply update\n  {update}\nto state\n  {state}\n'
+                f'with schema\n{schema}, but the update is not a dict')
 
         return state
 
@@ -244,8 +245,9 @@ class TypeSystem:
 
                     state[key] = subupdate
         else:
-            raise Exception(f'trying to apply update\n  {update}\nto state\n  {state}\nwith '
-                            f'schema\n{schema}, but the update is not a dict')
+            raise Exception(
+                f'trying to apply update\n  {update}\nto state\n  {state}\n'
+                f'with schema\n{schema}, but the update is not a dict')
 
         return state
 
@@ -439,15 +441,15 @@ class TypeSystem:
             result = get_path(instance, list(path) + list(wires))
         elif isinstance(wires, dict):
             result = {}
-            for port_key in wires:
-                if port_key in instance:
+            for port_key, port_path in wires.items():
+                if isinstance(port_path, dict) or get_path(instance, port_path) is not None:
                     inner_view = self.view(
                         schema[port_key],
-                        wires[port_key],
+                        port_path,
                         path,
                         instance)
 
-                    if inner_view:
+                    if inner_view is not None:
                         result[port_key] = inner_view
         else:
             raise Exception(f'trying to project state with these ports:\n{schema}\nbut not sure what these wires are:\n{wires}')
