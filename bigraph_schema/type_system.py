@@ -296,6 +296,9 @@ class TypeSystem:
                 raise Exception(
                     f'deserialize function not in the registry: {deserialize}')
 
+            if encoded is None:
+                encoded = self.default(schema)
+
             return deserialize_function(
                 encoded,
                 found.get('_bindings'),
