@@ -416,8 +416,9 @@ class TypeSystem:
 
 
     def fill(self, original_schema, state=None):
-        if state is not None:
-            state = copy.deepcopy(state)
+        # # Removing deepcopy means the state may be updated
+        # if state is not None:
+        #     state = copy.deepcopy(state)
         schema = self.access(original_schema)
 
         return self.fill_state(
