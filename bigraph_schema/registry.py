@@ -122,13 +122,15 @@ def get_path(tree, path):
         return tree
     else:
         head = path[0]
-        if head not in tree:
+        if not tree or head not in tree:
             return None
         else:
             return get_path(tree[head], path[1:])
 
 
 def establish_path(tree, path, top=None, cursor=()):
+    if tree is None:
+        tree = {}
     if top is None:
         top = tree
     if path is None or path == ():

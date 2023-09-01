@@ -291,10 +291,7 @@ def deserialize_tree(serialized, bindings=None, types=None):
     tree = None
 
     if isinstance(serialized, str):
-        try:
-            tree = eval(serialized)
-        except:
-            tree = serialized
+        tree = serialized
 
     elif isinstance(serialized, dict):
         tree = {}

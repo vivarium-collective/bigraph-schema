@@ -401,6 +401,9 @@ class TypeSystem:
                 top=top,
                 path=path)
 
+        if isinstance(schema, str):
+            schema = self.access(schema)
+
         branches = non_schema_keys(schema)
 
         if isinstance(state, dict):
@@ -553,8 +556,8 @@ class TypeSystem:
             return None
 
         if ports_key is not None:
-            ports = ports[ports_key]
-            wires = wires[ports_key]
+            ports = ports.get(ports_key, {})
+            wires = wires.get(ports_key, {})
 
         return self.project(
             ports,
