@@ -47,7 +47,7 @@ base_type_library = {
 
     'list': {
         '_type': 'list',
-        '_default': '[]',
+        '_default': [],
         '_apply': 'concatenate',
         '_serialize': 'to_string',
         '_deserialize': 'evaluate',
@@ -57,7 +57,7 @@ base_type_library = {
 
     'tree': {
         '_type': 'tree',
-        '_default': '{}',
+        '_default': {},
         '_apply': 'apply_tree',
         '_serialize': 'serialize_tree',
         '_deserialize': 'deserialize_tree',
@@ -67,7 +67,7 @@ base_type_library = {
 
     'dict': {
         '_type': 'dict',
-        '_default': '{}',
+        '_default': {},
         '_apply': 'apply_dict',
         '_serialize': 'serialize_dict',
         '_deserialize': 'deserialize_dict',
@@ -94,7 +94,7 @@ base_type_library = {
     'edge': {
         # TODO: do we need to have defaults informed by type parameters?
         '_type': 'edge',
-        '_default': '{"wires": {}}',
+        '_default': {'wires': {}},
         '_apply': 'apply_edge',
         '_serialize': 'serialize_edge',
         '_deserialize': 'deserialize_edge',
