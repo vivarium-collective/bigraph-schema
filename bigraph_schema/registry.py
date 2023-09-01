@@ -347,7 +347,7 @@ class TypeRegistry(Registry):
         elif isinstance(schema, str):
             found = self.registry.get(schema)
 
-            if found is None and schema is not None and schema != '':
+            if found is None and schema is not None and schema not in ('', '{}'):
                 try:
                     parse = parse_expression(schema)
                     if parse != schema:

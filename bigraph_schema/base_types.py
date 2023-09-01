@@ -288,7 +288,20 @@ def serialize_tree(value, bindings=None, types=None):
 
 
 def deserialize_tree(serialized, bindings=None, types=None):
-    return serialized
+    tree = None
+
+    if isinstance(serialized, str):
+        try:
+            tree = eval(serialized)
+        except:
+            tree = serialized
+
+    elif isinstance(serialized, dict):
+        tree = {}
+        for key, value in serialized.items():
+            tree[key] = deserialize_tree(value, bindings, types)
+
+    return tree
 
 
 def apply_dict(current, update, bindings=None, types=None):
