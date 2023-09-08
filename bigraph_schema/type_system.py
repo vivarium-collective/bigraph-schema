@@ -10,7 +10,7 @@ import pytest
 
 from bigraph_schema.base_types import base_type_library, set_apply, accumulate, concatenate, divide_float, divide_int, \
     divide_longest, divide_list, replace, serialize_string, deserialize_string, to_string, deserialize_int, \
-    deserialize_float, evaluate, apply_tree, divide_tree, serialize_tree, deserialize_tree, apply_dict, divide_dict, \
+    deserialize_float, evaluate, apply_any, serialize_any, deserialize_any, apply_tree, divide_tree, serialize_tree, deserialize_tree, apply_dict, divide_dict, \
     serialize_dict, deserialize_dict, apply_maybe, divide_maybe, serialize_maybe, deserialize_maybe, apply_units, \
     serialize_units, deserialize_units, divide_units, apply_edge, serialize_edge, deserialize_edge, divide_edge
 from bigraph_schema.registry import (
@@ -303,12 +303,17 @@ class TypeSystem:
                 encoded,
                 found.get('_bindings'),
                 self)
-        else:
-            tree = eval(encoded)
-            
+
+        elif isinstance(encoded, dict):
             return {
-                key: self.deserialize(schema.get(key), branch)
-                for key, branch in tree.items()}
+                key: self.deserialize(
+                    schema.get(key),
+                    branch)
+                for key, branch in encoded.items()}
+
+        else:
+            print(f'cannot deserialize: {encoded}')
+            return encoded
 
 
     def divide(self, schema, state, ratios=(0.5, 0.5)):
@@ -606,6 +611,7 @@ def register_units(types, units):
 def register_base_types(types):
 
     # validate the function registered is of the right type?
+    types.apply_registry.register('any', apply_any)
     types.apply_registry.register('accumulate', accumulate)
     types.apply_registry.register('set', set_apply)
     types.apply_registry.register('concatenate', concatenate)
@@ -626,6 +632,7 @@ def register_base_types(types):
     types.divide_registry.register('divide_units', divide_units)
     types.divide_registry.register('divide_edge', divide_edge)
 
+    types.serialize_registry.register('serialize_any', serialize_any)
     types.serialize_registry.register('serialize_string', serialize_string)
     types.serialize_registry.register('to_string', to_string)
     types.serialize_registry.register('serialize_tree', serialize_tree)
@@ -634,6 +641,7 @@ def register_base_types(types):
     types.serialize_registry.register('serialize_units', serialize_units)
     types.serialize_registry.register('serialize_edge', serialize_edge)
 
+    types.deserialize_registry.register('deserialize_any', deserialize_any)
     types.deserialize_registry.register('float', deserialize_float)
     types.deserialize_registry.register('deserialize_int', deserialize_int)
     types.deserialize_registry.register('deserialize_string', deserialize_string)

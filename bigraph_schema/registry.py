@@ -117,6 +117,33 @@ def deep_merge(dct, merge_dct):
     return dct
 
 
+def validate_merge(state, dct, merge_dct):
+    """ Recursive dict merge
+    This mutates dct - the contents of merge_dct are added to dct (which is also returned).
+    If you want to keep dct you could call it like deep_merge(copy.deepcopy(dct), merge_dct)
+    """
+    dct = dct or {}
+    merge_dct = merge_dct or {}
+    state = state or {}
+
+    for k, v in merge_dct.items():
+        if (k in dct and isinstance(dct[k], dict)
+                and isinstance(merge_dct[k], collections.abc.Mapping)):
+            validate_merge(
+                state[k],
+                dct[k],
+                merge_dct[k])
+        else:
+            if k in state:
+                dct[k] = state[k]
+            elif k in dct:
+                if dct[k] != merge_dct[k]:
+                    raise Exception(f'cannot merge dicts at key "{k}":\n{dct}\n{merge_dct}')
+            else:
+                dct[k] = merge_dct[k]
+    return dct
+
+
 def get_path(tree, path):
     if len(path) == 0:
         return tree
@@ -248,7 +275,13 @@ class TypeRegistry(Registry):
         super().__init__()
 
         self.supers = {}
-        self.register('any', {})
+        self.register(
+            'any', {
+                '_type': 'any',
+                '_apply': 'apply_any',
+                '_serialize': 'serialize_any',
+                '_deserialize': 'deserialize_any'})
+
 
     def register(self, key, schema, alternate_keys=tuple(), force=False):
         if isinstance(schema, str):

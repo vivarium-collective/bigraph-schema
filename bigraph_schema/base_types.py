@@ -124,6 +124,18 @@ base_type_library = {
 # Apply methods #
 #################
 
+def apply_any(current, update, bindings=None, types=None):
+    return update
+
+
+def serialize_any(value, bindings=None, types=None):
+    return str(value)
+
+
+def deserialize_any(serialized, bindings=None, types=None):
+    return serialized
+
+
 def accumulate(current, update, bindings=None, types=None):
     if update is None:
         return current
@@ -288,10 +300,12 @@ def serialize_tree(value, bindings=None, types=None):
 
 
 def deserialize_tree(serialized, bindings=None, types=None):
-    tree = None
+    tree = serialized
 
     if isinstance(serialized, str):
-        tree = serialized
+        tree = types.deserialize(
+            bindings['leaf'],
+            serialized)
 
     elif isinstance(serialized, dict):
         tree = {}
