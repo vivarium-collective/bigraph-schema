@@ -38,7 +38,7 @@ base_type_library = {
 
     'string': {
         '_type': 'string',
-        '_default': '""',
+        '_default': '',
         '_apply': 'replace',
         '_serialize': 'serialize_string',
         '_deserialize': 'deserialize_string',
@@ -212,13 +212,11 @@ def replace(current, update, bindings=None, types=None):
 #####################
 
 def serialize_string(value, bindings=None, types=None):
-    return f'"{value}"'
+    return value
 
 
 def deserialize_string(serialized, bindings=None, types=None):
-    if serialized[0] != '"' or serialized[-1] != '"':
-        raise Exception(f'deserializing str which requires double quotes: {serialized}')
-    return serialized[1:-1]
+    return serialized
 
 
 def to_string(value, bindings=None, types=None):
