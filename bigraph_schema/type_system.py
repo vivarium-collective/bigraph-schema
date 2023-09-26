@@ -12,7 +12,8 @@ from bigraph_schema.base_types import base_type_library, set_apply, accumulate, 
     divide_longest, divide_list, replace, serialize_string, deserialize_string, to_string, deserialize_int, \
     deserialize_float, evaluate, apply_any, serialize_any, deserialize_any, apply_tree, divide_tree, serialize_tree, deserialize_tree, apply_dict, divide_dict, \
     serialize_dict, deserialize_dict, apply_maybe, divide_maybe, serialize_maybe, deserialize_maybe, apply_units, \
-    serialize_units, deserialize_units, divide_units, apply_edge, serialize_edge, deserialize_edge, divide_edge
+    serialize_units, deserialize_units, divide_units, apply_edge, serialize_edge, deserialize_edge, divide_edge, \
+    serialize_list, deserialize_list, serialize_np_array, deserialize_np_array
 from bigraph_schema.registry import (
     Registry, TypeRegistry, RegistryRegistry, type_schema_keys, deep_merge, get_path,
     establish_path, set_path, non_schema_keys
@@ -640,6 +641,8 @@ def register_base_types(types):
     types.serialize_registry.register('serialize_maybe', serialize_maybe)
     types.serialize_registry.register('serialize_units', serialize_units)
     types.serialize_registry.register('serialize_edge', serialize_edge)
+    types.serialize_registry.register('serialize_list', serialize_list)
+    types.serialize_registry.register('serialize_np_array', serialize_np_array)
 
     types.deserialize_registry.register('deserialize_any', deserialize_any)
     types.deserialize_registry.register('float', deserialize_float)
@@ -651,6 +654,8 @@ def register_base_types(types):
     types.deserialize_registry.register('deserialize_maybe', deserialize_maybe)
     types.deserialize_registry.register('deserialize_units', deserialize_units)
     types.deserialize_registry.register('deserialize_edge', deserialize_edge)
+    types.deserialize_registry.register('deserialize_list', deserialize_list)
+    types.deserialize_registry.register('deserialize_np_array', deserialize_np_array)
 
     types.type_registry.register_multiple(base_type_library)
     register_units(types, units)

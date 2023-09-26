@@ -6,6 +6,7 @@ Base Types
 
 from bigraph_schema.registry import remove_path
 from bigraph_schema.units import units
+import numpy as np
 
 
 NONE_SYMBOL = 'None'
@@ -49,8 +50,8 @@ base_type_library = {
         '_type': 'list',
         '_default': [],
         '_apply': 'concatenate',
-        '_serialize': 'to_string',
-        '_deserialize': 'evaluate',
+        '_serialize': 'serialize_list',
+        '_deserialize': 'deserialize_list',
         '_divide': 'divide_list',
         '_type_parameters': ['element'],
         '_description': 'general list type (or sublists)'},
@@ -104,6 +105,15 @@ base_type_library = {
         'wires': 'tree[list[string]]',
     },
 
+    'numpy_array': {
+        '_type': 'numpy_array',
+        '_default': np.array([]),
+        '_apply': 'accumulate',
+        '_serialize': 'serialize_np_array',
+        '_deserialize': 'deserialize_np_array',
+        '_description': 'numpy arrays'
+    },
+
     'wires': 'tree[list[string]]',
 
     # TODO -- this should support any type
@@ -130,10 +140,6 @@ def apply_any(current, update, bindings=None, types=None):
 
 def serialize_any(value, bindings=None, types=None):
     return str(value)
-
-
-def deserialize_any(serialized, bindings=None, types=None):
-    return serialized
 
 
 def accumulate(current, update, bindings=None, types=None):
@@ -223,6 +229,19 @@ def to_string(value, bindings=None, types=None):
     return str(value)
 
 
+def serialize_list(value, bindings=None, types=None):
+    schema = bindings['element']
+    return [types.serialize(schema, element) for element in value]
+
+def serialize_np_array(value, bindings=None, types=None):
+    ''' Serialize numpy array to bytes '''
+    return {
+        'bytes': value.tobytes(),
+        'dtype': value.dtype,
+        'shape': value.shape,
+    }
+
+
 #######################
 # Deserialize methods #
 #######################
@@ -239,9 +258,20 @@ def evaluate(serialized, bindings=None, types=None):
     return eval(serialized)
 
 
+def deserialize_any(serialized, bindings=None, types=None):
+    return serialized
+
+def deserialize_list(serialized, bindings=None, types=None):
+    schema = bindings['element']
+    return [types.deserialize(schema, element) for element in serialized]
 
 
-
+def deserialize_np_array(serialized, bindings=None, types=None):
+    if isinstance(serialized, dict):
+        np.frombuffer(serialized['bytes'], dtype=serialized['dtype']).reshape(serialized['shape'])
+        return np.frombuffer(serialized)
+    else:
+        return  serialized
 
 
 # In Progress?
