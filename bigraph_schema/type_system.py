@@ -529,7 +529,7 @@ class TypeSystem:
             branches = [
                 branch
                 for branch in branches
-                if branch is not None and list(branch)[0][1] is not None]
+                if branch is not None] # and list(branch)[0][1] is not None]
 
             result = {}
             for branch in branches:
