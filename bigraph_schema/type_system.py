@@ -8,6 +8,8 @@ import copy
 import pprint
 import pytest
 
+
+from bigraph_schema.react import react_divide
 from bigraph_schema.base_types import base_type_library, set_apply, accumulate, concatenate, divide_float, divide_int, \
     divide_longest, divide_list, replace, serialize_string, deserialize_string, to_string, deserialize_int, \
     deserialize_float, evaluate, apply_any, serialize_any, deserialize_any, apply_tree, divide_tree, serialize_tree, deserialize_tree, apply_dict, divide_dict, \
@@ -29,26 +31,32 @@ class TypeSystem:
         self.serialize_registry = Registry(function_keys=['value', 'bindings', 'types'])
         self.deserialize_registry = Registry(function_keys=['serialized', 'bindings', 'types'])
         self.divide_registry = Registry()  # TODO enforce keys for divider methods
+        self.react_registry = Registry()
         self.type_registry = TypeRegistry()
 
         self.registry_registry = RegistryRegistry()
         self.registry_registry.register('_type', self.type_registry)
+        self.registry_registry.register('_react', self.react_registry)
         self.registry_registry.register('_apply', self.apply_registry)
         self.registry_registry.register('_divide', self.divide_registry)
         self.registry_registry.register('_serialize', self.serialize_registry)
         self.registry_registry.register('_deserialize', self.deserialize_registry)
         
         register_base_types(self)
+        register_base_reactions(self)
+
 
     def find_registry(self, underscore_key):
         root = underscore_key.trim('_')
         registry_key = f'{root}_registry'
         return getattr(self, registry_key)
 
+
     def register(self, type_data):
         self.function_keys = [
             '_apply',
             '_divide',
+            '_react',
             '_serialize',
             '_deserialize']
 
@@ -176,6 +184,19 @@ class TypeSystem:
                     default[key] = self.default(subschema)
 
         return default
+
+
+    def react(self, schema, state, reaction):
+        if 'reaction' in reaction:
+            make_reaction = self.react_registry.access(reaction['reaction'])
+            reaction_config = make_reaction(reaction.get('config', {}))
+        elif 'redex' in reaction and 'reactum' in reaction:
+            reaction_config = reaction
+        else:
+            raise Exception(f'react() called with an invalid reaction\nmust provide either "reaction" and "config", or "redex" and "reactum"')
+
+        # DO REACTION
+
 
     def apply_update(self, schema, state, update):
         if '_apply' in schema:
@@ -661,6 +682,10 @@ def register_base_types(types):
     register_units(types, units)
 
     return types
+
+
+def register_base_reactions(types):
+    types.react_registry.register('divide', react_divide)
 
 
 def test_cube(base_types):
