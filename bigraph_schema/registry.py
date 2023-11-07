@@ -278,7 +278,7 @@ class TypeRegistry(Registry):
         self.register(
             'any', {
                 '_type': 'any',
-                '_apply': 'apply_any',
+                '_apply': 'any',
                 '_serialize': 'serialize_any',
                 '_deserialize': 'deserialize_any'})
 
