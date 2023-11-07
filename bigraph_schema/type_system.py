@@ -199,7 +199,15 @@ class TypeSystem:
 
 
     def apply_update(self, schema, state, update):
-        if '_apply' in schema and schema['_apply'] != 'any':
+        if isinstance(update, dict) and '_react' in update:
+            # TODO: support reaction registry
+            state = self.react(
+                schema,
+                state,
+                update['_react']['redex'],
+                update['_react']['reactum'])
+
+        elif '_apply' in schema and schema['_apply'] != 'any':
             apply_function = self.apply_registry.access(schema['_apply'])
             
             state = apply_function(
@@ -607,7 +615,24 @@ class TypeSystem:
 
 
     def react(self, schema, instance, redex, reactum):
-        return {}
+        import ipdb; ipdb.set_trace()
+
+        if isinstance(instance, dict):
+            result = {}
+            for key, value in instance.items():
+                if key in redex:
+                    result[key] = self.react(
+                        schema[key],
+                        value,
+                        redex[key],
+                        reactum.get(key))
+                else:
+                    result[key] = value
+
+            return result
+
+        elif instance == redex:
+            return reactum
 
 
 def register_units(types, units):
@@ -1434,6 +1459,63 @@ def test_foursquare(base_types):
     }
 
 
+def test_reaction(base_types):
+    base_types.type_registry.register('compartment', {
+        'concentrations': 'tree[float]',
+        'inner': 'tree[compartment]'})
+
+    single_node = {
+        'environment': {
+            'concentrations': {},
+            'inner': {
+                '0': {
+                    'concentrations': {}}}}}
+
+    # TODO: compartment type ends up as 'any' at leafs?
+
+    def add_reaction(container, key, node):
+        return {
+            'redex': {container: {'inner': {}}},
+            'reactum': {container: {'inner': {key: node}}}}
+
+    def remove_reaction(container, key):
+        return {
+            'redex': {container: {key: {}}},
+            'reactum': {container: {}}}
+
+    def replace_reaction(container, before, after):
+        return {
+            'redex': {container: before},
+            'reactum': {container: after}}
+
+    add_agent = add_reaction(
+        'environment',
+        '1',
+        {'concentrations': {}})
+
+    state = base_types.apply(
+        {'environment': 'tree[compartment]'},
+        single_node,
+        {'_react': add_agent})
+
+    embedded_tree = {
+        'environment': {
+            'concentrations': {},
+            'inner': {
+                'agent1': {
+                    'concentrations': {},
+                    'inner': {
+                        'agent2': {
+                            'concentrations': {},
+                            'inner': {},
+                            'wires': {
+                                'outer': ['..', '..'],
+                                'inner': ['inner']}}},
+                    'wires': {
+                        'outer': ['..', '..'],
+                        'inner': ['inner']}}}}}
+
+
 if __name__ == '__main__':
     types = TypeSystem()
 
@@ -1450,4 +1532,5 @@ if __name__ == '__main__':
     test_fill_from_parse(types)
     test_serialize_deserialize(types)
     test_project(types)
+    test_reaction(types)
     test_foursquare(types)
