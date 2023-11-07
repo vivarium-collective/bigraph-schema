@@ -178,7 +178,7 @@ class TypeSystem:
         return default
 
     def apply_update(self, schema, state, update):
-        if '_apply' in schema:
+        if '_apply' in schema and schema['_apply'] != 'any':
             apply_function = self.apply_registry.access(schema['_apply'])
             
             state = apply_function(
@@ -280,7 +280,7 @@ class TypeSystem:
                     state.get(key))
                 for key in non_schema_keys(schema)}
 
-            return repr(tree)
+            return tree
 
     def deserialize(self, schema, encoded):
         found = self.access(schema)
