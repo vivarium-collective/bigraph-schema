@@ -1488,6 +1488,16 @@ def test_reaction(base_types):
             'redex': {container: before},
             'reactum': {container: after}}
 
+   # TODO: come at divide reaction from the other side:
+    #   ie make a call for it, then figure out what the
+    #   reaction needs to be
+    def divide_reaction(container, mother, divider):
+        daughters = divider(mother)
+
+        return {
+            'redex': mother,
+            'reactum': daughters}
+
     add_agent = add_reaction(
         'environment',
         '1',
@@ -1514,6 +1524,30 @@ def test_reaction(base_types):
                     'wires': {
                         'outer': ['..', '..'],
                         'inner': ['inner']}}}}}
+
+
+    mother_tree = {
+        'environment': {
+            '_type': 'compartment'
+            'concentrations': {
+                'A': 1.0},
+            'inner': {
+                'mother': {
+                    '_type': 'compartment'
+                    'concentrations': {
+                        'A': 2.0}}}}}
+
+    mother_composite = Composite(mother_tree)
+
+    divide_update = {
+        '_react': {
+            'redex': {
+                'mother': {
+                    'concentrations': '*'}},
+            'reactum': {
+                'daughter1': {
+                    'concentrations': '*'}}}}
+
 
 
 if __name__ == '__main__':
