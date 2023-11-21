@@ -4,6 +4,7 @@ Base Types
 ==========
 """
 
+from typing import * 
 from bigraph_schema.registry import remove_path
 from bigraph_schema.units import units
 import numpy as np
@@ -13,6 +14,13 @@ NONE_SYMBOL = 'None'
 
 
 base_type_library = {
+    'boolean': {
+        '_default': False,
+        '_apply': 'apply_boolean',
+        '_serialize': 'serialize_boolean',
+        '_deserialize': 'deserialize_boolean',
+        '_divide': 'divide_boolean',
+    },
     # abstract number type
     'number': {
         '_type': 'number',
@@ -134,6 +142,13 @@ base_type_library = {
 # Apply methods #
 #################
 
+def apply_boolean(current: bool, update: bool, bindings=None, types=None) -> bool:
+    """Performs a bit flip if `current` does not match `update`, returning update. Returns current if they match."""
+    if current != update:
+        return update
+    else:
+        return current
+
 def apply_any(current, update, bindings=None, types=None):
     return update
 
@@ -159,6 +174,16 @@ def concatenate(current, update, bindings=None, types=None):
 ##################
 # Divide methods #
 ##################
+
+def divide_boolean(value: bool, bindings=None, types=None):
+    """Convert the given boolean to an `int` and pass that value into `divide_int`.
+
+        Args:
+            value:`bool`
+    """
+    value_int = int(value)
+    return divide_int(value_int)
+
 # support dividing by ratios?
 # ---> divide_float({...}, [0.1, 0.3, 0.6])
 
@@ -217,6 +242,9 @@ def replace(current, update, bindings=None, types=None):
 # Serialize methods #
 #####################
 
+def serialize_boolean(value: bool, bindings=None, types=None) -> ByteString:
+    return value.to_bytes()
+
 def serialize_string(value, bindings=None, types=None):
     return value
 
@@ -246,32 +274,35 @@ def serialize_np_array(value, bindings=None, types=None):
 # Deserialize methods #
 #######################
 
-def deserialize_int(serialized, bindings=None, types=None):
+def deserialize_boolean(serialized: ByteString, bindings=None, types=None) -> bool:
+    return bool(serialized)
+
+def deserialize_int(serialized, bindings=None, types=None) -> int:
     return int(serialized)
 
 
-def deserialize_float(serialized, bindings=None, types=None):
+def deserialize_float(serialized, bindings=None, types=None) -> float:
     return float(serialized)
 
 
-def evaluate(serialized, bindings=None, types=None):
+def evaluate(serialized, bindings=None, types=None) -> Any:
     return eval(serialized)
 
 
-def deserialize_any(serialized, bindings=None, types=None):
+def deserialize_any(serialized, bindings=None, types=None) -> Any:
     return serialized
 
-def deserialize_list(serialized, bindings=None, types=None):
+def deserialize_list(serialized, bindings=None, types=None) -> List[Any]:
     schema = bindings['element']
     return [types.deserialize(schema, element) for element in serialized]
 
 
-def deserialize_np_array(serialized, bindings=None, types=None):
+def deserialize_np_array(serialized, bindings=None, types=None) -> np.ndarray:
     if isinstance(serialized, dict):
         np.frombuffer(serialized['bytes'], dtype=serialized['dtype']).reshape(serialized['shape'])
         return np.frombuffer(serialized)
     else:
-        return  serialized
+        return serialized
 
 
 # In Progress?
