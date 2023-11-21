@@ -1793,6 +1793,9 @@ def test_remove_reaction(types):
             'inner': {
                 '0': {
                     'counts': {'A': 13},
+                    'inner': {}},
+                '1': {
+                    'counts': {'A': 13},
                     'inner': {}}}}}
 
     def remove_reaction(config):
@@ -1806,7 +1809,7 @@ def test_remove_reaction(types):
             node[remove] = {}
 
         reactum = {}
-        node = establish_path(
+        establish_path(
             reactum,
             path)
 
@@ -1827,6 +1830,7 @@ def test_remove_reaction(types):
         single_node)
 
     assert '0' in state['environment']['inner']
+    assert '1' in state['environment']['inner']
 
     result = types.apply(
         schema,
@@ -1834,6 +1838,7 @@ def test_remove_reaction(types):
         {'_react': remove})
 
     assert '0' not in result['environment']['inner']
+    assert '1' in state['environment']['inner']
     
     import ipdb; ipdb.set_trace()
 
