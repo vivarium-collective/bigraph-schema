@@ -302,10 +302,16 @@ class TypeSystem:
             calls = reaction.get('calls', {})
         else:
             # single key with reaction name
+            reaction_key = list(reaction.keys())[0]
             make_reaction = self.react_registry.access(
-                reaction['reaction'])
-            redex, reactum, calls = make_reaction(
-                reaction.get('config', {}))
+                reaction_key)
+            react = make_reaction(
+                reaction.get(
+                    reaction_key, {}))
+
+            redex = react.get('redex', {})
+            reactum = react.get('reactum', {})
+            calls = react.get('calls', {})
 
         paths = self.match(
             schema,
@@ -334,7 +340,6 @@ class TypeSystem:
 
     def apply_update(self, schema, state, update):
         if isinstance(update, dict) and '_react' in update:
-            # TODO: support reaction registry
             state = self.react(
                 schema,
                 state,
@@ -1738,15 +1743,17 @@ def test_add_reaction(types):
                     'inner': {}}}}}
 
     def add_reaction(config):
+        path = config.get('path')
+
         redex = {}
         establish_path(
             redex,
-            config.get('path'))
+            path)
 
         reactum = {}
         node = establish_path(
             reactum,
-            config.get('path'))
+            path)
 
         deep_merge(
             node,
@@ -1760,12 +1767,12 @@ def test_add_reaction(types):
         'add',
         add_reaction)
 
-    add = add_reaction({
+    add_config = {
         'path': ['environment', 'inner'],
         'add': {
             '1': {
                 'counts': {
-                    'A': 8}}}})
+                    'A': 8}}}}
 
     schema, state = types.infer_schema(
         {},
@@ -1776,8 +1783,9 @@ def test_add_reaction(types):
 
     result = types.apply(
         schema,
-        state,
-        {'_react': add})
+        state, {
+            '_react': {
+                'add': add_config}})
 
     assert '0' in result['environment']['inner']
     assert '1' in result['environment']['inner']
@@ -1821,9 +1829,9 @@ def test_remove_reaction(types):
         'remove',
         remove_reaction)
 
-    remove = remove_reaction({
+    remove_config = {
         'path': ['environment', 'inner'],
-        'remove': ['0']})
+        'remove': ['0']}
 
     schema, state = types.infer_schema(
         {},
@@ -1834,8 +1842,9 @@ def test_remove_reaction(types):
 
     result = types.apply(
         schema,
-        state,
-        {'_react': remove})
+        state, {
+            '_react': {
+                'remove': remove_config}})
 
     assert '0' not in result['environment']['inner']
     assert '1' in state['environment']['inner']
