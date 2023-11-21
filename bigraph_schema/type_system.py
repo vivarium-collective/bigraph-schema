@@ -7,9 +7,10 @@ Type System
 import copy
 import pprint
 import pytest
+import random
 
 
-from bigraph_schema.react import react_divide
+from bigraph_schema.react import react_divide_counts
 from bigraph_schema.base_types import base_type_library, set_apply, accumulate, concatenate, divide_float, divide_int, \
     divide_longest, divide_list, replace, serialize_string, deserialize_string, to_string, deserialize_int, \
     deserialize_float, evaluate, apply_any, serialize_any, deserialize_any, apply_tree, divide_tree, serialize_tree, deserialize_tree, apply_dict, divide_dict, \
@@ -18,9 +19,13 @@ from bigraph_schema.base_types import base_type_library, set_apply, accumulate, 
     serialize_list, deserialize_list, serialize_np_array, deserialize_np_array
 from bigraph_schema.registry import (
     Registry, TypeRegistry, RegistryRegistry, type_schema_keys, deep_merge, get_path,
-    establish_path, set_path, non_schema_keys
+    establish_path, set_path, transform_path, remove_omitted, non_schema_keys
 )
 from bigraph_schema.units import units, render_units_type
+
+
+TYPE_SCHEMAS = {
+    'float': 'float'}
 
 
 class TypeSystem:
@@ -186,16 +191,140 @@ class TypeSystem:
         return default
 
 
-    def react(self, schema, state, reaction):
-        if 'reaction' in reaction:
-            make_reaction = self.react_registry.access(reaction['reaction'])
-            reaction_config = make_reaction(reaction.get('config', {}))
-        elif 'redex' in reaction and 'reactum' in reaction:
-            reaction_config = reaction
-        else:
-            raise Exception(f'react() called with an invalid reaction\nmust provide either "reaction" and "config", or "redex" and "reactum"')
+    def match_node(self, schema, state, pattern):
+        if isinstance(pattern, dict):
+            if not isinstance(state, dict):
+                return False
 
-        # DO REACTION
+            if '_type' in pattern and not self.is_compatible(schema, pattern):
+                return False
+
+            for key, subpattern in pattern.items():
+                if key.startswith('_'):
+                    continue
+
+                if key in state:
+                    matches = self.match_node(
+                        schema[key],
+                        state[key],
+                        pattern[key])
+                    if not matches:
+                        return False
+                else:
+                    return False
+
+            return True
+
+        else:
+            return pattern == state
+
+
+    def match_recur(self, schema, state, pattern, mode='first', path=()):
+        matches = []
+
+        match = self.match_node(
+            schema,
+            state,
+            pattern)
+
+        if match:
+            if mode == 'first':
+                return [path]
+            else:
+                matches.append(path)
+
+        if isinstance(state, dict):
+            for key, substate in state.items():
+                if key.startswith('_'):
+                    continue
+
+                if key in schema:
+                    subschema = schema[key]
+                else:
+                    subschema = schema
+
+                submatches = self.match_recur(
+                    subschema,
+                    state[key],
+                    pattern,
+                    mode=mode,
+                    path=path + (key,))
+
+                if mode == 'first' and len(submatches) > 0:
+                    return submatches[0:1]
+                else:
+                    matches.extend(submatches)
+
+        return matches
+
+
+    # TODO: do we need a "match" type method?
+    def match(self, original_schema, state, pattern, mode='first', path=()):
+        '''
+        find the path or paths to any instances of a given
+        given pattern in the tree.
+
+        "mode" can be a few things:
+        * first: only return the first match
+        * random: return a random match of all that matched
+        * all (or any other value): return every match in the tree
+        '''
+
+        schema = self.access(original_schema)
+
+        matches = self.match_recur(
+            schema,
+            state,
+            pattern,
+            mode=mode,
+            path=path)
+
+        if mode == 'random':
+            matches_count = len(matches)
+            if matches_count > 0:
+                choice = random.randint(
+                    0,
+                    matches_count-1)
+                matches = [matches[choice]]
+
+        return matches
+
+
+    def react(self, schema, state, reaction, mode='random'):
+        if 'redex' in reaction or 'reactum' in reaction or 'calls' in reaction:
+            redex = reaction.get('redex', {})
+            reactum = reaction.get('reactum', {})
+            calls = reaction.get('calls', {})
+        else:
+            # single key with reaction name
+            make_reaction = self.react_registry.access(
+                reaction['reaction'])
+            redex, reactum, calls = make_reaction(
+                reaction.get('config', {}))
+
+        paths = self.match(
+            schema,
+            state,
+            redex,
+            mode=mode)
+        
+        def merge_state(before):
+            remaining = remove_omitted(
+                redex,
+                reactum,
+                before)
+
+            return deep_merge(
+                remaining,
+                reactum)
+
+        for path in paths:
+            state = transform_path(
+                state,
+                path,
+                merge_state)
+
+        return state
 
 
     def apply_update(self, schema, state, update):
@@ -204,8 +333,7 @@ class TypeSystem:
             state = self.react(
                 schema,
                 state,
-                update['_react']['redex'],
-                update['_react']['reactum'])
+                update['_react'])
 
         elif '_apply' in schema and schema['_apply'] != 'any':
             apply_function = self.apply_registry.access(schema['_apply'])
@@ -601,6 +729,128 @@ class TypeSystem:
             states)
 
 
+    def infer_wires(self, ports, state, wires, top_schema=None, path=None):
+        top_schema = top_schema or {}
+        path = path or ()
+
+        for port_key, port_wires in wires.items():
+            if isinstance(ports, str):
+                import ipdb; ipdb.set_trace()
+            port_schema = ports.get(port_key, {})
+            # port_wires = wires.get(port_key, ())
+            if isinstance(port_wires, dict):
+                top_schema = self.infer_wires(
+                    ports,
+                    state.get(port_key),
+                    port_wires,
+                    top_schema,
+                    path + (port_key,))
+            else:
+                peer = get_path(
+                    top_schema,
+                    path[:-1])
+
+                destination = establish_path(
+                    peer,
+                    port_wires[:-1],
+                    top=top_schema,
+                    cursor=path[:-1])
+
+                if len(port_wires) == 0:
+                    raise Exception(f'no wires at port "{port_key}" in ports {ports} with state {state}')
+
+                destination_key = port_wires[-1]
+                if destination_key in destination:
+                    # TODO: validate the schema/state
+                    pass
+                else:
+                    destination[destination_key] = port_schema
+
+        return top_schema
+
+
+    def infer_schema(self, schema, state, top_state=None, path=None):
+        '''
+        Given a schema fragment and an existing state with _type keys,
+        return the full schema required to describe that state,
+        and whatever state was hydrated (edges) during this process
+        '''
+
+        schema = schema or {}
+        # TODO: deal with this
+        if schema == '{}':
+            schema = {}
+
+        top_state = top_state or state
+        path = path or ()
+
+        if isinstance(state, dict):
+            if '_type' in state:
+                state_type = state['_type']
+                state_schema = self.access(state_type)
+
+                hydrated_state = self.deserialize(state_schema, state)
+                top_state = set_path(
+                    top_state,
+                    path,
+                    hydrated_state)
+
+                schema = set_path(
+                    schema,
+                    path,
+                    {'_type': state_type})
+
+                # TODO: fix is_descendant
+                # if types.type_registry.is_descendant('edge', state_schema)
+                if state_type == 'edge':
+                    subwires = hydrated_state['wires']
+                    schema = self.infer_wires(
+                        port_schema,
+                        hydrated_state,
+                        subwires,
+                        top_schema=schema,
+                        path=path[:-1])
+
+            elif '_type' in schema:
+                hydrated_state = self.deserialize(schema, state)
+                top_state = set_path(
+                    top_state,
+                    path,
+                    hydrated_state)
+
+            else:
+                for key, value in state.items():
+                    inner_path = path + (key,)
+                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None:
+                        schema, top_state = self.infer_schema(
+                            schema,
+                            value,
+                            top_state=top_state,
+                            path=inner_path)
+
+        elif isinstance(state, str):
+            pass
+
+        else:
+            type_schema = TYPE_SCHEMAS.get(str(type(state)), schema)
+
+            peer = get_path(schema, path)
+            destination = establish_path(
+                peer,
+                path[:-1],
+                top=schema,
+                cursor=path[:-1])
+
+            path_key = path[-1]
+            if path_key in destination:
+                # TODO: validate
+                pass
+            else:
+                destination[path_key] = type_schema
+
+        return schema, top_state
+        
+
     def link_place(self, place, link):
         pass
 
@@ -614,25 +864,25 @@ class TypeSystem:
         return subschema
 
 
-    def react(self, schema, instance, redex, reactum):
-        import ipdb; ipdb.set_trace()
+    # def react(self, schema, instance, redex, reactum):
+    #     import ipdb; ipdb.set_trace()
 
-        if isinstance(instance, dict):
-            result = {}
-            for key, value in instance.items():
-                if key in redex:
-                    result[key] = self.react(
-                        schema[key],
-                        value,
-                        redex[key],
-                        reactum.get(key))
-                else:
-                    result[key] = value
+    #     if isinstance(instance, dict):
+    #         result = {}
+    #         for key, value in instance.items():
+    #             if key in redex:
+    #                 result[key] = self.react(
+    #                     schema[key],
+    #                     value,
+    #                     redex[key],
+    #                     reactum.get(key))
+    #             else:
+    #                 result[key] = value
 
-            return result
+    #         return result
 
-        elif instance == redex:
-            return reactum
+    #     elif instance == redex:
+    #         return reactum
 
 
 def register_units(types, units):
@@ -710,7 +960,7 @@ def register_base_types(types):
 
 
 def register_base_reactions(types):
-    types.react_registry.register('divide', react_divide)
+    types.react_registry.register('divide_counts', react_divide_counts)
 
 
 def test_cube(base_types):
@@ -1459,36 +1709,110 @@ def test_foursquare(base_types):
     }
 
 
-def test_reaction(base_types):
+def test_add_reaction(base_types):
     base_types.type_registry.register('compartment', {
-        'concentrations': 'tree[float]',
+        'counts': 'tree[float]',
         'inner': 'tree[compartment]'})
 
     single_node = {
         'environment': {
-            'concentrations': {},
+            '_type': 'compartment',
+            'counts': {'A': 144},
             'inner': {
                 '0': {
-                    'concentrations': {}}}}}
+                    'counts': {'A': 13},
+                    'inner': {}}}}}
+
+    def add_reaction(config):
+        redex = {}
+        establish_path(
+            redex,
+            config.get('path'))
+
+        reactum = {}
+        node = establish_path(
+            reactum,
+            config.get('path'))
+
+        node = deep_merge(
+            node,
+            config.get('add', {}))
+
+        return {
+            'redex': redex,
+            'reactum': reactum}
+
+    base_types.react_registry.register(
+        'add',
+        add_reaction)
+
+    add = add_reaction({
+        'path': ['environment', 'inner'],
+        'add': {
+            '1': {
+                'counts': {
+                    'A': 8}}}})
+
+    schema, state = base_types.infer_schema(
+        {},
+        single_node)
+
+    assert '0' in state['environment']['inner']
+    assert '1' not in state['environment']['inner']
+
+    result = base_types.apply(
+        schema,
+        state,
+        {'_react': add})
+
+    assert '1' in state['environment']['inner']
+    
+    import ipdb; ipdb.set_trace()
+
+
+def test_reaction(base_types):
+    base_types.type_registry.register('compartment', {
+        'counts': 'tree[float]',
+        'inner': 'tree[compartment]'})
+
+    single_node = {
+        'environment': {
+            'counts': {},
+            'inner': {
+                '0': {
+                    'counts': {}}}}}
 
     # TODO: compartment type ends up as 'any' at leafs?
 
     def add_reaction(container, key, node):
-        return {
-            'redex': {container: {'inner': {}}},
-            'reactum': {container: {'inner': {key: node}}}}
+        redex = {
+            container: {
+                'inner': {}}}
+        reactum = {
+            container: {
+                'inner': {
+                    key: node}}}
+
+        return redex, reactum, []
 
     def remove_reaction(container, key):
-        return {
-            'redex': {container: {key: {}}},
-            'reactum': {container: {}}}
+        redex = {
+            container: {
+                key: {}}}
+        reactum = {
+            container: {}}
+
+        return redex, reactum, []
 
     def replace_reaction(container, before, after):
-        return {
-            'redex': {container: before},
-            'reactum': {container: after}}
+        redex = {
+            container: before}
+        reactum = {
+            container: after}
 
-   # TODO: come at divide reaction from the other side:
+        return redex, reactum, []
+
+    # TODO: come at divide reaction from the other side:
     #   ie make a call for it, then figure out what the
     #   reaction needs to be
     def divide_reaction(container, mother, divider):
@@ -1501,7 +1825,7 @@ def test_reaction(base_types):
     add_agent = add_reaction(
         'environment',
         '1',
-        {'concentrations': {}})
+        {'counts': {}})
 
     state = base_types.apply(
         {'environment': 'tree[compartment]'},
@@ -1510,44 +1834,74 @@ def test_reaction(base_types):
 
     embedded_tree = {
         'environment': {
-            'concentrations': {},
+            '_type': 'compartment',
+            'counts': {},
             'inner': {
                 'agent1': {
-                    'concentrations': {},
+                    '_type': 'compartment',
+                    'counts': {},
                     'inner': {
                         'agent2': {
-                            'concentrations': {},
+                            '_type': 'compartment',
+                            'counts': {},
                             'inner': {},
-                            'wires': {
-                                'outer': ['..', '..'],
-                                'inner': ['inner']}}},
-                    'wires': {
-                        'outer': ['..', '..'],
-                        'inner': ['inner']}}}}}
+                            'transport': {
+                                'wires': {
+                                    'outer': ['..', '..'],
+                                    'inner': ['inner']}}}},
+                    'transport': {
+                        'wires': {
+                            'outer': ['..', '..'],
+                            'inner': ['inner']}}}}}}
 
 
     mother_tree = {
         'environment': {
-            '_type': 'compartment'
-            'concentrations': {
-                'A': 1.0},
+            '_type': 'compartment',
+            'counts': {
+                'A': 15},
             'inner': {
                 'mother': {
-                    '_type': 'compartment'
-                    'concentrations': {
-                        'A': 2.0}}}}}
+                    '_type': 'compartment',
+                    'counts': {
+                        'A': 5}}}}}
 
-    mother_composite = Composite(mother_tree)
+    mother_composite = Composite(
+        mother_tree)
 
-    divide_update = {
+    divide_react = {
         '_react': {
             'redex': {
                 'mother': {
-                    'concentrations': '*'}},
+                    'counts': '@counts'}},
             'reactum': {
                 'daughter1': {
-                    'concentrations': '*'}}}}
+                    'counts': '@daughter1_counts'},
+                'daughter2': {
+                    'counts': '@daughter2_counts'}},
+            'calls': [{
+                'function': 'divide_counts',
+                'arguments': ['@counts', [0.5, 0.5]],
+                'bindings': ['@daughter1_counts', '@daughter2_counts']}]}}
 
+    divide_update = {
+        '_react': {
+            'reaction': 'divide_counts',
+            'config': {
+                'id': 'mother',
+                'state_key': 'counts',
+                'daughters': [
+                    {'id': 'daughter1', 'ratio': 0.3},
+                    {'id': 'daughter2', 'ratio': 0.7}]}}}
+
+    divide_update_concise = {
+        '_react': {
+            'divide_counts': {
+                'id': 'mother',
+                'state_key': 'counts',
+                'daughters': [
+                    {'id': 'daughter1', 'ratio': 0.3},
+                    {'id': 'daughter2', 'ratio': 0.7}]}}}
 
 
 if __name__ == '__main__':
@@ -1566,5 +1920,5 @@ if __name__ == '__main__':
     test_fill_from_parse(types)
     test_serialize_deserialize(types)
     test_project(types)
-    test_reaction(types)
     test_foursquare(types)
+    test_add_reaction(types)

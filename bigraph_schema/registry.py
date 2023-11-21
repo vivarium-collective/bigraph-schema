@@ -158,6 +158,7 @@ def get_path(tree, path):
 def establish_path(tree, path, top=None, cursor=()):
     if tree is None:
         tree = {}
+
     if top is None:
         top = tree
     if path is None or path == ():
@@ -190,10 +191,43 @@ def establish_path(tree, path, top=None, cursor=()):
 def set_path(tree, path, value, top=None, cursor=None):
     if value is None:
         return None
+    if len(path) == 0:
+        return value
+
     final = path[-1]
     towards = path[:-1]
     destination = establish_path(tree, towards)
     destination[final] = value
+    return tree
+
+
+def transform_path(tree, path, transform):
+    before = establish_path(tree, path)
+    after = transform(before)
+
+    return set_path(tree, path, after)
+
+
+def remove_omitted(before, after, tree):
+    if isinstance(before, dict):
+        if not isinstance(tree, dict):
+            raise Exception(
+                f'trying to remove an entry from something that is not a dict: {tree}')
+
+        if not isinstance(after, dict):
+            return after
+
+        for key, down in before.items():
+            if not key.startswith('_'):
+                if key not in after:
+                    if key in tree:
+                        del tree[key]
+                else:
+                    tree[key] = remove_omitted(
+                        down,
+                        after[key],
+                        tree[key])
+
     return tree
 
 
@@ -427,5 +461,17 @@ def test_reregister_type():
     type_registry.register('A', {'_default': 'b'}, force=True)
 
 
+def test_remove_omitted():
+    result = remove_omitted(
+        {'a': {}, 'b': {'c': {}, 'd': {}}},
+        {'b': {'c': {}}},
+        {'a': {'X': 1111}, 'b': {'c': {'Y': 4444}, 'd': {'Z': 99999}}})
+
+    assert 'a' not in result
+    assert result['b']['c']['Y'] == 4444
+    assert 'd' not in result['b']
+
+
 if __name__ == '__main__':
     test_reregister_type()
+    test_remove_omitted()
