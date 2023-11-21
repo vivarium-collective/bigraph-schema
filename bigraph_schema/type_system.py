@@ -1852,6 +1852,77 @@ def test_remove_reaction(types):
     import ipdb; ipdb.set_trace()
 
 
+def test_replace_reaction(types):
+    single_node = {
+        'environment': {
+            '_type': 'compartment',
+            'counts': {'A': 144},
+            'inner': {
+                '0': {
+                    'counts': {'A': 13},
+                    'inner': {}},
+                '1': {
+                    'counts': {'A': 13},
+                    'inner': {}}}}}
+
+    def replace_reaction(config):
+        path = config.get('path', ())
+
+        redex = {}
+        node = establish_path(
+            redex,
+            path)
+
+        for before_key, before_state in config.get('before', {}).items():
+            node[before_key] = before_state
+
+        reactum = {}
+        node = establish_path(
+            reactum,
+            path)
+
+        for after_key, after_state in config.get('after', {}).items():
+            node[after_key] = after_state
+
+        return {
+            'redex': redex,
+            'reactum': reactum}
+
+    types.react_registry.register(
+        'replace',
+        replace_reaction)
+
+    replace_config = {
+        'before': {'0': {}},
+        'after': {
+            '2': {
+                'counts': {
+                    'A': 3}},
+            '3': {
+                'counts': {
+                    'A': 88}}}}
+
+    schema, state = types.infer_schema(
+        {},
+        single_node)
+
+    assert '0' in state['environment']['inner']
+    assert '1' in state['environment']['inner']
+
+    result = types.apply(
+        schema,
+        state, {
+            '_react': {
+                'replace': replace_config}})
+
+    assert '0' not in result['environment']['inner']
+    assert '1' in result['environment']['inner']
+    assert '2' in result['environment']['inner']
+    assert '3' in result['environment']['inner']
+
+    import ipdb; ipdb.set_trace()
+
+
 def test_reaction(base_types):
     single_node = {
         'environment': {
@@ -1861,26 +1932,6 @@ def test_reaction(base_types):
                     'counts': {}}}}}
 
     # TODO: compartment type ends up as 'any' at leafs?
-
-    def add_reaction(container, key, node):
-        redex = {
-            container: {
-                'inner': {}}}
-        reactum = {
-            container: {
-                'inner': {
-                    key: node}}}
-
-        return redex, reactum, []
-
-    def remove_reaction(container, key):
-        redex = {
-            container: {
-                key: {}}}
-        reactum = {
-            container: {}}
-
-        return redex, reactum, []
 
     def replace_reaction(container, before, after):
         redex = {
@@ -2003,3 +2054,4 @@ if __name__ == '__main__':
     test_foursquare(types)
     test_add_reaction(types)
     test_remove_reaction(types)
+    test_replace_reaction(types)
