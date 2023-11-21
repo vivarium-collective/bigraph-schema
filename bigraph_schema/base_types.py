@@ -261,7 +261,7 @@ def serialize_list(value, bindings=None, types=None):
     schema = bindings['element']
     return [types.serialize(schema, element) for element in value]
 
-def serialize_np_array(value, bindings=None, types=None):
+def serialize_np_array(value: np.ndarray, bindings=None, types=None) -> Dict:
     ''' Serialize numpy array to bytes '''
     return {
         'bytes': value.tobytes(),
