@@ -203,9 +203,14 @@ class TypeSystem:
                 if key.startswith('_'):
                     continue
 
+                if key in schema:
+                    subschema = schema[key]
+                else:
+                    subschema = schema
+
                 if key in state:
                     matches = self.match_node(
-                        schema[key],
+                        subschema,
                         state[key],
                         pattern[key])
                     if not matches:
@@ -372,7 +377,7 @@ class TypeSystem:
     def apply(self, original_schema, initial, update):
         schema = self.access(original_schema)
         state = copy.deepcopy(initial)
-        return self.apply_update(schema, initial, update)
+        return self.apply_update(schema, state, update)
 
 
     def set_update(self, schema, state, update):
@@ -963,7 +968,7 @@ def register_base_reactions(types):
     types.react_registry.register('divide_counts', react_divide_counts)
 
 
-def test_cube(base_types):
+def register_cube(types):
     cube_schema = {
         'shape': {
             '_type': 'shape',
@@ -986,10 +991,10 @@ def test_cube(base_types):
         },
     }
 
-    base_types.type_registry.register_multiple(
+    types.type_registry.register_multiple(
         cube_schema)
 
-    return base_types
+    return types
 
 
 @pytest.fixture
@@ -999,7 +1004,20 @@ def base_types():
 
 @pytest.fixture
 def cube_types(base_types):
-    return test_cube(base_types)
+    return register_cube(base_types)
+
+
+def register_compartment(base_types):
+    base_types.type_registry.register('compartment', {
+        'counts': 'tree[float]',
+        'inner': 'tree[compartment]'})
+
+    return base_types
+
+
+@pytest.fixture
+def compartment_types(base_types):
+    return register_compartment(base_types)
 
 
 def test_generate_default(cube_types):
@@ -1604,13 +1622,13 @@ def test_project(cube_types):
 
     inverted_update = cube_types.project_edge(
         schema,
-        instance,
+        updated_instance,
         ['edge1'],
         add_update)
 
     modified_branch = cube_types.apply(
         schema,
-        instance,
+        updated_instance,
         inverted_update)
 
     assert modified_branch == {
@@ -1709,11 +1727,7 @@ def test_foursquare(base_types):
     }
 
 
-def test_add_reaction(base_types):
-    base_types.type_registry.register('compartment', {
-        'counts': 'tree[float]',
-        'inner': 'tree[compartment]'})
-
+def test_add_reaction(types):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -1734,7 +1748,7 @@ def test_add_reaction(base_types):
             reactum,
             config.get('path'))
 
-        node = deep_merge(
+        deep_merge(
             node,
             config.get('add', {}))
 
@@ -1742,7 +1756,7 @@ def test_add_reaction(base_types):
             'redex': redex,
             'reactum': reactum}
 
-    base_types.react_registry.register(
+    types.react_registry.register(
         'add',
         add_reaction)
 
@@ -1753,28 +1767,78 @@ def test_add_reaction(base_types):
                 'counts': {
                     'A': 8}}}})
 
-    schema, state = base_types.infer_schema(
+    schema, state = types.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' not in state['environment']['inner']
 
-    result = base_types.apply(
+    result = types.apply(
         schema,
         state,
         {'_react': add})
 
-    assert '1' in state['environment']['inner']
+    assert '0' in result['environment']['inner']
+    assert '1' in result['environment']['inner']
+    
+    import ipdb; ipdb.set_trace()
+
+
+def test_remove_reaction(types):
+    single_node = {
+        'environment': {
+            '_type': 'compartment',
+            'counts': {'A': 144},
+            'inner': {
+                '0': {
+                    'counts': {'A': 13},
+                    'inner': {}}}}}
+
+    def remove_reaction(config):
+        path = config.get('path', ())
+        redex = {}
+        node = establish_path(
+            redex,
+            path)
+
+        for remove in config.get('remove', []):
+            node[remove] = {}
+
+        reactum = {}
+        node = establish_path(
+            reactum,
+            path)
+
+        return {
+            'redex': redex,
+            'reactum': reactum}
+
+    types.react_registry.register(
+        'remove',
+        remove_reaction)
+
+    remove = remove_reaction({
+        'path': ['environment', 'inner'],
+        'remove': ['0']})
+
+    schema, state = types.infer_schema(
+        {},
+        single_node)
+
+    assert '0' in state['environment']['inner']
+
+    result = types.apply(
+        schema,
+        state,
+        {'_react': remove})
+
+    assert '0' not in result['environment']['inner']
     
     import ipdb; ipdb.set_trace()
 
 
 def test_reaction(base_types):
-    base_types.type_registry.register('compartment', {
-        'counts': 'tree[float]',
-        'inner': 'tree[compartment]'})
-
     single_node = {
         'environment': {
             'counts': {},
@@ -1907,7 +1971,9 @@ def test_reaction(base_types):
 if __name__ == '__main__':
     types = TypeSystem()
 
-    test_cube(types)
+    register_compartment(types)
+    register_cube(types)
+
     test_generate_default(types)
     test_apply_update(types)
     test_validate_schema(types)
@@ -1922,3 +1988,4 @@ if __name__ == '__main__':
     test_project(types)
     test_foursquare(types)
     test_add_reaction(types)
+    test_remove_reaction(types)
