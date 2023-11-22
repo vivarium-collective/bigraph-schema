@@ -5,6 +5,7 @@ Base Types
 """
 
 from typing import * 
+from abc import ABC, abstractmethod
 from bigraph_schema.registry import remove_path
 from bigraph_schema.units import units
 import numpy as np
