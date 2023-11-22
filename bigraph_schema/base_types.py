@@ -15,7 +15,7 @@ NONE_SYMBOL = 'None'
 
 base_type_library = {
     'boolean': {
-        '_type': 'bool',
+        '_type': 'boolean',
         '_default': False,
         '_apply': 'apply_boolean',
         '_serialize': 'serialize_boolean',
