@@ -244,10 +244,11 @@ def replace(current, update, bindings=None, types=None):
 # Serialize methods #
 #####################
 
-def serialize_boolean(value: bool, bindings=None, types=None) -> ByteString:
-    return value.to_bytes()
+def serialize_boolean(value: bool, bindings=None, types=None) -> str:
+    return str(value)
 
-def serialize_string(value, bindings=None, types=None):
+
+def serialize_string(value, bindings=None, types=None) -> str:
     return value
 
 
