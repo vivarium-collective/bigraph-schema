@@ -5,6 +5,7 @@ Type System
 """
 
 import copy
+import pint
 import pprint
 import pytest
 import random
@@ -12,16 +13,18 @@ import numbers
 
 import numpy as np
 
-from bigraph_schema.react import react_divide_counts
 # from bigraph_schema.base_types import base_type_library, set_apply, accumulate, concatenate, divide_float, divide_int, \
 #     divide_longest, divide_list, replace, serialize_string, deserialize_string, to_string, deserialize_int, \
 #     deserialize_float, evaluate, apply_any, serialize_any, deserialize_any, apply_tree, divide_tree, serialize_tree, deserialize_tree, apply_dict, divide_dict, \
 #     serialize_dict, deserialize_dict, apply_maybe, divide_maybe, serialize_maybe, deserialize_maybe, apply_units, \
 #     serialize_units, deserialize_units, divide_units, apply_edge, serialize_edge, deserialize_edge, divide_edge, \
 #     serialize_list, deserialize_list, serialize_np_array, deserialize_np_array
+
+from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
-    Registry, TypeRegistry, RegistryRegistry, type_schema_keys, deep_merge, get_path,
-    establish_path, set_path, transform_path, remove_path, remove_omitted, non_schema_keys
+    Registry, TypeRegistry, RegistryRegistry,
+    type_schema_keys, non_schema_keys,
+    deep_merge, get_path, establish_path, set_path, transform_path, remove_path, remove_omitted
 )
 from bigraph_schema.units import units, render_units_type
 
@@ -64,6 +67,7 @@ class TypeSystem:
     def register(self, type_data):
         self.function_keys = [
             '_apply',
+            '_check',
             '_divide',
             '_react',
             '_serialize',
@@ -361,9 +365,9 @@ class TypeSystem:
                 self)
 
         elif isinstance(state, dict):
-            for key, branch in schema.items():
+            for key, branch in state.items():
                 if not key.startswith('_'):
-                    if key not in state:
+                    if key not in schema:
                         return False
                     else:
                         check = self.check_state(
@@ -959,7 +963,19 @@ check_string = instance_parameter(str)
 
 def check_list(state, bindings, types):
     element_type = bindings['element']
-    
+
+    if isinstance(state, list):
+        for element in state:
+            check = types.check(
+                element_type,
+                element)
+
+            if not check:
+                return False
+
+        return True
+    else:
+        return False
 
 
 base_type_library = {
@@ -976,6 +992,7 @@ base_type_library = {
         '_default': '0',
         # inherit _apply and _serialize from number type
         '_deserialize': 'deserialize_int',
+        '_check': 'check_int',
         '_divide': 'divide_int',
         '_description': '64-bit integer',
         '_super': 'number'},
@@ -984,6 +1001,7 @@ base_type_library = {
         '_type': 'float',
         '_default': '0.0',
         '_deserialize': 'float',
+        '_check': 'check_float',
         '_divide': 'divide_float',
         '_description': '64-bit floating point precision number',
         '_super': 'number'},
@@ -992,6 +1010,7 @@ base_type_library = {
         '_type': 'string',
         '_default': '',
         '_apply': 'replace',
+        '_check': 'check_string',
         '_serialize': 'serialize_string',
         '_deserialize': 'deserialize_string',
         '_divide': 'divide_int',
@@ -1001,6 +1020,7 @@ base_type_library = {
         '_type': 'list',
         '_default': [],
         '_apply': 'concatenate',
+        '_check': 'check_list',
         '_serialize': 'serialize_list',
         '_deserialize': 'deserialize_list',
         '_divide': 'divide_list',
@@ -1014,6 +1034,7 @@ base_type_library = {
         '_serialize': 'serialize_tree',
         '_deserialize': 'deserialize_tree',
         '_divide': 'divide_tree',
+        '_check': 'check_tree',
         '_type_parameters': ['leaf'],
         '_description': 'mapping from str to some type (or nested dicts)'},
 
@@ -1024,6 +1045,7 @@ base_type_library = {
         '_serialize': 'serialize_dict',
         '_deserialize': 'deserialize_dict',
         '_divide': 'divide_dict',
+        '_check': 'check_dict',
         # TODO: create assignable type parameters?
         '_type_parameters': ['key', 'value'],
         '_description': 'mapping from keys of any type to values of any type'},
@@ -1039,6 +1061,7 @@ base_type_library = {
         '_apply': 'apply_maybe',
         '_serialize': 'serialize_maybe',
         '_deserialize': 'deserialize_maybe',
+        '_check': 'check_maybe',
         '_divide': 'divide_maybe',
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
@@ -1051,6 +1074,7 @@ base_type_library = {
         '_serialize': 'serialize_edge',
         '_deserialize': 'deserialize_edge',
         '_divide': 'divide_edge',
+        '_check': 'check_edge',
         '_type_parameters': ['ports'],
         '_description': 'hyperedges in the bigraph, with ports as a type parameter',
         'wires': 'tree[list[string]]',
@@ -1098,9 +1122,12 @@ def serialize_any(value, bindings=None, types=None):
 
 
 def accumulate(current, update, bindings=None, types=None):
+    if current is None:
+        return update
     if update is None:
         return current
-    return current + update
+    else:
+        return current + update
 
 
 def set_apply(current, update, bindings=None, types=None):
@@ -1229,7 +1256,10 @@ def deserialize_np_array(serialized, bindings=None, types=None):
         return  serialized
 
 
-# TODO: make these work
+# ------------------------------
+# TODO: make all of the types work
+
+
 def apply_tree(current, update, bindings, types):
     leaf_type = types.access(bindings['leaf'])
     bindings['leaf'] = leaf_type
@@ -1242,6 +1272,11 @@ def apply_tree(current, update, bindings, types):
                 current.update(branch)
             elif key == '_remove':
                 current = remove_path(current, branch)
+            elif types.check(leaf_type, branch):
+                current[key] = types.apply(
+                    leaf_type,
+                    current.get(key),
+                    branch)
             else:
                 current[key] = apply_tree(
                     current.get(key),
@@ -1258,12 +1293,26 @@ def apply_tree(current, update, bindings, types):
 
 def check_tree(tree, bindings, types):
     leaf_type = bindings['leaf']
-    return types.check(leaf_type, tree)
 
-    # for key, value in tree.items():
-    #     check = types.check(leaf_type, value)
-    #     if not check:
-    #         return False
+    if isinstance(state, dict):
+        for key, value in state.items():
+            check = types.check(
+                leaf_type,
+                leaf)
+
+            if not check:
+                check = types.check({
+                    '_type': 'tree',
+                    '_leaf': leaf_type})
+
+                if not check:
+                    return False
+
+        return True
+    else:
+        return False
+
+    return types.check(leaf_type, tree)
 
 
 def divide_tree(tree, bindings, types):
@@ -1310,6 +1359,10 @@ def apply_dict(current, update, bindings=None, types=None):
     pass
 
 
+def check_dict(current, update, bindings=None, types=None):
+    pass
+
+
 def divide_dict(value, bindings=None, types=None):
     return value
 
@@ -1328,6 +1381,13 @@ def apply_maybe(current, update, bindings, types):
     else:
         value_type = bindings['value']
         return types.apply(value_type, current, update)
+
+
+def check_maybe(state):
+    if state is None:
+        return [None, None]
+    else:
+        pass
 
 
 def divide_maybe(value, bindings):
@@ -1358,6 +1418,11 @@ def apply_units(current, update, bindings, types):
     return current + update
 
 
+def check_units(state, bindings, types):
+    # TODO: expand this to check the actual units for compatibility
+    return isinstance(state, pint.Quantity)
+
+
 def serialize_units(value, bindings, types):
     return str(value)
 
@@ -1373,6 +1438,10 @@ def divide_units(value, bindings, types):
 # TODO: implement edge handling
 def apply_edge(current, update, bindings, types):
     return current + update
+
+
+def check_edge(state, bindings, types):
+    return state
 
 
 def serialize_edge(value, bindings, types):
@@ -1401,6 +1470,7 @@ def register_units(types, units):
             types.type_registry.register(type_key, {
                 '_default': '',
                 '_apply': 'apply_units',
+                '_check': 'check_units',
                 '_serialize': 'serialize_units',
                 '_deserialize': 'deserialize_units',
                 '_divide': 'divide_units',
@@ -1431,9 +1501,10 @@ def register_base_types(types):
     types.divide_registry.register('divide_units', divide_units)
     types.divide_registry.register('divide_edge', divide_edge)
 
+    types.check_registry.register('check_number', check_number)
     types.check_registry.register('check_float', check_float)
+    types.check_registry.register('check_string', check_string)
     types.check_registry.register('check_int', check_int)
-    types.check_registry.register('check_longest', check_longest)
     types.check_registry.register('check_list', check_list)
     types.check_registry.register('check_tree', check_tree)
     types.check_registry.register('check_dict', check_dict)
@@ -2291,7 +2362,7 @@ def test_add_reaction(types):
 
     assert '0' in result['environment']['inner']
     assert '1' in result['environment']['inner']
-    
+
     import ipdb; ipdb.set_trace()
 
 

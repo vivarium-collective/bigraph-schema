@@ -16,6 +16,7 @@ from bigraph_schema.parse import parse_expression
 required_schema_keys = set([
     '_default',
     '_apply',
+    '_check',
     '_serialize',
     '_deserialize',
     '_divide',
@@ -35,6 +36,7 @@ overridable_schema_keys = set([
     '_type',
     '_default',
     '_apply',
+    '_check',
     '_serialize',
     '_deserialize',
     '_value',
