@@ -15,8 +15,8 @@ NONE_SYMBOL = 'None'
 
 
 base_type_library = {
-    'boolean': {
-        '_type': 'boolean',
+    'bool': {
+        '_type': 'bool',
         '_default': False,
         '_apply': 'apply_boolean',
         '_serialize': 'serialize_boolean',
@@ -178,13 +178,7 @@ def concatenate(current, update, bindings=None, types=None):
 ##################
 
 def divide_boolean(value: bool, bindings=None, types=None):
-    """Convert the given boolean to an `int` and pass that value into `divide_int`.
-
-        Args:
-            value:`bool`
-    """
-    value_int = int(value)
-    return divide_int(value_int)
+    return (value, value)
 
 # support dividing by ratios?
 # ---> divide_float({...}, [0.1, 0.3, 0.6])
