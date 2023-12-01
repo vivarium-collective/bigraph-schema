@@ -390,9 +390,9 @@ class TypeRegistry(Registry):
                         if parameter_key in found:
                             if not '_bindings' in found:
                                 found['_bindings'] = {}
-                            found['_bindings'][parameter_key] = found[parameter_key]
+                            found['_bindings'][type_parameter] = found[parameter_key]
                         elif '_bindings' in found and type_parameter in found['_bindings']:
-                            found[parameter_key] = found['_bindings'][parameter_key]
+                            found[parameter_key] = found['_bindings'][type_parameter]
             else:
                 found = {
                    key: self.access(branch)

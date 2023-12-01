@@ -1026,7 +1026,7 @@ base_type_library = {
     'list': {
         '_type': 'list',
         '_default': [],
-        '_apply': 'concatenate',
+        '_apply': 'apply_list',
         '_check': 'check_list',
         '_serialize': 'serialize_list',
         '_deserialize': 'deserialize_list',
@@ -1267,6 +1267,24 @@ def deserialize_np_array(serialized, bindings=None, types=None):
 # TODO: make all of the types work
 
 
+def apply_list(current, update, bindings, types):
+    element_type = types.access(bindings['element'])
+    
+    if isinstance(update, list):
+        result = []
+        for current_element, update_element in zip(current, update):
+            applied = types.apply(
+                element_type,
+                current_element,
+                update_element)
+
+            result.append(applied)
+
+        return result
+    else:
+        raise Exception(f'trying to apply an update to an existing list, but the update is not a list: {update}')
+
+
 def apply_tree(current, update, bindings, types):
     leaf_type = types.access(bindings['leaf'])
     bindings['leaf'] = leaf_type
@@ -1493,6 +1511,7 @@ def register_base_types(types):
     types.apply_registry.register('concatenate', concatenate)
     types.apply_registry.register('replace', replace)
     types.apply_registry.register('apply_tree', apply_tree)
+    types.apply_registry.register('apply_list', apply_list)
     types.apply_registry.register('apply_dict', apply_dict)
     types.apply_registry.register('apply_maybe', apply_maybe)
     types.apply_registry.register('apply_units', apply_units)
