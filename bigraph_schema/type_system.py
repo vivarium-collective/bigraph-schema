@@ -281,10 +281,13 @@ class TypeSystem:
         given pattern in the tree.
 
         "mode" can be a few things:
+        * immediate: only match top level
         * first: only return the first match
         * random: return a random match of all that matched
         * all (or any other value): return every match in the tree
         '''
+
+        # TODO: provide immediate "mode"
 
         schema = self.access(original_schema)
 
@@ -307,6 +310,10 @@ class TypeSystem:
 
 
     def react(self, schema, state, reaction, mode='random'):
+        # TODO: explain all this
+        # TODO: after the reaction, fill in the state with missing values
+        #   from the schema
+
         if 'redex' in reaction or 'reactum' in reaction or 'calls' in reaction:
             redex = reaction.get('redex', {})
             reactum = reaction.get('reactum', {})
@@ -2341,6 +2348,7 @@ def test_add_reaction(types):
         add_reaction)
 
     add_config = {
+        'path': [],
         'path': ['environment', 'inner'],
         'add': {
             '1': {
@@ -2359,6 +2367,10 @@ def test_add_reaction(types):
         state, {
             '_react': {
                 'add': add_config}})
+
+            # '_react': {
+            #     'reaction': 'add',
+            #     'config': add_config}})
 
     assert '0' in result['environment']['inner']
     assert '1' in result['environment']['inner']
@@ -2379,6 +2391,7 @@ def test_remove_reaction(types):
                     'counts': {'A': 13},
                     'inner': {}}}}}
 
+    # TODO: register these for general access
     def remove_reaction(config):
         path = config.get('path', ())
         redex = {}
@@ -2466,6 +2479,18 @@ def test_replace_reaction(types):
         replace_reaction)
 
     replace_config = {
+        'path': ['environment', 'inner'],
+        'before': {'0': {'A': '?1'}},
+        'after': {
+            '2': {
+                'counts': {
+                    'A': {'function': 'divide', 'arguments': ['?1', 0.5], }}},
+            '3': {
+                'counts': {
+                    'A': '@1'}}}}
+
+    replace_config = {
+        'path': ['environment', 'inner'],
         'before': {'0': {}},
         'after': {
             '2': {
