@@ -13,19 +13,13 @@ import numbers
 
 import numpy as np
 
-# from bigraph_schema.base_types import base_type_library, set_apply, accumulate, concatenate, divide_float, divide_int, \
-#     divide_longest, divide_list, replace, serialize_string, deserialize_string, to_string, deserialize_int, \
-#     deserialize_float, evaluate, apply_any, serialize_any, deserialize_any, apply_tree, divide_tree, serialize_tree, deserialize_tree, apply_dict, divide_dict, \
-#     serialize_dict, deserialize_dict, apply_maybe, divide_maybe, serialize_maybe, deserialize_maybe, apply_units, \
-#     serialize_units, deserialize_units, divide_units, apply_edge, serialize_edge, deserialize_edge, divide_edge, \
-#     serialize_list, deserialize_list, serialize_np_array, deserialize_np_array
-
 from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
     Registry, TypeRegistry, RegistryRegistry,
     type_schema_keys, non_schema_keys,
     deep_merge, get_path, establish_path, set_path, transform_path, remove_path, remove_omitted
 )
+
 from bigraph_schema.units import units, render_units_type
 
 
@@ -2331,7 +2325,7 @@ def test_foursquare(base_types):
     }
 
 
-def test_add_reaction(types):
+def test_add_reaction(compartment_types):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -2362,26 +2356,25 @@ def test_add_reaction(types):
             'redex': redex,
             'reactum': reactum}
 
-    types.react_registry.register(
+    compartment_types.react_registry.register(
         'add',
         add_reaction)
 
     add_config = {
-        'path': [],
         'path': ['environment', 'inner'],
         'add': {
             '1': {
                 'counts': {
                     'A': 8}}}}
 
-    schema, state = types.infer_schema(
+    schema, state = compartment_types.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' not in state['environment']['inner']
 
-    result = types.apply(
+    result = compartment_types.apply(
         schema,
         state, {
             '_react': {
@@ -2394,10 +2387,8 @@ def test_add_reaction(types):
     assert '0' in result['environment']['inner']
     assert '1' in result['environment']['inner']
 
-    import ipdb; ipdb.set_trace()
 
-
-def test_remove_reaction(types):
+def test_remove_reaction(compartment_types):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -2430,7 +2421,7 @@ def test_remove_reaction(types):
             'redex': redex,
             'reactum': reactum}
 
-    types.react_registry.register(
+    compartment_types.react_registry.register(
         'remove',
         remove_reaction)
 
@@ -2438,14 +2429,14 @@ def test_remove_reaction(types):
         'path': ['environment', 'inner'],
         'remove': ['0']}
 
-    schema, state = types.infer_schema(
+    schema, state = compartment_types.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' in state['environment']['inner']
 
-    result = types.apply(
+    result = compartment_types.apply(
         schema,
         state, {
             '_react': {
@@ -2454,10 +2445,8 @@ def test_remove_reaction(types):
     assert '0' not in result['environment']['inner']
     assert '1' in state['environment']['inner']
     
-    import ipdb; ipdb.set_trace()
 
-
-def test_replace_reaction(types):
+def test_replace_reaction(compartment_types):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -2493,7 +2482,7 @@ def test_replace_reaction(types):
             'redex': redex,
             'reactum': reactum}
 
-    types.react_registry.register(
+    compartment_types.react_registry.register(
         'replace',
         replace_reaction)
 
@@ -2519,14 +2508,14 @@ def test_replace_reaction(types):
                 'counts': {
                     'A': 88}}}}
 
-    schema, state = types.infer_schema(
+    schema, state = compartment_types.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' in state['environment']['inner']
 
-    result = types.apply(
+    result = compartment_types.apply(
         schema,
         state, {
             '_react': {
@@ -2537,10 +2526,8 @@ def test_replace_reaction(types):
     assert '2' in result['environment']['inner']
     assert '3' in result['environment']['inner']
 
-    import ipdb; ipdb.set_trace()
 
-
-def test_reaction(base_types):
+def test_reaction(compartment_types):
     single_node = {
         'environment': {
             'counts': {},
@@ -2549,14 +2536,6 @@ def test_reaction(base_types):
                     'counts': {}}}}}
 
     # TODO: compartment type ends up as 'any' at leafs?
-
-    def replace_reaction(container, before, after):
-        redex = {
-            container: before}
-        reactum = {
-            container: after}
-
-        return redex, reactum, []
 
     # TODO: come at divide reaction from the other side:
     #   ie make a call for it, then figure out what the
@@ -2567,16 +2546,6 @@ def test_reaction(base_types):
         return {
             'redex': mother,
             'reactum': daughters}
-
-    add_agent = add_reaction(
-        'environment',
-        '1',
-        {'counts': {}})
-
-    state = base_types.apply(
-        {'environment': 'tree[compartment]'},
-        single_node,
-        {'_react': add_agent})
 
     embedded_tree = {
         'environment': {
@@ -2611,9 +2580,6 @@ def test_reaction(base_types):
                     '_type': 'compartment',
                     'counts': {
                         'A': 5}}}}}
-
-    mother_composite = Composite(
-        mother_tree)
 
     divide_react = {
         '_react': {
