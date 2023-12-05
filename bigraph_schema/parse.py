@@ -134,6 +134,7 @@ def render_expression(expression):
         return '|'.join(parts)
 
 
+# Test the functions
 def test_parse_parameters():
     for key, example in parameter_examples.items():
         types = parse_expression(example)
