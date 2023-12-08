@@ -957,6 +957,7 @@ def instance_parameter(instance_type):
 
 
 check_number = instance_parameter(numbers.Number)
+check_boolean = instance_parameter(bool)
 check_int = instance_parameter(int)
 check_float = instance_parameter(float)
 check_string = instance_parameter(str)
@@ -980,6 +981,15 @@ def check_list(state, bindings, types):
 
 
 base_type_library = {
+    'boolean': {
+        '_type': 'boolean',
+        '_default': False,
+        '_apply': 'apply_boolean',
+        '_serialize': 'serialize_boolean',
+        '_deserialize': 'deserialize_boolean',
+        '_divide': 'divide_boolean',
+    },
+
     # abstract number type
     'number': {
         '_type': 'number',
@@ -1109,6 +1119,26 @@ base_type_library = {
 #################
 # Apply methods #
 #################
+
+def apply_boolean(current: bool, update: bool, bindings=None, types=None) -> bool:
+    """Performs a bit flip if `current` does not match `update`, returning update. Returns current if they match."""
+    if current != update:
+        return update
+    else:
+        return current
+
+
+def divide_boolean(value: bool, bindings=None, types=None):
+    return (value, value)
+
+
+def serialize_boolean(value: bool, bindings=None, types=None) -> str:
+    return str(value)
+
+
+def deserialize_boolean(serialized, bindings=None, types=None) -> bool:
+    return bool(serialized)
+
 
 def apply_any(current, update, bindings=None, types=None):
     return update
@@ -1505,12 +1535,14 @@ def register_base_types(types):
     types.apply_registry.register('concatenate', concatenate)
     types.apply_registry.register('replace', replace)
     types.apply_registry.register('apply_tree', apply_tree)
+    types.apply_registry.register('apply_boolean', apply_boolean)
     types.apply_registry.register('apply_list', apply_list)
     types.apply_registry.register('apply_dict', apply_dict)
     types.apply_registry.register('apply_maybe', apply_maybe)
     types.apply_registry.register('apply_units', apply_units)
     types.apply_registry.register('apply_edge', apply_edge)
 
+    types.divide_registry.register('divide_boolean', divide_boolean)
     types.divide_registry.register('divide_float', divide_float)
     types.divide_registry.register('divide_int', divide_int)
     types.divide_registry.register('divide_longest', divide_longest)
@@ -1521,6 +1553,7 @@ def register_base_types(types):
     types.divide_registry.register('divide_units', divide_units)
     types.divide_registry.register('divide_edge', divide_edge)
 
+    types.check_registry.register('check_boolean', check_boolean)
     types.check_registry.register('check_number', check_number)
     types.check_registry.register('check_float', check_float)
     types.check_registry.register('check_string', check_string)
@@ -1533,6 +1566,7 @@ def register_base_types(types):
     types.check_registry.register('check_edge', check_edge)
 
     types.serialize_registry.register('serialize_any', serialize_any)
+    types.serialize_registry.register('serialize_boolean', serialize_boolean)
     types.serialize_registry.register('serialize_string', serialize_string)
     types.serialize_registry.register('to_string', to_string)
     types.serialize_registry.register('serialize_tree', serialize_tree)
@@ -1544,6 +1578,7 @@ def register_base_types(types):
     types.serialize_registry.register('serialize_np_array', serialize_np_array)
 
     types.deserialize_registry.register('deserialize_any', deserialize_any)
+    types.deserialize_registry.register('deserialize_boolean', deserialize_boolean)
     types.deserialize_registry.register('float', deserialize_float)
     types.deserialize_registry.register('deserialize_int', deserialize_int)
     types.deserialize_registry.register('deserialize_string', deserialize_string)
