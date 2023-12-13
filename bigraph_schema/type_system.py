@@ -238,10 +238,12 @@ class TypeSystem:
             pattern)
 
         if match:
-            if mode == 'first':
+            if mode == 'first' or mode == 'immediate':
                 return [path]
             else:
                 matches.append(path)
+        elif mode == 'immediate':
+            return []
 
         if isinstance(state, dict):
             for key, substate in state.items():
@@ -280,8 +282,6 @@ class TypeSystem:
         * random: return a random match of all that matched
         * all (or any other value): return every match in the tree
         '''
-
-        # TODO: provide immediate "mode"
 
         schema = self.access(original_schema)
 
