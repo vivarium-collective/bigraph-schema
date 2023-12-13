@@ -925,27 +925,6 @@ class TypeSystem:
         return subschema
 
 
-    # def react(self, schema, instance, redex, reactum):
-    #     import ipdb; ipdb.set_trace()
-
-    #     if isinstance(instance, dict):
-    #         result = {}
-    #         for key, value in instance.items():
-    #             if key in redex:
-    #                 result[key] = self.react(
-    #                     schema[key],
-    #                     value,
-    #                     redex[key],
-    #                     reactum.get(key))
-    #             else:
-    #                 result[key] = value
-
-    #         return result
-
-    #     elif instance == redex:
-    #         return reactum
-
-
 NONE_SYMBOL = 'None'
 
 
