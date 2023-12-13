@@ -2263,6 +2263,11 @@ def test_project(cube_types):
                 '4': ['a1']}}}
 
 
+def test_check(base_types):
+    assert base_types.check('float', 1.11)
+    assert base_types.check({'b': 'float'}, {'b': 1.11})
+
+
 def test_foursquare(base_types):
     # TODO: need union type and self-referential types (foursquare)
     foursquare_schema = {
