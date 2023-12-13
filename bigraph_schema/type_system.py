@@ -653,15 +653,19 @@ class TypeSystem:
             state=state)
 
 
-    def ports_and_wires(self, schema, instance, edge_path):
+    def ports_schema(self, schema, instance, edge_path, ports_key='inputs'):
         found = self.access(schema)
 
+        ports_schema = {}
+        ports = {}
+
         edge_schema = get_path(found, edge_path)
-        ports = edge_schema.get('_ports')
+        ports_schema = edge_schema.get(f'_{ports_key}')
+
         edge_state = get_path(instance, edge_path)
-        wires = edge_state.get('wires')
+        ports = edge_state.get(ports_key)
         
-        return ports, wires
+        return ports_schema, ports
 
 
     def view(self, schema, wires, path, instance):
@@ -688,7 +692,7 @@ class TypeSystem:
         return result
 
 
-    def view_edge(self, schema, instance, edge_path=None, ports_key=None):
+    def view_edge(self, schema, instance, edge_path=None, ports_key='inputs'):
         '''
         project the state of the current instance into a form
         the edge expects, based on its ports
@@ -701,23 +705,20 @@ class TypeSystem:
         if edge_path is None:
             edge_path = []
 
-        ports, wires = self.ports_and_wires(
+        ports_schema, ports = self.ports_schema(
             schema,
             instance,
-            edge_path=edge_path)
+            edge_path=edge_path,
+            ports_key=ports_key)
 
-        if ports is None:
+        if not ports_schema:
             return None
-        if wires is None:
+        if not ports:
             return None
-
-        if ports_key is not None:
-            ports = ports[ports_key]
-            wires = wires[ports_key]
 
         return self.view(
+            ports_schema,
             ports,
-            wires,
             edge_path[:-1],
             instance)
 
@@ -759,7 +760,7 @@ class TypeSystem:
         return result
 
 
-    def project_edge(self, schema, instance, edge_path, states, ports_key=None):
+    def project_edge(self, schema, instance, edge_path, states, ports_key='outputs'):
         '''
         given states from the perspective of an edge (through
           it's ports), produce states aligned to the tree
@@ -772,16 +773,16 @@ class TypeSystem:
         if instance is None:
             instance = self.default(schema)
 
-        ports, wires = self.ports_and_wires(schema, instance, edge_path)
+        ports_schema, ports = self.ports_schema(
+            schema,
+            instance,
+            edge_path,
+            ports_key)
 
+        if ports_schema is None:
+            return None
         if ports is None:
             return None
-        if wires is None:
-            return None
-
-        if ports_key is not None:
-            ports = ports.get(ports_key, {})
-            wires = wires.get(ports_key, {})
 
         return self.project(
             ports,
@@ -798,7 +799,7 @@ class TypeSystem:
             if isinstance(ports, str):
                 import ipdb; ipdb.set_trace()
             port_schema = ports.get(port_key, {})
-            # port_wires = wires.get(port_key, ())
+
             if isinstance(port_wires, dict):
                 top_schema = self.infer_wires(
                     ports,
@@ -864,13 +865,23 @@ class TypeSystem:
                 # TODO: fix is_descendant
                 # if types.type_registry.is_descendant('edge', state_schema)
                 if state_type == 'edge':
-                    subwires = hydrated_state['wires']
-                    schema = self.infer_wires(
-                        port_schema,
-                        hydrated_state,
-                        subwires,
-                        top_schema=schema,
-                        path=path[:-1])
+                    inputs = hydrated_state.get('inputs')
+                    if inputs:
+                        schema = self.infer_wires(
+                            state_schema,
+                            hydrated_state,
+                            inputs,
+                            top_schema=schema,
+                            path=path[:-1])
+
+                    outputs = hydrated_state.get('outputs')
+                    if outputs:
+                        schema = self.infer_wires(
+                            state_schema,
+                            hydrated_state,
+                            outputs,
+                            top_schema=schema,
+                            path=path[:-1])
 
             elif '_type' in schema:
                 hydrated_state = self.deserialize(schema, state)
@@ -1056,18 +1067,23 @@ base_type_library = {
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
 
+    'wires': 'tree[list[string]]',
+
     'edge': {
         # TODO: do we need to have defaults informed by type parameters?
         '_type': 'edge',
-        '_default': {'wires': {}},
+        '_default': {
+            'inputs': {},
+            'outputs': {}},
         '_apply': 'apply_edge',
         '_serialize': 'serialize_edge',
         '_deserialize': 'deserialize_edge',
         '_divide': 'divide_edge',
         '_check': 'check_edge',
-        '_type_parameters': ['ports'],
+        '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with ports as a type parameter',
-        'wires': 'tree[list[string]]',
+        'inputs': 'wires',
+        'outputs': 'wires',
     },
 
     'numpy_array': {
@@ -1078,8 +1094,6 @@ base_type_library = {
         '_deserialize': 'deserialize_np_array',
         '_description': 'numpy arrays'
     },
-
-    'wires': 'tree[list[string]]',
 
     # TODO -- this should support any type
     'union': {
@@ -1769,33 +1783,42 @@ def test_fill_in_missing_nodes(base_types):
     test_schema = {
         'edge 1': {
             '_type': 'edge',
-            '_ports': {
-                'port A': 'float'}}}
+            '_inputs': {
+                'I': 'float'},
+            '_outputs': {
+                'O': 'float'}}}
 
     test_state = {
         'edge 1': {
-            'wires': {
-                'port A': ['a']}}}
+            'inputs': {
+                'I': ['a']},
+            'outputs': {
+                'O': ['a']}}}
 
     filled = base_types.fill(
         test_schema,
         test_state)
 
+    import ipdb; ipdb.set_trace()
+
     assert filled == {
         'a': 0.0,
         'edge 1': {
-            'wires': {
-                'port A': ['a']}}}
+            'inputs': {
+                'I': ['a'],
+                'O': ['a']}}}
 
 
 def test_fill_from_parse(base_types):
     test_schema = {
-        'edge 1': 'edge[port A:float]'}
+        'edge 1': 'edge[I:float,O:float]'}
 
     test_state = {
         'edge 1': {
-            'wires': {
-                'port A': ['a']}}}
+            'inputs': {
+                'I': ['a']},
+            'outputs': {
+                'O': ['a']}}}
 
     filled = base_types.fill(
         test_schema,
@@ -1804,8 +1827,10 @@ def test_fill_from_parse(base_types):
     assert filled == {
         'a': 0.0,
         'edge 1': {
-            'wires': {
-                'port A': ['a']}}}
+            'inputs': {
+                'I': ['a']},
+            'outputs': {
+                'O': ['a']}}}
 
 
 # def test_fill_in_disconnected_port(base_types):
@@ -1909,15 +1934,15 @@ def test_expected_schema(base_types):
     # }
 
     dual_process_schema = {
-        'process1': 'edge[port1:float|port2:int]',
+        'process1': 'edge[input1:float|input2:int,output1:float|output2:int]',
         'process2': {
             '_type': 'edge',
-            '_ports': {
-                'port1': 'float',
-                'port2': 'int',
-            },
-        },
-    }
+            '_inputs': {
+                'input1': 'float',
+                'input2': 'int'},
+            '_outputs': {
+                'output1': 'float',
+                'output2': 'int'}}}
 
     base_types.type_registry.register(
         'dual_process',
@@ -1927,55 +1952,56 @@ def test_expected_schema(base_types):
     test_schema = {
         # 'store1': 'process1:edge[port1:float|port2:int]|process2[port1:float|port2:int]',
         'store1': 'dual_process',
-        'process3': 'edge[dual_process]'}
+        'process3': 'edge[input_process:dual_process,output_process:dual_process]'}
 
     test_state = {
         'store1': {
             'process1': {
-                'wires': {
-                    'port1': ['store1.1'],
-                    'port2': ['store1.2'],
-                }
-            },
+                'inputs': {
+                    'input1': ['store1.1'],
+                    'input2': ['store1.2']},
+                'outputs': {
+                    'output1': ['store2.1'],
+                    'output2': ['store2.2']}},
             'process2': {
-                'wires': {
-                    'port1': ['store1.1'],
-                    'port2': ['store1.2'],
-                }
-            }
-        },
+                'inputs': {
+                    'input1': ['store2.1'],
+                    'input2': ['store2.2']},
+                'outputs': {
+                    'output1': ['store2.1'],
+                    'output2': ['store2.2']}}},
         'process3': {
-            'wires': {
-                'port1': ['store1'],
-            }
-        },
-    }
+            'inputs': {
+                'input_process': ['store1']},
+            'outputs': {
+                'output_process': ['store2']}}}
     
     outcome = base_types.fill(test_schema, test_state)
 
     assert outcome == {
-        'process3': {
-            'wires': {
-                'port1': ['store1']
-            }
-        },
         'store1': {
             'process1': {
-                'wires': {
-                    'port1': ['store1.1'],
-                    'port2': ['store1.2']
-                }
-            },
+                'inputs': {
+                    'input1': ['store1.1'],
+                    'input2': ['store1.2']},
+                'outputs': {
+                    'output1': ['store2.1'],
+                    'output2': ['store2.2']}},
             'process2': {
-                'wires': {
-                    'port1': ['store1.1'],
-                    'port2': ['store1.2']
-                }
-            },
-            'store1.1': 0.0,
-            'store1.2': 0
-        }
-    }
+                'inputs': {
+                    'input1': ['store2.1'],
+                    'input2': ['store2.2']},
+                'outputs': {
+                    'output1': ['store2.1'],
+                    'output2': ['store2.2']}}},
+        'process3': {
+            'inputs': {
+                'input_process': ['store1'],
+                'output_process': ['store2']}},
+        'store1.1': 0.0,
+        'store1.2': 0,
+        'store2.1': 0.0,
+        'store2.2': 0}
 
 
 def test_link_place(base_types):
@@ -2647,10 +2673,10 @@ if __name__ == '__main__':
     test_fill_int(types)
     test_fill_cube(types)
     test_establish_path(types)
-    test_expected_schema(types)
-    test_units(types)
     test_fill_in_missing_nodes(types)
     test_fill_from_parse(types)
+    test_expected_schema(types)
+    test_units(types)
     test_serialize_deserialize(types)
     test_project(types)
     test_foursquare(types)
