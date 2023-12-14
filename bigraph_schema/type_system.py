@@ -551,8 +551,8 @@ class TypeSystem:
         if path is None:
             path = []
 
-        more_wires = state.get('wires', {})
-        wires = deep_merge(wires, more_wires)
+        # more_wires = state.get('wires', {})
+        # wires = deep_merge(wires, more_wires)
 
         for port_key, port_schema in schema.items():
             if port_key in wires:
@@ -616,11 +616,20 @@ class TypeSystem:
         if path is None:
             path = []
 
-        if '_ports' in schema:
-            wires = state.get('wires', {})
+        if '_inputs' in schema:
+            inputs = state.get('inputs', {})
             state = self.fill_ports(
-                schema['_ports'],
-                wires=wires,
+                schema['_inputs'],
+                wires=inputs,
+                state=state,
+                top=top,
+                path=path)
+
+        if '_outputs' in schema:
+            outputs = state.get('outputs', {})
+            state = self.fill_ports(
+                schema['_outputs'],
+                wires=outputs,
                 state=state,
                 top=top,
                 path=path)
@@ -785,8 +794,8 @@ class TypeSystem:
             return None
 
         return self.project(
+            ports_schema,
             ports,
-            wires,
             edge_path[:-1],
             states)
 
@@ -1799,13 +1808,12 @@ def test_fill_in_missing_nodes(base_types):
         test_schema,
         test_state)
 
-    import ipdb; ipdb.set_trace()
-
     assert filled == {
         'a': 0.0,
         'edge 1': {
             'inputs': {
-                'I': ['a'],
+                'I': ['a']},
+            'outputs': {
                 'O': ['a']}}}
 
 
@@ -1968,18 +1976,49 @@ def test_expected_schema(base_types):
                     'input1': ['store2.1'],
                     'input2': ['store2.2']},
                 'outputs': {
-                    'output1': ['store2.1'],
-                    'output2': ['store2.2']}}},
+                    'output1': ['store1.1'],
+                    'output2': ['store1.2']}}},
         'process3': {
             'inputs': {
                 'input_process': ['store1']},
             'outputs': {
-                'output_process': ['store2']}}}
+                'output_process': ['store1']}}}
     
     outcome = base_types.fill(test_schema, test_state)
 
+    # assert outcome == {
+    #     'process3': {
+    #         'inputs': {
+    #             'input_process': ['store1']},
+    #         'outputs': {
+    #             'output_process': ['store1']}},
+    #     'store1': {
+    #         'process1': {
+    #             'inputs': {
+    #                 'input1': ['store1.1'],
+    #                 'input2': ['store1.2']},
+    #             'outputs': {
+    #                 'output1': ['store2.1'],
+    #                 'output2': ['store2.2']}},
+    #         'process2': {
+    #             'inputs': {
+    #                 'input1': ['store2.1'],
+    #                 'input2': ['store2.2']},
+    #             'outputs': {
+    #                 'output1': ['store1.1'],
+    #                 'output2': ['store1.2']}},
+    #         'store1.1': 0.0,
+    #         'store1.2': 0,
+    #         'store2.1': 0.0,
+    #         'store2.2': 0}}
+
     assert outcome == {
         'store1': {
+            'store1.1': 0.0,
+            'store1.2': 0,
+            'store2.1': 0.0,
+            'store2.2': 0,
+
             'process1': {
                 'inputs': {
                     'input1': ['store1.1'],
@@ -1992,16 +2031,13 @@ def test_expected_schema(base_types):
                     'input1': ['store2.1'],
                     'input2': ['store2.2']},
                 'outputs': {
-                    'output1': ['store2.1'],
-                    'output2': ['store2.2']}}},
+                    'output1': ['store1.1'],
+                    'output2': ['store1.2']}}},
         'process3': {
             'inputs': {
-                'input_process': ['store1'],
-                'output_process': ['store2']}},
-        'store1.1': 0.0,
-        'store1.2': 0,
-        'store2.1': 0.0,
-        'store2.2': 0}
+                'input_process': ['store1']},
+            'outputs': {
+                'output_process': ['store1']}}}
 
 
 def test_link_place(base_types):
@@ -2141,7 +2177,7 @@ def test_serialize_deserialize(cube_types):
         'edge1': {
             # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
             '_type': 'edge',
-            '_ports': {
+            '_outputs': {
                 '1': 'int',
                 '2': 'float',
                 '3': 'string',
@@ -2155,7 +2191,7 @@ def test_serialize_deserialize(cube_types):
 
     instance = {
         'edge1': {
-            'wires': {
+            'outputs': {
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
                 '3': ['a0', 'a0.2', 'a0.2.0'],
@@ -2181,7 +2217,12 @@ def test_project(cube_types):
             # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
             # '_type': 'edge',
             '_type': 'edge',
-            '_ports': {
+            '_inputs': {
+                '1': 'int',
+                '2': 'float',
+                '3': 'string',
+                '4': 'tree[int]'},
+            '_outputs': {
                 '1': 'int',
                 '2': 'float',
                 '3': 'string',
@@ -2205,7 +2246,12 @@ def test_project(cube_types):
         'a0': {
             'a0.0': 11},
         'edge1': {
-            'wires': {
+            'inputs': {
+                '1': ['a0', 'a0.0'],
+                '2': ['a0', 'a0.1'],
+                '3': ['a0', 'a0.2', 'a0.2.0'],
+                '4': ['a1']},
+            'outputs': {
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
                 '3': ['a0', 'a0.2', 'a0.2.0'],
@@ -2282,7 +2328,12 @@ def test_project(cube_types):
             'branch5': 55,
             'branch6': 111},
         'edge1': {
-            'wires': {
+            'inputs': {
+                '1': ['a0', 'a0.0'],
+                '2': ['a0', 'a0.1'],
+                '3': ['a0', 'a0.2', 'a0.2.0'],
+                '4': ['a1']},
+            'outputs': {
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
                 '3': ['a0', 'a0.2', 'a0.2.0'],
