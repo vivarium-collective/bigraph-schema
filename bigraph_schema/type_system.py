@@ -551,9 +551,6 @@ class TypeSystem:
         if path is None:
             path = []
 
-        # more_wires = state.get('wires', {})
-        # wires = deep_merge(wires, more_wires)
-
         for port_key, port_schema in schema.items():
             if port_key in wires:
                 subwires = wires[port_key]
