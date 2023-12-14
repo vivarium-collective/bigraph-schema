@@ -1493,11 +1493,11 @@ def check_edge(state, bindings, types):
 
 
 def serialize_edge(value, bindings, types):
-    return str(value)
+    return value
 
 
 def deserialize_edge(serialized, bindings, types):
-    return eval(serialized)
+    return serialized
 
 
 def divide_edge(value, bindings, types):
