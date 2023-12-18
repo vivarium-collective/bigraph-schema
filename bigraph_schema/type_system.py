@@ -976,6 +976,17 @@ def check_list(state, bindings, types):
         return False
 
 
+class Edge:
+    def __init__(self):
+        pass
+
+
+    def schema(self):
+        return {
+            'inputs': {},
+            'outputs': {}}
+
+
 base_type_library = {
     'boolean': {
         '_type': 'boolean',
@@ -2169,6 +2180,18 @@ def test_units(base_types):
     assert new_state['distance'] == 9.476 * units.meter
 
 
+def test_unit_conversion(base_types):
+    # mass * length ^ 2 / second ^ 2
+
+    units_schema = {
+        'force': 'length^2*mass/time^2'}
+
+    force_units = units.meter ** 2 * units.kg / units.second ** 2
+
+    instance = {
+        'force': 3.333 * force_units}
+
+
 def test_serialize_deserialize(cube_types):
     schema = {
         'edge1': {
@@ -2731,3 +2754,4 @@ if __name__ == '__main__':
     test_add_reaction(types)
     test_remove_reaction(types)
     test_replace_reaction(types)
+    test_unit_conversion(types)
