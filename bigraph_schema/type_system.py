@@ -929,6 +929,56 @@ class TypeSystem:
         return schema, top_state
         
 
+    def hydrate_state(self, schema, state):
+        if isinstance(state, str) or '_deserialize' in schema:
+            result = self.deserialize(schema, state)
+        elif isinstance(state, dict):
+            if isinstance(schema, str):
+                schema = self.access(schema)
+                return self.hydrate_state(schema, state)
+            else:
+                result = state.copy()
+                for key, value in schema.items():
+                    if key in schema:
+                        subschema = schema[key]
+                    else:
+                        subschema = schema
+
+                    if key in state:
+                        result[key] = self.hydrate_state(
+                            subschema,
+                            state.get(key))
+        else:
+            result = state
+
+        return result
+
+
+    def hydrate(self, schema, state):
+        # TODO: support partial hydration (!)
+        hydrated = self.hydrate_state(schema, state)
+        return self.fill(schema, hydrated)
+
+
+    def complete(self, initial_schema, initial_state):
+        full_schema = self.access(
+            initial_schema)
+
+        # hydrate the state given the initial composition
+        state = self.hydrate(
+            full_schema,
+            initial_state)
+
+        # fill in the parts of the composition schema
+        # determined by the state
+        schema, state = self.infer_schema(
+            full_schema,
+            state)
+
+        # TODO: add flag to types.access(copy=True)
+        return self.access(schema), state
+        
+
     def link_place(self, place, link):
         pass
 
