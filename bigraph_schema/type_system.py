@@ -53,6 +53,7 @@ class TypeSystem:
 
 
     def find_registry(self, underscore_key):
+        """Find the registry for a given underscore key"""
         root = underscore_key.trim('_')
         registry_key = f'{root}_registry'
         return getattr(self, registry_key)
@@ -272,7 +273,7 @@ class TypeSystem:
 
     # TODO: do we need a "match" type method?
     def match(self, original_schema, state, pattern, mode='first', path=()):
-        '''
+        """
         find the path or paths to any instances of a given
         given pattern in the tree.
 
@@ -281,7 +282,7 @@ class TypeSystem:
         * first: only return the first match
         * random: return a random match of all that matched
         * all (or any other value): return every match in the tree
-        '''
+        """
 
         schema = self.access(original_schema)
 
@@ -699,10 +700,9 @@ class TypeSystem:
 
 
     def view_edge(self, schema, instance, edge_path=None, ports_key='inputs'):
-        '''
-        project the state of the current instance into a form
-        the edge expects, based on its ports
-        '''
+        """
+        project the state of the current instance into a form the edge expects, based on its ports.
+        """
 
         if schema is None:
             return None
@@ -767,12 +767,11 @@ class TypeSystem:
 
 
     def project_edge(self, schema, instance, edge_path, states, ports_key='outputs'):
-        '''
-        given states from the perspective of an edge (through
-          it's ports), produce states aligned to the tree
+        """
+        Given states from the perspective of an edge (through its ports), produce states aligned to the tree
           the wires point to.
           (inverse of view)
-        '''
+        """
 
         if schema is None:
             return None
@@ -838,11 +837,11 @@ class TypeSystem:
 
 
     def infer_schema(self, schema, state, top_state=None, path=None):
-        '''
+        """
         Given a schema fragment and an existing state with _type keys,
         return the full schema required to describe that state,
         and whatever state was hydrated (edges) during this process
-        '''
+        """
 
         schema = schema or {}
         # TODO: deal with this
@@ -1032,6 +1031,7 @@ class Edge:
 
 
     def schema(self):
+        """Returns the schema for this type"""
         return {
             'inputs': {},
             'outputs': {}}
@@ -1307,7 +1307,7 @@ def serialize_list(value, bindings=None, types=None):
     return [types.serialize(schema, element) for element in value]
 
 def serialize_np_array(value, bindings=None, types=None):
-    ''' Serialize numpy array to bytes '''
+    """ Serialize numpy array to bytes """
     return {
         'bytes': value.tobytes(),
         'dtype': value.dtype,
