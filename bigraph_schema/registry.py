@@ -11,6 +11,7 @@ import pytest
 import traceback
 
 from bigraph_schema.parse import parse_expression
+from bigraph_schema.protocols import local_lookup_module, function_module
 
 
 required_schema_keys = set([
@@ -31,6 +32,14 @@ optional_schema_keys = set([
 ])
 
 type_schema_keys = required_schema_keys | optional_schema_keys
+
+function_keys = [
+    '_apply',
+    '_check',
+    '_divide',
+    '_react',
+    '_serialize',
+    '_deserialize']
 
 overridable_schema_keys = set([
     '_type',
@@ -147,6 +156,17 @@ def validate_merge(state, dct, merge_dct):
 
 
 def get_path(tree, path):
+    '''
+    given a tree and a path, find the subtree at that path
+    Args:
+        tree: the tree we are looking in (a nested dict)
+        path: a list/tuple of keys we follow down the tree
+            to find the subtree we are looking for
+    Returns:
+        subtree: the subtree found by following the list of keys
+            down the tree
+    '''
+
     if len(path) == 0:
         return tree
     else:
@@ -158,6 +178,19 @@ def get_path(tree, path):
 
 
 def establish_path(tree, path, top=None, cursor=()):
+    '''
+    given a tree and a path in the tree that may or may not yet exist,
+    add nodes along the path and return the final node which is now at the
+    given path.
+    Args:
+        tree: the tree we are establishing a path in
+        path: where the new subtree will be located in the tree
+        top: (None) a reference to the top of the tree
+        cursor: (()) the current location we are visiting in the tree
+    Returns:
+        node: the new node of the tree that exists at the given path
+    '''
+
     if tree is None:
         tree = {}
 
@@ -191,6 +224,19 @@ def establish_path(tree, path, top=None, cursor=()):
 
 
 def set_path(tree, path, value, top=None, cursor=None):
+    '''
+    given a tree, a path, and a value, sets the location
+    in the tree corresponding to the path to the given value
+    Args:
+        tree: the tree we are setting a value in
+        path: where the new value will be located in the tree
+        value: the value to set at the given path in the tree
+        top: (None) a reference to the top of the tree
+        cursor: (()) the current location we are visiting in the tree
+    Returns:
+        node: the new node of the tree that exists at the given path
+    '''
+
     if value is None:
         return None
     if len(path) == 0:
@@ -204,6 +250,19 @@ def set_path(tree, path, value, top=None, cursor=None):
 
 
 def transform_path(tree, path, transform):
+    '''
+    given a tree, a path, and a transform (function), 
+    mutate the tree by replacing the subtree at the path by
+    whatever is returned from applying the transform to the
+    existing value
+    Args:
+        tree: the tree we are setting a value in
+        path: where the new value will be located in the tree
+        transform: the function to apply to whatever currently lives
+            at the given path in the tree
+    Returns:
+        node: the node of the tree that exists at the given path
+    '''
     before = establish_path(tree, path)
     after = transform(before)
 
@@ -211,6 +270,10 @@ def transform_path(tree, path, transform):
 
 
 def remove_omitted(before, after, tree):
+    '''
+    removes anything in tree that was in before but not in after
+    '''
+
     if isinstance(before, dict):
         if not isinstance(tree, dict):
             raise Exception(
@@ -234,6 +297,10 @@ def remove_omitted(before, after, tree):
 
 
 def remove_path(tree, path):
+    '''
+    removes whatever subtree lives at the given path
+    '''
+
     if path is None or len(path) == 0:
         return None
 
@@ -244,7 +311,7 @@ def remove_path(tree, path):
 
 
 class Registry(object):
-    """A Registry holds a collection of functions or objects."""
+    '''A Registry holds a collection of functions or objects'''
 
     def __init__(self, function_keys=None):
         function_keys = function_keys or []
@@ -253,7 +320,8 @@ class Registry(object):
         self.function_keys = set(function_keys)
 
     def register(self, key, item, alternate_keys=tuple(), force=False):
-        """Add an item to the registry.
+        '''
+        Add an item to the registry.
 
         Args:
             key: Item key.
@@ -265,7 +333,7 @@ class Registry(object):
                 This may be useful if you want to be able to look up an
                 item in the registry under multiple keys.
             force (bool): Force the registration, overriding existing keys. False by default.
-        """
+        '''
 
         # check that registered function have the required function keys
         if callable(item) and self.function_keys:
@@ -292,7 +360,10 @@ class Registry(object):
             self.register(key, schema, force=force)
 
     def access(self, key):
-        """Get an item by key from the registry."""
+        '''
+        get an item by key from the registry.
+        '''
+
         return self.registry.get(key)
 
     def list(self):
@@ -302,24 +373,114 @@ class Registry(object):
         return True
 
 
-class TypeRegistry(Registry):
-    """Type Registry
+def apply_tree(current, update, bindings, core):
+    leaf_type = core.access(bindings['leaf'])
+    bindings['leaf'] = leaf_type
+    
+    if isinstance(update, dict):
+        current = current or {}
+        
+        for key, branch in update.items():
+            if key == '_add':
+                current.update(branch)
+            elif key == '_remove':
+                current = remove_path(current, branch)
+            elif core.check(leaf_type, branch):
+                current[key] = core.apply(
+                    leaf_type,
+                    current.get(key),
+                    branch)
+            else:
+                current[key] = apply_tree(
+                    current.get(key),
+                    branch,
+                    bindings,
+                    core)
 
-    Holds type schema in one object for easy access
+        return current
+    else:
+        if current is None:
+            current = core.default(leaf_type)
+        return core.apply(leaf_type, current, update)
+
+
+def apply_any(current, update, bindings=None, core=None):
+    if isinstance(current, dict):
+        return apply_tree(
+            current,
+            update,
+            bindings={'leaf': 'any'},
+            core=core)
+    else:
+        return update
+
+
+def check_any(state, bindings=None, core=None):
+    return True
+
+
+def serialize_any(value, bindings=None, core=None):
+    return str(value)
+
+
+def deserialize_any(serialized, bindings=None, core=None):
+    return serialized
+
+
+class TypeRegistry(Registry):
     """
+    registry for holding type information
+    """
+
     def __init__(self):
         super().__init__()
 
         self.supers = {}
-        self.register(
-            'any', {
-                '_type': 'any',
-                '_apply': 'any',
-                '_serialize': 'serialize_any',
-                '_deserialize': 'deserialize_any'})
+
+        self.apply_registry = Registry(function_keys=[
+            'current',
+            'update',
+            'bindings',
+            'core'])
+
+        self.serialize_registry = Registry(function_keys=[
+            'value',
+            'bindings',
+            'core'])
+
+        self.deserialize_registry = Registry(function_keys=[
+            'serialized',
+            'bindings',
+            'core'])
+
+        self.divide_registry = Registry()  # TODO enforce keys for divider methods
+        self.check_registry = Registry()
+
+        self.register('any', {
+            '_type': 'any',
+            '_apply': apply_any,
+            '_check': check_any,
+            '_serialize': serialize_any,
+            '_deserialize': deserialize_any})
+
+
+    def find_registry(self, underscore_key):
+        '''
+        access the registry for the given key
+        '''
+
+        if underscore_key == '_type':
+            return self
+        root = underscore_key.strip('_')
+        registry_key = f'{root}_registry'
+        return getattr(self, registry_key)
 
 
     def register(self, key, schema, alternate_keys=tuple(), force=False):
+        '''
+        register the schema under the given key in the registry
+        '''
+
         if isinstance(schema, str):
             schema = self.access(schema)
         schema = copy.deepcopy(schema)
@@ -343,7 +504,35 @@ class TypeRegistry(Registry):
                     merge_supers=False)
 
             for subkey, original_subschema in schema.items():
-                if not subkey in type_schema_keys:
+                if subkey in function_keys:
+                    registry = self.find_registry(
+                        subkey)
+                    looking = original_subschema
+
+                    if isinstance(looking, str):
+                        module_key = looking
+                        found = registry.access(module_key)
+
+                        if found is None:
+                            found = local_lookup_module(
+                                module_key)
+
+                            if found is None:
+                                raise Exception(
+                                    f'function {looking} not found for type data {schema}')
+                            else:
+                                registry.register(
+                                    module_key,
+                                    found)
+
+                    elif inspect.isfunction(looking):
+                        found = looking
+                        module_key = function_module(found)
+                        registry.register(module_key, found)
+
+                    schema[subkey] = module_key
+
+                elif subkey not in type_schema_keys:
                     subschema = self.access(original_subschema)
                     if subschema is None:
                         raise Exception(f'trying to register a new type ({key}), '
@@ -357,14 +546,22 @@ class TypeRegistry(Registry):
 
         super().register(key, schema, alternate_keys, force)
 
+
     def resolve_parameters(self, type_parameters, schema):
+        '''
+        find the types associated with any type parameters in the schema
+        '''
+
         return {
             type_parameter: self.access(
                 schema.get(f'_{type_parameter}'))
             for type_parameter in type_parameters}
 
+
     def access(self, schema):
-        """Retrieve all types in the schema"""
+        '''
+        expand the schema to its full type information from the type registry
+        '''
 
         found = None
 
@@ -444,14 +641,14 @@ class TypeRegistry(Registry):
         return False
 
 
-class RegistryRegistry(Registry):
-    def type_attribute(self, type_key, attribute):
-        type_registry = self.access('_type')
-        type_value = type_registry.access(type_key)
-        attribute_key = type_value.get(attribute)
-        if attribute_key is not None:
-            attribute_registry = self.access(attribute)
-            return attribute_registry.access(attribute_key)
+# class RegistryRegistry(Registry):
+#     def type_attribute(self, type_key, attribute):
+#         type_registry = self.access('_type')
+#         type_value = type_registry.access(type_key)
+#         attribute_key = type_value.get(attribute)
+#         if attribute_key is not None:
+#             attribute_registry = self.access(attribute)
+#             return attribute_registry.access(attribute_key)
 
 
 def test_reregister_type():

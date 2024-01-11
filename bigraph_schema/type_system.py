@@ -9,18 +9,19 @@ import pint
 import pprint
 import pytest
 import random
+import inspect
 import numbers
 
 import numpy as np
 
+from bigraph_schema.units import units, render_units_type
 from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
-    Registry, TypeRegistry, RegistryRegistry,
-    type_schema_keys, non_schema_keys,
+    Registry, TypeRegistry, 
+    type_schema_keys, non_schema_keys, apply_tree,
     deep_merge, get_path, establish_path, set_path, transform_path, remove_path, remove_omitted
 )
 
-from bigraph_schema.units import units, render_units_type
 
 
 TYPE_SCHEMAS = {
@@ -31,56 +32,79 @@ class TypeSystem:
     """Handles type schemas and their operation"""
 
     def __init__(self):
-        self.apply_registry = Registry(function_keys=['current', 'update', 'bindings', 'types'])
-        self.serialize_registry = Registry(function_keys=['value', 'bindings', 'types'])
-        self.deserialize_registry = Registry(function_keys=['serialized', 'bindings', 'types'])
-        self.divide_registry = Registry()  # TODO enforce keys for divider methods
-        self.check_registry = Registry()
-        self.react_registry = Registry()
         self.type_registry = TypeRegistry()
+        self.react_registry = Registry()
 
-        self.registry_registry = RegistryRegistry()
-        self.registry_registry.register('_type', self.type_registry)
-        self.registry_registry.register('_react', self.react_registry)
-        self.registry_registry.register('_check', self.check_registry)
-        self.registry_registry.register('_apply', self.apply_registry)
-        self.registry_registry.register('_divide', self.divide_registry)
-        self.registry_registry.register('_serialize', self.serialize_registry)
-        self.registry_registry.register('_deserialize', self.deserialize_registry)
-        
-        register_base_types(self)
+        register_types(self, base_type_library)
         register_base_reactions(self)
 
 
-    def find_registry(self, underscore_key):
-        root = underscore_key.trim('_')
-        registry_key = f'{root}_registry'
-        return getattr(self, registry_key)
+    def register(self, type_key, type_data):
+        '''
+        register the provided type_data under the given type_key, looking up
+        the module of any functions provided
+        '''
+
+        self.type_registry.register(
+            type_key,
+            type_data)
+
+        # self.function_keys = [
+        #     '_apply',
+        #     '_check',
+        #     '_divide',
+        #     '_react',
+        #     '_serialize',
+        #     '_deserialize']
+
+        # type_record = {}
+        # missing_functions = []
+        # for function_key in self.function_keys:
+        #     if function_key in type_data:
+        #         registry = self.find_registry(
+        #             function_key)
+        #         looking = type_data[function_key]
+
+        #         if isinstance(looking, str):
+        #             module_key = looking
+        #             found = registry.access(module_key)
+
+        #             if found is None:
+        #                 found = local_lookup_module(
+        #                     module_key)
+
+        #                 if found is None:
+        #                     missing_functions.append((
+        #                         function_key,
+        #                         module_key))
+        #                 else:
+        #                     registry.register(
+        #                         module_key,
+        #                         found)
+
+        #         elif inspect.isfunction(looking):
+        #             found = looking
+        #             module_key = function_module(found)
+        #             registry.register(module_key, found)
+
+        #         type_record[function_key] = module_key
+
+        # if len(missing_functions) > 0:
+        #     raise Exception(
+        #         f'functions are missing from\n{type_data}\nnamely, {missing_functions}')
+        # else:
+        #     self.type_registry.register(
+        #         type_key,
+        #         type_record)
+
+        #     return type_record
 
 
-    def register(self, type_data):
-        self.function_keys = [
-            '_apply',
-            '_check',
-            '_divide',
-            '_react',
-            '_serialize',
-            '_deserialize']
+    def register_reaction(self, reaction_key, reaction):
+        self.react_registry.register(
+            reaction_key,
+            reaction)
 
-        missing_functions = []
-        for function_key in self.function_keys:
-            if function_key in type_data:
-                looking = type_data[function_key]
-                registry = self.find_registry(
-                    function_key)
-                found = registry.access(looking)
-                if found is None:
-                    missing_functions.append(
-                        (function_key, looking))
-
-        if len(missing_functions > 0):
-            raise Exception(
-                f'functions are missing from\n{type_data}\nnamely, {missing_functions}')
 
     def access(self, type_key):
         return self.type_registry.access(type_key)
@@ -116,7 +140,7 @@ class TypeSystem:
                         report[key] = f'type: {value} is not in the registry'
                 elif key in type_schema_keys:
                     schema_keys.add(key)
-                    registry = self.registry_registry.access(key)
+                    registry = self.type_registry.find_registry(key)
                     if registry is None:
                         # deserialize and serialize back and check it is equal
                         pass
@@ -154,9 +178,9 @@ class TypeSystem:
                     '_deserialize': f'serialize found in type without deserialize: {schema}'
                 }
             else:
-                serialize = self.serialize_registry.access(
+                serialize = self.type_registry.serialize_registry.access(
                     schema['_serialize'])
-                deserialize = self.deserialize_registry.access(
+                deserialize = self.type_registry.deserialize_registry.access(
                     schema['_deserialize'])
                 serial = serialize(state)
                 pass_through = deserialize(serial)
@@ -357,7 +381,7 @@ class TypeSystem:
             return self.check_state(schema, state, update)
 
         elif '_check' in schema and schema['_check'] != 'any':
-            check_function = self.check_registry.access(
+            check_function = self.type_registry.check_registry.access(
                 schema['_check'])
             
             return check_function(
@@ -397,7 +421,7 @@ class TypeSystem:
                 update['_react'])
 
         elif '_apply' in schema and schema['_apply'] != 'any':
-            apply_function = self.apply_registry.access(schema['_apply'])
+            apply_function = self.type_registry.apply_registry.access(schema['_apply'])
             
             state = apply_function(
                 state,
@@ -438,7 +462,7 @@ class TypeSystem:
 
     def set_update(self, schema, state, update):
         if '_apply' in schema:
-            apply_function = self.apply_registry.access('set')
+            apply_function = self.type_registry.apply_registry.access('set')
             
             state = apply_function(
                 state,
@@ -480,7 +504,7 @@ class TypeSystem:
     def serialize(self, schema, state):
         found = self.access(schema)
         if '_serialize' in found:
-            serialize_function = self.serialize_registry.access(
+            serialize_function = self.type_registry.serialize_registry.access(
                 found['_serialize'])
 
             if serialize_function is None:
@@ -506,7 +530,7 @@ class TypeSystem:
         if '_deserialize' in found:
             deserialize = found['_deserialize']
             if isinstance(deserialize, str):
-                deserialize_function = self.deserialize_registry.access(
+                deserialize_function = self.type_registry.deserialize_registry.access(
                     deserialize)
             else:
                 deserialize_function = deserialize
@@ -995,26 +1019,28 @@ class TypeSystem:
 NONE_SYMBOL = 'None'
 
 
-def instance_parameter(instance_type):
-    def is_instance_parameter(instance, bindings=None, types=None):
-        return isinstance(instance, instance_type)
+def check_number(instance, bindings=None, core=None):
+    return isinstance(instance, numbers.Number)
 
-    return is_instance_parameter
+def check_boolean(instance, bindings=None, core=None):
+    return isinstance(instance, bool)
+
+def check_int(instance, bindings=None, core=None):
+    return isinstance(instance, int)
+
+def check_float(instance, bindings=None, core=None):
+    return isinstance(instance, float)
+
+def check_string(instance, bindings=None, core=None):
+    return isinstance(instance, str)
 
 
-check_number = instance_parameter(numbers.Number)
-check_boolean = instance_parameter(bool)
-check_int = instance_parameter(int)
-check_float = instance_parameter(float)
-check_string = instance_parameter(str)
-
-
-def check_list(state, bindings, types):
+def check_list(state, bindings, core):
     element_type = bindings['element']
 
     if isinstance(state, list):
         for element in state:
-            check = types.check(
+            check = core.check(
                 element_type,
                 element)
 
@@ -1037,83 +1063,459 @@ class Edge:
             'outputs': {}}
 
 
+#################
+# Apply methods #
+#################
+
+def apply_boolean(current: bool, update: bool, bindings=None, core=None) -> bool:
+    """Performs a bit flip if `current` does not match `update`, returning update. Returns current if they match."""
+    if current != update:
+        return update
+    else:
+        return current
+
+
+def divide_boolean(value: bool, bindings=None, core=None):
+    return (value, value)
+
+
+def serialize_boolean(value: bool, bindings=None, core=None) -> str:
+    return str(value)
+
+
+def deserialize_boolean(serialized, bindings=None, core=None) -> bool:
+    return bool(serialized)
+
+
+def accumulate(current, update, bindings=None, core=None):
+    if current is None:
+        return update
+    if update is None:
+        return current
+    else:
+        return current + update
+
+
+def set_apply(current, update, bindings=None, core=None):
+    return update
+
+
+def concatenate(current, update, bindings=None, core=None):
+    return current + update
+
+
+##################
+# Divide methods #
+##################
+# support dividing by ratios?
+# ---> divide_float({...}, [0.1, 0.3, 0.6])
+
+def divide_float(value, ratios, bindings=None, core=None):
+    half = value / 2.0
+    return (half, half)
+
+
+# support function core for registrys?
+# def divide_int(value: int, _) -> tuple[int, int]:
+def divide_int(value, bindings=None, core=None):
+    half = value // 2
+    other_half = half
+    if value % 2 == 1:
+        other_half += 1
+    return half, other_half
+
+
+def divide_longest(dimensions, bindings=None, core=None):
+    # any way to declare the required keys for this function in the registry?
+    # find a way to ask a function what type its domain and codomain are
+
+    width = dimensions['width']
+    height = dimensions['height']
+
+    if width > height:
+        a, b = divide_int(width)
+        return [{'width': a, 'height': height}, {'width': b, 'height': height}]
+    else:
+        x, y = divide_int(height)
+        return [{'width': width, 'height': x}, {'width': width, 'height': y}]
+
+
+def divide_list(l, bindings, core):
+    result = [[], []]
+    divide_type = bindings['element']
+    divide = divide_type['_divide']
+
+    for item in l:
+        if isinstance(item, list):
+            divisions = divide_list(item, bindings, core)
+        else:
+            divisions = divide(item, divide_type, core)
+
+        result[0].append(divisions[0])
+        result[1].append(divisions[1])
+
+    return result
+
+
+def replace(current, update, bindings=None, core=None):
+    return update
+
+
+#####################
+# Serialize methods #
+#####################
+
+def serialize_string(value, bindings=None, core=None):
+    return value
+
+
+def deserialize_string(serialized, bindings=None, core=None):
+    return serialized
+
+
+def to_string(value, bindings=None, core=None):
+    return str(value)
+
+
+def serialize_list(value, bindings=None, core=None):
+    schema = bindings['element']
+    return [core.serialize(schema, element) for element in value]
+
+def serialize_numpy_array(value, bindings=None, core=None):
+    ''' Serialize numpy array to bytes '''
+    return {
+        'bytes': value.tobytes(),
+        'dtype': value.dtype,
+        'shape': value.shape,
+    }
+
+
+#######################
+# Deserialize methods #
+#######################
+
+def deserialize_int(serialized, bindings=None, core=None):
+    return int(serialized)
+
+
+def deserialize_float(serialized, bindings=None, core=None):
+    return float(serialized)
+
+
+def evaluate(serialized, bindings=None, core=None):
+    return eval(serialized)
+
+
+def deserialize_list(serialized, bindings=None, core=None):
+    schema = bindings['element']
+    return [core.deserialize(schema, element) for element in serialized]
+
+
+def deserialize_numpy_array(serialized, bindings=None, core=None):
+    if isinstance(serialized, dict):
+        np.frombuffer(serialized['bytes'], dtype=serialized['dtype']).reshape(serialized['shape'])
+        return np.frombuffer(serialized)
+    else:
+        return  serialized
+
+
+# ------------------------------
+# TODO: make all of the core work
+
+
+def apply_list(current, update, bindings, core):
+    element_type = core.access(bindings['element'])
+    
+    if isinstance(update, list):
+        result = []
+        for current_element, update_element in zip(current, update):
+            applied = core.apply(
+                element_type,
+                current_element,
+                update_element)
+
+            result.append(applied)
+
+        return result
+    else:
+        raise Exception(f'trying to apply an update to an existing list, but the update is not a list: {update}')
+
+
+def check_tree(tree, bindings, core):
+    leaf_type = bindings['leaf']
+
+    if isinstance(state, dict):
+        for key, value in state.items():
+            check = core.check(
+                leaf_type,
+                leaf)
+
+            if not check:
+                check = core.check({
+                    '_type': 'tree',
+                    '_leaf': leaf_type})
+
+                if not check:
+                    return False
+
+        return True
+    else:
+        return False
+
+    return core.check(leaf_type, tree)
+
+
+def divide_tree(tree, bindings, core):
+    result = [{}, {}]
+    # get the type of the values for this dict
+    divide_type = bindings['leaf']
+    divide_function = divide_type['_divide']
+    # divide_function = core.registry_registry.type_attribute(
+    #     divide_type,
+    #     '_divide')
+
+    for key, value in tree.items():
+        if isinstance(value, dict):
+            divisions = divide_tree(value)
+        else:
+            divisions = core.divide(divide_type, value)
+
+        result[0][key], result[1][key] = divisions
+
+    return result
+
+
+def serialize_tree(value, bindings=None, core=None):
+    return value
+
+
+def deserialize_tree(serialized, bindings=None, core=None):
+    tree = serialized
+
+    if isinstance(serialized, str):
+        tree = core.deserialize(
+            bindings['leaf'],
+            serialized)
+
+    elif isinstance(serialized, dict):
+        tree = {}
+        for key, value in serialized.items():
+            tree[key] = deserialize_tree(value, bindings, core)
+
+    return tree
+
+
+def apply_dict(current, update, bindings=None, core=None):
+    pass
+
+
+def check_dict(current, update, bindings=None, core=None):
+    pass
+
+
+def divide_dict(value, bindings=None, core=None):
+    return value
+
+
+def serialize_dict(value, bindings=None, core=None):
+    return value
+
+
+def deserialize_dict(serialized, bindings=None, core=None):
+    return serialized
+
+
+def apply_maybe(current, update, bindings, core):
+    if current is None or update is None:
+        return update
+    else:
+        value_type = bindings['value']
+        return core.apply(value_type, current, update)
+
+
+def check_maybe(state):
+    if state is None:
+        return [None, None]
+    else:
+        pass
+
+
+def divide_maybe(value, bindings):
+    if value is None:
+        return [None, None]
+    else:
+        pass
+
+
+def serialize_maybe(value, bindings, core):
+    if value is None:
+        return NONE_SYMBOL
+    else:
+        value_type = bindings['value']
+        return serialize(value_type, value)
+
+
+def deserialize_maybe(serialized, bindings, core):
+    if serialized == NONE_SYMBOL:
+        return None
+    else:
+        value_type = bindings['value']
+        return core.deserialize(value_type, serialized)
+
+
+# TODO: deal with all the different unit core
+def apply_units(current, update, bindings, core):
+    return current + update
+
+
+def check_units(state, bindings, core):
+    # TODO: expand this to check the actual units for compatibility
+    return isinstance(state, pint.Quantity)
+
+
+def serialize_units(value, bindings, core):
+    return str(value)
+
+
+def deserialize_units(serialized, bindings, core):
+    return units(serialized)
+
+
+def divide_units(value, bindings, core):
+    return [value, value]
+
+
+# TODO: implement edge handling
+def apply_edge(current, update, bindings, core):
+    return current + update
+
+
+def check_edge(state, bindings, core):
+    return state
+
+
+def serialize_edge(value, bindings, core):
+    return value
+
+
+def deserialize_edge(serialized, bindings, core):
+    return serialized
+
+
+def divide_edge(value, bindings, core):
+    return [value, value]
+
+
+def register_types(core, type_library):
+    for type_key, type_data in type_library.items():
+        if core.access(type_key) is None:
+            core.register(
+                type_key,
+                type_data)
+
+    return core
+        
+
+def register_units(core, units):
+    for unit_name in units._units:
+        try:
+            unit = getattr(units, unit_name)
+        except:
+            # print(f'no unit named {unit_name}')
+            continue
+
+        dimensionality = unit.dimensionality
+        type_key = render_units_type(dimensionality)
+        if core.access(type_key) is None:
+            core.register(type_key, {
+                '_default': '',
+                '_apply': apply_units,
+                '_check': check_units,
+                '_serialize': serialize_units,
+                '_deserialize': deserialize_units,
+                '_divide': divide_units,
+                '_description': 'type to represent values with scientific units'})
+
+    return core
+
+
+
 base_type_library = {
     'boolean': {
         '_type': 'boolean',
         '_default': False,
-        '_apply': 'apply_boolean',
-        '_serialize': 'serialize_boolean',
-        '_deserialize': 'deserialize_boolean',
-        '_divide': 'divide_boolean',
+        '_apply': apply_boolean,
+        '_serialize': serialize_boolean,
+        '_deserialize': deserialize_boolean,
+        '_divide': divide_boolean,
     },
 
     # abstract number type
     'number': {
         '_type': 'number',
-        '_apply': 'accumulate',
-        '_check': 'check_number',
-        '_serialize': 'to_string',
+        '_apply': accumulate,
+        '_check': check_number,
+        '_serialize': to_string,
         '_description': 'abstract base type for numbers'},
 
     'int': {
         '_type': 'int',
         '_default': '0',
         # inherit _apply and _serialize from number type
-        '_deserialize': 'deserialize_int',
-        '_check': 'check_int',
-        '_divide': 'divide_int',
+        '_deserialize': deserialize_int,
+        '_check': check_int,
+        '_divide': divide_int,
         '_description': '64-bit integer',
         '_super': 'number'},
 
     'float': {
         '_type': 'float',
         '_default': '0.0',
-        '_deserialize': 'float',
-        '_check': 'check_float',
-        '_divide': 'divide_float',
+        '_deserialize': deserialize_float,
+        '_check': check_float,
+        '_divide': divide_float,
         '_description': '64-bit floating point precision number',
         '_super': 'number'},
 
     'string': {
         '_type': 'string',
         '_default': '',
-        '_apply': 'replace',
-        '_check': 'check_string',
-        '_serialize': 'serialize_string',
-        '_deserialize': 'deserialize_string',
-        '_divide': 'divide_int',
+        '_apply': replace,
+        '_check': check_string,
+        '_serialize': serialize_string,
+        '_deserialize': deserialize_string,
         '_description': '64-bit integer'},
 
     'list': {
         '_type': 'list',
         '_default': [],
-        '_apply': 'apply_list',
-        '_check': 'check_list',
-        '_serialize': 'serialize_list',
-        '_deserialize': 'deserialize_list',
-        '_divide': 'divide_list',
+        '_apply': apply_list,
+        '_check': check_list,
+        '_serialize': serialize_list,
+        '_deserialize': deserialize_list,
+        '_divide': divide_list,
         '_type_parameters': ['element'],
         '_description': 'general list type (or sublists)'},
 
     'tree': {
         '_type': 'tree',
         '_default': {},
-        '_apply': 'apply_tree',
-        '_serialize': 'serialize_tree',
-        '_deserialize': 'deserialize_tree',
-        '_divide': 'divide_tree',
-        '_check': 'check_tree',
+        '_apply': apply_tree,
+        '_serialize': serialize_tree,
+        '_deserialize': deserialize_tree,
+        '_divide': divide_tree,
+        '_check': check_tree,
         '_type_parameters': ['leaf'],
         '_description': 'mapping from str to some type (or nested dicts)'},
 
     'dict': {
         '_type': 'dict',
         '_default': {},
-        '_apply': 'apply_dict',
-        '_serialize': 'serialize_dict',
-        '_deserialize': 'deserialize_dict',
-        '_divide': 'divide_dict',
-        '_check': 'check_dict',
+        '_apply': apply_dict,
+        '_serialize': serialize_dict,
+        '_deserialize': deserialize_dict,
+        '_divide': divide_dict,
+        '_check': check_dict,
         # TODO: create assignable type parameters?
         '_type_parameters': ['key', 'value'],
         '_description': 'mapping from keys of any type to values of any type'},
@@ -1126,11 +1528,11 @@ base_type_library = {
     'maybe': {
         '_type': 'maybe',
         '_default': 'None',
-        '_apply': 'apply_maybe',
-        '_serialize': 'serialize_maybe',
-        '_deserialize': 'deserialize_maybe',
-        '_check': 'check_maybe',
-        '_divide': 'divide_maybe',
+        '_apply': apply_maybe,
+        '_serialize': serialize_maybe,
+        '_deserialize': deserialize_maybe,
+        '_check': check_maybe,
+        '_divide': divide_maybe,
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
 
@@ -1142,11 +1544,11 @@ base_type_library = {
         '_default': {
             'inputs': {},
             'outputs': {}},
-        '_apply': 'apply_edge',
-        '_serialize': 'serialize_edge',
-        '_deserialize': 'deserialize_edge',
-        '_divide': 'divide_edge',
-        '_check': 'check_edge',
+        '_apply': apply_edge,
+        '_serialize': serialize_edge,
+        '_deserialize': deserialize_edge,
+        '_divide': divide_edge,
+        '_check': check_edge,
         '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with ports as a type parameter',
         'inputs': 'wires',
@@ -1156,9 +1558,9 @@ base_type_library = {
     'numpy_array': {
         '_type': 'numpy_array',
         '_default': np.array([]),
-        '_apply': 'accumulate',
-        '_serialize': 'serialize_np_array',
-        '_deserialize': 'deserialize_np_array',
+        '_apply': accumulate,
+        '_serialize': serialize_numpy_array,
+        '_deserialize': deserialize_numpy_array,
         '_description': 'numpy arrays'
     },
 
@@ -1176,492 +1578,82 @@ base_type_library = {
 }
 
 
-#################
-# Apply methods #
-#################
-
-def apply_boolean(current: bool, update: bool, bindings=None, types=None) -> bool:
-    """Performs a bit flip if `current` does not match `update`, returning update. Returns current if they match."""
-    if current != update:
-        return update
-    else:
-        return current
-
-
-def divide_boolean(value: bool, bindings=None, types=None):
-    return (value, value)
-
-
-def serialize_boolean(value: bool, bindings=None, types=None) -> str:
-    return str(value)
-
-
-def deserialize_boolean(serialized, bindings=None, types=None) -> bool:
-    return bool(serialized)
-
-
-def apply_any(current, update, bindings=None, types=None):
-    return update
-
-
-def check_any(state, bindings=None, types=None):
-    return True
-
-
-def serialize_any(value, bindings=None, types=None):
-    return str(value)
-
-
-def accumulate(current, update, bindings=None, types=None):
-    if current is None:
-        return update
-    if update is None:
-        return current
-    else:
-        return current + update
-
-
-def set_apply(current, update, bindings=None, types=None):
-    return update
-
-
-def concatenate(current, update, bindings=None, types=None):
-    return current + update
-
-
-##################
-# Divide methods #
-##################
-# support dividing by ratios?
-# ---> divide_float({...}, [0.1, 0.3, 0.6])
-
-def divide_float(value, ratios, bindings=None, types=None):
-    half = value / 2.0
-    return (half, half)
-
-
-# support function types for registrys?
-# def divide_int(value: int, _) -> tuple[int, int]:
-def divide_int(value, bindings=None, types=None):
-    half = value // 2
-    other_half = half
-    if value % 2 == 1:
-        other_half += 1
-    return half, other_half
-
-
-def divide_longest(dimensions, bindings=None, types=None):
-    # any way to declare the required keys for this function in the registry?
-    # find a way to ask a function what type its domain and codomain are
-
-    width = dimensions['width']
-    height = dimensions['height']
-
-    if width > height:
-        a, b = divide_int(width)
-        return [{'width': a, 'height': height}, {'width': b, 'height': height}]
-    else:
-        x, y = divide_int(height)
-        return [{'width': width, 'height': x}, {'width': width, 'height': y}]
-
-
-def divide_list(l, bindings, types):
-    result = [[], []]
-    divide_type = bindings['element']
-    divide = divide_type['_divide']
-
-    for item in l:
-        if isinstance(item, list):
-            divisions = divide_list(item, bindings, types)
-        else:
-            divisions = divide(item, divide_type, types)
-
-        result[0].append(divisions[0])
-        result[1].append(divisions[1])
-
-    return result
-
-
-def replace(current, update, bindings=None, types=None):
-    return update
-
-
-#####################
-# Serialize methods #
-#####################
-
-def serialize_string(value, bindings=None, types=None):
-    return value
-
-
-def deserialize_string(serialized, bindings=None, types=None):
-    return serialized
-
-
-def to_string(value, bindings=None, types=None):
-    return str(value)
-
-
-def serialize_list(value, bindings=None, types=None):
-    schema = bindings['element']
-    return [types.serialize(schema, element) for element in value]
-
-def serialize_np_array(value, bindings=None, types=None):
-    ''' Serialize numpy array to bytes '''
-    return {
-        'bytes': value.tobytes(),
-        'dtype': value.dtype,
-        'shape': value.shape,
-    }
-
-
-#######################
-# Deserialize methods #
-#######################
-
-def deserialize_int(serialized, bindings=None, types=None):
-    return int(serialized)
-
-
-def deserialize_float(serialized, bindings=None, types=None):
-    return float(serialized)
-
-
-def evaluate(serialized, bindings=None, types=None):
-    return eval(serialized)
-
-
-def deserialize_any(serialized, bindings=None, types=None):
-    return serialized
-
-def deserialize_list(serialized, bindings=None, types=None):
-    schema = bindings['element']
-    return [types.deserialize(schema, element) for element in serialized]
-
-
-def deserialize_np_array(serialized, bindings=None, types=None):
-    if isinstance(serialized, dict):
-        np.frombuffer(serialized['bytes'], dtype=serialized['dtype']).reshape(serialized['shape'])
-        return np.frombuffer(serialized)
-    else:
-        return  serialized
-
-
-# ------------------------------
-# TODO: make all of the types work
-
-
-def apply_list(current, update, bindings, types):
-    element_type = types.access(bindings['element'])
-    
-    if isinstance(update, list):
-        result = []
-        for current_element, update_element in zip(current, update):
-            applied = types.apply(
-                element_type,
-                current_element,
-                update_element)
-
-            result.append(applied)
-
-        return result
-    else:
-        raise Exception(f'trying to apply an update to an existing list, but the update is not a list: {update}')
-
-
-def apply_tree(current, update, bindings, types):
-    leaf_type = types.access(bindings['leaf'])
-    bindings['leaf'] = leaf_type
-    
-    if isinstance(update, dict):
-        current = current or {}
-        
-        for key, branch in update.items():
-            if key == '_add':
-                current.update(branch)
-            elif key == '_remove':
-                current = remove_path(current, branch)
-            elif types.check(leaf_type, branch):
-                current[key] = types.apply(
-                    leaf_type,
-                    current.get(key),
-                    branch)
-            else:
-                current[key] = apply_tree(
-                    current.get(key),
-                    branch,
-                    bindings,
-                    types)
-
-        return current
-    else:
-        if current is None:
-            current = types.default(leaf_type)
-        return types.apply(leaf_type, current, update)
-
-
-def check_tree(tree, bindings, types):
-    leaf_type = bindings['leaf']
-
-    if isinstance(state, dict):
-        for key, value in state.items():
-            check = types.check(
-                leaf_type,
-                leaf)
-
-            if not check:
-                check = types.check({
-                    '_type': 'tree',
-                    '_leaf': leaf_type})
-
-                if not check:
-                    return False
-
-        return True
-    else:
-        return False
-
-    return types.check(leaf_type, tree)
-
-
-def divide_tree(tree, bindings, types):
-    result = [{}, {}]
-    # get the type of the values for this dict
-    divide_type = bindings['leaf']
-    divide_function = divide_type['_divide']
-    # divide_function = types.registry_registry.type_attribute(
-    #     divide_type,
-    #     '_divide')
-
-    for key, value in tree.items():
-        if isinstance(value, dict):
-            divisions = divide_tree(value)
-        else:
-            divisions = types.divide(divide_type, value)
-
-        result[0][key], result[1][key] = divisions
-
-    return result
-
-
-def serialize_tree(value, bindings=None, types=None):
-    return value
-
-
-def deserialize_tree(serialized, bindings=None, types=None):
-    tree = serialized
-
-    if isinstance(serialized, str):
-        tree = types.deserialize(
-            bindings['leaf'],
-            serialized)
-
-    elif isinstance(serialized, dict):
-        tree = {}
-        for key, value in serialized.items():
-            tree[key] = deserialize_tree(value, bindings, types)
-
-    return tree
-
-
-def apply_dict(current, update, bindings=None, types=None):
-    pass
-
-
-def check_dict(current, update, bindings=None, types=None):
-    pass
-
-
-def divide_dict(value, bindings=None, types=None):
-    return value
-
-
-def serialize_dict(value, bindings=None, types=None):
-    return value
-
-
-def deserialize_dict(serialized, bindings=None, types=None):
-    return serialized
-
-
-def apply_maybe(current, update, bindings, types):
-    if current is None or update is None:
-        return update
-    else:
-        value_type = bindings['value']
-        return types.apply(value_type, current, update)
-
-
-def check_maybe(state):
-    if state is None:
-        return [None, None]
-    else:
-        pass
-
-
-def divide_maybe(value, bindings):
-    if value is None:
-        return [None, None]
-    else:
-        pass
-
-
-def serialize_maybe(value, bindings, types):
-    if value is None:
-        return NONE_SYMBOL
-    else:
-        value_type = bindings['value']
-        return serialize(value_type, value)
-
-
-def deserialize_maybe(serialized, bindings, types):
-    if serialized == NONE_SYMBOL:
-        return None
-    else:
-        value_type = bindings['value']
-        return types.deserialize(value_type, serialized)
-
-
-# TODO: deal with all the different unit types
-def apply_units(current, update, bindings, types):
-    return current + update
-
-
-def check_units(state, bindings, types):
-    # TODO: expand this to check the actual units for compatibility
-    return isinstance(state, pint.Quantity)
-
-
-def serialize_units(value, bindings, types):
-    return str(value)
-
-
-def deserialize_units(serialized, bindings, types):
-    return units(serialized)
-
-
-def divide_units(value, bindings, types):
-    return [value, value]
-
-
-# TODO: implement edge handling
-def apply_edge(current, update, bindings, types):
-    return current + update
-
-
-def check_edge(state, bindings, types):
-    return state
-
-
-def serialize_edge(value, bindings, types):
-    return value
-
-
-def deserialize_edge(serialized, bindings, types):
-    return serialized
-
-
-def divide_edge(value, bindings, types):
-    return [value, value]
-
-
-def register_units(types, units):
-    for unit_name in units._units:
-        try:
-            unit = getattr(units, unit_name)
-        except:
-            # print(f'no unit named {unit_name}')
-            continue
-
-        dimensionality = unit.dimensionality
-        type_key = render_units_type(dimensionality)
-        if types.type_registry.access(type_key) is None:
-            types.type_registry.register(type_key, {
-                '_default': '',
-                '_apply': 'apply_units',
-                '_check': 'check_units',
-                '_serialize': 'serialize_units',
-                '_deserialize': 'deserialize_units',
-                '_divide': 'divide_units',
-                '_description': 'type to represent values with scientific units'})
-
-
-def register_base_types(types):
-
-    # validate the function registered is of the right type?
-    types.apply_registry.register('any', apply_any)
-    types.apply_registry.register('accumulate', accumulate)
-    types.apply_registry.register('set', set_apply)
-    types.apply_registry.register('concatenate', concatenate)
-    types.apply_registry.register('replace', replace)
-    types.apply_registry.register('apply_tree', apply_tree)
-    types.apply_registry.register('apply_boolean', apply_boolean)
-    types.apply_registry.register('apply_list', apply_list)
-    types.apply_registry.register('apply_dict', apply_dict)
-    types.apply_registry.register('apply_maybe', apply_maybe)
-    types.apply_registry.register('apply_units', apply_units)
-    types.apply_registry.register('apply_edge', apply_edge)
-
-    types.divide_registry.register('divide_boolean', divide_boolean)
-    types.divide_registry.register('divide_float', divide_float)
-    types.divide_registry.register('divide_int', divide_int)
-    types.divide_registry.register('divide_longest', divide_longest)
-    types.divide_registry.register('divide_list', divide_list)
-    types.divide_registry.register('divide_tree', divide_tree)
-    types.divide_registry.register('divide_dict', divide_dict)
-    types.divide_registry.register('divide_maybe', divide_maybe)
-    types.divide_registry.register('divide_units', divide_units)
-    types.divide_registry.register('divide_edge', divide_edge)
-
-    types.check_registry.register('check_boolean', check_boolean)
-    types.check_registry.register('check_number', check_number)
-    types.check_registry.register('check_float', check_float)
-    types.check_registry.register('check_string', check_string)
-    types.check_registry.register('check_int', check_int)
-    types.check_registry.register('check_list', check_list)
-    types.check_registry.register('check_tree', check_tree)
-    types.check_registry.register('check_dict', check_dict)
-    types.check_registry.register('check_maybe', check_maybe)
-    types.check_registry.register('check_units', check_units)
-    types.check_registry.register('check_edge', check_edge)
-
-    types.serialize_registry.register('serialize_any', serialize_any)
-    types.serialize_registry.register('serialize_boolean', serialize_boolean)
-    types.serialize_registry.register('serialize_string', serialize_string)
-    types.serialize_registry.register('to_string', to_string)
-    types.serialize_registry.register('serialize_tree', serialize_tree)
-    types.serialize_registry.register('serialize_dict', serialize_dict)
-    types.serialize_registry.register('serialize_maybe', serialize_maybe)
-    types.serialize_registry.register('serialize_units', serialize_units)
-    types.serialize_registry.register('serialize_edge', serialize_edge)
-    types.serialize_registry.register('serialize_list', serialize_list)
-    types.serialize_registry.register('serialize_np_array', serialize_np_array)
-
-    types.deserialize_registry.register('deserialize_any', deserialize_any)
-    types.deserialize_registry.register('deserialize_boolean', deserialize_boolean)
-    types.deserialize_registry.register('float', deserialize_float)
-    types.deserialize_registry.register('deserialize_int', deserialize_int)
-    types.deserialize_registry.register('deserialize_string', deserialize_string)
-    types.deserialize_registry.register('evaluate', evaluate)
-    types.deserialize_registry.register('deserialize_tree', deserialize_tree)
-    types.deserialize_registry.register('deserialize_dict', deserialize_dict)
-    types.deserialize_registry.register('deserialize_maybe', deserialize_maybe)
-    types.deserialize_registry.register('deserialize_units', deserialize_units)
-    types.deserialize_registry.register('deserialize_edge', deserialize_edge)
-    types.deserialize_registry.register('deserialize_list', deserialize_list)
-    types.deserialize_registry.register('deserialize_np_array', deserialize_np_array)
-
-    types.type_registry.register_multiple(base_type_library)
-    register_units(types, units)
-
-    return types
-
-
-def register_base_reactions(types):
-    types.react_registry.register('divide_counts', react_divide_counts)
-
-
-def register_cube(types):
+# def register_base_types(types):
+
+#     # validate the function registered is of the right type?
+#     types.apply_registry.register('any', apply_any)
+#     types.apply_registry.register('accumulate', accumulate)
+#     types.apply_registry.register('set', set_apply)
+#     types.apply_registry.register('concatenate', concatenate)
+#     types.apply_registry.register('replace', replace)
+#     types.apply_registry.register('apply_tree', apply_tree)
+#     types.apply_registry.register('apply_boolean', apply_boolean)
+#     types.apply_registry.register('apply_list', apply_list)
+#     types.apply_registry.register('apply_dict', apply_dict)
+#     types.apply_registry.register('apply_maybe', apply_maybe)
+#     types.apply_registry.register('apply_units', apply_units)
+#     types.apply_registry.register('apply_edge', apply_edge)
+
+#     types.divide_registry.register('divide_boolean', divide_boolean)
+#     types.divide_registry.register('divide_float', divide_float)
+#     types.divide_registry.register('divide_int', divide_int)
+#     types.divide_registry.register('divide_longest', divide_longest)
+#     types.divide_registry.register('divide_list', divide_list)
+#     types.divide_registry.register('divide_tree', divide_tree)
+#     types.divide_registry.register('divide_dict', divide_dict)
+#     types.divide_registry.register('divide_maybe', divide_maybe)
+#     types.divide_registry.register('divide_units', divide_units)
+#     types.divide_registry.register('divide_edge', divide_edge)
+
+#     types.check_registry.register('check_boolean', check_boolean)
+#     types.check_registry.register('check_number', check_number)
+#     types.check_registry.register('check_float', check_float)
+#     types.check_registry.register('check_string', check_string)
+#     types.check_registry.register('check_int', check_int)
+#     types.check_registry.register('check_list', check_list)
+#     types.check_registry.register('check_tree', check_tree)
+#     types.check_registry.register('check_dict', check_dict)
+#     types.check_registry.register('check_maybe', check_maybe)
+#     types.check_registry.register('check_units', check_units)
+#     types.check_registry.register('check_edge', check_edge)
+
+#     types.serialize_registry.register('serialize_any', serialize_any)
+#     types.serialize_registry.register('serialize_boolean', serialize_boolean)
+#     types.serialize_registry.register('serialize_string', serialize_string)
+#     types.serialize_registry.register('to_string', to_string)
+#     types.serialize_registry.register('serialize_tree', serialize_tree)
+#     types.serialize_registry.register('serialize_dict', serialize_dict)
+#     types.serialize_registry.register('serialize_maybe', serialize_maybe)
+#     types.serialize_registry.register('serialize_units', serialize_units)
+#     types.serialize_registry.register('serialize_edge', serialize_edge)
+#     types.serialize_registry.register('serialize_list', serialize_list)
+#     types.serialize_registry.register('serialize_np_array', serialize_np_array)
+
+#     types.deserialize_registry.register('deserialize_any', deserialize_any)
+#     types.deserialize_registry.register('deserialize_boolean', deserialize_boolean)
+#     types.deserialize_registry.register('float', deserialize_float)
+#     types.deserialize_registry.register('deserialize_int', deserialize_int)
+#     types.deserialize_registry.register('deserialize_string', deserialize_string)
+#     types.deserialize_registry.register('evaluate', evaluate)
+#     types.deserialize_registry.register('deserialize_tree', deserialize_tree)
+#     types.deserialize_registry.register('deserialize_dict', deserialize_dict)
+#     types.deserialize_registry.register('deserialize_maybe', deserialize_maybe)
+#     types.deserialize_registry.register('deserialize_units', deserialize_units)
+#     types.deserialize_registry.register('deserialize_edge', deserialize_edge)
+#     types.deserialize_registry.register('deserialize_list', deserialize_list)
+#     types.deserialize_registry.register('deserialize_np_array', deserialize_np_array)
+
+#     types.type_registry.register_multiple(base_type_library)
+#     register_units(types, units)
+
+#     return types
+
+
+def register_base_reactions(core):
+    core.register_reaction('divide_counts', react_divide_counts)
+
+
+def register_cube(core):
     cube_schema = {
         'shape': {
             '_type': 'shape',
@@ -1669,7 +1661,7 @@ def register_cube(types):
         
         'rectangle': {
             '_type': 'rectangle',
-            '_divide': 'divide_longest',
+            '_divide': divide_longest,
             '_description': 'a two-dimensional value',
             '_super': 'shape',
             'width': {'_type': 'int'},
@@ -1684,10 +1676,13 @@ def register_cube(types):
         },
     }
 
-    types.type_registry.register_multiple(
-        cube_schema)
+    for type_key, type_data in cube_schema.items():
+        core.register(type_key, type_data)
 
-    return types
+    return core
+
+    # core.type_registry.register_multiple(
+    #     cube_schema)
 
 
 @pytest.fixture
@@ -1701,7 +1696,7 @@ def cube_types(base_types):
 
 
 def register_compartment(base_types):
-    base_types.type_registry.register('compartment', {
+    base_types.register('compartment', {
         'counts': 'tree[float]',
         'inner': 'tree[compartment]'})
 
@@ -1748,6 +1743,8 @@ def test_apply_update(cube_types):
         'depth': -5
     }
 
+    import ipdb; ipdb.set_trace()
+
     new_state = cube_types.apply(
         schema,
         state,
@@ -1758,9 +1755,9 @@ def test_apply_update(cube_types):
     assert new_state['depth'] == 39
 
 
-def print_schema_validation(types, library, should_pass):
+def print_schema_validation(core, library, should_pass):
     for key, declaration in library.items():
-        report = types.validate_schema(declaration)
+        report = core.validate_schema(declaration)
         if len(report) == 0:
             message = f'valid schema: {key}'
             if should_pass:
@@ -2010,7 +2007,7 @@ def test_expected_schema(base_types):
                 'output1': 'float',
                 'output2': 'int'}}}
 
-    base_types.type_registry.register(
+    base_types.register(
         'dual_process',
         dual_process_schema,
     )
@@ -2431,7 +2428,7 @@ def test_foursquare(base_types):
         },
         '_description': '',
     }
-    base_types.type_registry.register(
+    base_types.register(
         'foursquare', foursquare_schema)
 
     example = {
@@ -2783,25 +2780,25 @@ def test_reaction(compartment_types):
 
 
 if __name__ == '__main__':
-    types = TypeSystem()
+    core = TypeSystem()
 
-    register_compartment(types)
-    register_cube(types)
+    register_compartment(core)
+    register_cube(core)
 
-    test_generate_default(types)
-    test_apply_update(types)
-    test_validate_schema(types)
-    test_fill_int(types)
-    test_fill_cube(types)
-    test_establish_path(types)
-    test_fill_in_missing_nodes(types)
-    test_fill_from_parse(types)
-    test_expected_schema(types)
-    test_units(types)
-    test_serialize_deserialize(types)
-    test_project(types)
-    test_foursquare(types)
-    test_add_reaction(types)
-    test_remove_reaction(types)
-    test_replace_reaction(types)
-    test_unit_conversion(types)
+    test_generate_default(core)
+    test_apply_update(core)
+    test_validate_schema(core)
+    test_fill_int(core)
+    test_fill_cube(core)
+    test_establish_path(core)
+    test_fill_in_missing_nodes(core)
+    test_fill_from_parse(core)
+    test_expected_schema(core)
+    test_units(core)
+    test_serialize_deserialize(core)
+    test_project(core)
+    test_foursquare(core)
+    test_add_reaction(core)
+    test_remove_reaction(core)
+    test_replace_reaction(core)
+    test_unit_conversion(core)
