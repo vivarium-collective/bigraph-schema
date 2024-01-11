@@ -44,9 +44,10 @@ class TypeSystem:
         self.registry_registry.register('_react', self.react_registry)
         self.registry_registry.register('_check', self.check_registry)
         self.registry_registry.register('_apply', self.apply_registry)
-        self.registry_registry.register('_divide', self.divide_registry)
         self.registry_registry.register('_serialize', self.serialize_registry)
         self.registry_registry.register('_deserialize', self.deserialize_registry)
+
+        self.registry_registry.register('_divide', self.divide_registry)
         
         register_base_types(self)
         register_base_reactions(self)
@@ -1091,8 +1092,10 @@ base_type_library = {
         '_check': 'check_list',
         '_serialize': 'serialize_list',
         '_deserialize': 'deserialize_list',
-        '_divide': 'divide_list',
         '_type_parameters': ['element'],
+        '_methods': {
+            # 'divide': 'divide_list',
+            'append': 'append_list'},
         '_description': 'general list type (or sublists)'},
 
     'tree': {
@@ -1104,6 +1107,8 @@ base_type_library = {
         '_divide': 'divide_tree',
         '_check': 'check_tree',
         '_type_parameters': ['leaf'],
+        '_methods': {
+            'divide': 'divide_tree'},
         '_description': 'mapping from str to some type (or nested dicts)'},
 
     'dict': {
