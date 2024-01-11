@@ -144,10 +144,12 @@ class TypeSystem:
                     if registry is None:
                         # deserialize and serialize back and check it is equal
                         pass
-                    else:
+                    elif isinstance(value, str):
                         element = registry.access(value)
                         if element is None:
                             report[key] = f'no entry in the {key} registry for: {value}'
+                    elif not inspect.isfunction(value):
+                        report[key] = f'unknown value for key {key}: {value}'
                 else:
                     branches.add(key)
                     branch_report = self.validate_schema(value)
@@ -1578,77 +1580,6 @@ base_type_library = {
 }
 
 
-# def register_base_types(types):
-
-#     # validate the function registered is of the right type?
-#     types.apply_registry.register('any', apply_any)
-#     types.apply_registry.register('accumulate', accumulate)
-#     types.apply_registry.register('set', set_apply)
-#     types.apply_registry.register('concatenate', concatenate)
-#     types.apply_registry.register('replace', replace)
-#     types.apply_registry.register('apply_tree', apply_tree)
-#     types.apply_registry.register('apply_boolean', apply_boolean)
-#     types.apply_registry.register('apply_list', apply_list)
-#     types.apply_registry.register('apply_dict', apply_dict)
-#     types.apply_registry.register('apply_maybe', apply_maybe)
-#     types.apply_registry.register('apply_units', apply_units)
-#     types.apply_registry.register('apply_edge', apply_edge)
-
-#     types.divide_registry.register('divide_boolean', divide_boolean)
-#     types.divide_registry.register('divide_float', divide_float)
-#     types.divide_registry.register('divide_int', divide_int)
-#     types.divide_registry.register('divide_longest', divide_longest)
-#     types.divide_registry.register('divide_list', divide_list)
-#     types.divide_registry.register('divide_tree', divide_tree)
-#     types.divide_registry.register('divide_dict', divide_dict)
-#     types.divide_registry.register('divide_maybe', divide_maybe)
-#     types.divide_registry.register('divide_units', divide_units)
-#     types.divide_registry.register('divide_edge', divide_edge)
-
-#     types.check_registry.register('check_boolean', check_boolean)
-#     types.check_registry.register('check_number', check_number)
-#     types.check_registry.register('check_float', check_float)
-#     types.check_registry.register('check_string', check_string)
-#     types.check_registry.register('check_int', check_int)
-#     types.check_registry.register('check_list', check_list)
-#     types.check_registry.register('check_tree', check_tree)
-#     types.check_registry.register('check_dict', check_dict)
-#     types.check_registry.register('check_maybe', check_maybe)
-#     types.check_registry.register('check_units', check_units)
-#     types.check_registry.register('check_edge', check_edge)
-
-#     types.serialize_registry.register('serialize_any', serialize_any)
-#     types.serialize_registry.register('serialize_boolean', serialize_boolean)
-#     types.serialize_registry.register('serialize_string', serialize_string)
-#     types.serialize_registry.register('to_string', to_string)
-#     types.serialize_registry.register('serialize_tree', serialize_tree)
-#     types.serialize_registry.register('serialize_dict', serialize_dict)
-#     types.serialize_registry.register('serialize_maybe', serialize_maybe)
-#     types.serialize_registry.register('serialize_units', serialize_units)
-#     types.serialize_registry.register('serialize_edge', serialize_edge)
-#     types.serialize_registry.register('serialize_list', serialize_list)
-#     types.serialize_registry.register('serialize_np_array', serialize_np_array)
-
-#     types.deserialize_registry.register('deserialize_any', deserialize_any)
-#     types.deserialize_registry.register('deserialize_boolean', deserialize_boolean)
-#     types.deserialize_registry.register('float', deserialize_float)
-#     types.deserialize_registry.register('deserialize_int', deserialize_int)
-#     types.deserialize_registry.register('deserialize_string', deserialize_string)
-#     types.deserialize_registry.register('evaluate', evaluate)
-#     types.deserialize_registry.register('deserialize_tree', deserialize_tree)
-#     types.deserialize_registry.register('deserialize_dict', deserialize_dict)
-#     types.deserialize_registry.register('deserialize_maybe', deserialize_maybe)
-#     types.deserialize_registry.register('deserialize_units', deserialize_units)
-#     types.deserialize_registry.register('deserialize_edge', deserialize_edge)
-#     types.deserialize_registry.register('deserialize_list', deserialize_list)
-#     types.deserialize_registry.register('deserialize_np_array', deserialize_np_array)
-
-#     types.type_registry.register_multiple(base_type_library)
-#     register_units(types, units)
-
-#     return types
-
-
 def register_base_reactions(core):
     core.register_reaction('divide_counts', react_divide_counts)
 
@@ -1739,11 +1670,10 @@ def test_apply_update(cube_types):
         'height': 13,
         'depth': 44,
     }
+
     update = {
         'depth': -5
     }
-
-    import ipdb; ipdb.set_trace()
 
     new_state = cube_types.apply(
         schema,
@@ -1781,9 +1711,9 @@ def test_validate_schema(base_types):
     good = {
         'not quite int': {
             '_default': 0,
-            '_apply': 'accumulate',
-            '_serialize': 'to_string',
-            '_deserialize': 'deserialize_int',
+            '_apply': accumulate,
+            '_serialize': to_string,
+            '_deserialize': deserialize_int,
             '_description': '64-bit integer'
         },
         'ports match': {
@@ -1807,7 +1737,7 @@ def test_validate_schema(base_types):
         'str?': 'not a schema',
         'branch is weird': {
             'left': {'_type': 'ogre'},
-            'right': {'_default': 1, '_apply': 'accumulate'},
+            'right': {'_default': 1, '_apply': accumulate},
         },
     }
 

@@ -473,7 +473,8 @@ class TypeRegistry(Registry):
             return self
         root = underscore_key.strip('_')
         registry_key = f'{root}_registry'
-        return getattr(self, registry_key)
+        if hasattr(self, registry_key):
+            return getattr(self, registry_key)
 
 
     def register(self, key, schema, alternate_keys=tuple(), force=False):
@@ -486,7 +487,7 @@ class TypeRegistry(Registry):
         schema = copy.deepcopy(schema)
 
         if isinstance(schema, dict):
-            supers = schema.get('_super', ['any'])  # list of immediate supers
+            supers = schema.get('_super', [])  # list of immediate supers
             if isinstance(supers, str):
                 supers = [supers]
                 schema['_super'] = supers
