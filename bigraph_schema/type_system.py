@@ -36,6 +36,8 @@ class TypeSystem:
         self.react_registry = Registry()
 
         register_types(self, base_type_library)
+        register_units(self, units)
+
         register_base_reactions(self)
 
 
@@ -550,11 +552,13 @@ class TypeSystem:
                 self)
 
         elif isinstance(encoded, dict):
-            return {
-                key: self.deserialize(
-                    schema.get(key),
-                    branch)
-                for key, branch in encoded.items()}
+            result = {}
+            for key, branch in encoded.items():
+                if key in schema:
+                    result[key] = self.deserialize(
+                        schema[key],
+                        branch)
+            return result
 
         else:
             print(f'cannot deserialize: {encoded}')
@@ -2459,6 +2463,8 @@ def test_add_reaction(compartment_types):
             '1': {
                 'counts': {
                     'A': 8}}}}
+
+    import ipdb; ipdb.set_trace()
 
     schema, state = compartment_types.infer_schema(
         {},
