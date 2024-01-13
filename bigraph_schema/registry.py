@@ -14,6 +14,9 @@ from bigraph_schema.parse import parse_expression
 from bigraph_schema.protocols import local_lookup_module, function_module
 
 
+NONE_SYMBOL = '!nil'
+
+
 required_schema_keys = set([
     '_default',
     '_apply',
@@ -466,6 +469,66 @@ def deserialize_tuple(encoded, bindings, core):
         for index in range(len(encoded))])
 
 
+def find_union_type(core, possible_types, state):
+    for possible in possible_types:
+        if core.check(possible, state):
+            return core.access(possible)
+    return None
+
+
+def apply_union(current, update, bindings, core):
+    current_type = find_union_type(
+        core,
+        bindings.values(),
+        current)
+
+    update_type = find_union_type(
+        core,
+        bindings.values(),
+        update)
+
+    if current_type is None:
+        raise Exception(f'trying to apply update to union value but cannot find type of value in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
+    elif update_type is None:
+        raise Exception(f'trying to apply update to union value but cannot find type of update in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
+
+    return core.apply(
+        update_type,
+        current,
+        update)
+
+
+def check_union(state, bindings, core):
+    return find_union_type(
+        core,
+        bindings.values(),
+        state)
+
+
+def serialize_union(value, bindings, core):
+    union_type = find_union_type(
+        core,
+        bindings.values(),
+        value)
+
+    return core.serialize(
+        union_type,
+        value)
+
+
+def deserialize_union(encoded, bindings, core):
+    if encoded == NONE_SYMBOL:
+        return None
+    else:
+        for possible_type in bindings.values():
+            value = core.deserialize(
+                possible_type,
+                encoded)
+
+            if value is not None:
+                return value
+
+
 registry_types = {
     'any': {
         '_type': 'any',
@@ -481,7 +544,16 @@ registry_types = {
         '_check': check_tuple,
         '_serialize': serialize_tuple,
         '_deserialize': deserialize_tuple,
-        '_description': 'tuple of an ordered set of typed values'}}
+        '_description': 'tuple of an ordered set of typed values'},
+
+    'union': {
+        '_type': 'union',
+        '_default': NONE_SYMBOL,
+        '_apply': apply_union,
+        '_check': check_union,
+        '_serialize': serialize_union,
+        '_deserialize': deserialize_union,
+        '_description': 'union of a set of possible types'}}
 
 
 class TypeRegistry(Registry):
@@ -493,6 +565,11 @@ class TypeRegistry(Registry):
         super().__init__()
 
         self.supers = {}
+
+        self.check_registry = Registry(function_keys=[
+            'state',
+            'bindings',
+            'core'])
 
         self.apply_registry = Registry(function_keys=[
             'current',
@@ -511,7 +588,6 @@ class TypeRegistry(Registry):
             'core'])
 
         self.divide_registry = Registry()  # TODO enforce keys for divider methods
-        self.check_registry = Registry()
 
         for type_key, type_data in registry_types.items():
             self.register(
@@ -624,6 +700,17 @@ class TypeRegistry(Registry):
         if isinstance(schema, dict):
             if '_description' in schema:
                 return schema
+
+            elif '_union' in schema:
+                parameters = [
+                    str(parameter)
+                    for parameter in list(range(len(schema['_union'])))]
+
+                return self.access({
+                    '_type': 'union',
+                    '_type_parameters': parameters,
+                    '_bindings': dict(zip(parameters, schema['_union']))})
+
             elif '_type' in schema:
                 found = self.access(schema['_type'])
                 found_keys = overridable_schema_keys & schema.keys()
@@ -646,16 +733,13 @@ class TypeRegistry(Registry):
                             found['_bindings'][type_parameter] = found[parameter_key]
                         elif '_bindings' in found and type_parameter in found['_bindings']:
                             found[parameter_key] = found['_bindings'][type_parameter]
+
             else:
                 found = {
                    key: self.access(branch)
                    for key, branch in schema.items()}
 
         elif isinstance(schema, tuple):
-            # subschemas = [
-            #     self.access(subschema)
-            #     for subschema in schema]
-
             parameters = [
                 str(parameter)
                 for parameter in list(range(len(schema)))]

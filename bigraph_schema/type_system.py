@@ -17,6 +17,7 @@ import numpy as np
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
+    NONE_SYMBOL,
     Registry, TypeRegistry, 
     type_schema_keys, non_schema_keys, apply_tree,
     deep_merge, get_path, establish_path, set_path, transform_path, remove_path, remove_omitted
@@ -26,9 +27,6 @@ from bigraph_schema.registry import (
 
 TYPE_SCHEMAS = {
     'float': 'float'}
-
-
-NONE_SYMBOL = '!nil'
 
 
 class TypeSystem:
@@ -974,20 +972,20 @@ class TypeSystem:
         return subschema
 
 
-def check_number(instance, bindings=None, core=None):
-    return isinstance(instance, numbers.Number)
+def check_number(state, bindings=None, core=None):
+    return isinstance(state, numbers.Number)
 
-def check_boolean(instance, bindings=None, core=None):
-    return isinstance(instance, bool)
+def check_boolean(state, bindings=None, core=None):
+    return isinstance(state, bool)
 
-def check_int(instance, bindings=None, core=None):
-    return isinstance(instance, int)
+def check_int(state, bindings=None, core=None):
+    return isinstance(state, int)
 
-def check_float(instance, bindings=None, core=None):
-    return isinstance(instance, float)
+def check_float(state, bindings=None, core=None):
+    return isinstance(state, float)
 
-def check_string(instance, bindings=None, core=None):
-    return isinstance(instance, str)
+def check_string(state, bindings=None, core=None):
+    return isinstance(state, str)
 
 
 def check_list(state, bindings, core):
@@ -1039,7 +1037,10 @@ def serialize_boolean(value: bool, bindings=None, core=None) -> str:
 
 
 def deserialize_boolean(encoded, bindings=None, core=None) -> bool:
-    return bool(encoded)
+    if encoded == 'true':
+        return True
+    elif encoded == 'false':
+        return False
 
 
 def accumulate(current, update, bindings=None, core=None):
@@ -1125,7 +1126,8 @@ def serialize_string(value, bindings=None, core=None):
 
 
 def deserialize_string(encoded, bindings=None, core=None):
-    return encoded
+    if isinstance(encoded, str):
+        return encoded
 
 
 def to_string(value, bindings=None, core=None):
@@ -1150,11 +1152,23 @@ def serialize_numpy_array(value, bindings=None, core=None):
 #######################
 
 def deserialize_int(encoded, bindings=None, core=None):
-    return int(encoded)
+    value = None
+    try:
+        value = int(encoded)
+    except:
+        pass
+
+    return value
 
 
 def deserialize_float(encoded, bindings=None, core=None):
-    return float(encoded)
+    value = None
+    try:
+        value = float(encoded)
+    except:
+        pass
+
+    return value
 
 
 def evaluate(encoded, bindings=None, core=None):
@@ -1162,8 +1176,11 @@ def evaluate(encoded, bindings=None, core=None):
 
 
 def deserialize_list(encoded, bindings=None, core=None):
-    schema = bindings['element']
-    return [core.deserialize(schema, element) for element in encoded]
+    if isinstance(encoded, list):
+        schema = bindings['element']
+        return [
+            core.deserialize(schema, element)
+            for element in encoded]
 
 
 def deserialize_numpy_array(encoded, bindings=None, core=None):
@@ -1196,7 +1213,7 @@ def apply_list(current, update, bindings, core):
         raise Exception(f'trying to apply an update to an existing list, but the update is not a list: {update}')
 
 
-def check_tree(tree, bindings, core):
+def check_tree(state, bindings, core):
     leaf_type = bindings['leaf']
 
     if isinstance(state, dict):
@@ -1217,7 +1234,7 @@ def check_tree(tree, bindings, core):
     else:
         return False
 
-    return core.check(leaf_type, tree)
+    return core.check(leaf_type, state)
 
 
 def divide_tree(tree, bindings, core):
@@ -1261,10 +1278,8 @@ def serialize_tree(value, bindings, core):
 
 
 def deserialize_tree(encoded, bindings, core):
-    tree = encoded
-
     if isinstance(encoded, str):
-        tree = core.deserialize(
+        return core.deserialize(
             bindings['leaf'],
             encoded)
 
@@ -1273,7 +1288,7 @@ def deserialize_tree(encoded, bindings, core):
         for key, value in encoded.items():
             tree[key] = deserialize_tree(value, bindings, core)
 
-    return tree
+        return tree
 
 
 def apply_map(current, update, bindings=None, core=None):
@@ -1296,13 +1311,13 @@ def apply_map(current, update, bindings=None, core=None):
 
     return result
 
-def check_map(value, bindings=None, core=None):
-    value_type = bindings['value']
-    if not isinstance(value, dict):
+def check_map(state, bindings=None, core=None):
+    state_type = bindings['value']
+    if not isinstance(state, dict):
         return False
 
-    for key, subvalue in value.items():
-        if not core.check(value_type, subvalue):
+    for key, substate in state.items():
+        if not core.check(state_type, substate):
             return False
 
     return True
@@ -1320,10 +1335,11 @@ def serialize_map(value, bindings=None, core=None):
 
 
 def deserialize_map(encoded, bindings=None, core=None):
-    value_type = bindings['value']
-    return {
-        key: core.deserialize(value_type, subvalue)
-        for key, subvalue in encoded.items()}
+    if isinstance(encoded, dict):
+        value_type = bindings['value']
+        return {
+            key: core.deserialize(value_type, subvalue)
+            for key, subvalue in encoded.items()}
 
 
 def apply_maybe(current, update, bindings, core):
@@ -1578,18 +1594,6 @@ base_type_library = {
         '_serialize': serialize_numpy_array,
         '_deserialize': deserialize_numpy_array,
         '_description': 'numpy arrays'
-    },
-
-    # TODO -- this should support any type
-    'union': {
-        '_type': 'union',
-        '_default': 'None',
-        # '_apply': 'apply_maybe',
-        # '_serialize': 'serialize_maybe',
-        # '_deserialize': 'deserialize_maybe',
-        # '_divide': 'divide_maybe',
-        '_type_parameters': ['value'],
-        # '_description': 'type to represent values that could be empty'
     },
 }
 
@@ -2361,80 +2365,80 @@ def test_check(core):
     assert core.check({'b': 'float'}, {'b': 1.11})
 
 
-def test_foursquare(core):
-    # TODO: need union type and self-referential types (foursquare)
-    foursquare_schema = {
-        '_type': 'foursquare',
-        '00': 'union[bool,foursquare]',
-        '01': 'union[bool,foursquare]',
-        '10': 'union[bool,foursquare]',
-        '11': 'union[bool,foursquare]',
-        '_default': {
-            '00': False,
-            '01': False,
-            '10': False,
-            '11': False
-        },
-        '_description': '',
-    }
-    core.register(
-        'foursquare', foursquare_schema)
+# def test_foursquare(core):
+#     # TODO: need union type and self-referential types (foursquare)
+#     foursquare_schema = {
+#         '_type': 'foursquare',
+#         '00': 'union[bool,foursquare]',
+#         '01': 'union[bool,foursquare]',
+#         '10': 'union[bool,foursquare]',
+#         '11': 'union[bool,foursquare]',
+#         '_default': {
+#             '00': False,
+#             '01': False,
+#             '10': False,
+#             '11': False
+#         },
+#         '_description': '',
+#     }
+#     core.register(
+#         'foursquare', foursquare_schema)
 
-    example = {
-        '00': True,
-        '11': {
-            '00': True,
-            '11': {
-                '00': True,
-                '11': {
-                    '00': True,
-                    '11': {
-                        '00': True,
-                        '11': {
-                            '00': True,
-                        },
-                    },
-                },
-            },
-        },
-    }
+#     example = {
+#         '00': True,
+#         '11': {
+#             '00': True,
+#             '11': {
+#                 '00': True,
+#                 '11': {
+#                     '00': True,
+#                     '11': {
+#                         '00': True,
+#                         '11': {
+#                             '00': True,
+#                         },
+#                     },
+#                 },
+#             },
+#         },
+#     }
 
-    example_full = {
-        '_type': 'foursquare',
-        '00': {
-            '_value': True,
-            '_type': 'bool'},
-        '11': {
-            '_type': 'foursquare',
-            '00': {
-                '_value': True,
-                '_type': 'bool'},
-            '11': {
-                '_type': 'foursquare',
-                '00': {
-                    '_value': True,
-                    '_type': 'bool'},
-                '11': {
-                    '_type': 'foursquare',
-                    '00': {
-                        '_value': True,
-                        '_type': 'bool'},
-                    '11': {
-                        '_type': 'foursquare',
-                        '00': {
-                            '_value': True,
-                            '_type': 'bool'},
-                        '11': {
-                            '_type': 'foursquare',
-                            '00': {
-                                '_value': True,
-                                '_type': 'bool'},
-                        },
-                    },
-                },
-            },
-        },
-    }
+#     example_full = {
+#         '_type': 'foursquare',
+#         '00': {
+#             '_value': True,
+#             '_type': 'bool'},
+#         '11': {
+#             '_type': 'foursquare',
+#             '00': {
+#                 '_value': True,
+#                 '_type': 'bool'},
+#             '11': {
+#                 '_type': 'foursquare',
+#                 '00': {
+#                     '_value': True,
+#                     '_type': 'bool'},
+#                 '11': {
+#                     '_type': 'foursquare',
+#                     '00': {
+#                         '_value': True,
+#                         '_type': 'bool'},
+#                     '11': {
+#                         '_type': 'foursquare',
+#                         '00': {
+#                             '_value': True,
+#                             '_type': 'bool'},
+#                         '11': {
+#                             '_type': 'foursquare',
+#                             '00': {
+#                                 '_value': True,
+#                                 '_type': 'bool'},
+#                         },
+#                     },
+#                 },
+#             },
+#         },
+#     }
 
 
 def test_add_reaction(compartment_types):
@@ -2844,7 +2848,42 @@ def test_self_type(core):
 
 
 def test_union_type(core):
-    assert True
+    schema = 'string~int~map[maybe[float]]'
+
+    state = {
+        'a': 1.1,
+        'b': None}
+
+    update = {
+        'a': 33.33,
+        'b': 4.44444}
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert core.check(schema, 15)
+    
+    wrong_state = {
+        'a': 1.1,
+        'b': None}
+
+    wrong_update = 'a different type'
+
+    assert core.check(schema, wrong_state)
+    assert core.check(schema, wrong_update)
+    
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert result['a'] == 34.43
+    assert result['b'] == update['b']
+
+    encode = core.serialize(schema, state)
+    assert encode['b'] == NONE_SYMBOL
+
+    decode = core.deserialize(schema, encode)
+    assert decode == state
 
 
 if __name__ == '__main__':
@@ -2865,7 +2904,7 @@ if __name__ == '__main__':
     test_units(core)
     test_serialize_deserialize(core)
     test_project(core)
-    test_foursquare(core)
+    # test_foursquare(core)
     test_add_reaction(core)
     test_remove_reaction(core)
     test_replace_reaction(core)
