@@ -2467,8 +2467,20 @@ def test_foursquare(core):
         example,
         update)
 
-    import ipdb; ipdb.set_trace()
-
+    assert result == {
+        '00': True,
+        '01': True,
+        '10': 5,
+        '11': {'00': True,
+               '01': True,
+               '10': False,
+               '11': {'00': True,
+                      '01': False,
+                      '10': {
+                          '10': {
+                              '00': True,
+                              '11': False}},
+                      '11': True}}}
 
 
 def test_add_reaction(compartment_types):
