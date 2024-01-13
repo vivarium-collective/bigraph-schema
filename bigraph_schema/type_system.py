@@ -1485,6 +1485,7 @@ base_type_library = {
     'boolean': {
         '_type': 'boolean',
         '_default': False,
+        '_check': check_boolean,
         '_apply': apply_boolean,
         '_serialize': serialize_boolean,
         '_deserialize': deserialize_boolean,
@@ -2389,80 +2390,52 @@ def test_check(core):
     assert core.check({'b': 'float'}, {'b': 1.11})
 
 
-# def test_foursquare(core):
-#     # TODO: need union type and self-referential types (foursquare)
-#     foursquare_schema = {
-#         '_type': 'foursquare',
-#         '00': 'union[bool,foursquare]',
-#         '01': 'union[bool,foursquare]',
-#         '10': 'union[bool,foursquare]',
-#         '11': 'union[bool,foursquare]',
-#         '_default': {
-#             '00': False,
-#             '01': False,
-#             '10': False,
-#             '11': False
-#         },
-#         '_description': '',
-#     }
-#     core.register(
-#         'foursquare', foursquare_schema)
+def test_foursquare(core):
+    foursquare_schema = {
+        '00': 'boolean~foursquare',
+        '01': 'boolean~foursquare',
+        '10': 'boolean~foursquare',
+        '11': 'boolean~foursquare'}
 
-#     example = {
-#         '00': True,
-#         '11': {
-#             '00': True,
-#             '11': {
-#                 '00': True,
-#                 '11': {
-#                     '00': True,
-#                     '11': {
-#                         '00': True,
-#                         '11': {
-#                             '00': True,
-#                         },
-#                     },
-#                 },
-#             },
-#         },
-#     }
+    core.register(
+        'foursquare',
+        foursquare_schema)
 
-#     example_full = {
-#         '_type': 'foursquare',
-#         '00': {
-#             '_value': True,
-#             '_type': 'bool'},
-#         '11': {
-#             '_type': 'foursquare',
-#             '00': {
-#                 '_value': True,
-#                 '_type': 'bool'},
-#             '11': {
-#                 '_type': 'foursquare',
-#                 '00': {
-#                     '_value': True,
-#                     '_type': 'bool'},
-#                 '11': {
-#                     '_type': 'foursquare',
-#                     '00': {
-#                         '_value': True,
-#                         '_type': 'bool'},
-#                     '11': {
-#                         '_type': 'foursquare',
-#                         '00': {
-#                             '_value': True,
-#                             '_type': 'bool'},
-#                         '11': {
-#                             '_type': 'foursquare',
-#                             '00': {
-#                                 '_value': True,
-#                                 '_type': 'bool'},
-#                         },
-#                     },
-#                 },
-#             },
-#         },
-#     }
+    example = {
+        '00': True,
+        '01': False,
+        '10': False,
+        '11': {
+            '00': True,
+            '01': False,
+            '10': False,
+            '11': {
+                '00': True,
+                '01': False,
+                '10': False,
+                '11': {
+                    '00': True,
+                    '01': False,
+                    '10': False,
+                    '11': {
+                        '00': True,
+                        '01': False,
+                        '10': False,
+                        '11': {
+                            '00': True,
+                            '01': False,
+                            '10': False,
+                            '11': False}}}}}}
+
+    assert core.check(
+        'foursquare',
+        example)
+
+    example['10'] = 5
+
+    assert not core.check(
+        'foursquare',
+        example)
 
 
 def test_add_reaction(compartment_types):
@@ -2958,7 +2931,6 @@ if __name__ == '__main__':
     test_units(core)
     test_serialize_deserialize(core)
     test_project(core)
-    # test_foursquare(core)
     test_add_reaction(core)
     test_remove_reaction(core)
     test_replace_reaction(core)
@@ -2969,3 +2941,4 @@ if __name__ == '__main__':
     test_array_type(core)
     test_self_type(core)
     test_union_type(core)
+    test_foursquare(core)
