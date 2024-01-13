@@ -46,11 +46,58 @@ parameter_grammar = Grammar(
     """)
 
 
+parameter_examples = {
+    'no-parameters': 'simple',
+    'one-parameter': 'parameterized[A]',
+    'three-parameters': 'parameterized[A,B,C]',
+    'nested-parameters': 'nested[outer[inner]]',
+    'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
+    'bars': 'a|b|c|zzzz',
+    'typed': 'a.field[yellow,tree,snake]|b.(x.earth|y.cloud|z.sky)',
+    'typed_parameters': 'edge[a.int:b.(x.length|y.float),v[zz.float|xx.what]]',
+    'inputs_and_outputs': 'edge[input1.float:input2.int,output1.float:output2.int]',
+    'units_type': 'length^2*mass/time^1_5'}
+
+
+parameter_grammar = Grammar(
+    """
+    expression = merge / map / tree
+    merge = tree (bar tree)+
+    map = tree (colon tree)+
+    tree = bigraph / type_name
+    bigraph = group / nest
+    group = paren_left expression paren_right
+    nest = symbol dot tree
+    type_name = symbol parameter_list?
+    parameter_list = square_left expression (comma expression)* square_right
+    symbol = ~r"[\w\d-_/*&^%$#@!~`+ ]+"
+    dot = "."
+    colon = ":"
+    bar = "|"
+    paren_left = "("
+    paren_right = ")"
+    square_left = "["
+    square_right = "]"
+    comma = ","
+    not_newline = ~r"[^\\n\\r]"*
+    newline = ~"[\\n\\r]+"
+    ws = ~"\s*"
+    """)
+
+
 class ParameterVisitor(NodeVisitor):
     def visit_expression(self, node, visit):
         return visit[0]
 
     def visit_merge(self, node, visit):
+        head = [visit[0]]
+        tail = [
+            tree['visit'][1]
+            for tree in visit[1]['visit']]
+
+        return tuple(head + tail)
+
+    def visit_map(self, node, visit):
         head = [visit[0]]
         tail = [
             tree['visit'][1]
@@ -74,8 +121,8 @@ class ParameterVisitor(NodeVisitor):
     def visit_nest(self, node, visit):
         return {visit[0]: visit[2]}
 
-    def visit_control(self, node, visit):
-        return {visit[0]: visit[2]}
+    # def visit_control(self, node, visit):
+    #     return {visit[0]: visit[2]}
 
     def visit_type_name(self, node, visit):
         type_name = visit[0]
@@ -114,24 +161,38 @@ def parse_expression(expression):
     return type_parameters
 
 
+def is_type_expression(expression):
+    return len(expression) == 2 and isinstance(expression[1], list)
+
+
 def render_expression(expression):
     if isinstance(expression, str):
         return expression
+
     elif isinstance(expression, list):
         type_name, parameters = expression
         render = ','.join([
             render_expression(parameter)
             for parameter in parameters])
         return f'{type_name}[{render}]'
+
+    elif isinstance(expression, tuple):
+        render = '|'.join([
+            render_expression(subexpression)
+            for subexpression in expression])
+        return f'({render})'
+
     elif isinstance(expression, dict):
         parts = []
         for key, tree in expression.items():
             render = render_expression(tree)
-            if isinstance(tree, dict):
-                parts.append(f'{key}.({render})')
-            else:
-                parts.append(f'{key}:{render}')
-        return '|'.join(parts)
+            parts.append(f'{key}.{render}')
+
+            # if isinstance(tree, list) and len(tree) > 1:
+            #     parts.append(f'{key}.({render})')
+            # else:
+            #     parts.append(f'{key}:{render}')
+        return ':'.join(parts)
 
 
 # Test the functions

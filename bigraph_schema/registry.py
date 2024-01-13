@@ -48,6 +48,7 @@ overridable_schema_keys = set([
     '_check',
     '_serialize',
     '_deserialize',
+    '_type_parameters',
     '_value',
     '_divide',
     '_description',
@@ -423,8 +424,64 @@ def serialize_any(value, bindings=None, core=None):
     return str(value)
 
 
-def deserialize_any(serialized, bindings=None, core=None):
-    return serialized
+def deserialize_any(encoded, bindings=None, core=None):
+    return encoded
+
+
+def apply_tuple(current, update, bindings, core):
+    length = range(len(current))
+    return tuple([
+        core.apply(
+            bindings[str(index)],
+            current_value,
+            update_value)
+        for index, current_value, update_value in zip(length, current, update)])
+
+
+def check_tuple(state, bindings, core):
+    if not isinstance(state, (tuple, list)):
+        return False
+
+    for index in range(len(state)):
+        element_binding = bindings[str(index)]
+        if not core.check(element_binding, state[index]):
+            return False
+
+    return True
+
+
+def serialize_tuple(value, bindings, core):
+    return tuple([
+        core.serialize(
+            bindings[str(index)],
+            value[index])
+        for index in range(len(value))])
+
+
+def deserialize_tuple(encoded, bindings, core):
+    return tuple([
+        core.deserialize(
+            bindings[str(index)],
+            encoded[index])
+        for index in range(len(encoded))])
+
+
+registry_types = {
+    'any': {
+        '_type': 'any',
+        '_apply': apply_any,
+        '_check': check_any,
+        '_serialize': serialize_any,
+        '_deserialize': deserialize_any},
+
+    'tuple': {
+        '_type': 'tuple',
+        '_default': '()',
+        '_apply': apply_tuple,
+        '_check': check_tuple,
+        '_serialize': serialize_tuple,
+        '_deserialize': deserialize_tuple,
+        '_description': 'tuple of an ordered set of typed values'}}
 
 
 class TypeRegistry(Registry):
@@ -449,19 +506,17 @@ class TypeRegistry(Registry):
             'core'])
 
         self.deserialize_registry = Registry(function_keys=[
-            'serialized',
+            'encoded',
             'bindings',
             'core'])
 
         self.divide_registry = Registry()  # TODO enforce keys for divider methods
         self.check_registry = Registry()
 
-        self.register('any', {
-            '_type': 'any',
-            '_apply': apply_any,
-            '_check': check_any,
-            '_serialize': serialize_any,
-            '_deserialize': deserialize_any})
+        for type_key, type_data in registry_types.items():
+            self.register(
+                type_key,
+                type_data)
 
 
     def find_registry(self, underscore_key):
@@ -596,6 +651,20 @@ class TypeRegistry(Registry):
                    key: self.access(branch)
                    for key, branch in schema.items()}
 
+        elif isinstance(schema, tuple):
+            # subschemas = [
+            #     self.access(subschema)
+            #     for subschema in schema]
+
+            parameters = [
+                str(parameter)
+                for parameter in list(range(len(schema)))]
+
+            return self.access({
+                '_type': 'tuple',
+                '_type_parameters': parameters,
+                '_bindings': dict(zip(parameters, schema))})
+
         elif isinstance(schema, list):
             bindings = []
             if len(schema) > 1:
@@ -605,6 +674,9 @@ class TypeRegistry(Registry):
             found = self.access(schema)
 
             if len(bindings) > 0:
+                if '_type_parameters' not in found:
+                    import ipdb; ipdb.set_trace()
+
                 found = found.copy()
                 found['_bindings'] = dict(zip(
                     found['_type_parameters'],

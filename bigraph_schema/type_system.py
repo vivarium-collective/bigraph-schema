@@ -28,6 +28,9 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
+NONE_SYMBOL = '!nil'
+
+
 class TypeSystem:
     """Handles type schemas and their operation"""
 
@@ -50,56 +53,6 @@ class TypeSystem:
         self.type_registry.register(
             type_key,
             type_data)
-
-        # self.function_keys = [
-        #     '_apply',
-        #     '_check',
-        #     '_divide',
-        #     '_react',
-        #     '_serialize',
-        #     '_deserialize']
-
-        # type_record = {}
-        # missing_functions = []
-        # for function_key in self.function_keys:
-        #     if function_key in type_data:
-        #         registry = self.find_registry(
-        #             function_key)
-        #         looking = type_data[function_key]
-
-        #         if isinstance(looking, str):
-        #             module_key = looking
-        #             found = registry.access(module_key)
-
-        #             if found is None:
-        #                 found = local_lookup_module(
-        #                     module_key)
-
-        #                 if found is None:
-        #                     missing_functions.append((
-        #                         function_key,
-        #                         module_key))
-        #                 else:
-        #                     registry.register(
-        #                         module_key,
-        #                         found)
-
-        #         elif inspect.isfunction(looking):
-        #             found = looking
-        #             module_key = function_module(found)
-        #             registry.register(module_key, found)
-
-        #         type_record[function_key] = module_key
-
-        # if len(missing_functions) > 0:
-        #     raise Exception(
-        #         f'functions are missing from\n{type_data}\nnamely, {missing_functions}')
-        # else:
-        #     self.type_registry.register(
-        #         type_key,
-        #         type_record)
-
-        #     return type_record
 
 
     def register_reaction(self, reaction_key, reaction):
@@ -298,7 +251,6 @@ class TypeSystem:
         return matches
 
 
-    # TODO: do we need a "match" type method?
     def match(self, original_schema, state, pattern, mode='first', path=()):
         '''
         find the path or paths to any instances of a given
@@ -1022,9 +974,6 @@ class TypeSystem:
         return subschema
 
 
-NONE_SYMBOL = 'None'
-
-
 def check_number(instance, bindings=None, core=None):
     return isinstance(instance, numbers.Number)
 
@@ -1089,8 +1038,8 @@ def serialize_boolean(value: bool, bindings=None, core=None) -> str:
     return str(value)
 
 
-def deserialize_boolean(serialized, bindings=None, core=None) -> bool:
-    return bool(serialized)
+def deserialize_boolean(encoded, bindings=None, core=None) -> bool:
+    return bool(encoded)
 
 
 def accumulate(current, update, bindings=None, core=None):
@@ -1175,8 +1124,8 @@ def serialize_string(value, bindings=None, core=None):
     return value
 
 
-def deserialize_string(serialized, bindings=None, core=None):
-    return serialized
+def deserialize_string(encoded, bindings=None, core=None):
+    return encoded
 
 
 def to_string(value, bindings=None, core=None):
@@ -1200,29 +1149,29 @@ def serialize_numpy_array(value, bindings=None, core=None):
 # Deserialize methods #
 #######################
 
-def deserialize_int(serialized, bindings=None, core=None):
-    return int(serialized)
+def deserialize_int(encoded, bindings=None, core=None):
+    return int(encoded)
 
 
-def deserialize_float(serialized, bindings=None, core=None):
-    return float(serialized)
+def deserialize_float(encoded, bindings=None, core=None):
+    return float(encoded)
 
 
-def evaluate(serialized, bindings=None, core=None):
-    return eval(serialized)
+def evaluate(encoded, bindings=None, core=None):
+    return eval(encoded)
 
 
-def deserialize_list(serialized, bindings=None, core=None):
+def deserialize_list(encoded, bindings=None, core=None):
     schema = bindings['element']
-    return [core.deserialize(schema, element) for element in serialized]
+    return [core.deserialize(schema, element) for element in encoded]
 
 
-def deserialize_numpy_array(serialized, bindings=None, core=None):
-    if isinstance(serialized, dict):
-        np.frombuffer(serialized['bytes'], dtype=serialized['dtype']).reshape(serialized['shape'])
-        return np.frombuffer(serialized)
+def deserialize_numpy_array(encoded, bindings=None, core=None):
+    if isinstance(encoded, dict):
+        np.frombuffer(encoded['bytes'], dtype=encoded['dtype']).reshape(encoded['shape'])
+        return np.frombuffer(encoded)
     else:
-        return  serialized
+        return  encoded
 
 
 # ------------------------------
@@ -1291,44 +1240,90 @@ def divide_tree(tree, bindings, core):
     return result
 
 
-def serialize_tree(value, bindings=None, core=None):
-    return value
+def serialize_tree(value, bindings, core):
+    if core.check(bindings['leaf'], value):
+        encoded = core.serialize(
+            bindings['leaf'],
+            value)
+
+    elif isinstance(value, dict):
+        encoded = {}
+        for key, subvalue in value.items():
+            encoded[key] = serialize_tree(
+                subvalue,
+                bindings,
+                core)
+
+    else:
+        raise Exception(f'trying to serialize a tree but unfamiliar with this form of tree: {value}\n  current bindings are: {bindings}')
+
+    return encoded
 
 
-def deserialize_tree(serialized, bindings=None, core=None):
-    tree = serialized
+def deserialize_tree(encoded, bindings, core):
+    tree = encoded
 
-    if isinstance(serialized, str):
+    if isinstance(encoded, str):
         tree = core.deserialize(
             bindings['leaf'],
-            serialized)
+            encoded)
 
-    elif isinstance(serialized, dict):
+    elif isinstance(encoded, dict):
         tree = {}
-        for key, value in serialized.items():
+        for key, value in encoded.items():
             tree[key] = deserialize_tree(value, bindings, core)
 
     return tree
 
 
-def apply_dict(current, update, bindings=None, core=None):
-    pass
+def apply_map(current, update, bindings=None, core=None):
+    if not isinstance(current, dict):
+        raise Exception(f'trying to apply an update to a value that is not a map:\n  value: {current}\n  update: {update}')
+    if not isinstance(update, dict):
+        raise Exception(f'trying to apply an update that is not a map:\n  value: {current}\n  update: {update}')
+
+    value_type = bindings['value']
+    result = current.copy()
+
+    for key, update_value in update.items():
+        if key not in current:
+            raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
+
+        result[key] = core.apply(
+            value_type,
+            result[key],
+            update_value)
+
+    return result
+
+def check_map(value, bindings=None, core=None):
+    value_type = bindings['value']
+    if not isinstance(value, dict):
+        return False
+
+    for key, subvalue in value.items():
+        if not core.check(value_type, subvalue):
+            return False
+
+    return True
 
 
-def check_dict(current, update, bindings=None, core=None):
-    pass
-
-
-def divide_dict(value, bindings=None, core=None):
+def divide_map(value, bindings=None, core=None):
     return value
 
 
-def serialize_dict(value, bindings=None, core=None):
-    return value
+def serialize_map(value, bindings=None, core=None):
+    value_type = bindings['value']
+    return {
+        key: core.serialize(value_type, subvalue)
+        for key, subvalue in value.items()}
 
 
-def deserialize_dict(serialized, bindings=None, core=None):
-    return serialized
+def deserialize_map(encoded, bindings=None, core=None):
+    value_type = bindings['value']
+    return {
+        key: core.deserialize(value_type, subvalue)
+        for key, subvalue in encoded.items()}
 
 
 def apply_maybe(current, update, bindings, core):
@@ -1336,14 +1331,18 @@ def apply_maybe(current, update, bindings, core):
         return update
     else:
         value_type = bindings['value']
-        return core.apply(value_type, current, update)
+        return core.apply(
+            value_type,
+            current,
+            update)
 
 
-def check_maybe(state):
+def check_maybe(state, bindings, core):
     if state is None:
-        return [None, None]
+        return True
     else:
-        pass
+        value_type = bindings['value']
+        return core.check(value_type, state)
 
 
 def divide_maybe(value, bindings):
@@ -1358,15 +1357,17 @@ def serialize_maybe(value, bindings, core):
         return NONE_SYMBOL
     else:
         value_type = bindings['value']
-        return serialize(value_type, value)
+        return core.serialize(
+            value_type,
+            value)
 
 
-def deserialize_maybe(serialized, bindings, core):
-    if serialized == NONE_SYMBOL:
+def deserialize_maybe(encoded, bindings, core):
+    if encoded == NONE_SYMBOL:
         return None
     else:
         value_type = bindings['value']
-        return core.deserialize(value_type, serialized)
+        return core.deserialize(value_type, encoded)
 
 
 # TODO: deal with all the different unit core
@@ -1383,8 +1384,8 @@ def serialize_units(value, bindings, core):
     return str(value)
 
 
-def deserialize_units(serialized, bindings, core):
-    return units(serialized)
+def deserialize_units(encoded, bindings, core):
+    return units(encoded)
 
 
 def divide_units(value, bindings, core):
@@ -1404,8 +1405,8 @@ def serialize_edge(value, bindings, core):
     return value
 
 
-def deserialize_edge(serialized, bindings, core):
-    return serialized
+def deserialize_edge(encoded, bindings, core):
+    return encoded
 
 
 def divide_edge(value, bindings, core):
@@ -1418,6 +1419,8 @@ def register_types(core, type_library):
             core.register(
                 type_key,
                 type_data)
+
+    core.type_registry.apply_registry.register('set', set_apply)
 
     return core
         
@@ -1501,6 +1504,9 @@ base_type_library = {
         '_deserialize': deserialize_list,
         '_divide': divide_list,
         '_type_parameters': ['element'],
+        # '_methods': {
+        #     # 'divide': 'divide_list',
+        #     'append': 'append_list'},
         '_description': 'general list type (or sublists)'},
 
     'tree': {
@@ -1512,19 +1518,21 @@ base_type_library = {
         '_divide': divide_tree,
         '_check': check_tree,
         '_type_parameters': ['leaf'],
-        '_description': 'mapping from str to some type (or nested dicts)'},
+        # '_methods': {
+        #     'divide': 'divide_tree'},
+        '_description': 'mapping from str to some type in a potentially nested form'},
 
-    'dict': {
-        '_type': 'dict',
+    'map': {
+        '_type': 'map',
         '_default': {},
-        '_apply': apply_dict,
-        '_serialize': serialize_dict,
-        '_deserialize': deserialize_dict,
-        '_divide': divide_dict,
-        '_check': check_dict,
+        '_apply': apply_map,
+        '_serialize': serialize_map,
+        '_deserialize': deserialize_map,
+        '_divide': divide_map,
+        '_check': check_map,
         # TODO: create assignable type parameters?
-        '_type_parameters': ['key', 'value'],
-        '_description': 'mapping from keys of any type to values of any type'},
+        '_type_parameters': ['value'],
+        '_description': 'flat mapping from keys of strings to values of any type'},
 
     # TODO: add native numpy array type
     'array': {
@@ -1543,6 +1551,8 @@ base_type_library = {
         '_description': 'type to represent values that could be empty'},
 
     'wires': 'tree[list[string]]',
+
+    'schema': 'tree',
 
     'edge': {
         # TODO: do we need to have defaults informed by type parameters?
@@ -1621,26 +1631,31 @@ def register_cube(core):
 
 
 @pytest.fixture
+def core():
+    return TypeSystem()
+
+
+@pytest.fixture
 def base_types():
     return TypeSystem()
 
 
 @pytest.fixture
-def cube_types(base_types):
-    return register_cube(base_types)
+def cube_types(core):
+    return register_cube(core)
 
 
-def register_compartment(base_types):
-    base_types.register('compartment', {
+def register_compartment(core):
+    core.register('compartment', {
         'counts': 'tree[float]',
         'inner': 'tree[compartment]'})
 
-    return base_types
+    return core
 
 
 @pytest.fixture
-def compartment_types(base_types):
-    return register_compartment(base_types)
+def compartment_types(core):
+    return register_compartment(core)
 
 
 def test_generate_default(cube_types):
@@ -1708,9 +1723,9 @@ def print_schema_validation(core, library, should_pass):
                 raise Exception(f'FAIL: {message}\n{declaration}\n{report}')
 
 
-def test_validate_schema(base_types):
+def test_validate_schema(core):
     # good schemas
-    print_schema_validation(base_types, base_type_library, True)
+    print_schema_validation(core, base_type_library, True)
 
     good = {
         'not quite int': {
@@ -1726,7 +1741,7 @@ def test_validate_schema(base_types):
                 '_value': 2
             },
             'edge1': {
-                '_type': 'edge[a:int]',
+                '_type': 'edge[a.int]',
                 # '_type': 'edge',
                 # '_ports': {
                 #     '1': {'_type': 'int'},
@@ -1747,17 +1762,17 @@ def test_validate_schema(base_types):
 
     # test for ports and wires mismatch
 
-    print_schema_validation(base_types, good, True)
-    print_schema_validation(base_types, bad, False)
+    print_schema_validation(core, good, True)
+    print_schema_validation(core, bad, False)
 
 
-def test_fill_int(base_types):
+def test_fill_int(core):
     test_schema = {
         '_type': 'int'
     }
 
-    full_state = base_types.fill(test_schema)
-    direct_state = base_types.fill('int')
+    full_state = core.fill(test_schema)
+    direct_state = core.fill('int')
 
     assert full_state == direct_state == 0
 
@@ -1777,7 +1792,7 @@ def test_fill_cube(cube_types):
     assert full_state['depth'] == 0
 
 
-def test_fill_in_missing_nodes(base_types):
+def test_fill_in_missing_nodes(core):
     test_schema = {
         'edge 1': {
             '_type': 'edge',
@@ -1793,7 +1808,7 @@ def test_fill_in_missing_nodes(base_types):
             'outputs': {
                 'O': ['a']}}}
 
-    filled = base_types.fill(
+    filled = core.fill(
         test_schema,
         test_state)
 
@@ -1806,9 +1821,9 @@ def test_fill_in_missing_nodes(base_types):
                 'O': ['a']}}}
 
 
-def test_fill_from_parse(base_types):
+def test_fill_from_parse(core):
     test_schema = {
-        'edge 1': 'edge[I:float,O:float]'}
+        'edge 1': 'edge[I.float,O.float]'}
 
     test_state = {
         'edge 1': {
@@ -1817,7 +1832,7 @@ def test_fill_from_parse(base_types):
             'outputs': {
                 'O': ['a']}}}
 
-    filled = base_types.fill(
+    filled = core.fill(
         test_schema,
         test_state)
 
@@ -1830,7 +1845,7 @@ def test_fill_from_parse(base_types):
                 'O': ['a']}}}
 
 
-# def test_fill_in_disconnected_port(base_types):
+# def test_fill_in_disconnected_port(core):
 #     test_schema = {
 #         'edge1': {
 #             '_type': 'edge',
@@ -1840,7 +1855,7 @@ def test_fill_from_parse(base_types):
 #     test_state = {}
 
 
-# def test_fill_type_mismatch(base_types):
+# def test_fill_type_mismatch(core):
 #     test_schema = {
 #         'a': {'_type': 'int', '_value': 2},
 #         'edge1': {
@@ -1854,7 +1869,7 @@ def test_fill_from_parse(base_types):
 #             'a': 5}}
 
 
-# def test_edge_type_mismatch(base_types):
+# def test_edge_type_mismatch(core):
 #     test_schema = {
 #         'edge1': {
 #             '_type': 'edge',
@@ -1870,7 +1885,7 @@ def test_fill_from_parse(base_types):
 #                 '1': ['..', 'a']}}}
 
 
-def test_establish_path(base_types):
+def test_establish_path(core):
     tree = {}
     destination = establish_path(
         tree,
@@ -1889,7 +1904,7 @@ def test_establish_path(base_types):
     assert tree['some']['where']['deep']['inside']['lives']['a']['tiny']['creature']['made']['of']['light'] == destination
 
 
-def test_expected_schema(base_types):
+def test_expected_schema(core):
     # equivalent to previous schema:
 
     # expected = {
@@ -1931,7 +1946,7 @@ def test_expected_schema(base_types):
     # }
 
     dual_process_schema = {
-        'process1': 'edge[input1:float|input2:int,output1:float|output2:int]',
+        'process1': 'edge[input1.float:input2.int,output1.float:output2.int]',
         'process2': {
             '_type': 'edge',
             '_inputs': {
@@ -1941,15 +1956,15 @@ def test_expected_schema(base_types):
                 'output1': 'float',
                 'output2': 'int'}}}
 
-    base_types.register(
+    core.register(
         'dual_process',
         dual_process_schema,
     )
 
     test_schema = {
-        # 'store1': 'process1:edge[port1:float|port2:int]|process2[port1:float|port2:int]',
+        # 'store1': 'process1.edge[port1.float|port2.int]|process2[port1.float|port2.int]',
         'store1': 'dual_process',
-        'process3': 'edge[input_process:dual_process,output_process:dual_process]'}
+        'process3': 'edge[input_process.dual_process,output_process.dual_process]'}
 
     test_state = {
         'store1': {
@@ -1973,7 +1988,7 @@ def test_expected_schema(base_types):
             'outputs': {
                 'output_process': ['store1']}}}
     
-    outcome = base_types.fill(test_schema, test_state)
+    outcome = core.fill(test_schema, test_state)
 
     # assert outcome == {
     #     'process3': {
@@ -2029,7 +2044,7 @@ def test_expected_schema(base_types):
                 'output_process': ['store1']}}}
 
 
-def test_link_place(base_types):
+def test_link_place(core):
     # TODO: this form is more fundamental than the compressed/inline dict form,
     #   and we should probably derive that from this form
 
@@ -2141,18 +2156,18 @@ def test_link_place(base_types):
                 'e0.1': ['v4'],
                 'e0.2': ['v4', 'v5']}}}
 
-    result = base_types.link_place(placegraph, hypergraph)
+    result = core.link_place(placegraph, hypergraph)
     # assert result == merged
 
 
-def test_units(base_types):
+def test_units(core):
     schema_length = {
         'distance': {'_type': 'length'}}
 
     state = {'distance': 11 * units.meter}
     update = {'distance': -5 * units.feet}
 
-    new_state = base_types.apply(
+    new_state = core.apply(
         schema_length,
         state,
         update
@@ -2161,7 +2176,7 @@ def test_units(base_types):
     assert new_state['distance'] == 9.476 * units.meter
 
 
-def test_unit_conversion(base_types):
+def test_unit_conversion(core):
     # mass * length ^ 2 / second ^ 2
 
     units_schema = {
@@ -2341,12 +2356,12 @@ def test_project(cube_types):
                 '4': ['a1']}}}
 
 
-def test_check(base_types):
-    assert base_types.check('float', 1.11)
-    assert base_types.check({'b': 'float'}, {'b': 1.11})
+def test_check(core):
+    assert core.check('float', 1.11)
+    assert core.check({'b': 'float'}, {'b': 1.11})
 
 
-def test_foursquare(base_types):
+def test_foursquare(core):
     # TODO: need union type and self-referential types (foursquare)
     foursquare_schema = {
         '_type': 'foursquare',
@@ -2362,7 +2377,7 @@ def test_foursquare(base_types):
         },
         '_description': '',
     }
-    base_types.register(
+    core.register(
         'foursquare', foursquare_schema)
 
     example = {
@@ -2463,8 +2478,6 @@ def test_add_reaction(compartment_types):
             '1': {
                 'counts': {
                     'A': 8}}}}
-
-    import ipdb; ipdb.set_trace()
 
     schema, state = compartment_types.infer_schema(
         {},
@@ -2715,6 +2728,125 @@ def test_reaction(compartment_types):
                     {'id': 'daughter2', 'ratio': 0.7}]}}}
 
 
+def test_map_type(core):
+    schema = 'map[int]'
+
+    state = {
+        'a': 12,
+        'b': 13,
+        'c': 15,
+        'd': 18}
+
+    update = {
+        'b': 44,
+        'd': 111}
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert not core.check(schema, 15)
+
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert result['a'] == 12
+    assert result['b'] == 57
+    assert result['d'] == 129
+
+    encode = core.serialize(schema, update)
+    assert encode['d'] == '111'
+
+    decode = core.deserialize(schema, encode)
+    assert decode == update
+
+
+def test_maybe_type(core):
+    schema = 'map[maybe[int]]'
+
+    state = {
+        'a': 12,
+        'b': 13,
+        'c': None,
+        'd': 18}
+
+    update = {
+        'a': None,
+        'c': 44,
+        'd': 111}
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert not core.check(schema, 15)
+    
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert result['a'] == None
+    assert result['b'] == 13
+    assert result['c'] == 44
+    assert result['d'] == 129
+
+    encode = core.serialize(schema, update)
+    assert encode['a'] == NONE_SYMBOL
+    assert encode['d'] == '111'
+
+    decode = core.deserialize(schema, encode)
+    assert decode == update
+
+
+def test_tuple_type(core):
+    schema = 'string|int|map[maybe[float]]'
+
+    state = (
+        'aaaaa',
+        13, {
+            'a': 1.1,
+            'b': None})
+
+    update = (
+        'bbbbbb',
+        10, {
+            'a': 33.33,
+            'b': 4.44444})
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert not core.check(schema, 15)
+    
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert len(result) == 3
+    assert result[0] == update[0]
+    assert result[1] == 23
+    assert result[2]['a'] == 34.43
+    assert result[2]['b'] == update[2]['b']
+
+    encode = core.serialize(schema, state)
+    assert encode[2]['b'] == NONE_SYMBOL
+    assert encode[1] == '13'
+
+    decode = core.deserialize(schema, encode)
+    assert decode == state
+
+
+def test_array_type(core):
+    assert True
+
+
+def test_self_type(core):
+    assert True
+
+
+def test_union_type(core):
+    assert True
+
+
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -2738,3 +2870,9 @@ if __name__ == '__main__':
     test_remove_reaction(core)
     test_replace_reaction(core)
     test_unit_conversion(core)
+    test_map_type(core)
+    test_maybe_type(core)
+    test_tuple_type(core)
+    test_array_type(core)
+    test_self_type(core)
+    test_union_type(core)
