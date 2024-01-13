@@ -2909,10 +2909,6 @@ def test_array_type(core):
             state[key]).all()
 
 
-def test_self_type(core):
-    assert True
-
-
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -2939,6 +2935,5 @@ if __name__ == '__main__':
     test_maybe_type(core)
     test_tuple_type(core)
     test_array_type(core)
-    test_self_type(core)
     test_union_type(core)
     test_foursquare(core)
