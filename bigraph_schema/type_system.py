@@ -2390,8 +2390,22 @@ def test_check(core):
     assert core.check({'b': 'float'}, {'b': 1.11})
 
 
+def apply_foursquare(current, update, bindings, core):
+    if isinstance(current, bool) or isinstance(update, bool):
+        return update
+    else:
+        for key, value in update.items():
+            current[key] = apply_foursquare(
+                current[key],
+                value,
+                bindings,
+                core)
+
+        return current
+                
 def test_foursquare(core):
     foursquare_schema = {
+        '_apply': apply_foursquare,
         '00': 'boolean~foursquare',
         '01': 'boolean~foursquare',
         '10': 'boolean~foursquare',
@@ -2436,6 +2450,25 @@ def test_foursquare(core):
     assert not core.check(
         'foursquare',
         example)
+
+    update = {
+        '01': True,
+        '11': {
+            '01': True,
+            '11': {
+                '11': True,
+                '10': {
+                    '10': {
+                        '00': True,
+                        '11': False}}}}}
+
+    result = core.apply(
+        'foursquare',
+        example,
+        update)
+
+    import ipdb; ipdb.set_trace()
+
 
 
 def test_add_reaction(compartment_types):
