@@ -1138,15 +1138,6 @@ def serialize_list(value, bindings=None, core=None):
     schema = bindings['element']
     return [core.serialize(schema, element) for element in value]
 
-def serialize_numpy_array(value, bindings=None, core=None):
-    ''' Serialize numpy array to bytes '''
-    return {
-        'bytes': value.tobytes(),
-        'dtype': value.dtype,
-        'shape': value.shape,
-    }
-
-
 #######################
 # Deserialize methods #
 #######################
@@ -1181,14 +1172,6 @@ def deserialize_list(encoded, bindings=None, core=None):
         return [
             core.deserialize(schema, element)
             for element in encoded]
-
-
-def deserialize_numpy_array(encoded, bindings=None, core=None):
-    if isinstance(encoded, dict):
-        np.frombuffer(encoded['bytes'], dtype=encoded['dtype']).reshape(encoded['shape'])
-        return np.frombuffer(encoded)
-    else:
-        return  encoded
 
 
 # ------------------------------
@@ -1408,11 +1391,44 @@ def divide_units(value, bindings, core):
     return [value, value]
 
 
-# TODO: implement edge handling
 def apply_edge(current, update, bindings, core):
     return current + update
 
 
+def array_shape(bindings):
+    return tuple([
+        int(binding)
+        for binding in bindings])
+
+
+def check_array(state, bindings, core):
+    return isinstance(state, np.ndarray) and state.shape == array_shape(bindings['shape']) # and state.dtype == bindings['data'] # TODO align numpy data types so we can validate the types of the arrays
+
+
+def apply_array(current, update, bindings, core):
+    return current + update
+
+
+def serialize_array(value, bindings, core):
+    ''' Serialize numpy array to bytes '''
+
+    return {
+        'bytes': value.tobytes(),
+        'dtype': value.dtype,
+        'shape': value.shape}
+
+
+def deserialize_array(encoded, bindings=None, core=None):
+    if isinstance(encoded, np.ndarray):
+        return encoded
+
+    elif isinstance(encoded, dict):
+        return np.frombuffer(
+            encoded['bytes'],
+            dtype=encoded['dtype']).reshape(encoded['shape'])
+
+
+# TODO: implement edge handling
 def check_edge(state, bindings, core):
     return state
 
@@ -1553,11 +1569,19 @@ base_type_library = {
     # TODO: add native numpy array type
     'array': {
         '_type': 'array',
-        '_type_parameters': ['shape', 'element']},
+        '_default': '',
+        '_check': check_array,
+        '_apply': apply_array,
+        '_serialize': serialize_array,
+        '_deserialize': deserialize_array,
+        '_type_parameters': [
+            'shape',
+            'data'],
+        '_description': 'an array of arbitrary dimension'},
 
     'maybe': {
         '_type': 'maybe',
-        '_default': 'None',
+        '_default': NONE_SYMBOL,
         '_apply': apply_maybe,
         '_serialize': serialize_maybe,
         '_deserialize': deserialize_maybe,
@@ -1587,14 +1611,14 @@ base_type_library = {
         'outputs': 'wires',
     },
 
-    'numpy_array': {
-        '_type': 'numpy_array',
-        '_default': np.array([]),
-        '_apply': accumulate,
-        '_serialize': serialize_numpy_array,
-        '_deserialize': deserialize_numpy_array,
-        '_description': 'numpy arrays'
-    },
+    # 'numpy_array': {
+    #     '_type': 'numpy_array',
+    #     '_default': np.array([]),
+    #     '_apply': accumulate,
+    #     '_serialize': serialize_numpy_array,
+    #     '_deserialize': deserialize_numpy_array,
+    #     '_description': 'numpy arrays'
+    # },
 }
 
 
@@ -2839,14 +2863,6 @@ def test_tuple_type(core):
     assert decode == state
 
 
-def test_array_type(core):
-    assert True
-
-
-def test_self_type(core):
-    assert True
-
-
 def test_union_type(core):
     schema = 'string~int~map[maybe[float]]'
 
@@ -2884,6 +2900,44 @@ def test_union_type(core):
 
     decode = core.deserialize(schema, encode)
     assert decode == state
+
+
+def test_array_type(core):
+    schema = 'map[array[(3|4|10),float]]'
+
+    state = {
+        'a': np.zeros((3, 4, 10)),
+        'b': np.ones((3, 4, 10))}
+
+    update = {
+        'a': np.full((3, 4, 10), 5.555),
+        'b': np.full((3, 4, 10), 9.999)}
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert not core.check(schema, 15)
+    
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert result['a'][0, 0, 0] == 5.555
+    assert result['b'][0, 0, 0] == 10.999
+
+    encode = core.serialize(schema, state)
+    assert encode['b']['shape'] == (3, 4, 10)
+
+    decode = core.deserialize(schema, encode)
+
+    for key in state:
+        assert np.equal(
+            decode[key],
+            state[key]).all()
+
+
+def test_self_type(core):
+    assert True
 
 
 if __name__ == '__main__':
