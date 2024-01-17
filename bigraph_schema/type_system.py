@@ -42,7 +42,7 @@ class TypeSystem:
         register_base_reactions(self)
 
 
-    def register(self, type_key, type_data):
+    def register(self, type_key, type_data, force=False):
         '''
         register the provided type_data under the given type_key, looking up
         the module of any functions provided
@@ -50,7 +50,8 @@ class TypeSystem:
 
         self.type_registry.register(
             type_key,
-            type_data)
+            type_data,
+            force=force)
 
 
     def register_reaction(self, reaction_key, reaction):
