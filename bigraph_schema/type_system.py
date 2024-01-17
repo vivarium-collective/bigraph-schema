@@ -1261,17 +1261,19 @@ def serialize_tree(value, bindings, core):
 
 
 def deserialize_tree(encoded, bindings, core):
-    if isinstance(encoded, str):
-        return core.deserialize(
-            bindings['leaf'],
-            encoded)
-
-    elif isinstance(encoded, dict):
+    if isinstance(encoded, dict):
         tree = {}
         for key, value in encoded.items():
             tree[key] = deserialize_tree(value, bindings, core)
-
         return tree
+
+    else:
+        if 'leaf' in bindings:
+            return core.deserialize(
+                bindings['leaf'],
+                encoded)
+        else:
+            return encoded
 
 
 def apply_map(current, update, bindings=None, core=None):
@@ -1423,9 +1425,15 @@ def deserialize_array(encoded, bindings=None, core=None):
         return encoded
 
     elif isinstance(encoded, dict):
-        return np.frombuffer(
-            encoded['bytes'],
-            dtype=encoded['dtype']).reshape(encoded['shape'])
+        if 'value' in encoded:
+            return encoded['value']
+        elif 'bytes' in encoded:
+            return np.frombuffer(
+                encoded['bytes'],
+                dtype=encoded['data']).reshape(encoded['shape'])
+        else:
+            return np.zeros(
+                encoded['shape'], dtype=encoded['data'])
 
 
 # TODO: implement edge handling
@@ -1570,7 +1578,7 @@ base_type_library = {
     # TODO: add native numpy array type
     'array': {
         '_type': 'array',
-        '_default': '',
+        '_default': {'shape': (0,0), 'data': 'float'},
         '_check': check_array,
         '_apply': apply_array,
         '_serialize': serialize_array,
