@@ -64,6 +64,10 @@ class TypeSystem:
 
 
     def validate_schema(self, schema, enforce_connections=False):
+        # TODO:
+        #   check() always returns true or false,
+        #   validate() returns information about what doesn't match
+
         # add ports and wires
         # validate ports are wired to a matching type,
         #   either the same type or a subtype (more specific type)
@@ -2844,6 +2848,15 @@ def test_maybe_type(core):
 
 
 def test_tuple_type(core):
+    schema = {
+        '_type': 'tuple',
+        '_type_parameters': ['0', '1', '2'],
+        '_0': 'string',
+        '_1': 'int',
+        '_2': 'map[maybe[float]]'}
+
+    schema = ('string', 'int', 'map[maybe[float]]')
+    schema = 'tuple[string,int,map[maybe[float]]]'
     schema = 'string|int|map[maybe[float]]'
 
     state = (
@@ -2882,6 +2895,13 @@ def test_tuple_type(core):
 
 
 def test_union_type(core):
+    schema = {
+        '_type': 'union',
+        '_type_parameters': ['0', '1', '2'],
+        '_0': 'string',
+        '_1': 'int',
+        '_2': 'map[maybe[float]]'}
+
     schema = 'string~int~map[maybe[float]]'
 
     state = {
@@ -2905,6 +2925,8 @@ def test_union_type(core):
     assert core.check(schema, wrong_state)
     assert core.check(schema, wrong_update)
     
+    # TODO: deal with union apply of different types
+
     result = core.apply(
         schema,
         state,
@@ -2920,7 +2942,43 @@ def test_union_type(core):
     assert decode == state
 
 
+def test_union_values(core):
+    schema = 'map[string~int~map[maybe[float]]]'
+
+    state = {
+        'a': 'bbbbb',
+        'b': 15}
+
+    update = {
+        'a': 'aaaaa',
+        'b': 22}
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert not core.check(schema, 15)
+    
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert result['a'] == 'aaaaa'
+    assert result['b'] == 37
+
+    encode = core.serialize(schema, state)
+    decode = core.deserialize(schema, encode)
+    assert decode == state
+
+
 def test_array_type(core):
+    schema = {
+        '_type': 'map',
+        '_value': {
+            '_type': 'array',
+            '_shape': 'tuple(3,4,10)',
+            '_data': 'float'}}
+
+    schema = 'map[array[tuple(3,4,10),float]]'
     schema = 'map[array[(3|4|10),float]]'
 
     state = {
@@ -2981,4 +3039,5 @@ if __name__ == '__main__':
     test_tuple_type(core)
     test_array_type(core)
     test_union_type(core)
+    # test_union_values(core)
     test_foursquare(core)

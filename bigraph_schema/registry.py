@@ -492,6 +492,9 @@ def apply_union(current, update, bindings, core):
     elif update_type is None:
         raise Exception(f'trying to apply update to union value but cannot find type of update in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
 
+    # TODO: throw an exception if current_type is incompatible with update_type
+    #   check with supers (!)
+
     return core.apply(
         update_type,
         current,
@@ -660,6 +663,9 @@ class TypeRegistry(Registry):
                     elif inspect.isfunction(looking):
                         found = looking
                         module_key = function_module(found)
+                        
+                        function_name = module_key.split('.')[-1]
+                        registry.register(function_name, found)
                         registry.register(module_key, found)
 
                     schema[subkey] = module_key
