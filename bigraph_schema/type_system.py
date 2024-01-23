@@ -912,7 +912,10 @@ class TypeSystem:
 
     def hydrate_state(self, schema, state):
         if isinstance(state, str) or '_deserialize' in schema:
-            result = self.deserialize(schema, state)
+            result = self.deserialize(
+                schema,
+                state)
+
         elif isinstance(state, dict):
             if isinstance(schema, str):
                 schema = self.access(schema)
@@ -1330,9 +1333,13 @@ def serialize_map(value, bindings=None, core=None):
 
 def deserialize_map(encoded, bindings=None, core=None):
     if isinstance(encoded, dict):
-        value_type = bindings['value']
+        value_type = core.access(
+            bindings['value'])
+
         return {
-            key: core.deserialize(value_type, subvalue)
+            key: core.deserialize(
+                value_type,
+                subvalue)
             for key, subvalue in encoded.items()}
 
 
@@ -1651,7 +1658,7 @@ base_type_library = {
 
     'wires': 'tree[list[string]]',
 
-    'schema': 'tree',
+    'schema': 'tree[any]',
 
     'edge': {
         # TODO: do we need to have defaults informed by type parameters?
