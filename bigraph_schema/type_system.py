@@ -512,8 +512,8 @@ class TypeSystem:
             return result
 
         else:
-            print(f'cannot deserialize: {encoded}')
-            return encoded
+            return self.default(
+                schema)
 
 
     def divide(self, schema, state, ratios=(0.5, 0.5)):
@@ -1011,10 +1011,18 @@ class Edge:
         pass
 
 
-    def schema(self):
+    def inputs(self):
+        return {}
+
+
+    def outputs(self):
+        return {}
+
+
+    def interface(self):
         return {
-            'inputs': {},
-            'outputs': {}}
+            'inputs': self.inputs(),
+            'outputs': self.outputs()}
 
 
 #################
@@ -1415,10 +1423,41 @@ def apply_array(current, update, bindings, core):
 def serialize_array(value, bindings, core):
     ''' Serialize numpy array to bytes '''
 
-    return {
-        'bytes': value.tobytes(),
-        'dtype': value.dtype,
-        'shape': value.shape}
+    if isinstance(value, dict):
+        return value
+    else:
+        data = 'string'
+        dtype = value.dtype.name
+        if dtype.startswith('int'):
+            data = 'integer'
+        elif dtype.startswith('float'):
+            data = 'float'
+
+        return {
+            'bytes': value.tobytes(),
+            'data': data,
+            'shape': value.shape}
+
+
+DTYPE_MAP = {
+    'float': 'float64',
+    'integer': 'int64',
+    'string': 'str'}
+
+
+def lookup_dtype(data_name):
+    data_name = data_name or 'string'
+    dtype_name = DTYPE_MAP.get(data_name)
+    if dtype_name is None:
+        raise Exception(f'unknown data type for array: {data_name}')
+
+    dtype = np.dtype(dtype_name)
+
+
+def read_shape(shape):
+    return tuple([
+        int(x)
+        for x in shape])
 
 
 def deserialize_array(encoded, bindings=None, core=None):
@@ -1428,13 +1467,21 @@ def deserialize_array(encoded, bindings=None, core=None):
     elif isinstance(encoded, dict):
         if 'value' in encoded:
             return encoded['value']
-        elif 'bytes' in encoded:
-            return np.frombuffer(
-                encoded['bytes'],
-                dtype=encoded['data']).reshape(encoded['shape'])
         else:
-            return np.zeros(
-                encoded['shape'], dtype=encoded['data'])
+            dtype = lookup_dtype(
+                encoded.get('data'))
+            shape = read_shape(
+                encoded.get('shape'))
+
+            if 'bytes' in encoded:
+                return np.frombuffer(
+                    encoded['bytes'],
+                    dtype=dtype).reshape(
+                        shape)
+            else:
+                return np.zeros(
+                    shape,
+                    dtype=dtype)
 
 
 # TODO: implement edge handling
@@ -1579,7 +1626,9 @@ base_type_library = {
     # TODO: add native numpy array type
     'array': {
         '_type': 'array',
-        '_default': {'shape': (0,0), 'data': 'float'},
+        '_default': {
+            'shape': (0,0),
+            'data': 'float'},
         '_check': check_array,
         '_apply': apply_array,
         '_serialize': serialize_array,
@@ -2954,6 +3003,7 @@ def test_array_type(core):
 
     encode = core.serialize(schema, state)
     assert encode['b']['shape'] == (3, 4, 10)
+    assert encode['a']['data'] == 'float'
 
     decode = core.deserialize(schema, encode)
 
