@@ -182,8 +182,8 @@ def test_parse_parameters():
 
         print(f'{key}: {example}')
         if types:
-            print(types)
-            print(render_expression(types))
+            print(f'  {types}')
+            print(f'  {render_expression(types)}')
 
 
 if __name__ == '__main__':

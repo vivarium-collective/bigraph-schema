@@ -1556,8 +1556,8 @@ base_type_library = {
         '_serialize': to_string,
         '_description': 'abstract base type for numbers'},
 
-    'int': {
-        '_type': 'int',
+    'integer': {
+        '_type': 'integer',
         '_default': '0',
         # inherit _apply and _serialize from number type
         '_deserialize': deserialize_int,
@@ -1627,7 +1627,7 @@ base_type_library = {
     'array': {
         '_type': 'array',
         '_default': {
-            'shape': (0,0),
+            'shape': (1,1),
             'data': 'float'},
         '_check': check_array,
         '_apply': apply_array,
@@ -1665,20 +1665,9 @@ base_type_library = {
         '_divide': divide_edge,
         '_check': check_edge,
         '_type_parameters': ['inputs', 'outputs'],
-        '_description': 'hyperedges in the bigraph, with ports as a type parameter',
+        '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
         'inputs': 'wires',
-        'outputs': 'wires',
-    },
-
-    # 'numpy_array': {
-    #     '_type': 'numpy_array',
-    #     '_default': np.array([]),
-    #     '_apply': accumulate,
-    #     '_serialize': serialize_numpy_array,
-    #     '_deserialize': deserialize_numpy_array,
-    #     '_description': 'numpy arrays'
-    # },
-}
+        'outputs': 'wires'}}
 
 
 def register_base_reactions(core):
@@ -1696,15 +1685,15 @@ def register_cube(core):
             '_divide': divide_longest,
             '_description': 'a two-dimensional value',
             '_super': 'shape',
-            'width': {'_type': 'int'},
-            'height': {'_type': 'int'},
+            'width': {'_type': 'integer'},
+            'height': {'_type': 'integer'},
         },
         
         # cannot override existing keys unless it is of a subtype
         'cube': {
             '_type': 'cube',
             '_super': 'rectangle',
-            'depth': {'_type': 'int'},
+            'depth': {'_type': 'integer'},
         },
     }
 
@@ -1747,7 +1736,7 @@ def compartment_types(core):
 
 def test_generate_default(cube_types):
     int_default = cube_types.default(
-        {'_type': 'int'}
+        {'_type': 'integer'}
     )
 
     assert int_default == 0
@@ -1760,7 +1749,7 @@ def test_generate_default(cube_types):
     assert 'depth' in cube_default
 
     nested_default = cube_types.default(
-        {'a': 'int',
+        {'a': 'integer',
          'b': {
              'c': 'float',
              'd': 'cube'},
@@ -1824,14 +1813,14 @@ def test_validate_schema(core):
         },
         'ports match': {
             'a': {
-                '_type': 'int',
+                '_type': 'integer',
                 '_value': 2
             },
             'edge1': {
                 '_type': 'edge[a.int]',
                 # '_type': 'edge',
                 # '_ports': {
-                #     '1': {'_type': 'int'},
+                #     '1': {'_type': 'integer'},
                 # },
             }
         }
@@ -1855,11 +1844,11 @@ def test_validate_schema(core):
 
 def test_fill_int(core):
     test_schema = {
-        '_type': 'int'
+        '_type': 'integer'
     }
 
     full_state = core.fill(test_schema)
-    direct_state = core.fill('int')
+    direct_state = core.fill('integer')
 
     assert full_state == direct_state == 0
 
@@ -1944,7 +1933,7 @@ def test_fill_from_parse(core):
 
 # def test_fill_type_mismatch(core):
 #     test_schema = {
-#         'a': {'_type': 'int', '_value': 2},
+#         'a': {'_type': 'integer', '_value': 2},
 #         'edge1': {
 #             '_type': 'edge',
 #             '_ports': {
@@ -1967,7 +1956,7 @@ def test_fill_from_parse(core):
 #         'edge2': {
 #             '_type': 'edge',
 #             '_ports': {
-#                 '1': {'_type': 'int'}},
+#                 '1': {'_type': 'integer'}},
 #             'wires': {
 #                 '1': ['..', 'a']}}}
 
@@ -2002,7 +1991,7 @@ def test_expected_schema(core):
     #         },
     #         'store1.2': {
     #             '_value': 2,
-    #             '_type': 'int',
+    #             '_type': 'integer',
     #         },
     #         'process1': {
     #             '_ports': {
@@ -2033,15 +2022,15 @@ def test_expected_schema(core):
     # }
 
     dual_process_schema = {
-        'process1': 'edge[input1.float:input2.int,output1.float:output2.int]',
+        'process1': 'edge[input1.float:input2.integer,output1.float:output2.integer]',
         'process2': {
             '_type': 'edge',
             '_inputs': {
                 'input1': 'float',
-                'input2': 'int'},
+                'input2': 'integer'},
             '_outputs': {
                 'output1': 'float',
-                'output2': 'int'}}}
+                'output2': 'integer'}}}
 
     core.register(
         'dual_process',
@@ -2137,18 +2126,18 @@ def test_link_place(core):
 
     bigraph = {
         'nodes': {
-            'v0': 'int',
-            'v1': 'int',
-            'v2': 'int',
-            'v3': 'int',
-            'v4': 'int',
-            'v5': 'int',
+            'v0': 'integer',
+            'v1': 'integer',
+            'v2': 'integer',
+            'v3': 'integer',
+            'v4': 'integer',
+            'v5': 'integer',
             'e0': 'edge[e0-0:int|e0-1:int|e0-2:int]',
             'e1': {
                 '_type': 'edge',
                 '_ports': {
-                    'e1-0': 'int',
-                    'e2-0': 'int'}},
+                    'e1-0': 'integer',
+                    'e2-0': 'integer'}},
             'e2': {
                 '_type': 'edge[e2-0:int|e2-1:int|e2-2:int]'}},
 
@@ -2281,16 +2270,16 @@ def test_serialize_deserialize(cube_types):
             # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
             '_type': 'edge',
             '_outputs': {
-                '1': 'int',
+                '1': 'integer',
                 '2': 'float',
                 '3': 'string',
-                '4': 'tree[int]'}},
+                '4': 'tree[integer]'}},
         'a0': {
-            'a0.0': 'int',
+            'a0.0': 'integer',
             'a0.1': 'float',
             'a0.2': {
                 'a0.2.0': 'string'}},
-        'a1': 'tree[int]'}
+        'a1': 'tree[integer]'}
 
     instance = {
         'edge1': {
@@ -2321,21 +2310,21 @@ def test_project(cube_types):
             # '_type': 'edge',
             '_type': 'edge',
             '_inputs': {
-                '1': 'int',
+                '1': 'integer',
                 '2': 'float',
                 '3': 'string',
-                '4': 'tree[int]'},
+                '4': 'tree[integer]'},
             '_outputs': {
-                '1': 'int',
+                '1': 'integer',
                 '2': 'float',
                 '3': 'string',
-                '4': 'tree[int]'}},
+                '4': 'tree[integer]'}},
         'a0': {
-            'a0.0': 'int',
+            'a0.0': 'integer',
             'a0.1': 'float',
             'a0.2': {
                 'a0.2.0': 'string'}},
-        'a1': 'tree[int]'}
+        'a1': 'tree[integer]'}
 
     path_format = {
         '1': 'a0>a0.0',
@@ -2833,7 +2822,7 @@ def test_reaction(compartment_types):
 
 
 def test_map_type(core):
-    schema = 'map[int]'
+    schema = 'map[integer]'
 
     state = {
         'a': 12,
@@ -2866,7 +2855,7 @@ def test_map_type(core):
 
 
 def test_maybe_type(core):
-    schema = 'map[maybe[int]]'
+    schema = 'map[maybe[integer]]'
 
     state = {
         'a': 12,
@@ -2902,7 +2891,7 @@ def test_maybe_type(core):
 
 
 def test_tuple_type(core):
-    schema = 'string|int|map[maybe[float]]'
+    schema = 'string|integer|map[maybe[float]]'
 
     state = (
         'aaaaa',
@@ -2940,7 +2929,7 @@ def test_tuple_type(core):
 
 
 def test_union_type(core):
-    schema = 'string~int~map[maybe[float]]'
+    schema = 'string~integer~map[maybe[float]]'
 
     state = {
         'a': 1.1,
