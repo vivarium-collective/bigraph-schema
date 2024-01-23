@@ -144,6 +144,9 @@ def validate_merge(state, dct, merge_dct):
     for k, v in merge_dct.items():
         if (k in dct and isinstance(dct[k], dict)
                 and isinstance(merge_dct[k], collections.abc.Mapping)):
+            if k not in state:
+                state[k] = {}
+
             validate_merge(
                 state[k],
                 dct[k],
