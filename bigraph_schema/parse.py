@@ -16,22 +16,22 @@ parameter_examples = {
     'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
     'bars': 'a|b|c|zzzz',
     'union': 'a~b~c~zzzz',
-    'typed': 'a.field[yellow,tree,snake]|b.(x.earth|y.cloud|z.sky)',
-    'typed_parameters': 'edge[a.int:b.(x.length|y.float),v[zz.float|xx.what]]',
-    'inputs_and_outputs': 'edge[input1.float:input2.int,output1.float:output2.int]',
+    'typed': 'a:field[yellow,tree,snake]|b:(x:earth|y:cloud|z:sky)',
+    'typed_parameters': 'edge[a:int|b:(x:length|y:float),v[zz:float|xx:what]]',
+    'inputs_and_outputs': 'edge[input1:float|input2:int,output1:float|output2:int]',
+    'tuple': 'what[is,happening|(with:yellow|this:green)|this:now]',
     'units_type': 'length^2*mass/time^1_5'}
 
 
 parameter_grammar = Grammar(
     """
-    expression = merge / map / union/ tree
+    expression = merge / union / tree
     merge = tree (bar tree)+
-    map = tree (colon tree)+
     union = tree (tilde tree)+
     tree = bigraph / type_name
     bigraph = group / nest
     group = paren_left expression paren_right
-    nest = symbol dot tree
+    nest = symbol colon tree
     type_name = symbol parameter_list?
     parameter_list = square_left expression (comma expression)* square_right
     symbol = ~r"[\w\d-_/*&^%$#@!`+ ]+"
@@ -54,6 +54,7 @@ class ParameterVisitor(NodeVisitor):
     def visit_expression(self, node, visit):
         return visit[0]
 
+
     def visit_union(self, node, visit):
         head = [visit[0]]
         tail = [
@@ -63,25 +64,32 @@ class ParameterVisitor(NodeVisitor):
         return {
             '_union': head + tail}
 
+
     def visit_merge(self, node, visit):
         head = [visit[0]]
         tail = [
             tree['visit'][1]
             for tree in visit[1]['visit']]
 
-        return tuple(head + tail)
+        nodes = head + tail
 
-    def visit_map(self, node, visit):
-        head = [visit[0]]
-        tail = [
-            tree['visit'][1]
-            for tree in visit[1]['visit']]
+        if all([
+            isinstance(tree, dict)
+            for tree in nodes]):
 
-        merge = {}
-        for tree in head + tail:
-            merge.update(tree)
+            merge = {}
+            for tree in nodes:
+                merge.update(tree)
 
-        return merge
+            return merge
+
+        else:
+            values = []
+            for tree in head + tail:
+                values.append(tree)
+
+            return tuple(values)
+
 
     def visit_tree(self, node, visit):
         return visit[0]
@@ -94,9 +102,6 @@ class ParameterVisitor(NodeVisitor):
 
     def visit_nest(self, node, visit):
         return {visit[0]: visit[2]}
-
-    # def visit_control(self, node, visit):
-    #     return {visit[0]: visit[2]}
 
     def visit_type_name(self, node, visit):
         type_name = visit[0]
@@ -166,13 +171,10 @@ def render_expression(expression):
         else:
             for key, tree in expression.items():
                 render = render_expression(tree)
-                parts.append(f'{key}.{render}')
+                parts.append(f'{key}:{render}')
 
-                # if isinstance(tree, list) and len(tree) > 1:
-                #     parts.append(f'{key}.({render})')
-                # else:
-                #     parts.append(f'{key}:{render}')
-            return ':'.join(parts)
+            inner = '|'.join(parts)
+            return f'({inner})'
 
 
 # Test the functions

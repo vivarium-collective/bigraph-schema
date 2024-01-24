@@ -1836,7 +1836,7 @@ def test_validate_schema(core):
                 '_value': 2
             },
             'edge1': {
-                '_type': 'edge[a.int]',
+                '_type': 'edge[a:integer]',
                 # '_type': 'edge',
                 # '_ports': {
                 #     '1': {'_type': 'integer'},
@@ -1918,7 +1918,7 @@ def test_fill_in_missing_nodes(core):
 
 def test_fill_from_parse(core):
     test_schema = {
-        'edge 1': 'edge[I.float,O.float]'}
+        'edge 1': 'edge[I:float,O:float]'}
 
     test_state = {
         'edge 1': {
@@ -2041,7 +2041,7 @@ def test_expected_schema(core):
     # }
 
     dual_process_schema = {
-        'process1': 'edge[input1.float:input2.integer,output1.float:output2.integer]',
+        'process1': 'edge[input1:float|input2:integer,output1:float|output2:integer]',
         'process2': {
             '_type': 'edge',
             '_inputs': {
@@ -2059,7 +2059,7 @@ def test_expected_schema(core):
     test_schema = {
         # 'store1': 'process1.edge[port1.float|port2.int]|process2[port1.float|port2.int]',
         'store1': 'dual_process',
-        'process3': 'edge[input_process.dual_process,output_process.dual_process]'}
+        'process3': 'edge[input_process:dual_process,output_process:dual_process]'}
 
     test_state = {
         'store1': {
