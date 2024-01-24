@@ -369,8 +369,18 @@ class TypeSystem:
 
     def check(self, initial_schema, state):
         schema = self.access(initial_schema)
+        if schema is None:
+            raise Exception(f'no type registered for the given schema: {initial_schema}')
         return self.check_state(schema, state)
     
+
+    def validate(self, schema, state):
+        # TODO:
+        #   go through the state using the schema and
+        #   return information about what doesn't match
+
+        return {}
+
 
     def apply_update(self, schema, state, update):
         if isinstance(update, dict) and '_react' in update:
@@ -986,8 +996,8 @@ def check_number(state, bindings=None, core=None):
 def check_boolean(state, bindings=None, core=None):
     return isinstance(state, bool)
 
-def check_int(state, bindings=None, core=None):
-    return isinstance(state, int)
+def check_integer(state, bindings=None, core=None):
+    return isinstance(state, int) and not isinstance(state, bool)
 
 def check_float(state, bindings=None, core=None):
     return isinstance(state, float)
@@ -1088,8 +1098,8 @@ def divide_float(value, ratios, bindings=None, core=None):
 
 
 # support function core for registrys?
-# def divide_int(value: int, _) -> tuple[int, int]:
-def divide_int(value, bindings=None, core=None):
+# def divide_integer(value: int, _) -> tuple[int, int]:
+def divide_integer(value, bindings=None, core=None):
     half = value // 2
     other_half = half
     if value % 2 == 1:
@@ -1105,10 +1115,10 @@ def divide_longest(dimensions, bindings=None, core=None):
     height = dimensions['height']
 
     if width > height:
-        a, b = divide_int(width)
+        a, b = divide_integer(width)
         return [{'width': a, 'height': height}, {'width': b, 'height': height}]
     else:
-        x, y = divide_int(height)
+        x, y = divide_integer(height)
         return [{'width': width, 'height': x}, {'width': width, 'height': y}]
 
 
@@ -1158,7 +1168,7 @@ def serialize_list(value, bindings=None, core=None):
 # Deserialize methods #
 #######################
 
-def deserialize_int(encoded, bindings=None, core=None):
+def deserialize_integer(encoded, bindings=None, core=None):
     value = None
     try:
         value = int(encoded)
@@ -1217,23 +1227,19 @@ def check_tree(state, bindings, core):
 
     if isinstance(state, dict):
         for key, value in state.items():
-            check = core.check(
-                leaf_type,
-                leaf)
+            check = core.check({
+                '_type': 'tree',
+                '_leaf': leaf_type},
+                value)
 
             if not check:
-                check = core.check({
-                    '_type': 'tree',
-                    '_leaf': leaf_type})
-
-                if not check:
-                    return False
+                return core.check(
+                    leaf_type,
+                    value)
 
         return True
     else:
-        return False
-
-    return core.check(leaf_type, state)
+        return core.check(leaf_type, state)
 
 
 def divide_tree(tree, bindings, core):
@@ -1257,18 +1263,18 @@ def divide_tree(tree, bindings, core):
 
 
 def serialize_tree(value, bindings, core):
-    if core.check(bindings['leaf'], value):
-        encoded = core.serialize(
-            bindings['leaf'],
-            value)
-
-    elif isinstance(value, dict):
+    if isinstance(value, dict):
         encoded = {}
         for key, subvalue in value.items():
             encoded[key] = serialize_tree(
                 subvalue,
                 bindings,
                 core)
+
+    elif core.check(bindings['leaf'], value):
+        encoded = core.serialize(
+            bindings['leaf'],
+            value)
 
     else:
         raise Exception(f'trying to serialize a tree but unfamiliar with this form of tree: {value}\n  current bindings are: {bindings}')
@@ -1571,9 +1577,9 @@ base_type_library = {
         '_type': 'integer',
         '_default': '0',
         # inherit _apply and _serialize from number type
-        '_deserialize': deserialize_int,
-        '_check': check_int,
-        '_divide': divide_int,
+        '_deserialize': deserialize_integer,
+        '_check': check_integer,
+        '_divide': divide_integer,
         '_description': '64-bit integer',
         '_super': 'number'},
 
@@ -1609,6 +1615,7 @@ base_type_library = {
         #     'append': 'append_list'},
         '_description': 'general list type (or sublists)'},
 
+    # TODO: tree should behave as if the leaf type is a valid tree
     'tree': {
         '_type': 'tree',
         '_default': {},
@@ -1660,6 +1667,7 @@ base_type_library = {
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
 
+    # TODO: is a leaf a valid tree?
     'wires': 'tree[list[string]]',
 
     'schema': 'tree[any]',
@@ -1819,7 +1827,7 @@ def test_validate_schema(core):
             '_default': 0,
             '_apply': accumulate,
             '_serialize': to_string,
-            '_deserialize': deserialize_int,
+            '_deserialize': deserialize_integer,
             '_description': '64-bit integer'
         },
         'ports match': {
@@ -1853,7 +1861,7 @@ def test_validate_schema(core):
     print_schema_validation(core, bad, False)
 
 
-def test_fill_int(core):
+def test_fill_integer(core):
     test_schema = {
         '_type': 'integer'
     }
@@ -2865,6 +2873,52 @@ def test_map_type(core):
     assert decode == update
 
 
+def test_tree_type(core):
+    schema = 'tree[maybe[integer]]'
+
+    state = {
+        'a': 12,
+        'b': 13,
+        'c': {
+            'e': 5555,
+            'f': 111},
+        'd': None}
+
+    update = {
+        'a': None,
+        'c': {
+            'e': 88888,
+            'f': 2222,
+            'G': None},
+        'd': 111}
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert core.check(schema, 15)
+    assert core.check(schema, None)
+    assert core.check(schema, {'c': {'D': None, 'e': 11111}})
+    assert not core.check(schema, 'yellow')
+    assert not core.check(schema, {'a': 5, 'b': 'green'})
+    assert not core.check(schema, {'c': {'D': False, 'e': 11111}})
+    
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert result['a'] == None
+    assert result['b'] == 13
+    assert result['c']['f'] == 2333
+    assert result['d'] == 111
+
+    encode = core.serialize(schema, update)
+    assert encode['a'] == NONE_SYMBOL
+    assert encode['d'] == '111'
+
+    decode = core.deserialize(schema, encode)
+    assert decode == update
+
+
 def test_maybe_type(core):
     schema = 'map[maybe[integer]]'
 
@@ -2997,32 +3051,33 @@ def test_union_type(core):
     assert decode == state
 
 
-# def test_union_values(core):
-#     schema = 'map[string~int~map[maybe[float]]]'
+def test_union_values(core):
+    schema = 'map[integer~string~map[maybe[float]]]'
 
-#     state = {
-#         'a': 'bbbbb',
-#         'b': 15}
+    state = {
+        'a': 'bbbbb',
+        'b': 15}
 
-#     update = {
-#         'a': 'aaaaa',
-#         'b': 22}
+    update = {
+        'a': 'aaaaa',
+        'b': 22}
 
-#     assert core.check(schema, state)
-#     assert core.check(schema, update)
-#     assert not core.check(schema, 15)
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert not core.check(schema, 15)
     
-#     result = core.apply(
-#         schema,
-#         state,
-#         update)
+    result = core.apply(
+        schema,
+        state,
+        update)
 
-#     assert result['a'] == 'aaaaa'
-#     assert result['b'] == 37
+    assert result['a'] == 'aaaaa'
+    assert result['b'] == 37
 
-#     encode = core.serialize(schema, state)
-#     decode = core.deserialize(schema, encode)
-#     assert decode == state
+    encode = core.serialize(schema, state)
+    decode = core.deserialize(schema, encode)
+
+    assert decode == state
 
 
 def test_array_type(core):
@@ -3077,7 +3132,7 @@ if __name__ == '__main__':
     test_generate_default(core)
     test_apply_update(core)
     test_validate_schema(core)
-    test_fill_int(core)
+    test_fill_integer(core)
     test_fill_cube(core)
     test_establish_path(core)
     test_fill_in_missing_nodes(core)
@@ -3091,9 +3146,10 @@ if __name__ == '__main__':
     test_replace_reaction(core)
     test_unit_conversion(core)
     test_map_type(core)
+    test_tree_type(core)
     test_maybe_type(core)
     test_tuple_type(core)
     test_array_type(core)
     test_union_type(core)
-    # test_union_values(core)
+    test_union_values(core)
     test_foursquare(core)

@@ -384,7 +384,7 @@ def apply_tree(current, update, bindings, core):
     leaf_type = core.access(bindings['leaf'])
     bindings['leaf'] = leaf_type
     
-    if isinstance(update, dict):
+    if isinstance(current, dict) and isinstance(update, dict):
         current = current or {}
         
         for key, branch in update.items():
@@ -405,6 +405,13 @@ def apply_tree(current, update, bindings, core):
                     core)
 
         return current
+    elif core.check(leaf_type, current):
+        core.apply(
+            leaf_type,
+            current,
+            update,
+            bindings,
+            core)
     else:
         if current is None:
             current = core.default(leaf_type)
@@ -476,6 +483,7 @@ def find_union_type(core, possible_types, state):
     for possible in possible_types:
         if core.check(possible, state):
             return core.access(possible)
+
     return None
 
 
@@ -505,10 +513,12 @@ def apply_union(current, update, bindings, core):
 
 
 def check_union(state, bindings, core):
-    return find_union_type(
+    found = find_union_type(
         core,
         bindings.values(),
         state)
+
+    return found is not None and len(found) > 0
 
 
 def serialize_union(value, bindings, core):
