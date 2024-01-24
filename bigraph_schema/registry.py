@@ -383,6 +383,9 @@ class Registry(object):
 def apply_tree(current, update, schema, core):
     if '_bindings' not in schema:
         schema = core.access(schema)
+    if '_bindings' not in schema:
+        import ipdb; ipdb.set_trace()
+
     bindings = schema['_bindings']
 
     leaf_type = core.access(
@@ -390,24 +393,29 @@ def apply_tree(current, update, schema, core):
     bindings['leaf'] = leaf_type
     
     if isinstance(current, dict) and isinstance(update, dict):
-        current = current or {}
-        
         for key, branch in update.items():
             if key == '_add':
                 current.update(branch)
             elif key == '_remove':
                 current = remove_path(current, branch)
+            elif isinstance(branch, dict):
+                subschema = schema
+                if key in schema:
+                    subschema = schema[key]
+
+                current[key] = core.apply(
+                    subschema,
+                    current.get(key),
+                    branch)
+
             elif core.check(leaf_type, branch):
                 current[key] = core.apply(
                     leaf_type,
                     current.get(key),
                     branch)
+
             else:
-                current[key] = apply_tree(
-                    current.get(key),
-                    branch,
-                    schema,
-                    core)
+                raise Exception(f'state does not seem to be of leaf type:\n  state: {state}\n  leaf type: {leaf_type}')
 
         return current
     elif core.check(leaf_type, current):
@@ -428,7 +436,7 @@ def apply_any(current, update, schema, core):
         return apply_tree(
             current,
             update,
-            schema,
+            'tree[any]',
             core)
     else:
         return update

@@ -19,7 +19,7 @@ from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
     NONE_SYMBOL,
     Registry, TypeRegistry, 
-    type_schema_keys, non_schema_keys, apply_tree,
+    type_schema_keys, non_schema_keys, apply_tree, type_merge,
     deep_merge, get_path, establish_path, set_path, transform_path, remove_path, remove_omitted
 )
 
@@ -30,8 +30,9 @@ TYPE_SCHEMAS = {
 
 
 def apply_schema(current, update, schema, core):
-    # TODO
-    return current
+    return type_merge(
+        current,
+        update)
 
 
 class TypeSystem:
@@ -415,7 +416,7 @@ class TypeSystem:
                         f'for state: {key}\n{state}\nwith schema:\n{schema}')
                 else:
                     subupdate = self.apply_update(
-                        schema[key],
+                        self.access(schema[key]),
                         state[key],
                         branch)
 
@@ -423,7 +424,7 @@ class TypeSystem:
         else:
             raise Exception(
                 f'trying to apply update\n  {update}\nto state\n  {state}\n'
-                f'with schema\n{schema}, but the update is not a dict')
+                f'with schema\n  {schema}\nbut the update is not a dict')
 
         return state
 
@@ -550,6 +551,9 @@ class TypeSystem:
             top = state
         if path is None:
             path = []
+
+        if isinstance(schema, str):
+            schema = self.access(schema)
 
         for port_key, port_schema in schema.items():
             if port_key in wires:
@@ -805,8 +809,6 @@ class TypeSystem:
             ports = self.access(ports)
 
         if isinstance(wires, list):
-            import ipdb; ipdb.set_trace()
-
             if len(wires) == 0:
                 destination = top_schema
             else:
@@ -1088,22 +1090,22 @@ def apply_boolean(current: bool, update: bool, schema, core=None) -> bool:
         return current
 
 
-def divide_boolean(value: bool, schema, core=None):
+def divide_boolean(value: bool, schema, core):
     return (value, value)
 
 
-def serialize_boolean(value: bool, schema, core=None) -> str:
+def serialize_boolean(value: bool, schema, core) -> str:
     return str(value)
 
 
-def deserialize_boolean(encoded, schema, core=None) -> bool:
+def deserialize_boolean(encoded, schema, core) -> bool:
     if encoded == 'true':
         return True
     elif encoded == 'false':
         return False
 
 
-def accumulate(current, update, schema, core=None):
+def accumulate(current, update, schema, core):
     if current is None:
         return update
     if update is None:
@@ -1112,8 +1114,19 @@ def accumulate(current, update, schema, core=None):
         return current + update
 
 
-def set_apply(current, update, schema, core=None):
-    return update
+def set_apply(current, update, schema, core):
+    if isinstance(current, dict) and isinstance(update, dict):
+        for key, value in update.items():
+            current[key] = set_apply(
+                current[key],
+                value,
+                schema,
+                core)
+
+        return current
+
+    else:
+        return update        
 
 
 def concatenate(current, update, schema, core=None):
