@@ -2752,6 +2752,19 @@ def test_inherits_from(core):
         'b': 'number'})
 
 
+def test_resolve_schemas(core):
+    resolved = core.resolve_schemas({
+        'a': 'float',
+        'b': 'map[list[string]]'}, {
+        'a': 'number',
+        'b': 'map[path]',
+        'c': 'string'})
+
+    assert resolved['a']['_type'] == 'float'
+    assert resolved['b']['_value']['_type'] == 'path'
+    assert resolved['c']['_type'] == 'string'
+
+
 def apply_foursquare(current, update, schema, core):
     if isinstance(current, bool) or isinstance(update, bool):
         return update
@@ -3439,6 +3452,7 @@ if __name__ == '__main__':
     test_serialize_deserialize(core)
     test_project(core)
     test_inherits_from(core)
+    test_resolve_schemas(core)
     test_add_reaction(core)
     test_remove_reaction(core)
     test_replace_reaction(core)
