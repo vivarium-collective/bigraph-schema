@@ -853,28 +853,6 @@ class TypeRegistry(Registry):
         return self.access(type_key).get(attribute)
 
 
-    def inherits_from(self, descendant, ancestor):
-        # current inherits logic is an operation with keys.
-        # potentially allow us to check inheritance of trees and
-        # types with type parameters
-        for inherit in self.inherits[descendant]:
-            if inherit == ancestor:
-                return True
-            else:
-                # depth first search of the tree
-                if self.inherits_from(inherit, ancestor):
-                    return True
-
-        return False
-
-
-def test_inherits_from():
-    registry = TypeRegistry()
-    assert registry.inherits_from('float', 'number')
-    assert registry.inherits_from('float', 'any')
-    assert not registry.inherits_from('number', 'float')
-
-
 def test_reregister_type():
     type_registry = TypeRegistry()
     type_registry.register('A', {'_default': 'a'})
