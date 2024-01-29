@@ -889,7 +889,10 @@ class TypeSystem:
         current = self.access(current)
         update = self.access(update)
 
-        if self.inherits_from(current, update):
+        if self.equivalent(current, update):
+            return current
+
+        elif self.inherits_from(current, update):
             return current
 
         elif self.inherits_from(update, current):
