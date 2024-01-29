@@ -2765,6 +2765,21 @@ def test_resolve_schemas(core):
     assert resolved['c']['_type'] == 'string'
 
 
+def test_apply_schema(core):
+    applied = apply_schema({
+        'a': 'float',
+        'b': 'map[list[string]]'}, {
+        'a': 'number',
+        'b': 'map[path]',
+        'c': 'string'},
+        'schema',
+        core)
+
+    assert applied['a']['_type'] == 'float'
+    assert applied['b']['_value']['_type'] == 'path'
+    assert applied['c']['_type'] == 'string'
+
+
 def apply_foursquare(current, update, schema, core):
     if isinstance(current, bool) or isinstance(update, bool):
         return update

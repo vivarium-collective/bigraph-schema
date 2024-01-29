@@ -55,6 +55,7 @@ overridable_schema_keys = set([
     '_value',
     '_divide',
     '_description',
+    '_inherit',
 ])
 
 nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
@@ -62,12 +63,6 @@ nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
 merge_schema_keys = (
     '_ports',
     '_type_parameters',
-)
-
-# check to see where are not adding in supertypes of types
-# already present
-concatenate_schema_keys = (
-    '_inherit',
 )
 
 
@@ -78,7 +73,7 @@ def non_schema_keys(schema):
         if not element.startswith('_')]
 
             
-def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
+def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
     """Recursively merge type definitions, never overwrite.
     Args:
         dct: The dictionary to merge into. This dictionary is mutated
@@ -100,12 +95,12 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
         ) and isinstance(
             merge_dct[k], collections.abc.Mapping
         ):
-            type_merge(dct[k], merge_dct[k], path + (k,))
-        elif k in concatenate_schema_keys:
-            # this check may not be necessary if we check
-            # for merging super types
-            if k != '_inherit' or merge_supers:
-                dct[k].extend(merge_dct[k])
+            type_merge(
+                dct[k],
+                merge_dct[k],
+                path + (k,),
+                merge_supers)
+
         else:
             raise ValueError(
                 f'cannot merge types at path {path + (k,)}:\n'
@@ -678,6 +673,9 @@ class TypeRegistry(Registry):
             schema = self.access(schema)
         schema = copy.deepcopy(schema)
 
+        if '_type' not in schema:
+            schema['_type'] = key
+
         if isinstance(schema, dict):
             inherits = schema.get('_inherit', [])  # list of immediate inherits
             if isinstance(inherits, str):
@@ -690,8 +688,7 @@ class TypeRegistry(Registry):
                 new_schema = copy.deepcopy(inherit_type)
                 schema = type_merge(
                     new_schema,
-                    schema,
-                    merge_supers=False)
+                    schema)
 
                 self.inherits[key].append(
                     inherit_type)
