@@ -746,7 +746,7 @@ class TypeSystem:
 
         if not ports_schema:
             return None
-        if not ports:
+        if ports is None:
             return None
 
         return self.view(
@@ -762,8 +762,8 @@ class TypeSystem:
         if isinstance(wires, str):
             wires = [wires]
 
-        if isinstance(wires, list):
-            destination = list(path) + wires
+        if isinstance(wires, (list, tuple)):
+            destination = list(path) + list(wires)
             result = set_path(
                 result,
                 destination,
@@ -788,7 +788,7 @@ class TypeSystem:
                 deep_merge(result, branch)
         else:
             raise Exception(
-                f'inverting state\n  {state}\naccording to ports schema\n  {schema}\nbut wires are not recognized\n  {wires}')
+                f'inverting state\n  {states}\naccording to ports schema\n  {ports}\nbut wires are not recognized\n  {wires}')
 
         return result
 
@@ -927,7 +927,7 @@ class TypeSystem:
         if isinstance(ports, str):
             ports = self.access(ports)
 
-        if isinstance(wires, list):
+        if isinstance(wires, (list, tuple)):
             if len(wires) == 0:
                 destination = top_schema
             else:
