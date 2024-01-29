@@ -30,9 +30,32 @@ TYPE_SCHEMAS = {
 
 
 def apply_schema(current, update, schema, core):
-    return type_merge(
-        current,
-        update)
+    current = core.access(current)
+    update = core.access(update)
+
+    if '_type' in update:
+        if '_type' in current:
+            current = core.resolve_schemas(
+                current,
+                update)
+        else:
+            current['_type'] = update['_type']
+
+    for key, subschema in update.items():
+        if key in type_schema_keys:
+            if key not in ['_type', '_inherit']:
+                current[key] = subschema
+
+        elif key in current:
+            current[key] = apply_schema(
+                current.get(key),
+                subschema,
+                schema,
+                core)
+        else:
+            current[key] = subschema
+
+    return current
 
 
 class TypeSystem:
@@ -801,6 +824,99 @@ class TypeSystem:
             states)
 
 
+    def equivalent(self, current, question):
+        current = self.access(current)
+        question = self.access(question)
+
+        if '_type' in current:
+            if '_type' in question:
+                if current['_type'] == question['_type']:
+                    if '_type_parameters' in current:
+                        if '_type_parameters' in question:
+                            for parameter in current['_type_parameters']:
+                                parameter_key = f'_{parameter}'
+                                if parameter_key in question:
+                                    if not self.equivalent(current[parameter_key], question[parameter_key]):
+                                        return False
+                        else:
+                            return False
+                else:
+                    return False
+            else:
+                return False
+
+        for key, value in current.items():
+            if key not in type_schema_keys:
+                if key not in question or not self.equivalent(current[key], question[key]):
+                    return False
+
+        return True
+
+
+    def inherits_from(self, descendant, ancestor):
+        descendant = self.access(descendant)
+        ancestor = self.access(ancestor)
+
+        if '_type' in descendant:
+            if '_type_parameters' in descendant:
+                for type_parameter in descendant['_type_parameters']:
+                    parameter_key = f'_{type_parameter}'
+                    if parameter_key in ancestor:
+                        if not self.inherits_from(descendant[parameter_key], ancestor[parameter_key]):
+                            return False
+
+            if '_inherit' in descendant:
+                for inherit in descendant['_inherit']:
+
+                    if self.equivalent(inherit, ancestor) or self.inherits_from(inherit, ancestor):
+                        return True
+
+                return False
+            elif '_type' not in ancestor or descendant['_type'] != ancestor['_type']:
+                return False
+
+        else:
+            for key, value in descendant.items():
+                if key not in type_schema_keys:
+                    if key in ancestor:
+                        if not self.inherits_from(value, ancestor[key]):
+                            return False
+
+        return True
+
+
+    def resolve_schemas(self, current, update):
+        current = self.access(current)
+        update = self.access(update)
+
+        if self.inherits_from(current, update):
+            return current
+
+        elif self.inherits_from(update, current):
+            return update
+
+        elif '_type' in current and '_type' in update:
+            raise Exception(f'trying to resolve schemas but they are incompatible:\n  current: {current}\n  update: {update}')
+
+        else:
+            outcome = {}
+
+            for key, value in current.items():
+                if key in type_schema_keys or key not in update:
+                    outcome[key] = value
+
+                else:
+                    outcome[key] = self.resolve_schemas(
+                        value,
+                        update[key])
+
+            for key, value in update.items():
+                if key not in outcome:
+                    outcome[key] = value
+
+            return outcome
+
+
     def infer_wires(self, ports, state, wires, top_schema=None, path=None):
         top_schema = top_schema or {}
         path = path or ()
@@ -855,12 +971,32 @@ class TypeSystem:
                         top=top_schema,
                         cursor=path[:-1])
 
+                    # TODO: validate the schema/state
                     destination_key = port_wires[-1]
                     if destination_key in destination:
-                        # TODO: validate the schema/state
-                        pass
-                    else:
-                        destination[destination_key] = port_schema
+                        current = destination[destination_key]
+                        if isinstance(current, str):
+                            if isinstance(port_schema, str):
+                                port_schema = self.resolve_schemas(
+                                    current,
+                                    port_schema)
+
+                            else:
+                                port_schema['_type'] = current
+
+                        elif isinstance(port_schema, str):
+                            current['_type'] = port_schema
+                            port_schema = current
+
+                        else:
+                            port_schema = apply_schema(
+                                current,
+                                port_schema,
+                                'schema',
+                                self)
+
+                    destination[destination_key] = self.access(
+                        port_schema)
 
         return top_schema
 
@@ -1779,9 +1915,13 @@ base_type_library = {
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
 
+    'path': {
+        '_type': 'path',
+        '_inherit': 'list[string]'},
+
     'wires': {
         '_type': 'wires',
-        '_inherit': 'tree[list[string]]'},
+        '_inherit': 'tree[path]'},
 
     'schema': {
         '_type': 'schema',
@@ -2572,6 +2712,46 @@ def test_check(core):
     assert core.check({'b': 'float'}, {'b': 1.11})
 
 
+def test_inherits_from(core):
+    assert core.inherits_from(
+        'float',
+        'number')
+
+    assert core.inherits_from(
+        'tree[float]',
+        'tree[number]')
+
+    assert core.inherits_from(
+        'tree[path]',
+        'tree[list[string]]')
+
+    assert not core.inherits_from(
+        'tree[path]',
+        'tree[list[number]]')
+
+    assert not core.inherits_from(
+        'tree[float]',
+        'tree[string]')
+
+    assert not core.inherits_from(
+        'tree[float]',
+        'list[float]')
+
+    assert core.inherits_from({
+        'a': 'float',
+        'b': 'schema'}, {
+
+        'a': 'number',
+        'b': 'tree'})
+
+    assert not core.inherits_from({
+        'a': 'float',
+        'b': 'schema'}, {
+
+        'a': 'number',
+        'b': 'number'})
+
+
 def apply_foursquare(current, update, schema, core):
     if isinstance(current, bool) or isinstance(update, bool):
         return update
@@ -3258,6 +3438,7 @@ if __name__ == '__main__':
     test_units(core)
     test_serialize_deserialize(core)
     test_project(core)
+    test_inherits_from(core)
     test_add_reaction(core)
     test_remove_reaction(core)
     test_replace_reaction(core)

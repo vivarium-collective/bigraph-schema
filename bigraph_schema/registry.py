@@ -624,6 +624,9 @@ class TypeRegistry(Registry):
     def __init__(self):
         super().__init__()
 
+        # inheritance tracking
+        self.inherits = {}
+
         self.check_registry = Registry(function_keys=[
             'state',
             'schema',
@@ -681,6 +684,7 @@ class TypeRegistry(Registry):
                 inherits = [inherits]
                 schema['_inherit'] = inherits
 
+            self.inherits[key] = []
             for inherit in inherits:
                 inherit_type = self.access(inherit)
                 new_schema = copy.deepcopy(inherit_type)
@@ -688,6 +692,9 @@ class TypeRegistry(Registry):
                     new_schema,
                     schema,
                     merge_supers=False)
+
+                self.inherits[key].append(
+                    inherit_type)
 
             for subkey, original_subschema in schema.items():
                 if subkey in function_keys:
@@ -724,8 +731,9 @@ class TypeRegistry(Registry):
                 elif subkey not in type_schema_keys:
                     subschema = self.access(original_subschema)
                     if subschema is None:
-                        raise Exception(f'trying to register a new type ({key}), '
-                                        f'but it depends on a type ({subkey}) which is not in the registry')
+                        raise Exception(
+                            f'trying to register a new type ({key}), '
+                            f'but it depends on a type ({subkey}) which is not in the registry')
                     else:
                         schema[subkey] = subschema
         else:
@@ -840,8 +848,31 @@ class TypeRegistry(Registry):
                     
         return found
 
+
     def lookup(self, type_key, attribute):
         return self.access(type_key).get(attribute)
+
+
+    def inherits_from(self, descendant, ancestor):
+        # current inherits logic is an operation with keys.
+        # potentially allow us to check inheritance of trees and
+        # types with type parameters
+        for inherit in self.inherits[descendant]:
+            if inherit == ancestor:
+                return True
+            else:
+                # depth first search of the tree
+                if self.inherits_from(inherit, ancestor):
+                    return True
+
+        return False
+
+
+def test_inherits_from():
+    registry = TypeRegistry()
+    assert registry.inherits_from('float', 'number')
+    assert registry.inherits_from('float', 'any')
+    assert not registry.inherits_from('number', 'float')
 
 
 def test_reregister_type():
