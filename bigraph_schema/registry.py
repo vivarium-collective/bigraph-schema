@@ -11,6 +11,10 @@ import pytest
 import traceback
 
 from bigraph_schema.parse import parse_expression
+from bigraph_schema.protocols import local_lookup_module, function_module
+
+
+NONE_SYMBOL = '!nil'
 
 
 required_schema_keys = set([
@@ -27,10 +31,18 @@ optional_schema_keys = set([
     '_value',
     '_description',
     '_type_parameters',
-    '_super',
+    '_inherit',
 ])
 
 type_schema_keys = required_schema_keys | optional_schema_keys
+
+function_keys = [
+    '_apply',
+    '_check',
+    '_divide',
+    '_react',
+    '_serialize',
+    '_deserialize']
 
 overridable_schema_keys = set([
     '_type',
@@ -39,9 +51,11 @@ overridable_schema_keys = set([
     '_check',
     '_serialize',
     '_deserialize',
+    '_type_parameters',
     '_value',
     '_divide',
     '_description',
+    '_inherit',
 ])
 
 nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
@@ -49,12 +63,6 @@ nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
 merge_schema_keys = (
     '_ports',
     '_type_parameters',
-)
-
-# check to see where are not adding in supertypes of types
-# already present
-concatenate_schema_keys = (
-    '_super',
 )
 
 
@@ -66,7 +74,7 @@ def non_schema_keys(schema):
         if not element.startswith('_')]
 
             
-def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
+def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
     """Recursively merge type definitions, never overwrite.
     Args:
         dct: The dictionary to merge into. This dictionary is mutated
@@ -88,12 +96,12 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=True):
         ) and isinstance(
             merge_dct[k], collections.abc.Mapping
         ):
-            type_merge(dct[k], merge_dct[k], path + (k,))
-        elif k in concatenate_schema_keys:
-            # this check may not be necessary if we check
-            # for merging super types
-            if k != '_super' or merge_supers:
-                dct[k].extend(merge_dct[k])
+            type_merge(
+                dct[k],
+                merge_dct[k],
+                path + (k,),
+                merge_supers)
+
         else:
             raise ValueError(
                 f'cannot merge types at path {path + (k,)}:\n'
@@ -132,6 +140,9 @@ def validate_merge(state, dct, merge_dct):
     for k, v in merge_dct.items():
         if (k in dct and isinstance(dct[k], dict)
                 and isinstance(merge_dct[k], collections.abc.Mapping)):
+            if k not in state:
+                state[k] = {}
+
             validate_merge(
                 state[k],
                 dct[k],
@@ -148,6 +159,17 @@ def validate_merge(state, dct, merge_dct):
 
 
 def get_path(tree, path):
+    '''
+    given a tree and a path, find the subtree at that path
+    Args:
+        tree: the tree we are looking in (a nested dict)
+        path: a list/tuple of keys we follow down the tree
+            to find the subtree we are looking for
+    Returns:
+        subtree: the subtree found by following the list of keys
+            down the tree
+    '''
+
     if len(path) == 0:
         return tree
     else:
@@ -159,6 +181,19 @@ def get_path(tree, path):
 
 
 def establish_path(tree, path, top=None, cursor=()):
+    '''
+    given a tree and a path in the tree that may or may not yet exist,
+    add nodes along the path and return the final node which is now at the
+    given path.
+    Args:
+        tree: the tree we are establishing a path in
+        path: where the new subtree will be located in the tree
+        top: (None) a reference to the top of the tree
+        cursor: (()) the current location we are visiting in the tree
+    Returns:
+        node: the new node of the tree that exists at the given path
+    '''
+
     if tree is None:
         tree = {}
 
@@ -192,6 +227,19 @@ def establish_path(tree, path, top=None, cursor=()):
 
 
 def set_path(tree, path, value, top=None, cursor=None):
+    '''
+    given a tree, a path, and a value, sets the location
+    in the tree corresponding to the path to the given value
+    Args:
+        tree: the tree we are setting a value in
+        path: where the new value will be located in the tree
+        value: the value to set at the given path in the tree
+        top: (None) a reference to the top of the tree
+        cursor: (()) the current location we are visiting in the tree
+    Returns:
+        node: the new node of the tree that exists at the given path
+    '''
+
     if value is None:
         return None
     if len(path) == 0:
@@ -205,6 +253,19 @@ def set_path(tree, path, value, top=None, cursor=None):
 
 
 def transform_path(tree, path, transform):
+    '''
+    given a tree, a path, and a transform (function), 
+    mutate the tree by replacing the subtree at the path by
+    whatever is returned from applying the transform to the
+    existing value
+    Args:
+        tree: the tree we are setting a value in
+        path: where the new value will be located in the tree
+        transform: the function to apply to whatever currently lives
+            at the given path in the tree
+    Returns:
+        node: the node of the tree that exists at the given path
+    '''
     before = establish_path(tree, path)
     after = transform(before)
 
@@ -212,6 +273,10 @@ def transform_path(tree, path, transform):
 
 
 def remove_omitted(before, after, tree):
+    '''
+    removes anything in tree that was in before but not in after
+    '''
+
     if isinstance(before, dict):
         if not isinstance(tree, dict):
             raise Exception(
@@ -235,6 +300,10 @@ def remove_omitted(before, after, tree):
 
 
 def remove_path(tree, path):
+    '''
+    removes whatever subtree lives at the given path
+    '''
+
     if path is None or len(path) == 0:
         return None
 
@@ -245,7 +314,7 @@ def remove_path(tree, path):
 
 
 class Registry(object):
-    """A Registry holds a collection of functions or objects."""
+    '''A Registry holds a collection of functions or objects'''
 
     def __init__(self, function_keys=None):
         function_keys = function_keys or []
@@ -254,7 +323,8 @@ class Registry(object):
         self.function_keys = set(function_keys)
 
     def register(self, key, item, alternate_keys=tuple(), force=False):
-        """Add an item to the registry.
+        '''
+        Add an item to the registry.
 
         Args:
             key: Item key.
@@ -266,7 +336,7 @@ class Registry(object):
                 This may be useful if you want to be able to look up an
                 item in the registry under multiple keys.
             force (bool): Force the registration, overriding existing keys. False by default.
-        """
+        '''
 
         # check that registered function have the required function keys
         if callable(item) and self.function_keys:
@@ -293,7 +363,10 @@ class Registry(object):
             self.register(key, schema, force=force)
 
     def access(self, key):
-        """Get an item by key from the registry."""
+        '''
+        get an item by key from the registry.
+        '''
+
         return self.registry.get(key)
 
     def list(self):
@@ -303,52 +376,362 @@ class Registry(object):
         return True
 
 
-class TypeRegistry(Registry):
-    """Type Registry
+def apply_tree(current, update, schema, core):
+    if '_bindings' not in schema:
+        schema = core.access(schema)
+    if '_bindings' not in schema:
+        import ipdb; ipdb.set_trace()
 
-    Holds type schema in one object for easy access
+    bindings = schema['_bindings']
+
+    leaf_type = core.access(
+        bindings['leaf'])
+    bindings['leaf'] = leaf_type
+    
+    if isinstance(current, dict) and isinstance(update, dict):
+        for key, branch in update.items():
+            if key == '_add':
+                current.update(branch)
+            elif key == '_remove':
+                current = remove_path(current, branch)
+            elif isinstance(branch, dict):
+                subschema = schema
+                if key in schema:
+                    subschema = schema[key]
+
+                current[key] = core.apply(
+                    subschema,
+                    current.get(key),
+                    branch)
+
+            elif core.check(leaf_type, branch):
+                current[key] = core.apply(
+                    leaf_type,
+                    current.get(key),
+                    branch)
+
+            else:
+                raise Exception(f'state does not seem to be of leaf type:\n  state: {state}\n  leaf type: {leaf_type}')
+
+        return current
+    elif core.check(leaf_type, current):
+        core.apply(
+            leaf_type,
+            current,
+            update) # ,
+            # bindings,
+            # core)
+    else:
+        if current is None:
+            current = core.default(leaf_type)
+        return core.apply(leaf_type, current, update)
+
+
+def apply_any(current, update, schema, core):
+    if isinstance(current, dict):
+        return apply_tree(
+            current,
+            update,
+            'tree[any]',
+            core)
+    else:
+        return update
+
+
+def check_any(state, schema, core):
+    return True
+
+
+def serialize_any(value, schema, core):
+    return str(value)
+
+
+def deserialize_any(encoded, schema, core):
+    return encoded
+
+
+def apply_tuple(current, update, schema, core):
+    if '_bindings' not in schema:
+        schema = core.access(schema)
+    bindings = schema['_bindings']
+
+    length = range(len(current))
+    return tuple([
+        core.apply(
+            bindings[str(index)],
+            current_value,
+            update_value)
+        for index, current_value, update_value in zip(length, current, update)])
+
+
+def check_tuple(state, schema, core):
+    if not isinstance(state, (tuple, list)):
+        return False
+
+    if '_bindings' not in schema:
+        schema = core.access(schema)
+    bindings = schema['_bindings']
+
+    for index in range(len(state)):
+        element_binding = bindings[str(index)]
+        if not core.check(element_binding, state[index]):
+            return False
+
+    return True
+
+
+def serialize_tuple(value, schema, core):
+    if '_bindings' not in schema:
+        schema = core.access(schema)
+    bindings = schema['_bindings']
+
+    return tuple([
+        core.serialize(
+            bindings[str(index)],
+            value[index])
+        for index in range(len(value))])
+
+
+def deserialize_tuple(encoded, schema, core):
+    if '_bindings' not in schema:
+        schema = core.access(schema)
+    bindings = schema['_bindings']
+
+    return tuple([
+        core.deserialize(
+            bindings[str(index)],
+            encoded[index])
+        for index in range(len(encoded))])
+
+
+def find_union_type(core, possible_types, state):
+    for possible in possible_types:
+        if core.check(possible, state):
+            return core.access(possible)
+
+    return None
+
+
+def apply_union(current, update, schema, core):
+    if '_bindings' not in schema:
+        schema = core.access(schema)
+    bindings = schema['_bindings']
+
+    current_type = find_union_type(
+        core,
+        bindings.values(),
+        current)
+
+    update_type = find_union_type(
+        core,
+        bindings.values(),
+        update)
+
+    if current_type is None:
+        raise Exception(f'trying to apply update to union value but cannot find type of value in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
+    elif update_type is None:
+        raise Exception(f'trying to apply update to union value but cannot find type of update in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
+
+    # TODO: throw an exception if current_type is incompatible with update_type
+
+    return core.apply(
+        update_type,
+        current,
+        update)
+
+
+def check_union(state, schema, core):
+    if '_bindings' not in schema:
+        schema = core.access(schema)
+    bindings = schema['_bindings']
+
+    found = find_union_type(
+        core,
+        bindings.values(),
+        state)
+
+    return found is not None and len(found) > 0
+
+
+def serialize_union(value, schema, core):
+    if '_bindings' not in schema:
+        schema = core.access(schema)
+    bindings = schema['_bindings']
+
+    union_type = find_union_type(
+        core,
+        bindings.values(),
+        value)
+
+    return core.serialize(
+        union_type,
+        value)
+
+
+def deserialize_union(encoded, schema, core):
+    if encoded == NONE_SYMBOL:
+        return None
+    else:
+        if '_bindings' not in schema:
+            schema = core.access(schema)
+        bindings = schema['_bindings']
+
+        for possible_type in bindings.values():
+            value = core.deserialize(
+                possible_type,
+                encoded)
+
+            if value is not None:
+                return value
+
+
+registry_types = {
+    'any': {
+        '_type': 'any',
+        '_apply': apply_any,
+        '_check': check_any,
+        '_serialize': serialize_any,
+        '_deserialize': deserialize_any},
+
+    'tuple': {
+        '_type': 'tuple',
+        '_default': '()',
+        '_apply': apply_tuple,
+        '_check': check_tuple,
+        '_serialize': serialize_tuple,
+        '_deserialize': deserialize_tuple,
+        '_description': 'tuple of an ordered set of typed values'},
+
+    'union': {
+        '_type': 'union',
+        '_default': NONE_SYMBOL,
+        '_apply': apply_union,
+        '_check': check_union,
+        '_serialize': serialize_union,
+        '_deserialize': deserialize_union,
+        '_description': 'union of a set of possible types'}}
+
+
+class TypeRegistry(Registry):
     """
+    registry for holding type information
+    """
+
     def __init__(self):
         super().__init__()
 
-        self.supers = {}
-        self.register(
-            'any', {
-                '_type': 'any',
-                '_apply': 'any',
-                '_serialize': 'serialize_any',
-                '_deserialize': 'deserialize_any'})
+        # inheritance tracking
+        self.inherits = {}
+
+        self.check_registry = Registry(function_keys=[
+            'state',
+            'schema',
+            'core'])
+
+        self.apply_registry = Registry(function_keys=[
+            'current',
+            'update',
+            'schema',
+            'core'])
+
+        self.serialize_registry = Registry(function_keys=[
+            'value',
+            'schema',
+            'core'])
+
+        self.deserialize_registry = Registry(function_keys=[
+            'encoded',
+            'schema',
+            'core'])
+
+        self.divide_registry = Registry()  # TODO enforce keys for divider methods
+
+        for type_key, type_data in registry_types.items():
+            self.register(
+                type_key,
+                type_data)
+
+
+    def find_registry(self, underscore_key):
+        '''
+        access the registry for the given key
+        '''
+
+        if underscore_key == '_type':
+            return self
+        root = underscore_key.strip('_')
+        registry_key = f'{root}_registry'
+        if hasattr(self, registry_key):
+            return getattr(self, registry_key)
 
 
     def register(self, key, schema, alternate_keys=tuple(), force=False):
+        '''
+        register the schema under the given key in the registry
+        '''
+
         if isinstance(schema, str):
             schema = self.access(schema)
         schema = copy.deepcopy(schema)
 
-        if isinstance(schema, dict):
-            supers = schema.get('_super', ['any'])  # list of immediate supers
-            if isinstance(supers, str):
-                supers = [supers]
-                schema['_super'] = supers
-            for su in supers:
-                assert isinstance(
-                    su, str), f"super for {key} must be a string, not {su}"
-            self.supers[key] = supers
+        if '_type' not in schema:
+            schema['_type'] = key
 
-            for su in supers:
-                su_type = self.registry.get(su, {})
-                new_schema = copy.deepcopy(su_type)
+        if isinstance(schema, dict):
+            inherits = schema.get('_inherit', [])  # list of immediate inherits
+            if isinstance(inherits, str):
+                inherits = [inherits]
+                schema['_inherit'] = inherits
+
+            self.inherits[key] = []
+            for inherit in inherits:
+                inherit_type = self.access(inherit)
+                new_schema = copy.deepcopy(inherit_type)
                 schema = type_merge(
                     new_schema,
-                    schema,
-                    merge_supers=False)
+                    schema)
+
+                self.inherits[key].append(
+                    inherit_type)
 
             for subkey, original_subschema in schema.items():
-                if not subkey in type_schema_keys:
+                if subkey in function_keys:
+                    registry = self.find_registry(
+                        subkey)
+                    looking = original_subschema
+
+                    if isinstance(looking, str):
+                        module_key = looking
+                        found = registry.access(module_key)
+
+                        if found is None:
+                            found = local_lookup_module(
+                                module_key)
+
+                            if found is None:
+                                raise Exception(
+                                    f'function {looking} not found for type data {schema}')
+                            else:
+                                registry.register(
+                                    module_key,
+                                    found)
+
+                    elif inspect.isfunction(looking):
+                        found = looking
+                        module_key = function_module(found)
+                        
+                        function_name = module_key.split('.')[-1]
+                        registry.register(function_name, found)
+                        registry.register(module_key, found)
+
+                    schema[subkey] = module_key
+
+                elif subkey not in type_schema_keys:
                     subschema = self.access(original_subschema)
                     if subschema is None:
-                        raise Exception(f'trying to register a new type ({key}), '
-                                        f'but it depends on a type ({subkey}) which is not in the registry')
+                        raise Exception(
+                            f'trying to register a new type ({key}), '
+                            f'but it depends on a type ({subkey}) which is not in the registry')
                     else:
                         schema[subkey] = subschema
         else:
@@ -358,20 +741,39 @@ class TypeRegistry(Registry):
 
         super().register(key, schema, alternate_keys, force)
 
+
     def resolve_parameters(self, type_parameters, schema):
+        '''
+        find the types associated with any type parameters in the schema
+        '''
+
         return {
             type_parameter: self.access(
                 schema.get(f'_{type_parameter}'))
             for type_parameter in type_parameters}
 
+
     def access(self, schema):
-        """Retrieve all types in the schema"""
+        '''
+        expand the schema to its full type information from the type registry
+        '''
 
         found = None
 
         if isinstance(schema, dict):
             if '_description' in schema:
                 return schema
+
+            elif '_union' in schema:
+                parameters = [
+                    str(parameter)
+                    for parameter in list(range(len(schema['_union'])))]
+
+                return self.access({
+                    '_type': 'union',
+                    '_type_parameters': parameters,
+                    '_bindings': dict(zip(parameters, schema['_union']))})
+
             elif '_type' in schema:
                 found = self.access(schema['_type'])
                 found_keys = overridable_schema_keys & schema.keys()
@@ -394,10 +796,21 @@ class TypeRegistry(Registry):
                             found['_bindings'][type_parameter] = found[parameter_key]
                         elif '_bindings' in found and type_parameter in found['_bindings']:
                             found[parameter_key] = found['_bindings'][type_parameter]
+
             else:
                 found = {
                    key: self.access(branch)
                    for key, branch in schema.items()}
+
+        elif isinstance(schema, tuple):
+            parameters = [
+                str(parameter)
+                for parameter in list(range(len(schema)))]
+
+            return self.access({
+                '_type': 'tuple',
+                '_type_parameters': parameters,
+                '_bindings': dict(zip(parameters, schema))})
 
         elif isinstance(schema, list):
             bindings = []
@@ -408,6 +821,9 @@ class TypeRegistry(Registry):
             found = self.access(schema)
 
             if len(bindings) > 0:
+                if '_type_parameters' not in found:
+                    import ipdb; ipdb.set_trace()
+
                 found = found.copy()
                 found['_bindings'] = dict(zip(
                     found['_type_parameters'],
@@ -430,29 +846,9 @@ class TypeRegistry(Registry):
                     
         return found
 
+
     def lookup(self, type_key, attribute):
         return self.access(type_key).get(attribute)
-
-    # description should come from type
-    def is_descendant(self, key, ancestor):
-        for sup in self.supers.get(key, []):
-            if sup == ancestor:
-                return True
-            else:
-                found = self.is_descendant(sup, ancestor)
-                if found:
-                    return True
-        return False
-
-
-class RegistryRegistry(Registry):
-    def type_attribute(self, type_key, attribute):
-        type_registry = self.access('_type')
-        type_value = type_registry.access(type_key)
-        attribute_key = type_value.get(attribute)
-        if attribute_key is not None:
-            attribute_registry = self.access(attribute)
-            return attribute_registry.access(attribute_key)
 
 
 def test_reregister_type():
