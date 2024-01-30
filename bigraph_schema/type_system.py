@@ -96,8 +96,15 @@ class TypeSystem:
             reaction)
 
 
+    def exists(self, type_key):
+        return type_key in self.type_registry.registry
+
+
     def access(self, type_key):
-        return self.type_registry.access(type_key)
+        schema = self.type_registry.access(type_key)
+        if not schema:
+            raise Exception(f'schema not found for type: {type_key}')
+        return schema
 
 
     def validate_schema(self, schema, enforce_connections=False):
@@ -1044,18 +1051,22 @@ class TypeSystem:
                 # if types.type_registry.is_descendant('edge', state_schema)
                 if state_type == 'edge':
                     inputs = hydrated_state.get('inputs')
+                    if '_inputs' not in state_schema:
+                        state_schema['_inputs'] = hydrated_state.get('_inputs', 'any')
                     if inputs:
                         schema = self.infer_wires(
-                            state_schema,
+                            state_schema['_inputs'],
                             hydrated_state,
                             inputs,
                             top_schema=schema,
                             path=path[:-1])
 
                     outputs = hydrated_state.get('outputs')
+                    if '_outputs' not in state_schema:
+                        state_schema['_outputs'] = hydrated_state.get('_outputs', 'any')
                     if outputs:
                         schema = self.infer_wires(
-                            state_schema,
+                            state_schema['_outputs'],
                             hydrated_state,
                             outputs,
                             top_schema=schema,
@@ -1768,7 +1779,7 @@ def deserialize_array(encoded, schema, core=None):
 
 # TODO: implement edge handling
 def check_edge(state, schema, core):
-    return state
+    return isinstance(state, dict) and 'inputs' in state and 'outputs' in state
 
 
 def serialize_edge(value, schema, core):
@@ -1785,7 +1796,7 @@ def divide_edge(value, schema, core):
 
 def register_types(core, type_library):
     for type_key, type_data in type_library.items():
-        if core.access(type_key) is None:
+        if not core.exists(type_key):
             core.register(
                 type_key,
                 type_data)
@@ -1805,7 +1816,7 @@ def register_units(core, units):
 
         dimensionality = unit.dimensionality
         type_key = render_units_type(dimensionality)
-        if core.access(type_key) is None:
+        if not core.exists(type_key):
             core.register(type_key, {
                 '_default': '',
                 '_apply': apply_units,
