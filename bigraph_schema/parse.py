@@ -14,24 +14,27 @@ parameter_examples = {
     'three-parameters': 'parameterized[A,B,C]',
     'nested-parameters': 'nested[outer[inner]]',
     'multiple-nested-parameters': 'nested[outer[inner],other,later[on,there[is],more]]',
-    'typed': 'a:field[yellow,tree,snake]|b.(x:earth|y:cloud|z:sky)',
-    'typed_parameters': 'edge[a:int|b.(x:length|y:float),v[zz:float|xx:what]]',
-    'units_type': 'length^2*mass/time^1_5',
-}
+    'bars': 'a|b|c|zzzz',
+    'union': 'a~b~c~zzzz',
+    'typed': 'a:field[yellow,tree,snake]|b:(x:earth|y:cloud|z:sky)',
+    'typed_parameters': 'edge[a:int|b:(x:length|y:float),v[zz:float|xx:what]]',
+    'inputs_and_outputs': 'edge[input1:float|input2:int,output1:float|output2:int]',
+    'tuple': 'what[is,happening|(with:yellow|this:green)|this:now]',
+    'units_type': 'length^2*mass/time^1_5'}
 
 
 parameter_grammar = Grammar(
     """
-    expression = merge / tree
-    merge = bigraph (bar bigraph)+
+    expression = merge / union / tree
+    merge = tree (bar tree)+
+    union = tree (tilde tree)+
     tree = bigraph / type_name
-    bigraph = group / nest / control
+    bigraph = group / nest
     group = paren_left expression paren_right
-    nest = symbol dot bigraph
-    control = symbol colon type_name
+    nest = symbol colon tree
     type_name = symbol parameter_list?
     parameter_list = square_left expression (comma expression)* square_right
-    symbol = ~r"[\w\d-_/*&^%$#@!~`+ ]+"
+    symbol = ~r"[\w\d-_/*&^%$#@!`+ ]+"
     dot = "."
     colon = ":"
     bar = "|"
@@ -40,6 +43,7 @@ parameter_grammar = Grammar(
     square_left = "["
     square_right = "]"
     comma = ","
+    tilde = "~"
     not_newline = ~r"[^\\n\\r]"*
     newline = ~"[\\n\\r]+"
     ws = ~"\s*"
@@ -50,17 +54,42 @@ class ParameterVisitor(NodeVisitor):
     def visit_expression(self, node, visit):
         return visit[0]
 
+
+    def visit_union(self, node, visit):
+        head = [visit[0]]
+        tail = [
+            tree['visit'][1]
+            for tree in visit[1]['visit']]
+
+        return {
+            '_union': head + tail}
+
+
     def visit_merge(self, node, visit):
         head = [visit[0]]
         tail = [
             tree['visit'][1]
             for tree in visit[1]['visit']]
 
-        merge = {}
-        for tree in head + tail:
-            merge.update(tree)
+        nodes = head + tail
 
-        return merge
+        if all([
+            isinstance(tree, dict)
+            for tree in nodes]):
+
+            merge = {}
+            for tree in nodes:
+                merge.update(tree)
+
+            return merge
+
+        else:
+            values = []
+            for tree in head + tail:
+                values.append(tree)
+
+            return tuple(values)
+
 
     def visit_tree(self, node, visit):
         return visit[0]
@@ -72,9 +101,6 @@ class ParameterVisitor(NodeVisitor):
         return visit[1]
 
     def visit_nest(self, node, visit):
-        return {visit[0]: visit[2]}
-
-    def visit_control(self, node, visit):
         return {visit[0]: visit[2]}
 
     def visit_type_name(self, node, visit):
@@ -114,24 +140,41 @@ def parse_expression(expression):
     return type_parameters
 
 
+def is_type_expression(expression):
+    return len(expression) == 2 and isinstance(expression[1], list)
+
+
 def render_expression(expression):
     if isinstance(expression, str):
         return expression
+
     elif isinstance(expression, list):
         type_name, parameters = expression
         render = ','.join([
             render_expression(parameter)
             for parameter in parameters])
         return f'{type_name}[{render}]'
+
+    elif isinstance(expression, tuple):
+        render = '|'.join([
+            render_expression(subexpression)
+            for subexpression in expression])
+        return f'({render})'
+
     elif isinstance(expression, dict):
         parts = []
-        for key, tree in expression.items():
-            render = render_expression(tree)
-            if isinstance(tree, dict):
-                parts.append(f'{key}.({render})')
-            else:
+        if '_union' in expression:
+            parts = [
+                render_expression(part)
+                for part in expression['_union']]
+            return '~'.join(parts)
+        else:
+            for key, tree in expression.items():
+                render = render_expression(tree)
                 parts.append(f'{key}:{render}')
-        return '|'.join(parts)
+
+            inner = '|'.join(parts)
+            return f'({inner})'
 
 
 # Test the functions
@@ -141,8 +184,8 @@ def test_parse_parameters():
 
         print(f'{key}: {example}')
         if types:
-            print(types)
-            print(render_expression(types))
+            print(f'  {types}')
+            print(f'  {render_expression(types)}')
 
 
 if __name__ == '__main__':
