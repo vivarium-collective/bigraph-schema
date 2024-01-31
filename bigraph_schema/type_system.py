@@ -100,11 +100,21 @@ class TypeSystem:
         return type_key in self.type_registry.registry
 
 
-    def access(self, type_key):
-        schema = self.type_registry.access(type_key)
-        if not schema:
-            raise Exception(f'schema not found for type: {type_key}')
-        return schema
+    def access(self, schema):
+        found = self.type_registry.access(
+            schema)
+        return found
+
+
+    def retrieve(self, schema):
+        '''
+        like access(schema) but raises an exception if nothing is found
+        '''
+
+        found = self.access(schema)
+        if not found:
+            raise Exception(f'schema not found for type: {schema}')
+        return found
 
 
     def validate_schema(self, schema, enforce_connections=False):
