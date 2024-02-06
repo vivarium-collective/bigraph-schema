@@ -1059,7 +1059,7 @@ class TypeSystem:
 
                 # TODO: fix is_descendant
                 # if types.type_registry.is_descendant('edge', state_schema)
-                if state_type == 'edge':
+                if self.check('edge', hydrated_state):
                     inputs = hydrated_state.get('inputs')
                     if '_inputs' not in state_schema:
                         state_schema['_inputs'] = hydrated_state.get('_inputs', 'any')
@@ -1171,8 +1171,10 @@ class TypeSystem:
             full_schema,
             state)
 
+        final_state = self.fill(schema, state)
+
         # TODO: add flag to types.access(copy=True)
-        return self.access(schema), state
+        return self.access(schema), final_state
         
 
     def link_place(self, place, link):
