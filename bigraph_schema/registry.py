@@ -449,7 +449,7 @@ def deserialize_any(encoded, schema, core):
 
 
 def apply_tuple(current, update, schema, core):
-    parameters = core.variable_parameters(schema)
+    parameters = core.parameters_for(schema)
     result = []
 
     for parameter, current_value, update_value in zip(parameters, current, update):
@@ -467,7 +467,7 @@ def check_tuple(state, schema, core):
     if not isinstance(state, (tuple, list)):
         return False
 
-    parameters = core.variable_parameters(schema)
+    parameters = core.parameters_for(schema)
     for parameter, element in zip(parameters, state):
         if not core.check(parameter, element):
             return False
@@ -476,7 +476,7 @@ def check_tuple(state, schema, core):
 
 
 def serialize_tuple(value, schema, core):
-    parameters = core.variable_parameters(schema)
+    parameters = core.parameters_for(schema)
     result = []
 
     for parameter, element in zip(parameters, value):
@@ -490,7 +490,7 @@ def serialize_tuple(value, schema, core):
 
 
 def deserialize_tuple(encoded, schema, core):
-    parameters = core.variable_parameters(schema)
+    parameters = core.parameters_for(schema)
     result = []
 
     for parameter, code in zip(parameters, encoded):
@@ -504,7 +504,7 @@ def deserialize_tuple(encoded, schema, core):
 
 
 def find_union_type(core, schema, state):
-    parameters = core.variable_parameters(schema)
+    parameters = core.parameters_for(schema)
 
     for possible in parameters:
         if core.check(possible, state):
@@ -561,7 +561,7 @@ def deserialize_union(encoded, schema, core):
     if encoded == NONE_SYMBOL:
         return None
     else:
-        parameters = core.variable_parameters(schema)
+        parameters = core.parameters_for(schema)
 
         for parameter in parameters:
             value = core.deserialize(

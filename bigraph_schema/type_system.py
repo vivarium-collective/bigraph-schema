@@ -131,7 +131,7 @@ class TypeSystem:
         return parameter_type
 
 
-    def variable_parameters(self, initial_schema):
+    def parameters_for(self, initial_schema):
         if '_type_parameters' in initial_schema:
             schema = initial_schema
         else:
@@ -441,9 +441,10 @@ class TypeSystem:
         elif isinstance(state, dict):
             for key, branch in state.items():
                 if not key.startswith('_'):
-                    if key not in schema:
-                        return False
-                    else:
+                    # TODO: reject keys that aren't in the schema?
+                    # if key not in schema:
+                    #     return False
+                    if key in schema:
                         check = self.check_state(
                             schema[key],
                             state[key])
@@ -1063,25 +1064,70 @@ class TypeSystem:
         return top_schema
 
 
+    def infer_edge(self, schema, state, top_state=None, path=None):
+        schema = schema or {}
+        top_state = top_state or state
+        path = path or ()
+
+        state_schema = get_path(schema, path)
+
+        if self.check('edge', state):
+            inputs = state.get('inputs')
+            if '_inputs' not in state_schema:
+                state_schema['_inputs'] = state.get(
+                    '_inputs',
+                    'any')
+
+            if inputs:
+                schema = self.infer_wires(
+                    state_schema['_inputs'],
+                    state,
+                    inputs,
+                    top_schema=schema,
+                    path=path[:-1])
+
+            outputs = state.get('outputs')
+            if '_outputs' not in state_schema:
+                state_schema['_outputs'] = state.get(
+                    '_outputs',
+                    'any')
+
+            if outputs:
+                schema = self.infer_wires(
+                    state_schema['_outputs'],
+                    state,
+                    outputs,
+                    top_schema=schema,
+                    path=path[:-1])
+
+        return schema
+
+
     def infer_schema(self, schema, state, top_state=None, path=None):
         """
         Given a schema fragment and an existing state with _type keys,
         return the full schema required to describe that state,
         and whatever state was hydrated (edges) during this process
+
         """
 
-        schema = schema or {}
-        # TODO: deal with this
-        if schema == '{}':
-            schema = {}
+        # during recursive call, schema is kept at the top level and the 
+        # path is used to access it (!)
 
+        schema = schema or {}
         top_state = top_state or state
         path = path or ()
 
         if isinstance(state, dict):
+            inner_schema = get_path(schema, path)
+
             if '_type' in state:
-                state_type = state['_type']
-                state_schema = self.access(state_type)
+                state_type = {
+                    key: value
+                    for key, value in state.items()
+                    if key.startswith('_')}
+                state_schema = self.access(
+                    state_type)
 
                 hydrated_state = self.deserialize(state_schema, state)
                 top_state = set_path(
@@ -1089,52 +1135,47 @@ class TypeSystem:
                     path,
                     hydrated_state)
 
-                schema = set_path(
+                update = state_type
+                def merge_schema(existing):
+                    return apply_schema(existing, update, 'schema', self)
+
+                path_schema = set_path(
                     schema,
                     path,
-                    {'_type': state_type})
+                    state_type)
 
-                # TODO: fix is_descendant
-                # if types.type_registry.is_descendant('edge', state_schema)
-                if self.check('edge', hydrated_state):
-                    inputs = hydrated_state.get('inputs')
-                    if '_inputs' not in state_schema:
-                        state_schema['_inputs'] = hydrated_state.get('_inputs', 'any')
-                    if inputs:
-                        schema = self.infer_wires(
-                            state_schema['_inputs'],
-                            hydrated_state,
-                            inputs,
-                            top_schema=schema,
-                            path=path[:-1])
+                schema = self.infer_edge(
+                    schema,
+                    hydrated_state,
+                    top_state,
+                    path)
 
-                    outputs = hydrated_state.get('outputs')
-                    if '_outputs' not in state_schema:
-                        state_schema['_outputs'] = hydrated_state.get('_outputs', 'any')
-                    if outputs:
-                        schema = self.infer_wires(
-                            state_schema['_outputs'],
-                            hydrated_state,
-                            outputs,
-                            top_schema=schema,
-                            path=path[:-1])
+            elif '_type' in inner_schema:
+                hydrated_state = self.deserialize(
+                    inner_schema,
+                    state)
 
-            elif '_type' in schema:
-                hydrated_state = self.deserialize(schema, state)
+                schema = self.infer_edge(
+                    schema,
+                    hydrated_state,
+                    top_state,
+                    path)
+
                 top_state = set_path(
                     top_state,
                     path,
-                    hydrated_state)
+                    state)
 
             else:
                 for key, value in state.items():
                     inner_path = path + (key,)
-                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None:
-                        schema, top_state = self.infer_schema(
-                            schema,
-                            value,
-                            top_state=top_state,
-                            path=inner_path)
+                    # if get_path(schema, inner_path) is None or get_path(state, inner_path) is None:
+
+                    schema, top_state = self.infer_schema(
+                        schema,
+                        value,
+                        top_state=top_state,
+                        path=inner_path)
 
         elif isinstance(state, str):
             pass
@@ -1241,25 +1282,6 @@ def check_float(state, schema, core=None):
 
 def check_string(state, schema, core=None):
     return isinstance(state, str)
-
-
-def check_list(state, schema, core):
-    element_type = core.find_parameter(
-        schema,
-        'element')
-
-    if isinstance(state, list):
-        for element in state:
-            check = core.check(
-                element_type,
-                element)
-
-            if not check:
-                return False
-
-        return True
-    else:
-        return False
 
 
 class Edge:
@@ -1398,10 +1420,6 @@ def replace(current, update, schema, core=None):
     return update
 
 
-#####################
-# Serialize methods #
-#####################
-
 def serialize_string(value, schema, core=None):
     return value
 
@@ -1414,22 +1432,6 @@ def deserialize_string(encoded, schema, core=None):
 def to_string(value, schema, core=None):
     return str(value)
 
-
-def serialize_list(value, schema, core=None):
-    element_type = core.find_parameter(
-        schema,
-        'element')
-
-    return [
-        core.serialize(
-            element_type,
-            element)
-        for element in value]
-
-
-#######################
-# Deserialize methods #
-#######################
 
 def deserialize_integer(encoded, schema, core=None):
     value = None
@@ -1455,23 +1457,6 @@ def evaluate(encoded, schema, core=None):
     return eval(encoded)
 
 
-def deserialize_list(encoded, schema, core=None):
-    if isinstance(encoded, list):
-        element_type = core.find_parameter(
-            schema,
-            'element')
-
-        return [
-            core.deserialize(
-                element_type,
-                element)
-            for element in encoded]
-
-
-# ------------------------------
-# TODO: make all of the core work
-
-
 def apply_list(current, update, schema, core):
     element_type = core.find_parameter(
         schema,
@@ -1490,6 +1475,50 @@ def apply_list(current, update, schema, core):
         return result
     else:
         raise Exception(f'trying to apply an update to an existing list, but the update is not a list: {update}')
+
+
+def check_list(state, schema, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+
+    if isinstance(state, list):
+        for element in state:
+            check = core.check(
+                element_type,
+                element)
+
+            if not check:
+                return False
+
+        return True
+    else:
+        return False
+
+
+def serialize_list(value, schema, core=None):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+
+    return [
+        core.serialize(
+            element_type,
+            element)
+        for element in value]
+
+
+def deserialize_list(encoded, schema, core=None):
+    if isinstance(encoded, list):
+        element_type = core.find_parameter(
+            schema,
+            'element')
+
+        return [
+            core.deserialize(
+                element_type,
+                element)
+            for element in encoded]
 
 
 def check_tree(state, schema, core):
@@ -1723,8 +1752,46 @@ def divide_units(value, schema, core):
     return [value, value]
 
 
+def apply_path(current, update, schema, core):
+    # paths replace previous paths
+    return update
+
+
 def apply_edge(current, update, schema, core):
-    return current + update
+    result = current.copy()
+    result['inputs'] = core.apply(
+        'wires',
+        current.get('inputs'),
+        update.get('inputs'))
+
+    result['outputs'] = core.apply(
+        'wires',
+        current.get('outputs'),
+        update.get('outputs'))
+
+    return result
+
+
+def check_ports(state, core, key):
+    return key in state and core.check(
+        'wires',
+        state[key])
+
+
+def check_edge(state, schema, core):
+    return isinstance(state, dict) and check_ports(state, core, 'inputs') and check_ports(state, core, 'outputs')
+
+
+def serialize_edge(value, schema, core):
+    return value
+
+
+def deserialize_edge(encoded, schema, core):
+    return encoded
+
+
+def divide_edge(value, schema, core):
+    return [value, value]
 
 
 def array_shape(core, schema):
@@ -1789,7 +1856,7 @@ def read_shape(shape):
         for x in shape])
 
 
-def deserialize_array(encoded, schema, core=None):
+def deserialize_array(encoded, schema, core):
     if isinstance(encoded, np.ndarray):
         return encoded
 
@@ -1799,8 +1866,10 @@ def deserialize_array(encoded, schema, core=None):
         else:
             dtype = lookup_dtype(
                 encoded.get('data'))
+
             shape = read_shape(
-                encoded.get('shape'))
+                core.parameters_for(
+                    schema['_shape']))
 
             if 'bytes' in encoded:
                 return np.frombuffer(
@@ -1811,23 +1880,6 @@ def deserialize_array(encoded, schema, core=None):
                 return np.zeros(
                     shape,
                     dtype=dtype)
-
-
-# TODO: implement edge handling
-def check_edge(state, schema, core):
-    return isinstance(state, dict) and 'inputs' in state and 'outputs' in state
-
-
-def serialize_edge(value, schema, core):
-    return value
-
-
-def deserialize_edge(encoded, schema, core):
-    return encoded
-
-
-def divide_edge(value, schema, core):
-    return [value, value]
 
 
 def register_types(core, type_library):
@@ -1957,7 +2009,6 @@ base_type_library = {
     'array': {
         '_type': 'array',
         '_default': {
-            'shape': (1,1),
             'data': 'float'},
         '_check': check_array,
         '_apply': apply_array,
@@ -1981,7 +2032,8 @@ base_type_library = {
 
     'path': {
         '_type': 'path',
-        '_inherit': 'list[string]'},
+        '_inherit': 'list[string]',
+        '_apply': apply_path},
 
     'wires': {
         '_type': 'wires',
@@ -2001,7 +2053,6 @@ base_type_library = {
         '_apply': apply_edge,
         '_serialize': serialize_edge,
         '_deserialize': deserialize_edge,
-        '_divide': divide_edge,
         '_check': check_edge,
         '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
@@ -3512,6 +3563,111 @@ def test_array_type(core):
             state[key]).all()
 
 
+def test_infer_edge(core):
+    initial_schema = {}
+    initial_state = {
+        'fade': {
+            '_type': 'edge',
+            '_inputs': {
+                'yellow': 'array[(3|4|10),float]'},
+            '_outputs': {
+                'green': 'array[(11|5|8),float]'},
+            'inputs': {
+                'yellow': ['yellow']},
+            'outputs': {
+                'green': ['green']}}}
+
+    update = {
+        'yellow': np.ones((3, 4, 10)),
+        'fade': {
+            'inputs': {
+                'yellow': ['red']},
+            'outputs': {
+                'green': ['green', 'green', 'green']}}}
+
+    schema, state = core.complete(
+        initial_schema,
+        initial_state)
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert not core.check(schema, 15)
+
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert result['yellow'][0, 0, 0] == 1.0
+    assert result['fade']['inputs']['yellow'] == ['red']
+
+    encode = core.serialize(schema, state)
+    decode = core.deserialize(schema, encode)
+
+    assert np.equal(
+        decode['yellow'],
+        state['yellow']).all()
+
+
+def test_edge_type(core):
+    schema = {
+        'fade': {
+            '_type': 'edge',
+            '_inputs': {
+                'yellow': {
+                    '_type': 'array',
+                    '_shape': 'tuple(3,4,10)',
+                    '_data': 'float'}},
+            '_outputs': {
+                'green': {
+                    '_type': 'array',
+                    '_shape': 'tuple(11,5,8)',
+                    '_data': 'float'}}}}
+
+    initial_schema = {
+        'fade': 'edge[yellow:array[(3|4|10),float],green:array[(11|5|8),float]]'}
+
+    initial_state = {
+        # 'yellow': np.zeros((3, 4, 10)),
+        # 'green': np.ones((11, 5, 8)),
+        'fade': {
+            'inputs': {
+                'yellow': ['yellow']},
+            'outputs': {
+                'green': ['green']}}}
+
+    schema, state = core.complete(
+        initial_schema,
+        initial_state)
+
+    update = {
+        'yellow': np.ones((3, 4, 10)),
+        'fade': {
+            'inputs': {
+                'yellow': ['red']},
+            'outputs': {
+                'green': ['green', 'green', 'green']}}}
+
+    assert core.check(schema, state)
+    assert core.check(schema, update)
+    assert not core.check(schema, 15)
+
+    result = core.apply(
+        schema,
+        state,
+        update)
+
+    assert result['yellow'][0, 0, 0] == 1.0
+    assert result['fade']['inputs']['yellow'] == ['red']
+
+    encode = core.serialize(schema, state)
+    decode = core.deserialize(schema, encode)
+
+    assert np.equal(
+        decode['yellow'],
+        state['yellow']).all()
+
+
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -3543,4 +3699,6 @@ if __name__ == '__main__':
     test_array_type(core)
     test_union_type(core)
     test_union_values(core)
+    test_infer_edge(core)
+    test_edge_type(core)
     test_foursquare(core)
