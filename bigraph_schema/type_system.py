@@ -1580,7 +1580,6 @@ def serialize_tree(value, schema, core):
                 leaf_type,
                 value)
         else:
-            import ipdb; ipdb.set_trace()
             raise Exception(f'trying to serialize a tree but unfamiliar with this form of tree: {value} - current schema:\n {pf(schema)}')
 
     return encoded
@@ -3441,6 +3440,15 @@ def test_tuple_type(core):
     decode = core.deserialize(schema, encode)
     assert decode == state
 
+    tuple_type = core.access('(3|4|10)')
+    assert '_2' in tuple_type
+    assert tuple_type['_2'] == '10'
+
+    tuple_type = core.access('tuple[9,float,7]')
+    assert '_2' in tuple_type
+    assert tuple_type['_2'] == '7'
+
+
 
 def test_union_type(core):
     schema = {
@@ -3525,10 +3533,10 @@ def test_array_type(core):
         '_type': 'map',
         '_value': {
             '_type': 'array',
-            '_shape': 'tuple(3,4,10)',
+            '_shape': '(3|4|10)',
             '_data': 'float'}}
 
-    schema = 'map[array[tuple(3,4,10),float]]'
+    schema = 'map[array[tuple[3,4,10],float]]'
     schema = 'map[array[(3|4|10),float]]'
 
     state = {

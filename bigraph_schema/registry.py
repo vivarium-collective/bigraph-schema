@@ -806,13 +806,17 @@ class TypeRegistry(Registry):
             found = self.access(schema)
 
             if len(bindings) > 0:
-                if '_type_parameters' not in found:
-                    import ipdb; ipdb.set_trace()
-
                 found = found.copy()
 
-                for parameter, binding in zip(found['_type_parameters'], bindings):
-                    found[f'_{parameter}'] = self.access(binding)
+                if '_type_parameters' not in found:
+                    found['_type_parameters'] = []
+                    for index, binding in enumerate(bindings):
+                        found['_type_parameters'].append(str(index))
+                        found[f'_{index}'] = binding
+                else:
+                    for parameter, binding in zip(found['_type_parameters'], bindings):
+                        binding_type = self.access(binding) or binding
+                        found[f'_{parameter}'] = binding_type
 
         elif isinstance(schema, str):
             found = self.registry.get(schema)
