@@ -1617,7 +1617,7 @@ def deserialize_map(encoded, schema, core=None):
         return {
             key: core.deserialize(
                 value_type,
-                subvalue)
+                subvalue) if not key.startswith('_') else subvalue
             for key, subvalue in encoded.items()}
 
 
