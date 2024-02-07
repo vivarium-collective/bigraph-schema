@@ -117,6 +117,19 @@ class TypeSystem:
         return found
 
 
+    def find_parameter(self, schema, parameter):
+        schema_key = f'_{parameter}'
+        if schema_key not in schema:
+            schema = self.access(schema)
+        if schema_key not in schema:
+            raise Exception(f'parameter {parameter} not found in schema:\n  {schema}')
+
+        parameter_type = self.access(
+            schema[schema_key])
+
+        return schema, parameter_type
+
+
     def validate_schema(self, schema, enforce_connections=False):
         # TODO:
         #   check() always returns true or false,

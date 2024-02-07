@@ -377,17 +377,10 @@ class Registry(object):
 
 
 def apply_tree(current, update, schema, core):
-    if '_bindings' not in schema:
-        schema = core.access(schema)
-    if '_bindings' not in schema:
-        import ipdb; ipdb.set_trace()
+    schema, leaf_type = core.find_parameter(
+        schema,
+        'leaf')
 
-    bindings = schema['_bindings']
-
-    leaf_type = core.access(
-        bindings['leaf'])
-    bindings['leaf'] = leaf_type
-    
     if isinstance(current, dict) and isinstance(update, dict):
         for key, branch in update.items():
             if key == '_add':
@@ -414,17 +407,20 @@ def apply_tree(current, update, schema, core):
                 raise Exception(f'state does not seem to be of leaf type:\n  state: {state}\n  leaf type: {leaf_type}')
 
         return current
+
     elif core.check(leaf_type, current):
         core.apply(
             leaf_type,
             current,
-            update) # ,
-            # bindings,
-            # core)
+            update)
+
     else:
         if current is None:
             current = core.default(leaf_type)
-        return core.apply(leaf_type, current, update)
+        return core.apply(
+            leaf_type,
+            current,
+            update)
 
 
 def apply_any(current, update, schema, core):
@@ -451,17 +447,19 @@ def deserialize_any(encoded, schema, core):
 
 
 def apply_tuple(current, update, schema, core):
-    if '_bindings' not in schema:
-        schema = core.access(schema)
-    bindings = schema['_bindings']
-
     length = range(len(current))
-    return tuple([
-        core.apply(
-            bindings[str(index)],
+
+    result = []
+    for index, current_value, update_value in zip(length, current, update):
+        schema, index_type = core.find_parameter(schema, str(index))
+        item_result = core.apply(
+            index_type,
             current_value,
             update_value)
-        for index, current_value, update_value in zip(length, current, update)])
+
+        result.append(item_result)
+
+    return tuple(result)
 
 
 def check_tuple(state, schema, core):
