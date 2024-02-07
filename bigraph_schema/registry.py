@@ -10,6 +10,8 @@ import collections
 import pytest
 import traceback
 
+from pprint import pformat as pf
+
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.protocols import local_lookup_module, function_module
 
@@ -377,7 +379,7 @@ class Registry(object):
 
 
 def apply_tree(current, update, schema, core):
-    schema, leaf_type = core.find_parameter(
+    leaf_type = core.find_parameter(
         schema,
         'leaf')
 
@@ -447,17 +449,16 @@ def deserialize_any(encoded, schema, core):
 
 
 def apply_tuple(current, update, schema, core):
-    length = range(len(current))
-
+    parameters = core.variable_parameters(schema)
     result = []
-    for index, current_value, update_value in zip(length, current, update):
-        schema, index_type = core.find_parameter(schema, str(index))
-        item_result = core.apply(
-            index_type,
+
+    for parameter, current_value, update_value in zip(parameters, current, update):
+        element = core.apply(
+            parameter,
             current_value,
             update_value)
 
-        result.append(item_result)
+        result.append(element)
 
     return tuple(result)
 
@@ -466,44 +467,46 @@ def check_tuple(state, schema, core):
     if not isinstance(state, (tuple, list)):
         return False
 
-    if '_bindings' not in schema:
-        schema = core.access(schema)
-    bindings = schema['_bindings']
-
-    for index in range(len(state)):
-        element_binding = bindings[str(index)]
-        if not core.check(element_binding, state[index]):
+    parameters = core.variable_parameters(schema)
+    for parameter, element in zip(parameters, state):
+        if not core.check(parameter, element):
             return False
 
     return True
 
 
 def serialize_tuple(value, schema, core):
-    if '_bindings' not in schema:
-        schema = core.access(schema)
-    bindings = schema['_bindings']
+    parameters = core.variable_parameters(schema)
+    result = []
 
-    return tuple([
-        core.serialize(
-            bindings[str(index)],
-            value[index])
-        for index in range(len(value))])
+    for parameter, element in zip(parameters, value):
+        encoded = core.serialize(
+            parameter,
+            element)
+
+        result.append(encoded)
+
+    return tuple(result)
 
 
 def deserialize_tuple(encoded, schema, core):
-    if '_bindings' not in schema:
-        schema = core.access(schema)
-    bindings = schema['_bindings']
+    parameters = core.variable_parameters(schema)
+    result = []
 
-    return tuple([
-        core.deserialize(
-            bindings[str(index)],
-            encoded[index])
-        for index in range(len(encoded))])
+    for parameter, code in zip(parameters, encoded):
+        element = core.deserialize(
+            parameter,
+            code)
+
+        result.append(element)
+
+    return tuple(result)
 
 
-def find_union_type(core, possible_types, state):
-    for possible in possible_types:
+def find_union_type(core, schema, state):
+    parameters = core.variable_parameters(schema)
+
+    for possible in parameters:
         if core.check(possible, state):
             return core.access(possible)
 
@@ -511,18 +514,14 @@ def find_union_type(core, possible_types, state):
 
 
 def apply_union(current, update, schema, core):
-    if '_bindings' not in schema:
-        schema = core.access(schema)
-    bindings = schema['_bindings']
-
     current_type = find_union_type(
         core,
-        bindings.values(),
+        schema,
         current)
 
     update_type = find_union_type(
         core,
-        bindings.values(),
+        schema,
         update)
 
     if current_type is None:
@@ -539,26 +538,18 @@ def apply_union(current, update, schema, core):
 
 
 def check_union(state, schema, core):
-    if '_bindings' not in schema:
-        schema = core.access(schema)
-    bindings = schema['_bindings']
-
     found = find_union_type(
         core,
-        bindings.values(),
+        schema,
         state)
 
     return found is not None and len(found) > 0
 
 
 def serialize_union(value, schema, core):
-    if '_bindings' not in schema:
-        schema = core.access(schema)
-    bindings = schema['_bindings']
-
     union_type = find_union_type(
         core,
-        bindings.values(),
+        schema,
         value)
 
     return core.serialize(
@@ -570,13 +561,11 @@ def deserialize_union(encoded, schema, core):
     if encoded == NONE_SYMBOL:
         return None
     else:
-        if '_bindings' not in schema:
-            schema = core.access(schema)
-        bindings = schema['_bindings']
+        parameters = core.variable_parameters(schema)
 
-        for possible_type in bindings.values():
+        for parameter in parameters:
             value = core.deserialize(
-                possible_type,
+                parameter,
                 encoded)
 
             if value is not None:
@@ -763,14 +752,16 @@ class TypeRegistry(Registry):
                 return schema
 
             elif '_union' in schema:
-                parameters = [
-                    str(parameter)
-                    for parameter in list(range(len(schema['_union'])))]
-
-                return self.access({
+                union_schema = {
                     '_type': 'union',
-                    '_type_parameters': parameters,
-                    '_bindings': dict(zip(parameters, schema['_union']))})
+                    '_type_parameters': []}
+
+                for index, element in enumerate(schema['_union']):
+                    union_schema['_type_parameters'].append(str(index))
+                    union_schema[f'_{index}'] = element
+
+                return self.access(
+                    union_schema)
 
             elif '_type' in schema:
                 found = self.access(schema['_type'])
@@ -788,12 +779,6 @@ class TypeRegistry(Registry):
                 if '_type_parameters' in found:
                     for type_parameter in found['_type_parameters']:
                         parameter_key = f'_{type_parameter}'
-                        if parameter_key in found:
-                            if not '_bindings' in found:
-                                found['_bindings'] = {}
-                            found['_bindings'][type_parameter] = found[parameter_key]
-                        elif '_bindings' in found and type_parameter in found['_bindings']:
-                            found[parameter_key] = found['_bindings'][type_parameter]
 
             else:
                 found = {
@@ -801,14 +786,16 @@ class TypeRegistry(Registry):
                    for key, branch in schema.items()}
 
         elif isinstance(schema, tuple):
-            parameters = [
-                str(parameter)
-                for parameter in list(range(len(schema)))]
-
-            return self.access({
+            tuple_schema = {
                 '_type': 'tuple',
-                '_type_parameters': parameters,
-                '_bindings': dict(zip(parameters, schema))})
+                '_type_parameters': []}
+
+            for index, element in enumerate(schema):
+                tuple_schema['_type_parameters'].append(str(index))
+                tuple_schema[f'_{index}'] = element
+
+            return self.access(
+                tuple_schema)
 
         elif isinstance(schema, list):
             bindings = []
@@ -823,12 +810,9 @@ class TypeRegistry(Registry):
                     import ipdb; ipdb.set_trace()
 
                 found = found.copy()
-                found['_bindings'] = dict(zip(
-                    found['_type_parameters'],
-                    bindings))
 
-                for type_parameter, binding in found['_bindings'].items():
-                    found[f'_{type_parameter}'] = self.access(binding)
+                for parameter, binding in zip(found['_type_parameters'], bindings):
+                    found[f'_{parameter}'] = self.access(binding)
 
         elif isinstance(schema, str):
             found = self.registry.get(schema)
