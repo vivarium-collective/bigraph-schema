@@ -3455,10 +3455,9 @@ def test_union_type(core):
         '_type': 'union',
         '_type_parameters': ['0', '1', '2'],
         '_0': 'string',
-        '_1': 'int',
+        '_1': 'integer',
         '_2': 'map[maybe[float]]'}
 
-    schema = 'string~int~map[maybe[float]]'
     schema = 'string~integer~map[maybe[float]]'
 
     state = {
