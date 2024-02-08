@@ -661,13 +661,13 @@ class TypeSystem:
 
                     peer = get_path(
                         top,
-                        path[:-1])
+                        path)
 
                     destination = establish_path(
                         peer,
                         subwires[:-1],
                         top=top,
-                        cursor=path[:-1])
+                        cursor=path)
 
                     destination_key = subwires[-1]
 
