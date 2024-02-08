@@ -1084,7 +1084,7 @@ class TypeSystem:
                     state,
                     inputs,
                     top_schema=schema,
-                    path=path[:-1])
+                    path=path)
 
             outputs = state.get('outputs')
             if '_outputs' not in state_schema:
@@ -1098,7 +1098,7 @@ class TypeSystem:
                     state,
                     outputs,
                     top_schema=schema,
-                    path=path[:-1])
+                    path=path)
 
         return schema
 
@@ -1119,7 +1119,7 @@ class TypeSystem:
         path = path or ()
 
         if isinstance(state, dict):
-            inner_schema = get_path(schema, path)
+            inner_schema = establish_path(schema, path)
 
             if '_type' in state:
                 state_type = {
@@ -2367,6 +2367,23 @@ def test_establish_path(core):
          'light'))
 
     assert tree['some']['where']['deep']['inside']['lives']['a']['tiny']['creature']['made']['of']['light'] == destination
+
+
+def test_fill_ports(core):
+    cell_state = {
+        'cell1': {
+            'nucleus': {
+                'transcription': {
+                    '_type': 'edge',
+                    'inputs': {'DNA': ['chromosome']},
+                    'outputs': {
+                        'RNA': [ '..', 'cytoplasm']}}}}}
+
+    schema, state = core.complete(
+        {},
+        cell_state)
+
+    assert 'chromosome' in schema['cell1']['nucleus']
 
 
 def test_expected_schema(core):
@@ -3689,6 +3706,7 @@ if __name__ == '__main__':
     test_establish_path(core)
     test_fill_in_missing_nodes(core)
     test_fill_from_parse(core)
+    test_fill_ports(core)
     test_expected_schema(core)
     test_units(core)
     test_serialize_deserialize(core)
