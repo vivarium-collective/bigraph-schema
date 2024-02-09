@@ -722,14 +722,13 @@ class TypeRegistry(Registry):
                 self.inherits[key].append(
                     inherit_type)
 
-            for subkey, original_subschema in schema.items():
+            for subkey, subschema in schema.items():
                 if subkey in TYPE_FUNCTION_KEYS:
                     registry = self.find_registry(
                         subkey)
-                    looking = original_subschema
 
-                    if isinstance(looking, str):
-                        module_key = looking
+                    if isinstance(subschema, str):
+                        module_key = subschema
                         found = registry.access(module_key)
 
                         if found is None:
@@ -738,14 +737,14 @@ class TypeRegistry(Registry):
 
                             if found is None:
                                 raise Exception(
-                                    f'function {looking} not found for type data {schema}')
+                                    f'function {subschema} not found for type data {schema}')
                             else:
                                 registry.register(
                                     module_key,
                                     found)
 
-                    elif inspect.isfunction(looking):
-                        found = looking
+                    elif inspect.isfunction(subschema):
+                        found = subschema
                         module_key = function_module(found)
                         
                         function_name = module_key.split('.')[-1]
@@ -755,13 +754,13 @@ class TypeRegistry(Registry):
                     schema[subkey] = module_key
 
                 elif subkey not in type_schema_keys:
-                    subschema = self.access(original_subschema)
-                    if subschema is None:
+                    lookup = self.access(subschema)
+                    if lookup is None:
                         raise Exception(
                             f'trying to register a new type ({key}), '
                             f'but it depends on a type ({subkey}) which is not in the registry')
                     else:
-                        schema[subkey] = subschema
+                        schema[subkey] = lookup
         else:
             raise Exception(
                 f'all type definitions must be dicts '

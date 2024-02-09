@@ -98,6 +98,12 @@ class TypeSystem:
             reaction)
 
 
+    def register_method(self, method_key, method):
+        self.method_registry.register(
+            method_key,
+            method)
+
+
     def exists(self, type_key):
         return type_key in self.type_registry.registry
 
@@ -2108,7 +2114,9 @@ base_type_library = {
 
 
 def register_base_reactions(core):
-    core.register_reaction('divide_counts', react_divide_counts)
+    core.register_reaction(
+        'divide_counts',
+        react_divide_counts)
 
 
 def register_cube(core):
