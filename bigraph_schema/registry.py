@@ -38,10 +38,11 @@ optional_schema_keys = set([
 
 type_schema_keys = required_schema_keys | optional_schema_keys
 
-function_keys = [
+TYPE_FUNCTION_KEYS = [
     '_apply',
     '_check',
-    '_divide',
+    '_fold',
+    # '_divide',
     '_react',
     '_serialize',
     '_deserialize']
@@ -378,10 +379,50 @@ class Registry(object):
         return True
 
 
+def fold_tree(visit, merge, result, state, schema, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+    
+    if core.check(leaf_type, state):
+        result = visit(
+            state,
+            leaf_type,
+            core)
+
+    elif isinstance(state, dict):
+        substate = {}
+        for key, branch in state.items():
+            substate[key] = fold_tree(
+                visit,
+                merge,
+                result,
+                branch,
+                schema,
+                core)
+
+        result = merge(result, substate)
+
+    else:
+        raise Exception(f'state does not seem to be a tree or a leaf:\n  state: {state}\n  schema: {schema}')
+
+
+def divide_visit(state, initial_schema, core):
+    schema = core.access(initial_schema)
+
+    if '_divide' in schema:
+        divide_function = core.find_method(
+            schema,
+            '_divide')
+
+
 def apply_tree(current, update, schema, core):
     leaf_type = core.find_parameter(
         schema,
         'leaf')
+
+    if current is None:
+        current = core.default(leaf_type)
 
     if isinstance(current, dict) and isinstance(update, dict):
         for key, branch in update.items():
@@ -411,18 +452,13 @@ def apply_tree(current, update, schema, core):
         return current
 
     elif core.check(leaf_type, current):
-        core.apply(
+        return core.apply(
             leaf_type,
             current,
             update)
 
     else:
-        if current is None:
-            current = core.default(leaf_type)
-        return core.apply(
-            leaf_type,
-            current,
-            update)
+        raise Exception(f'trying to apply an update to a tree but the values are not trees or leaves of that tree\ncurrent:\n  {pf(current)}\nupdate:\n  {pf(update)}\nschema:\n  {pf(schema)}')
 
 
 def apply_any(current, update, schema, core):
@@ -631,7 +667,12 @@ class TypeRegistry(Registry):
             'schema',
             'core'])
 
-        self.divide_registry = Registry()  # TODO enforce keys for divider methods
+        self.fold_registry = Registry(function_keys=[
+             'visit',
+             'merge',
+             'state',
+             'schema',
+             'core'])
 
         for type_key, type_data in registry_types.items():
             self.register(
@@ -682,7 +723,7 @@ class TypeRegistry(Registry):
                     inherit_type)
 
             for subkey, original_subschema in schema.items():
-                if subkey in function_keys:
+                if subkey in TYPE_FUNCTION_KEYS:
                     registry = self.find_registry(
                         subkey)
                     looking = original_subschema

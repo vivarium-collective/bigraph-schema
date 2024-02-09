@@ -65,6 +65,7 @@ class TypeSystem:
     def __init__(self):
         self.type_registry = TypeRegistry()
         self.react_registry = Registry()
+        self.method_registry = Registry()
 
         register_types(self, base_type_library)
         register_units(self, units)
@@ -346,7 +347,7 @@ class TypeSystem:
 
     def match(self, original_schema, state, pattern, mode='first', path=()):
         """
-        find the path or paths to any instances of a given
+        find the path or paths to any instances of a
         given pattern in the tree.
 
         "mode" can be a few things:
@@ -473,12 +474,48 @@ class TypeSystem:
         return {}
 
 
+    def lookup_method(self, data, method_key, default_method):
+        if method_key not in data:
+            return default_method
+        else:
+            pass
+
+
+    def fold(self, schema, state, fold):
+        def identity_visit(x, schema, core):
+            return x
+
+        def identity_merge(x, y, schema, core):
+            if x is None:
+                if y is None:
+                    return ()
+                else:
+                    return (y,)
+            elif isinstance(x, tuple):
+                if y is None:
+                    return x
+                else:
+                    return x + (y,)
+
+        visit = self.lookup_method(fold, 'visit', identity_visit)
+        merge = self.lookup_method(fold, 'merge', identity_merge)
+
+        # we get the initial state by calling merge with empty arguments
+        initial = merge(None, None, schema, self)
+
+
     def apply_update(self, schema, state, update):
         if isinstance(update, dict) and '_react' in update:
             state = self.react(
                 schema,
                 state,
                 update['_react'])
+
+        elif isinstance(update, dict) and '_fold' in update:
+            state = self.fold(
+                schema,
+                state,
+                update['_fold'])
 
         elif '_apply' in schema and schema['_apply'] != 'any':
             apply_function = self.type_registry.apply_registry.access(schema['_apply'])
@@ -1254,6 +1291,17 @@ class TypeSystem:
         # TODO: add flag to types.access(copy=True)
         return self.access(schema), final_state
         
+
+    # def register_method(self, method_key, method):
+        
+        
+
+    # def find_method(self, schema, method_key):
+    #     if method_key in schema:
+    #         return self.method_registry.access(
+    #             method_key,
+    #             schema[method_key])
+
 
     def link_place(self, place, link):
         pass
@@ -3690,6 +3738,9 @@ def test_edge_type(core):
     assert np.equal(
         decode['yellow'],
         state['yellow']).all()
+
+
+    # import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':
