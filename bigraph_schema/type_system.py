@@ -113,7 +113,7 @@ class TypeSystem:
         '''
 
         found = self.access(schema)
-        if not found:
+        if found is None:
             raise Exception(f'schema not found for type: {schema}')
         return found
 
@@ -254,7 +254,7 @@ class TypeSystem:
 
     def default(self, schema):
         default = None
-        found = self.access(schema)
+        found = self.retrieve(schema)
 
         if '_default' in found:
             if not '_deserialize' in found:
@@ -677,8 +677,11 @@ class TypeSystem:
                         #     port_schema,
                         #     destination[destination_key])
                     else:
-                        destination[destination_key] = self.default(
-                            port_schema)
+                        try:
+                            destination[destination_key] = self.default(
+                                port_schema)
+                        except:
+                            raise Exception(f"schema '{port_schema}' not found at path {path} port '{port_key}'")
             else:
                 # handle unconnected ports
                 pass
