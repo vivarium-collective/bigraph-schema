@@ -193,9 +193,10 @@ class TypeSystem:
                     typ = self.access(value)
                     if typ is None:
                         report[key] = f'type: {value} is not in the registry'
+
                 elif key in type_schema_keys:
                     schema_keys.add(key)
-                    registry = self.type_registry.find_registry(key)
+                    registry = self.type_registry.lookup_registry(key)
                     if registry is None:
                         # deserialize and serialize back and check it is equal
                         pass
@@ -3746,7 +3747,6 @@ def test_edge_type(core):
     assert np.equal(
         decode['yellow'],
         state['yellow']).all()
-
 
     # import ipdb; ipdb.set_trace()
 

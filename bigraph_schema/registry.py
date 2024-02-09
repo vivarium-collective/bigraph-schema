@@ -604,6 +604,7 @@ def deserialize_union(encoded, schema, core):
                 parameter,
                 encoded)
 
+
             if value is not None:
                 return value
 
@@ -633,6 +634,11 @@ registry_types = {
         '_serialize': serialize_union,
         '_deserialize': deserialize_union,
         '_description': 'union of a set of possible types'}}
+
+
+def is_method_key(key, parameters):
+    return key.startswith('_') and key not in type_schema_keys and key not in [
+        f'_{parameter}' for parameter in parameters]
 
 
 class TypeRegistry(Registry):
@@ -680,7 +686,7 @@ class TypeRegistry(Registry):
                 type_data)
 
 
-    def find_registry(self, underscore_key):
+    def lookup_registry(self, underscore_key):
         '''
         access the registry for the given key
         '''
@@ -691,6 +697,20 @@ class TypeRegistry(Registry):
         registry_key = f'{root}_registry'
         if hasattr(self, registry_key):
             return getattr(self, registry_key)
+
+
+    def find_registry(self, underscore_key):
+        '''
+        access the registry for the given key
+        and create if it doesn't exist
+        '''
+
+        registry = self.lookup_registry(underscore_key)
+        if registry is None:
+            registry = Registry()
+            setattr(self, registry_key, registry)
+
+        return registry
 
 
     def register(self, key, schema, alternate_keys=tuple(), force=False):
@@ -723,7 +743,8 @@ class TypeRegistry(Registry):
                     inherit_type)
 
             for subkey, subschema in schema.items():
-                if subkey in TYPE_FUNCTION_KEYS:
+                parameters = schema.get('_type_parameters', [])
+                if subkey in TYPE_FUNCTION_KEYS or is_method_key(subkey, parameters):
                     registry = self.find_registry(
                         subkey)
 
