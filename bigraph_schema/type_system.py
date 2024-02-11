@@ -585,7 +585,7 @@ class TypeSystem:
             return tree
 
     def deserialize(self, schema, encoded):
-        found = self.access(schema)
+        found = self.retrieve(schema)
 
         if '_deserialize' in found:
             deserialize = found['_deserialize']
