@@ -21,7 +21,8 @@ from bigraph_schema.registry import (
     NONE_SYMBOL,
     Registry, TypeRegistry, 
     type_schema_keys, non_schema_keys, apply_tree, type_merge,
-    deep_merge, get_path, establish_path, set_path, transform_path, remove_path, remove_omitted
+    deep_merge, get_path, establish_path,
+    set_path, transform_path, remove_path, remove_omitted
 )
 
 
