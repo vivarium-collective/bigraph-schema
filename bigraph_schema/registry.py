@@ -380,8 +380,10 @@ class Registry(object):
             module_key = function_module(found)
         
         function_name = module_key.split('.')[-1]
-        registry.register(function_name, found)
-        registry.register(module_key, found)
+        self.register(function_name, found)
+        self.register(module_key, found)
+
+        return function_name, module_key
 
 
 
@@ -784,7 +786,7 @@ class TypeRegistry(Registry):
             'core'])
 
         self.fold_registry = Registry(function_keys=[
-             'visit',
+             'method',
              'state',
              'schema',
              'core'])
@@ -857,7 +859,7 @@ class TypeRegistry(Registry):
                     registry = self.find_registry(
                         subkey)
 
-                    registry.register_method(subschema)
+                    function_name, module_key = registry.register_function(subschema)
 
                     # if isinstance(subschema, str):
                     #     module_key = subschema
@@ -883,7 +885,7 @@ class TypeRegistry(Registry):
                     #     registry.register(function_name, found)
                     #     registry.register(module_key, found)
 
-                    schema[subkey] = module_key
+                    schema[subkey] = function_name
 
                 elif subkey not in type_schema_keys:
                     lookup = self.access(subschema)

@@ -1983,7 +1983,7 @@ def fold_list(method, state, schema, core):
             for element in state]
 
         result = visit_method(
-            method
+            method,
             subresult,
             schema,
             core)
@@ -2047,7 +2047,7 @@ def fold_map(method, state, schema, core):
             method)
     
     result = visit_method(
-        method
+        method,
         subresult,
         schema,
         core)
@@ -2133,32 +2133,15 @@ def divide_tree(state, schema, core):
 
 
 def divide_map(state, schema, core):
-    value_type = core.find_parameter(
-        schema,
-        'value')
-    
-    division = [{}, {}]
-    for key, value in state.items():
-        for index in range(2):
-            division[index][key] = value[index]
-
-    if core.check(value_type, state):
-        return visit_method(
-            'divide',
-            state,
-            leaf_type,
-            core)
-
-    elif isinstance(state, dict):
+    if isinstance(state, dict):
         division = [{}, {}]
         for key, value in state.items():
             for index in range(2):
                 division[index][key] = value[index]
 
         return division
-
     else:
-        raise Exception(f'trying to divide tree but state does not resemble a leaf or a tree.\n  state: {pf(state)}\n  schema: {pf(schema)}')
+        raise Exception(f'trying to divide a map but state is not a dict.\n  state: {pf(state)}\n  schema: {pf(schema)}')        
 
 
 def register_types(core, type_library):
@@ -3973,6 +3956,30 @@ def test_edge_type(core):
     # import ipdb; ipdb.set_trace()
 
 
+def test_divide(core):
+    schema = {
+        'a': 'tree[maybe[float]]',
+        'b': 'float~list[string]',
+        'c': {
+            'd': 'integer',
+            'e': 'boolean'}}
+
+    state = {
+        'a': {
+            'x': {
+                'y': 1.1,
+                'z': 33.33},
+            'w': 44.444},
+        'b': ['1', '11', '111', '1111'],
+        'c': {
+            'd': 5,
+            'e': False}}
+
+    division = core.fold(schema, state, 'divide')
+
+    import ipdb; ipdb.set_trace()
+
+
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -4009,3 +4016,6 @@ if __name__ == '__main__':
     test_infer_edge(core)
     test_edge_type(core)
     test_foursquare(core)
+    test_divide(core)
+    
+
