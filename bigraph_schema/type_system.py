@@ -20,8 +20,11 @@ from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
     NONE_SYMBOL,
     Registry, TypeRegistry, 
-    type_schema_keys, non_schema_keys, apply_tree, type_merge,
-    deep_merge, get_path, establish_path, set_path, transform_path, remove_path, remove_omitted
+    type_schema_keys, non_schema_keys,
+    apply_tree, visit_method,
+    type_merge, deep_merge,
+    get_path, establish_path, set_path, transform_path, remove_path,
+    remove_omitted
 )
 
 
@@ -1429,28 +1432,32 @@ def concatenate(current, update, schema, core=None):
     return current + update
 
 
-##################
-# Divide methods #
-##################
-# support dividing by ratios?
-# ---> divide_float({...}, [0.1, 0.3, 0.6])
+def divide_float(state, schema, core):
+    half = state / 2.0
+    return [half, half]
 
-def divide_float(value, ratios, schema, core=None):
-    half = value / 2.0
-    return (half, half)
+
+# ##################
+# # Divide methods #
+# ##################
+# # support dividing by ratios?
+# # ---> divide_float({...}, [0.1, 0.3, 0.6])
+
+# def divide_float(value, ratios, schema, core=None):
+#     half = value / 2.0
+#     return (half, half)
 
 
 # support function core for registrys?
-# def divide_integer(value: int, _) -> tuple[int, int]:
-def divide_integer(value, schema, core=None):
+def divide_integer(value, schema, core):
     half = value // 2
     other_half = half
     if value % 2 == 1:
         other_half += 1
-    return half, other_half
+    return [half, other_half]
 
 
-def divide_longest(dimensions, schema, core=None):
+def divide_longest(dimensions, schema, core):
     # any way to declare the required keys for this function in the registry?
     # find a way to ask a function what type its domain and codomain are
 
@@ -1463,27 +1470,6 @@ def divide_longest(dimensions, schema, core=None):
     else:
         x, y = divide_integer(height)
         return [{'width': width, 'height': x}, {'width': width, 'height': y}]
-
-
-# def divide_list(l, schema, core):
-#     result = [[], []]
-
-#     divide_type = core.find_parameter(
-#         schema,
-#         'element')
-
-#     divide = divide_type['_divide']
-
-#     for item in l:
-#         if isinstance(item, list):
-#             divisions = divide_list(item, schema, core)
-#         else:
-#             divisions = divide(item, divide_type, core)
-
-#         result[0].append(divisions[0])
-#         result[1].append(divisions[1])
-
-#     return result
 
 
 def replace(current, update, schema, core=None):
@@ -1696,10 +1682,6 @@ def check_map(state, schema, core=None):
     return True
 
 
-def divide_map(value, schema, core=None):
-    return value
-
-
 def serialize_map(value, schema, core=None):
     value_type = core.find_parameter(
         schema,
@@ -1750,13 +1732,6 @@ def check_maybe(state, schema, core):
         return core.check(value_type, state)
 
 
-def divide_maybe(value, schema):
-    if value is None:
-        return [None, None]
-    else:
-        pass
-
-
 def serialize_maybe(value, schema, core):
     if value is None:
         return NONE_SYMBOL
@@ -1799,10 +1774,6 @@ def deserialize_units(encoded, schema, core):
     return units(encoded)
 
 
-def divide_units(value, schema, core):
-    return [value, value]
-
-
 def apply_path(current, update, schema, core):
     # paths replace previous paths
     return update
@@ -1839,10 +1810,6 @@ def serialize_edge(value, schema, core):
 
 def deserialize_edge(encoded, schema, core):
     return encoded
-
-
-def divide_edge(value, schema, core):
-    return [value, value]
 
 
 def array_shape(core, schema):
@@ -1953,7 +1920,7 @@ def fold_list(method, state, schema, core):
     elif isinstance(state, list):
         subresult = [
             fold_list(
-                visit,
+                method,
                 element,
                 schema,
                 core)
@@ -1977,26 +1944,29 @@ def fold_tree(method, state, schema, core):
         'leaf')
     
     if core.check(leaf_type, state):
-        fold = core.fold(
+        result = core.fold(
             leaf_type,
             state,
             method)
 
-        result = visit_method(
-            method,
-            fold,
-            leaf_type,
-            core)
+        # result = visit_method(
+        #     method,
+        #     fold,
+        #     leaf_type,
+        #     core)
 
     elif isinstance(state, dict):
         subresult = {}
 
         for key, branch in state.items():
-            subresult[key] = fold_tree(
-                method,
-                branch,
-                schema[key] if key in schema else schema,
-                core)
+            if key.startswith('_'):
+                subresult[key] = branch
+            else:
+                subresult[key] = fold_tree(
+                    method,
+                    branch,
+                    schema[key] if key in schema else schema,
+                    core)
 
         result = visit_method(
             method,
@@ -2075,11 +2045,13 @@ def divide_list(state, schema, core):
             element_type,
             core)
 
-    elif isinstance(state, (tuple, list)):
+    elif isinstance(state, list):
         result = [
             elements[index]
             for elements in state
             for index in range(2)]
+
+        return result
 
     else:
         raise Exception(f'trying to divide list but state does not resemble a list or an element.\n  state: {pf(state)}\n  schema: {pf(schema)}')
@@ -2150,7 +2122,6 @@ def register_units(core, units):
                 '_check': check_units,
                 '_serialize': serialize_units,
                 '_deserialize': deserialize_units,
-                '_divide': divide_units,
                 '_description': 'type to represent values with scientific units'})
 
     return core
@@ -2262,7 +2233,6 @@ base_type_library = {
         '_serialize': serialize_maybe,
         '_deserialize': deserialize_maybe,
         '_fold': fold_maybe,
-        '_divide': divide_maybe,
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
 
@@ -3930,13 +3900,13 @@ def test_edge_type(core):
         decode['yellow'],
         state['yellow']).all()
 
-    # import ipdb; ipdb.set_trace()
-
 
 def test_divide(core):
     schema = {
-        'a': 'tree[maybe[float]]',
-        'b': 'float~list[string]',
+        'a': 'tree[float]',
+        # 'a': 'tree[maybe[float]]',
+        'b': 'list[string]',
+        # 'b': 'float~list[string]',
         'c': {
             'd': 'integer',
             'e': 'boolean'}}
@@ -3952,10 +3922,9 @@ def test_divide(core):
             'd': 5,
             'e': False}}
 
+    division = core.fold(schema, state, 'divide')
 
     import ipdb; ipdb.set_trace()
-
-    division = core.fold(schema, state, 'divide')
 
 
 if __name__ == '__main__':

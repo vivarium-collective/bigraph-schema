@@ -43,7 +43,7 @@ TYPE_FUNCTION_KEYS = [
     '_apply',
     '_check',
     '_fold',
-    # '_divide',
+    '_divide',
     '_react',
     '_serialize',
     '_deserialize']
@@ -426,9 +426,6 @@ def visit_method(method, state, schema, core):
             'any',
             method_key)
 
-    if visit is None:
-        import ipdb; ipdb.set_trace()
-
     result = visit(
         state,
         schema,
@@ -503,8 +500,8 @@ def fold_union(method, state, schema, core):
 
 def divide_any(state, schema, core):
     return [
-        state.copy(),
-        state.copy()]
+        copy.deepcopy(state),
+        copy.deepcopy(state)]
 
 
 def divide_tuple(state, schema, core):
@@ -825,7 +822,10 @@ class TypeRegistry(Registry):
         registry = self.lookup_registry(underscore_key)
         if registry is None:
             registry = Registry()
-            setattr(self, registry_key, registry)
+            setattr(
+                self,
+                f'{underscore_key[1:]}_registry',
+                registry)
 
         return registry
 
