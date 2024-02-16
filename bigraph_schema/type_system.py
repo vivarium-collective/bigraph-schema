@@ -3879,7 +3879,10 @@ def test_divide(core):
             'd': 5,
             'e': False}}
 
-    division = core.fold(schema, state, 'divide')
+    division = core.fold(
+        schema,
+        state,
+        'divide')
 
     assert len(division) == 2
     assert 'a' in division[0].keys()
