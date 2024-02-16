@@ -361,6 +361,33 @@ class Registry(object):
                 self.registry[registry_key] = item
         self.main_keys.add(key)
 
+
+    def register_function(self, function):
+        if isinstance(function, str):
+            module_key = function
+            found = self.access(module_key)
+
+            if found is None:
+                found = local_lookup_module(
+                    module_key)
+
+                if found is None:
+                    raise Exception(
+                        f'function "{subschema}" not found for type data:\n  {pf(schema)}')
+
+        elif inspect.isfunction(function):
+            found = function
+            module_key = function_module(found)
+        
+        function_name = module_key.split('.')[-1]
+        registry.register(function_name, found)
+        registry.register(module_key, found)
+
+
+
+
+
+
     def register_multiple(self, schemas, force=False):
         for key, schema in schemas.items():
             self.register(key, schema, force=force)
@@ -377,6 +404,34 @@ class Registry(object):
 
     def validate(self, item):
         return True
+
+
+def visit_method(method, state, schema, core):
+    schema = core.access(schema)
+    method_key = f'_{method}'
+
+    # TODO: we should probably cache all this
+    if method_key in state:
+        visit = core.find_method(
+            {method_key: state[method_key]},
+            method_key)
+
+    elif method_key in schema:
+        visit = core.find_method(
+            schema,
+            method_key)
+
+    else:
+        visit = core.find_method(
+            'any',
+            method_key)
+
+    result = visit(
+        state,
+        schema,
+        core)
+
+    return result
 
 
 def fold_any(method, state, schema, core):
@@ -403,176 +458,56 @@ def fold_any(method, state, schema, core):
         core)
 
 
-def fold_list(method, state, schema, core):
-    element_type = core.find_parameter(
-        schema,
-        'element')
-    
-    if core.check(element_type, state):
-        fold = core.fold(
-            element_type,
-            state,
-            method)
-
-        result = visit_method(
+def fold_tuple(method, state, schema, core):
+    if not isinstance(state, (tuple, list)):
+        return visit_method(
             method,
-            fold,
-            element_type,
-            core)
-
-    elif isinstance(state, list):
-        subresult = [
-            fold_list(
-                visit,
-                element,
-                schema,
-                core)
-            for element in state]
-
-        result = visit(
-            subresult,
-            schema,
-            core)
-
-    else:
-        raise Exception(f'state does not seem to be a list or an eelement:\n  state: {state}\n  schema: {schema}')
-
-    return result
-
-
-def fold_tree(visit, state, schema, core):
-    leaf_type = core.find_parameter(
-        schema,
-        'leaf')
-    
-    if core.check(leaf_type, state):
-        fold = core.fold(
-            visit,
             state,
-            leaf_type,
+            schema,
             core)
+    else:
+        parameters = core.parameters_for(schema)
+        result = []
+        for parameter, element in zip(parameters, state):
+            fold = core.fold(parameter, element, method)
+            result.append(fold)
+        result = tuple(result)
 
-        result = visit_method(
-            fold,
-            leaf_type,
-            core)
-
-    elif isinstance(state, dict):
-        subresult = {}
-
-        for key, branch in state.items():
-            subresult[key] = fold_tree(
-                visit,
-                branch,
-                schema,
-                core)
-
-        result = visit(
-            subresult,
+        return visit_method(
+            method,
+            result,
             schema,
             core)
 
-    else:
-        raise Exception(f'state does not seem to be a tree or a leaf:\n  state: {state}\n  schema: {schema}')
 
-    return result
-
-
-def fold_map(visit, state, schema, core):
-    value_type = core.find_parameter(
+def fold_union(method, state, schema, core):
+    union_type = find_union_type(
+        core,
         schema,
-        'value')
-    
-    subresult = {}
+        state)
 
-    for key, value in state.items():
-        subresult[key] = core.fold(
-            visit,
-            value,
-            value_type,
-            core)
-
-        result = visit(
-            subresult,
-            schema,
-            core)
-
-    else:
-        raise Exception(f'state does not seem to be a map or a value:\n  state: {state}\n  schema: {schema}')
-
-    return result
-
-
-def fold_array(visit, state, schema, core):
-    shape_type = core.find_parameter(schema, 'shape')
-    data_type = core.find_parameter(schema, 'data')
-    
-    
-
-    for key, value in state.items():
-        subresult[key] = core.fold(
-            visit,
-            value,
-            value_type,
-            core)
-
-        result = visit(
-            subresult,
-            schema,
-            core)
-
-    else:
-        raise Exception(f'state does not seem to be a map or a value:\n  state: {state}\n  schema: {schema}')
-
-    return result
-
-
-def visit_method(method, state, schema, core):
-    schema = core.access(schema)
-    method_key = f'_{method}'
-
-    if method_key in state:
-        visit = core.find_method(state, method_key)
-    elif method_key in schema:
-        visit = core.find_method(schema, method_key)
-    else:
-        visit = core.find_method('any', method_key)
-
-    result = visit(
+    result = core.fold(
+        union_type,
         state,
-        schema,
-        core)
+        method)
 
-    return result
+    return visit_method(
+        method,
+        state,
+        union_type,
+        core)
 
 
 def divide_any(state, schema, core):
-    if isinstance(state, dict):
-        result = {}
-        for key, value in state.items():
-            result[key] = core.fold(
-                schema,
-                value,
-                'divide')
-    else:
-        return [state.copy(), state.copy()]
+    return [
+        state.copy(),
+        state.copy()]
 
 
-def divide_tree(state, schema, core):
-    leaf_type = core.find_parameter(
-        schema,
-        'leaf')
-    
-    if core.check(leaf_type, state):
-        return divide_visit(state, leaf_type, core)
-
-    elif isinstance(state, dict):
-        division = [{}, {}]
-        for key, value in state.items():
-            for index in range(2):
-                division[index][key] = value[index]
-
-        return division
+def divide_tuple(state, schema, core):
+    return [
+        tuple([item[0] for item in state]),
+        tuple([item[1] for item in state])]
 
 
 def apply_tree(current, update, schema, core):
@@ -785,7 +720,9 @@ registry_types = {
         '_apply': apply_any,
         '_check': check_any,
         '_serialize': serialize_any,
-        '_deserialize': deserialize_any},
+        '_deserialize': deserialize_any,
+        '_fold': fold_any,
+        '_divide': divide_any},
 
     'tuple': {
         '_type': 'tuple',
@@ -794,6 +731,8 @@ registry_types = {
         '_check': check_tuple,
         '_serialize': serialize_tuple,
         '_deserialize': deserialize_tuple,
+        '_fold': fold_tuple,
+        '_divide': divide_tuple,
         '_description': 'tuple of an ordered set of typed values'},
 
     'union': {
@@ -803,6 +742,7 @@ registry_types = {
         '_check': check_union,
         '_serialize': serialize_union,
         '_deserialize': deserialize_union,
+        '_fold': fold_union,
         '_description': 'union of a set of possible types'}}
 
 
@@ -917,29 +857,31 @@ class TypeRegistry(Registry):
                     registry = self.find_registry(
                         subkey)
 
-                    if isinstance(subschema, str):
-                        module_key = subschema
-                        found = registry.access(module_key)
+                    registry.register_method(subschema)
 
-                        if found is None:
-                            found = local_lookup_module(
-                                module_key)
+                    # if isinstance(subschema, str):
+                    #     module_key = subschema
+                    #     found = registry.access(module_key)
 
-                            if found is None:
-                                raise Exception(
-                                    f'function {subschema} not found for type data {schema}')
-                            else:
-                                registry.register(
-                                    module_key,
-                                    found)
+                    #     if found is None:
+                    #         found = local_lookup_module(
+                    #             module_key)
 
-                    elif inspect.isfunction(subschema):
-                        found = subschema
-                        module_key = function_module(found)
+                    #         if found is None:
+                    #             raise Exception(
+                    #                 f'function {subschema} not found for type data {schema}')
+                    #         else:
+                    #             registry.register(
+                    #                 module_key,
+                    #                 found)
+
+                    # elif inspect.isfunction(subschema):
+                    #     found = subschema
+                    #     module_key = function_module(found)
                         
-                        function_name = module_key.split('.')[-1]
-                        registry.register(function_name, found)
-                        registry.register(module_key, found)
+                    #     function_name = module_key.split('.')[-1]
+                    #     registry.register(function_name, found)
+                    #     registry.register(module_key, found)
 
                     schema[subkey] = module_key
 

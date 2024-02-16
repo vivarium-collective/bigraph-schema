@@ -700,11 +700,6 @@ class TypeSystem:
                 schema)
 
 
-    def divide(self, schema, state, ratios=(0.5, 0.5)):
-        # TODO: implement
-        return state
-
-
     def fill_ports(self, schema, wires=None, state=None, top=None, path=None):
         # deal with wires
         if wires is None:
@@ -1337,15 +1332,24 @@ class TypeSystem:
         return self.access(schema), final_state
         
 
-    # def register_method(self, method_key, method):
-        
+    def register_method(self, method_key, method):
+        registry = self.type_registry.find_registry(method_key)
+        registry.register_method(method)
         
 
     def find_method(self, schema, method_key):
+        if not isinstance(schema, dict) or method_key not in schema:
+            schema = self.access(schema)
+
         if method_key in schema:
-            return self.method_registry.access(
-                method_key,
-                schema[method_key])
+            registry = self.type_registry.lookup_registry(
+                method_key)
+
+            if registry is not None:
+                method_name = schema[method_key]
+                method = registry.access(method_name)
+
+                return method
 
 
     def link_place(self, place, link):
@@ -1407,10 +1411,6 @@ def apply_boolean(current: bool, update: bool, schema, core=None) -> bool:
         return update
     else:
         return current
-
-
-def divide_boolean(value: bool, schema, core):
-    return (value, value)
 
 
 def serialize_boolean(value: bool, schema, core) -> str:
@@ -1488,25 +1488,25 @@ def divide_longest(dimensions, schema, core=None):
         return [{'width': width, 'height': x}, {'width': width, 'height': y}]
 
 
-def divide_list(l, schema, core):
-    result = [[], []]
+# def divide_list(l, schema, core):
+#     result = [[], []]
 
-    divide_type = core.find_parameter(
-        schema,
-        'element')
+#     divide_type = core.find_parameter(
+#         schema,
+#         'element')
 
-    divide = divide_type['_divide']
+#     divide = divide_type['_divide']
 
-    for item in l:
-        if isinstance(item, list):
-            divisions = divide_list(item, schema, core)
-        else:
-            divisions = divide(item, divide_type, core)
+#     for item in l:
+#         if isinstance(item, list):
+#             divisions = divide_list(item, schema, core)
+#         else:
+#             divisions = divide(item, divide_type, core)
 
-        result[0].append(divisions[0])
-        result[1].append(divisions[1])
+#         result[0].append(divisions[0])
+#         result[1].append(divisions[1])
 
-    return result
+#     return result
 
 
 def replace(current, update, schema, core=None):
@@ -1634,24 +1634,6 @@ def check_tree(state, schema, core):
         return True
     else:
         return core.check(leaf_type, state)
-
-
-def divide_tree(tree, schema, core):
-    divide_type = core.find_parameter(
-        schema,
-        'leaf')
-
-    divide_function = divide_type['_divide']
-
-    for key, value in tree.items():
-        if isinstance(value, dict):
-            divisions = divide_tree(value)
-        else:
-            divisions = core.divide(divide_type, value)
-
-        result[0][key], result[1][key] = divisions
-
-    return result
 
 
 def serialize_tree(value, schema, core):
@@ -1974,6 +1956,211 @@ def deserialize_array(encoded, schema, core):
                     dtype=dtype)
 
 
+def fold_list(method, state, schema, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+    
+    if core.check(element_type, state):
+        fold = core.fold(
+            element_type,
+            state,
+            method)
+
+        result = visit_method(
+            method,
+            fold,
+            element_type,
+            core)
+
+    elif isinstance(state, list):
+        subresult = [
+            fold_list(
+                visit,
+                element,
+                schema,
+                core)
+            for element in state]
+
+        result = visit_method(
+            method
+            subresult,
+            schema,
+            core)
+
+    else:
+        raise Exception(f'state does not seem to be a list or an eelement:\n  state: {state}\n  schema: {schema}')
+
+    return result
+
+
+def fold_tree(method, state, schema, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+    
+    if core.check(leaf_type, state):
+        fold = core.fold(
+            leaf_type,
+            state,
+            method)
+
+        result = visit_method(
+            method,
+            fold,
+            leaf_type,
+            core)
+
+    elif isinstance(state, dict):
+        subresult = {}
+
+        for key, branch in state.items():
+            subresult[key] = fold_tree(
+                visit,
+                branch,
+                schema,
+                core)
+
+        result = visit_method(
+            method,
+            subresult,
+            schema,
+            core)
+
+    else:
+        raise Exception(f'state does not seem to be a tree or a leaf:\n  state: {state}\n  schema: {schema}')
+
+    return result
+
+
+def fold_map(method, state, schema, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+    
+    subresult = {}
+
+    for key, value in state.items():
+        subresult[key] = core.fold(
+            value_type,
+            value,
+            method)
+    
+    result = visit_method(
+        method
+        subresult,
+        schema,
+        core)
+
+    # else:
+    #     raise Exception(f'state does not seem to be a map or a value:\n  state: {state}\n  schema: {schema}')
+
+    return result
+
+
+# def fold_array(method, state, schema, core):
+#     result = visit_method(
+#         method,
+#         state,
+#         schema,
+#         core)
+
+
+def fold_maybe(method, state, schema, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    if state is None:
+        result = None
+    else:
+        result = core.fold(
+            value_type,
+            state,
+            method)
+
+    return visit_method(
+        method,
+        result,
+        schema,
+        core)
+
+
+def divide_list(state, schema, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+
+    if core.check(element_type, state):
+        return visit_method(
+            'divide',
+            state,
+            element_type,
+            core)
+
+    elif isinstance(state, (tuple, list)):
+        result = [
+            elements[index]
+            for elements in state
+            for index in range(2)]
+
+    else:
+        raise Exception(f'trying to divide list but state does not resemble a list or an element.\n  state: {pf(state)}\n  schema: {pf(schema)}')
+
+
+def divide_tree(state, schema, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+    
+    if core.check(leaf_type, state):
+        return visit_method(
+            'divide',
+            state,
+            leaf_type,
+            core)
+
+    elif isinstance(state, dict):
+        division = [{}, {}]
+        for key, value in state.items():
+            for index in range(2):
+                division[index][key] = value[index]
+
+        return division
+
+    else:
+        raise Exception(f'trying to divide tree but state does not resemble a leaf or a tree.\n  state: {pf(state)}\n  schema: {pf(schema)}')
+
+
+def divide_map(state, schema, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+    
+    division = [{}, {}]
+    for key, value in state.items():
+        for index in range(2):
+            division[index][key] = value[index]
+
+    if core.check(value_type, state):
+        return visit_method(
+            'divide',
+            state,
+            leaf_type,
+            core)
+
+    elif isinstance(state, dict):
+        division = [{}, {}]
+        for key, value in state.items():
+            for index in range(2):
+                division[index][key] = value[index]
+
+        return division
+
+    else:
+        raise Exception(f'trying to divide tree but state does not resemble a leaf or a tree.\n  state: {pf(state)}\n  schema: {pf(schema)}')
+
+
 def register_types(core, type_library):
     for type_key, type_data in type_library.items():
         if not core.exists(type_key):
@@ -2023,8 +2210,8 @@ base_type_library = {
     # abstract number type
     'number': {
         '_type': 'number',
-        '_apply': accumulate,
         '_check': check_number,
+        '_apply': accumulate,
         '_serialize': to_string,
         '_description': 'abstract base type for numbers'},
 
@@ -2032,16 +2219,16 @@ base_type_library = {
         '_type': 'integer',
         '_default': '0',
         # inherit _apply and _serialize from number type
-        '_deserialize': deserialize_integer,
         '_check': check_integer,
+        '_deserialize': deserialize_integer,
         '_description': '64-bit integer',
         '_inherit': 'number'},
 
     'float': {
         '_type': 'float',
         '_default': '0.0',
-        '_deserialize': deserialize_float,
         '_check': check_float,
+        '_deserialize': deserialize_float,
         '_divide': divide_float,
         '_description': '64-bit floating point precision number',
         '_inherit': 'number'},
@@ -2049,8 +2236,8 @@ base_type_library = {
     'string': {
         '_type': 'string',
         '_default': '',
-        '_apply': replace,
         '_check': check_string,
+        '_apply': replace,
         '_serialize': serialize_string,
         '_deserialize': deserialize_string,
         '_description': '64-bit integer'},
@@ -2058,26 +2245,25 @@ base_type_library = {
     'list': {
         '_type': 'list',
         '_default': [],
-        '_apply': apply_list,
         '_check': check_list,
+        '_apply': apply_list,
         '_serialize': serialize_list,
         '_deserialize': deserialize_list,
+        '_fold': fold_list,
         '_divide': divide_list,
         '_type_parameters': ['element'],
-        # '_methods': {
-        #     # 'divide': 'divide_list',
-        #     'append': 'append_list'},
         '_description': 'general list type (or sublists)'},
 
     # TODO: tree should behave as if the leaf type is a valid tree
     'tree': {
         '_type': 'tree',
         '_default': {},
+        '_check': check_tree,
         '_apply': apply_tree,
         '_serialize': serialize_tree,
         '_deserialize': deserialize_tree,
+        '_fold': fold_tree,
         '_divide': divide_tree,
-        '_check': check_tree,
         '_type_parameters': ['leaf'],
         # '_methods': {
         #     'divide': 'divide_tree'},
@@ -2089,17 +2275,16 @@ base_type_library = {
         '_apply': apply_map,
         '_serialize': serialize_map,
         '_deserialize': deserialize_map,
-        '_divide': divide_map,
         '_check': check_map,
-        # TODO: create assignable type parameters?
+        '_fold': fold_map,
+        '_divide': divide_map,
         '_type_parameters': ['value'],
         '_description': 'flat mapping from keys of strings to values of any type'},
 
-    # TODO: add native numpy array type
     'array': {
         '_type': 'array',
         '_default': {
-            'data': 'float'},
+            '_data': 'float'},
         '_check': check_array,
         '_apply': apply_array,
         '_serialize': serialize_array,
@@ -2112,10 +2297,11 @@ base_type_library = {
     'maybe': {
         '_type': 'maybe',
         '_default': NONE_SYMBOL,
+        '_check': check_maybe,
         '_apply': apply_maybe,
         '_serialize': serialize_maybe,
         '_deserialize': deserialize_maybe,
-        '_check': check_maybe,
+        '_fold': fold_maybe,
         '_divide': divide_maybe,
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
