@@ -451,11 +451,13 @@ def fold_any(method, state, schema, core):
     else:
         result = state
 
-    return visit_method(
+    visit = visit_method(
         method,
         result,
         schema,
         core)
+
+    return visit
 
 
 def fold_tuple(method, state, schema, core):
@@ -491,17 +493,28 @@ def fold_union(method, state, schema, core):
         state,
         method)
 
-    return visit_method(
-        method,
-        state,
-        union_type,
-        core)
+    return result
+
+    # return visit_method(
+    #     method,
+    #     state,
+    #     union_type,
+    #     core)
 
 
 def divide_any(state, schema, core):
-    return [
-        copy.deepcopy(state),
-        copy.deepcopy(state)]
+    if isinstance(state, dict):
+        result = [{}, {}]
+        for key, value in state.items():
+            for index in range(2):
+                result[index][key] = value[index]
+
+        return result
+
+    else:
+        return [
+            copy.deepcopy(state),
+            copy.deepcopy(state)]
 
 
 def divide_tuple(state, schema, core):
@@ -864,32 +877,7 @@ class TypeRegistry(Registry):
                 if subkey in TYPE_FUNCTION_KEYS or is_method_key(subkey, parameters):
                     registry = self.find_registry(
                         subkey)
-
                     function_name, module_key = registry.register_function(subschema)
-
-                    # if isinstance(subschema, str):
-                    #     module_key = subschema
-                    #     found = registry.access(module_key)
-
-                    #     if found is None:
-                    #         found = local_lookup_module(
-                    #             module_key)
-
-                    #         if found is None:
-                    #             raise Exception(
-                    #                 f'function {subschema} not found for type data {schema}')
-                    #         else:
-                    #             registry.register(
-                    #                 module_key,
-                    #                 found)
-
-                    # elif inspect.isfunction(subschema):
-                    #     found = subschema
-                    #     module_key = function_module(found)
-                        
-                    #     function_name = module_key.split('.')[-1]
-                    #     registry.register(function_name, found)
-                    #     registry.register(module_key, found)
 
                     schema[subkey] = function_name
 

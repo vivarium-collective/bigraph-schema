@@ -458,22 +458,6 @@ class TypeSystem:
             schema,
             self)
 
-        # elif isinstance(state, dict):
-        #     for key, branch in state.items():
-        #         if not key.startswith('_'):
-        #             if key in schema:
-        #                 check = self.check_state(
-        #                     schema[key],
-        #                     state[key])
-
-        #                 if not check:
-        #                     return False
-
-        # else:
-        #     return False
-
-        # return True
-
 
     def check(self, initial_schema, state):
         schema = self.retrieve(initial_schema)
@@ -1906,16 +1890,10 @@ def fold_list(method, state, schema, core):
         'element')
     
     if core.check(element_type, state):
-        fold = core.fold(
+        result = core.fold(
             element_type,
             state,
             method)
-
-        result = visit_method(
-            method,
-            fold,
-            element_type,
-            core)
 
     elif isinstance(state, list):
         subresult = [
@@ -1948,12 +1926,6 @@ def fold_tree(method, state, schema, core):
             leaf_type,
             state,
             method)
-
-        # result = visit_method(
-        #     method,
-        #     fold,
-        #     leaf_type,
-        #     core)
 
     elif isinstance(state, dict):
         subresult = {}
@@ -1999,18 +1971,7 @@ def fold_map(method, state, schema, core):
         schema,
         core)
 
-    # else:
-    #     raise Exception(f'state does not seem to be a map or a value:\n  state: {state}\n  schema: {schema}')
-
     return result
-
-
-# def fold_array(method, state, schema, core):
-#     result = visit_method(
-#         method,
-#         state,
-#         schema,
-#         core)
 
 
 def fold_maybe(method, state, schema, core):
@@ -2019,18 +1980,14 @@ def fold_maybe(method, state, schema, core):
         'value')
 
     if state is None:
-        result = None
+        result = [None, None]
     else:
         result = core.fold(
             value_type,
             state,
             method)
 
-    return visit_method(
-        method,
-        result,
-        schema,
-        core)
+    return result
 
 
 def divide_list(state, schema, core):
@@ -2039,17 +1996,24 @@ def divide_list(state, schema, core):
         'element')
 
     if core.check(element_type, state):
-        return visit_method(
-            'divide',
-            state,
+        # return visit_method(
+        #     'divide',
+        #     state,
+        #     element_type,
+        #     core)
+
+        return core.fold(
             element_type,
+            state,
             core)
 
     elif isinstance(state, list):
-        result = [
-            elements[index]
-            for elements in state
-            for index in range(2)]
+        result = [[], []]
+
+        for elements in state:
+            for index in range(2):
+                result[index].append(
+                    elements[index])
 
         return result
 
@@ -2063,6 +2027,12 @@ def divide_tree(state, schema, core):
         'leaf')
     
     if core.check(leaf_type, state):
+        # return core.fold(
+        #     leaf_type,
+        #     state,
+        #     'divide',
+        #     core)
+
         return visit_method(
             'divide',
             state,
@@ -3903,10 +3873,8 @@ def test_edge_type(core):
 
 def test_divide(core):
     schema = {
-        'a': 'tree[float]',
-        # 'a': 'tree[maybe[float]]',
-        'b': 'list[string]',
-        # 'b': 'float~list[string]',
+        'a': 'tree[maybe[float]]',
+        'b': 'float~list[string]',
         'c': {
             'd': 'integer',
             'e': 'boolean'}}
@@ -3914,6 +3882,7 @@ def test_divide(core):
     state = {
         'a': {
             'x': {
+                'oooo': None,
                 'y': 1.1,
                 'z': 33.33},
             'w': 44.444},
@@ -3924,7 +3893,12 @@ def test_divide(core):
 
     division = core.fold(schema, state, 'divide')
 
+    assert len(division) == 2
+    assert 'a' in division[0].keys()
+    assert len(division[1]['b']) == len(state['b'])
+
     import ipdb; ipdb.set_trace()
+
 
 
 if __name__ == '__main__':
