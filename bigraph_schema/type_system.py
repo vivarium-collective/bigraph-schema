@@ -3866,6 +3866,9 @@ def test_divide(core):
         'c': {
             'd': 'integer',
             'e': 'boolean'}}
+        # TODO: 
+        #   'd': 'map[edge]',
+        #   'e': 'array[(3|4|10),float]'}
 
     state = {
         'a': {
