@@ -435,28 +435,30 @@ class TypeSystem:
 
 
     def check_state(self, schema, state):
-        if isinstance(schema, str) or isinstance(schema, list):
-            # this assumes access always returns a dict
-            schema = self.access(schema)
-            return self.check_state(schema, state)
+        return self.fold(schema, state, 'check')
 
-        elif isinstance(state, dict) and '_check' in state:
-            check_key = state['_check']
+        # if isinstance(schema, str) or isinstance(schema, list):
+        #     # this assumes access always returns a dict
+        #     schema = self.access(schema)
+        #     return self.check_state(schema, state)
 
-        elif '_check' in schema:
-            check_key = schema['_check']
+        # elif isinstance(state, dict) and '_check' in state:
+        #     check_key = state['_check']
 
-        else:
-            any_type = self.access('any')
-            check_key = any_type['_check']
+        # elif '_check' in schema:
+        #     check_key = schema['_check']
 
-        check_function = self.type_registry.check_registry.access(
-            check_key)
+        # else:
+        #     any_type = self.access('any')
+        #     check_key = any_type['_check']
+
+        # check_function = self.type_registry.check_registry.access(
+        #     check_key)
             
-        return check_function(
-            state,
-            schema,
-            self)
+        # return check_function(
+        #     state,
+        #     schema,
+        #     self)
 
 
     def check(self, initial_schema, state):
@@ -1522,18 +1524,23 @@ def check_list(state, schema, core):
         schema,
         'element')
 
-    if isinstance(state, list):
-        for element in state:
-            check = core.check(
-                element_type,
-                element)
-
-            if not check:
-                return False
-
+    if core.check(element_type, state):
         return True
     else:
-        return False
+        return isinstance(state, list) and all(state)
+
+    # if isinstance(state, list):
+    #     for element in state:
+    #         check = core.check(
+    #             element_type,
+    #             element)
+
+    #         if not check:
+    #             return False
+
+    #     return True
+    # else:
+    #     return False
 
 
 def serialize_list(value, schema, core=None):
@@ -1566,21 +1573,27 @@ def check_tree(state, schema, core):
         schema,
         'leaf')
 
-    if isinstance(state, dict):
-        for key, value in state.items():
-            check = core.check({
-                '_type': 'tree',
-                '_leaf': leaf_type},
-                value)
-
-            if not check:
-                return core.check(
-                    leaf_type,
-                    value)
-
+    if core.check(leaf_type, state):
         return True
-    else:
-        return core.check(leaf_type, state)
+    elif isinstance(state, dict):
+        return all(state.values())
+        
+
+    # if isinstance(state, dict):
+    #     for key, value in state.items():
+    #         check = core.check({
+    #             '_type': 'tree',
+    #             '_leaf': leaf_type},
+    #             value)
+
+    #         if not check:
+    #             return core.check(
+    #                 leaf_type,
+    #                 value)
+
+    #     return True
+    # else:
+    #     return core.check(leaf_type, state)
 
 
 def serialize_tree(value, schema, core):
@@ -1652,18 +1665,20 @@ def apply_map(current, update, schema, core=None):
 
 
 def check_map(state, schema, core=None):
-    value_type = core.find_parameter(
-        schema,
-        'value')
+    return all(state.values())
 
-    if not isinstance(state, dict):
-        return False
+    # value_type = core.find_parameter(
+    #     schema,
+    #     'value')
 
-    for key, substate in state.items():
-        if not core.check(value_type, substate):
-            return False
+    # if not isinstance(state, dict):
+    #     return False
 
-    return True
+    # for key, substate in state.items():
+    #     if not core.check(value_type, substate):
+    #         return False
+
+    # return True
 
 
 def serialize_map(value, schema, core=None):
@@ -1706,14 +1721,16 @@ def apply_maybe(current, update, schema, core):
 
 
 def check_maybe(state, schema, core):
-    if state is None:
-        return True
-    else:
-        value_type = core.find_parameter(
-            schema,
-            'value')
+    return state
 
-        return core.check(value_type, state)
+    # if state is None:
+    #     return True
+    # else:
+    #     value_type = core.find_parameter(
+    #         schema,
+    #         'value')
+
+    #     return core.check(value_type, state)
 
 
 def serialize_maybe(value, schema, core):
@@ -1885,6 +1902,8 @@ def deserialize_array(encoded, schema, core):
 
 
 def fold_list(method, state, schema, core):
+    result = None
+
     element_type = core.find_parameter(
         schema,
         'element')
@@ -1910,13 +1929,18 @@ def fold_list(method, state, schema, core):
             schema,
             core)
 
-    else:
-        raise Exception(f'state does not seem to be a list or an eelement:\n  state: {state}\n  schema: {schema}')
+    # else:
+    #     result = None
+    #     import ipdb; ipdb.set_trace()
+
+        # raise Exception(f'state does not seem to be a list or an eelement:\n  state: {state}\n  schema: {schema}')
 
     return result
 
 
 def fold_tree(method, state, schema, core):
+    result = None
+
     leaf_type = core.find_parameter(
         schema,
         'leaf')
@@ -1946,8 +1970,8 @@ def fold_tree(method, state, schema, core):
             schema,
             core)
 
-    else:
-        raise Exception(f'state does not seem to be a tree or a leaf:\n  state: {state}\n  schema: {schema}')
+    # else:
+    #     raise Exception(f'state does not seem to be a tree or a leaf:\n  state: {state}\n  schema: {schema}')
 
     return result
 

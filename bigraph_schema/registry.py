@@ -460,28 +460,6 @@ def fold_any(method, state, schema, core):
     return visit
 
 
-def fold_tuple(method, state, schema, core):
-    if not isinstance(state, (tuple, list)):
-        return visit_method(
-            method,
-            state,
-            schema,
-            core)
-    else:
-        parameters = core.parameters_for(schema)
-        result = []
-        for parameter, element in zip(parameters, state):
-            fold = core.fold(parameter, element, method)
-            result.append(fold)
-        result = tuple(result)
-
-        return visit_method(
-            method,
-            result,
-            schema,
-            core)
-
-
 def fold_union(method, state, schema, core):
     union_type = find_union_type(
         core,
@@ -616,16 +594,38 @@ def apply_tuple(current, update, schema, core):
     return tuple(result)
 
 
-def check_tuple(state, schema, core):
+def fold_tuple(method, state, schema, core):
     if not isinstance(state, (tuple, list)):
-        return False
+        raise Exception(f'tuple type required, not:\n  state: {pf(state)}\n  schema: {pf(schema)}')
+    else:
+        parameters = core.parameters_for(schema)
+        result = []
+        for parameter, element in zip(parameters, state):
+            fold = core.fold(parameter, element, method)
+            result.append(fold)
+        result = tuple(result)
 
-    parameters = core.parameters_for(schema)
-    for parameter, element in zip(parameters, state):
-        if not core.check(parameter, element):
-            return False
+        return visit_method(
+            method,
+            result,
+            schema,
+            core)
 
-    return True
+
+def check_tuple(state, schema, core):
+    return all(state)
+
+
+# def check_tuple(state, schema, core):
+#     if not isinstance(state, (tuple, list)):
+#         return False
+
+#     parameters = core.parameters_for(schema)
+#     for parameter, element in zip(parameters, state):
+#         if not core.check(parameter, element):
+#             return False
+
+#     return True
 
 
 def serialize_tuple(value, schema, core):
@@ -696,7 +696,8 @@ def check_union(state, schema, core):
         schema,
         state)
 
-    return found is not None and len(found) > 0
+    return core.check(found, state)
+    # return found is not None and len(found) > 0
 
 
 def serialize_union(value, schema, core):
