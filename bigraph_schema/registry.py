@@ -379,41 +379,200 @@ class Registry(object):
         return True
 
 
-def fold_tree(visit, merge, result, state, schema, core):
+def fold_any(method, state, schema, core):
+    if isinstance(state, dict):
+        result = {}
+        for key, value in state.items():
+            if key.startswith('_'):
+                result[key] = value
+            else:
+                if key in schema:
+                    fold = core.fold_state(
+                        schema[key],
+                        value,
+                        method)
+                    result[key] = fold
+
+    else:
+        result = state
+
+    return visit_method(
+        method,
+        result,
+        schema,
+        core)
+
+
+def fold_list(method, state, schema, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+    
+    if core.check(element_type, state):
+        fold = core.fold(
+            element_type,
+            state,
+            method)
+
+        result = visit_method(
+            method,
+            fold,
+            element_type,
+            core)
+
+    elif isinstance(state, list):
+        subresult = [
+            fold_list(
+                visit,
+                element,
+                schema,
+                core)
+            for element in state]
+
+        result = visit(
+            subresult,
+            schema,
+            core)
+
+    else:
+        raise Exception(f'state does not seem to be a list or an eelement:\n  state: {state}\n  schema: {schema}')
+
+    return result
+
+
+def fold_tree(visit, state, schema, core):
     leaf_type = core.find_parameter(
         schema,
         'leaf')
     
     if core.check(leaf_type, state):
-        result = visit(
+        fold = core.fold(
+            visit,
             state,
             leaf_type,
             core)
 
+        result = visit_method(
+            fold,
+            leaf_type,
+            core)
+
     elif isinstance(state, dict):
-        substate = {}
+        subresult = {}
+
         for key, branch in state.items():
-            substate[key] = fold_tree(
+            subresult[key] = fold_tree(
                 visit,
-                merge,
-                result,
                 branch,
                 schema,
                 core)
 
-        result = merge(result, substate)
+        result = visit(
+            subresult,
+            schema,
+            core)
 
     else:
         raise Exception(f'state does not seem to be a tree or a leaf:\n  state: {state}\n  schema: {schema}')
 
+    return result
 
-def divide_visit(state, initial_schema, core):
-    schema = core.access(initial_schema)
 
-    if '_divide' in schema:
-        divide_function = core.find_method(
+def fold_map(visit, state, schema, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+    
+    subresult = {}
+
+    for key, value in state.items():
+        subresult[key] = core.fold(
+            visit,
+            value,
+            value_type,
+            core)
+
+        result = visit(
+            subresult,
             schema,
-            '_divide')
+            core)
+
+    else:
+        raise Exception(f'state does not seem to be a map or a value:\n  state: {state}\n  schema: {schema}')
+
+    return result
+
+
+def fold_array(visit, state, schema, core):
+    shape_type = core.find_parameter(schema, 'shape')
+    data_type = core.find_parameter(schema, 'data')
+    
+    
+
+    for key, value in state.items():
+        subresult[key] = core.fold(
+            visit,
+            value,
+            value_type,
+            core)
+
+        result = visit(
+            subresult,
+            schema,
+            core)
+
+    else:
+        raise Exception(f'state does not seem to be a map or a value:\n  state: {state}\n  schema: {schema}')
+
+    return result
+
+
+def visit_method(method, state, schema, core):
+    schema = core.access(schema)
+    method_key = f'_{method}'
+
+    if method_key in state:
+        visit = core.find_method(state, method_key)
+    elif method_key in schema:
+        visit = core.find_method(schema, method_key)
+    else:
+        visit = core.find_method('any', method_key)
+
+    result = visit(
+        state,
+        schema,
+        core)
+
+    return result
+
+
+def divide_any(state, schema, core):
+    if isinstance(state, dict):
+        result = {}
+        for key, value in state.items():
+            result[key] = core.fold(
+                schema,
+                value,
+                'divide')
+    else:
+        return [state.copy(), state.copy()]
+
+
+def divide_tree(state, schema, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+    
+    if core.check(leaf_type, state):
+        return divide_visit(state, leaf_type, core)
+
+    elif isinstance(state, dict):
+        division = [{}, {}]
+        for key, value in state.items():
+            for index in range(2):
+                division[index][key] = value[index]
+
+        return division
 
 
 def apply_tree(current, update, schema, core):
@@ -473,6 +632,17 @@ def apply_any(current, update, schema, core):
 
 
 def check_any(state, schema, core):
+    if isinstance(state, dict):
+        for key, value in state.items():
+            if not key.startswith('_'):
+                if key in schema:
+                    check = core.check_state(
+                        schema[key],
+                        value)
+
+                    if not check:
+                        return False
+
     return True
 
 
@@ -675,7 +845,6 @@ class TypeRegistry(Registry):
 
         self.fold_registry = Registry(function_keys=[
              'visit',
-             'merge',
              'state',
              'schema',
              'core'])

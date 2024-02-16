@@ -435,43 +435,78 @@ class TypeSystem:
         if isinstance(schema, str) or isinstance(schema, list):
             # this assumes access always returns a dict
             schema = self.access(schema)
-            return self.check_state(schema, state, update)
+            return self.check_state(schema, state)
 
-        elif '_check' in schema and schema['_check'] != 'any':
-            check_function = self.type_registry.check_registry.access(
-                schema['_check'])
-            
-            return check_function(
-                state,
-                schema,
-                self)
+        elif isinstance(state, dict) and '_check' in state:
+            check_key = state['_check']
 
-        elif isinstance(state, dict):
-            for key, branch in state.items():
-                if not key.startswith('_'):
-                    # TODO: reject keys that aren't in the schema?
-                    # if key not in schema:
-                    #     return False
-                    if key in schema:
-                        check = self.check_state(
-                            schema[key],
-                            state[key])
-
-                        if not check:
-                            return False
+        elif '_check' in schema:
+            check_key = schema['_check']
 
         else:
-            return False
+            any_type = self.access('any')
+            check_key = any_type['_check']
 
-        return True
+        check_function = self.type_registry.check_registry.access(
+            check_key)
+            
+        return check_function(
+            state,
+            schema,
+            self)
+
+        # elif isinstance(state, dict):
+        #     for key, branch in state.items():
+        #         if not key.startswith('_'):
+        #             if key in schema:
+        #                 check = self.check_state(
+        #                     schema[key],
+        #                     state[key])
+
+        #                 if not check:
+        #                     return False
+
+        # else:
+        #     return False
+
+        # return True
 
 
     def check(self, initial_schema, state):
-        schema = self.access(initial_schema)
-        if schema is None:
-            raise Exception(f'no type registered for the given schema: {initial_schema}')
+        schema = self.retrieve(initial_schema)
         return self.check_state(schema, state)
     
+
+    def fold_state(self, schema, state, method):
+        if isinstance(schema, str) or isinstance(schema, list):
+            # this assumes access always returns a dict
+            schema = self.access(schema)
+            return self.fold_state(schema, state, method)
+
+        elif isinstance(state, dict) and '_fold' in state:
+            fold_key = state['_fold']
+
+        elif '_fold' in schema:
+            fold_key = schema['_fold']
+
+        else:
+            any_type = self.access('any')
+            fold_key = any_type['_fold']
+
+        fold_function = self.type_registry.fold_registry.access(
+            fold_key)
+            
+        return fold_function(
+            method,
+            state,
+            schema,
+            self)
+
+
+    def fold(self, initial_schema, state, method):
+        schema = self.retrieve(initial_schema)
+        return self.fold_state(schema, state, method)
+
 
     def validate(self, schema, state):
         # TODO:
@@ -1306,11 +1341,11 @@ class TypeSystem:
         
         
 
-    # def find_method(self, schema, method_key):
-    #     if method_key in schema:
-    #         return self.method_registry.access(
-    #             method_key,
-    #             schema[method_key])
+    def find_method(self, schema, method_key):
+        if method_key in schema:
+            return self.method_registry.access(
+                method_key,
+                schema[method_key])
 
 
     def link_place(self, place, link):
@@ -1983,7 +2018,6 @@ base_type_library = {
         '_apply': apply_boolean,
         '_serialize': serialize_boolean,
         '_deserialize': deserialize_boolean,
-        '_divide': divide_boolean,
     },
 
     # abstract number type
@@ -2000,7 +2034,6 @@ base_type_library = {
         # inherit _apply and _serialize from number type
         '_deserialize': deserialize_integer,
         '_check': check_integer,
-        '_divide': divide_integer,
         '_description': '64-bit integer',
         '_inherit': 'number'},
 
@@ -3762,6 +3795,7 @@ if __name__ == '__main__':
 
     test_generate_default(core)
     test_apply_update(core)
+    test_apply_schema(core)
     test_validate_schema(core)
     test_fill_integer(core)
     test_fill_cube(core)
