@@ -523,29 +523,6 @@ class TypeSystem:
             pass
 
 
-    def fold(self, schema, state, fold):
-        def identity_visit(x, schema, core):
-            return x
-
-        def identity_merge(x, y, schema, core):
-            if x is None:
-                if y is None:
-                    return ()
-                else:
-                    return (y,)
-            elif isinstance(x, tuple):
-                if y is None:
-                    return x
-                else:
-                    return x + (y,)
-
-        visit = self.lookup_method(fold, 'visit', identity_visit)
-        merge = self.lookup_method(fold, 'merge', identity_merge)
-
-        # we get the initial state by calling merge with empty arguments
-        initial = merge(None, None, schema, self)
-
-
     def apply_update(self, schema, state, update):
         if isinstance(update, dict) and '_react' in update:
             state = self.react(
@@ -2016,9 +1993,9 @@ def fold_tree(method, state, schema, core):
 
         for key, branch in state.items():
             subresult[key] = fold_tree(
-                visit,
+                method,
                 branch,
-                schema,
+                schema[key] if key in schema else schema,
                 core)
 
         result = visit_method(
@@ -3975,9 +3952,10 @@ def test_divide(core):
             'd': 5,
             'e': False}}
 
-    division = core.fold(schema, state, 'divide')
 
     import ipdb; ipdb.set_trace()
+
+    division = core.fold(schema, state, 'divide')
 
 
 if __name__ == '__main__':
@@ -3988,7 +3966,6 @@ if __name__ == '__main__':
 
     test_generate_default(core)
     test_apply_update(core)
-    test_apply_schema(core)
     test_validate_schema(core)
     test_fill_integer(core)
     test_fill_cube(core)
@@ -4001,6 +3978,7 @@ if __name__ == '__main__':
     test_serialize_deserialize(core)
     test_project(core)
     test_inherits_from(core)
+    test_apply_schema(core)
     test_resolve_schemas(core)
     test_add_reaction(core)
     test_remove_reaction(core)

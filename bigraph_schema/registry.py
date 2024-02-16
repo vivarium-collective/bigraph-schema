@@ -25,7 +25,7 @@ required_schema_keys = set([
     '_check',
     '_serialize',
     '_deserialize',
-    '_divide',
+    '_fold',
 ])
 
 optional_schema_keys = set([
@@ -34,6 +34,7 @@ optional_schema_keys = set([
     '_description',
     '_type_parameters',
     '_inherit',
+    '_divide',
 ])
 
 type_schema_keys = required_schema_keys | optional_schema_keys
@@ -50,13 +51,14 @@ TYPE_FUNCTION_KEYS = [
 overridable_schema_keys = set([
     '_type',
     '_default',
-    '_apply',
     '_check',
+    '_apply',
     '_serialize',
     '_deserialize',
+    '_fold',
+    '_divide',
     '_type_parameters',
     '_value',
-    '_divide',
     '_description',
     '_inherit',
 ])
@@ -386,10 +388,6 @@ class Registry(object):
         return function_name, module_key
 
 
-
-
-
-
     def register_multiple(self, schemas, force=False):
         for key, schema in schemas.items():
             self.register(key, schema, force=force)
@@ -413,7 +411,7 @@ def visit_method(method, state, schema, core):
     method_key = f'_{method}'
 
     # TODO: we should probably cache all this
-    if method_key in state:
+    if isinstance(state, dict) and method_key in state:
         visit = core.find_method(
             {method_key: state[method_key]},
             method_key)
@@ -427,6 +425,9 @@ def visit_method(method, state, schema, core):
         visit = core.find_method(
             'any',
             method_key)
+
+    if visit is None:
+        import ipdb; ipdb.set_trace()
 
     result = visit(
         state,
@@ -569,18 +570,23 @@ def apply_any(current, update, schema, core):
 
 
 def check_any(state, schema, core):
-    if isinstance(state, dict):
-        for key, value in state.items():
+    if isinstance(schema, dict):
+        for key, subschema in schema.items():
             if not key.startswith('_'):
-                if key in schema:
-                    check = core.check_state(
-                        schema[key],
-                        value)
+                if isinstance(state, dict):
+                    if key in state:
+                        check = core.check_state(
+                            subschema,
+                            state[key])
 
-                    if not check:
-                        return False
+                        if not check:
+                            return False
+                else:
+                    return False
 
-    return True
+        return True
+    else:
+        return True
 
 
 def serialize_any(value, schema, core):
