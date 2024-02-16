@@ -1996,12 +1996,6 @@ def divide_list(state, schema, core):
         'element')
 
     if core.check(element_type, state):
-        # return visit_method(
-        #     'divide',
-        #     state,
-        #     element_type,
-        #     core)
-
         return core.fold(
             element_type,
             state,
@@ -2027,16 +2021,10 @@ def divide_tree(state, schema, core):
         'leaf')
     
     if core.check(leaf_type, state):
-        # return core.fold(
-        #     leaf_type,
-        #     state,
-        #     'divide',
-        #     core)
-
-        return visit_method(
-            'divide',
-            state,
+        return core.fold(
             leaf_type,
+            state,
+            'divide',
             core)
 
     elif isinstance(state, dict):

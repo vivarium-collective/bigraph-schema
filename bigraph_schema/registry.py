@@ -495,12 +495,6 @@ def fold_union(method, state, schema, core):
 
     return result
 
-    # return visit_method(
-    #     method,
-    #     state,
-    #     union_type,
-    #     core)
-
 
 def divide_any(state, schema, core):
     if isinstance(state, dict):
