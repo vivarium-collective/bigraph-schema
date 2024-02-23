@@ -406,7 +406,7 @@ class Registry(object):
         return True
 
 
-def visit_method(method, state, schema, core):
+def visit_method(schema, state, method, values, core):
     schema = core.access(schema)
     method_key = f'_{method}'
 
@@ -427,14 +427,15 @@ def visit_method(method, state, schema, core):
             method_key)
 
     result = visit(
-        state,
         schema,
+        state,
+        values,
         core)
 
     return result
 
 
-def fold_any(method, state, schema, core):
+def fold_any(schema, state, method, values, core):
     if isinstance(state, dict):
         result = {}
         for key, value in state.items():
@@ -445,44 +446,53 @@ def fold_any(method, state, schema, core):
                     fold = core.fold_state(
                         schema[key],
                         value,
-                        method)
+                        method,
+                        values)
                     result[key] = fold
 
     else:
         result = state
 
     visit = visit_method(
-        method,
-        result,
         schema,
+        result,
+        method,
+        values,
         core)
 
     return visit
 
 
-def fold_tuple(method, state, schema, core):
+def fold_tuple(schema, state, method, values, core):
     if not isinstance(state, (tuple, list)):
         return visit_method(
-            method,
-            state,
             schema,
+            state,
+            method,
+            values,
             core)
     else:
         parameters = core.parameters_for(schema)
         result = []
         for parameter, element in zip(parameters, state):
-            fold = core.fold(parameter, element, method)
+            fold = core.fold(
+                parameter,
+                element,
+                method,
+                values)
             result.append(fold)
+
         result = tuple(result)
 
         return visit_method(
-            method,
-            result,
             schema,
+            result,
+            method,
+            values,
             core)
 
 
-def fold_union(method, state, schema, core):
+def fold_union(schema, state, method, values, core):
     union_type = find_union_type(
         core,
         schema,
@@ -491,33 +501,41 @@ def fold_union(method, state, schema, core):
     result = core.fold(
         union_type,
         state,
-        method)
+        method,
+        values)
 
     return result
 
 
-def divide_any(state, schema, core):
+def divide_any(schema, state, values, core):
+    divisions = values.get('divisions', 2)
+
     if isinstance(state, dict):
-        result = [{}, {}]
+        result = [
+            {}
+            for _ in range(divisions)]
+
         for key, value in state.items():
-            for index in range(2):
+            for index in range(divisions):
                 result[index][key] = value[index]
 
         return result
 
     else:
         return [
-            copy.deepcopy(state),
-            copy.deepcopy(state)]
+            copy.deepcopy(state)
+            for _ in range(divisions)]
 
 
-def divide_tuple(state, schema, core):
+def divide_tuple(schema, state, values, core):
+    divisions = values.get('divisions', 2)
+
     return [
-        tuple([item[0] for item in state]),
-        tuple([item[1] for item in state])]
+        tuple([item[index] for item in state])
+        for index in range(divisions)]
 
 
-def apply_tree(current, update, schema, core):
+def apply_tree(schema, current, update, core):
     leaf_type = core.find_parameter(
         schema,
         'leaf')
@@ -562,7 +580,7 @@ def apply_tree(current, update, schema, core):
         raise Exception(f'trying to apply an update to a tree but the values are not trees or leaves of that tree\ncurrent:\n  {pf(current)}\nupdate:\n  {pf(update)}\nschema:\n  {pf(schema)}')
 
 
-def apply_any(current, update, schema, core):
+def apply_any(schema, current, update, core):
     if isinstance(current, dict):
         return apply_tree(
             current,
@@ -573,7 +591,7 @@ def apply_any(current, update, schema, core):
         return update
 
 
-def check_any(state, schema, core):
+def check_any(schema, state, core):
     if isinstance(schema, dict):
         for key, subschema in schema.items():
             if not key.startswith('_'):
@@ -593,15 +611,15 @@ def check_any(state, schema, core):
         return True
 
 
-def serialize_any(value, schema, core):
+def serialize_any(schema, value, core):
     return str(value)
 
 
-def deserialize_any(encoded, schema, core):
+def deserialize_any(schema, encoded, core):
     return encoded
 
 
-def apply_tuple(current, update, schema, core):
+def apply_tuple(schema, current, update, core):
     parameters = core.parameters_for(schema)
     result = []
 
@@ -616,7 +634,7 @@ def apply_tuple(current, update, schema, core):
     return tuple(result)
 
 
-def check_tuple(state, schema, core):
+def check_tuple(schema, state, core):
     if not isinstance(state, (tuple, list)):
         return False
 
@@ -628,7 +646,7 @@ def check_tuple(state, schema, core):
     return True
 
 
-def serialize_tuple(value, schema, core):
+def serialize_tuple(schema, value, core):
     parameters = core.parameters_for(schema)
     result = []
 
@@ -642,7 +660,7 @@ def serialize_tuple(value, schema, core):
     return tuple(result)
 
 
-def deserialize_tuple(encoded, schema, core):
+def deserialize_tuple(schema, encoded, core):
     parameters = core.parameters_for(schema)
     result = []
 
@@ -666,7 +684,7 @@ def find_union_type(core, schema, state):
     return None
 
 
-def apply_union(current, update, schema, core):
+def apply_union(schema, current, update, core):
     current_type = find_union_type(
         core,
         schema,
@@ -690,7 +708,7 @@ def apply_union(current, update, schema, core):
         update)
 
 
-def check_union(state, schema, core):
+def check_union(schema, state, core):
     found = find_union_type(
         core,
         schema,
@@ -699,7 +717,7 @@ def check_union(state, schema, core):
     return found is not None and len(found) > 0
 
 
-def serialize_union(value, schema, core):
+def serialize_union(schema, value, core):
     union_type = find_union_type(
         core,
         schema,
@@ -710,7 +728,7 @@ def serialize_union(value, schema, core):
         value)
 
 
-def deserialize_union(encoded, schema, core):
+def deserialize_union(schema, encoded, core):
     if encoded == NONE_SYMBOL:
         return None
     else:

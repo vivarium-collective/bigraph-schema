@@ -33,7 +33,7 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
-def apply_schema(current, update, schema, core):
+def apply_schema(schema, current, update, core):
     outcome = core.resolve_schemas(current, update)
     return outcome
 
@@ -430,8 +430,8 @@ class TypeSystem:
             check_key)
             
         return check_function(
-            state,
             schema,
+            state,
             self)
 
 
@@ -440,11 +440,15 @@ class TypeSystem:
         return self.check_state(schema, state)
     
 
-    def fold_state(self, schema, state, method):
+    def fold_state(self, schema, state, method, values):
         if isinstance(schema, str) or isinstance(schema, list):
             # this assumes access always returns a dict
             schema = self.access(schema)
-            return self.fold_state(schema, state, method)
+            return self.fold_state(
+                schema,
+                state,
+                method,
+                values)
 
         elif isinstance(state, dict) and '_fold' in state:
             fold_key = state['_fold']
@@ -460,15 +464,20 @@ class TypeSystem:
             fold_key)
             
         return fold_function(
-            method,
-            state,
             schema,
+            state,
+            method,
+            values,
             self)
 
 
-    def fold(self, initial_schema, state, method):
+    def fold(self, initial_schema, state, method, values=None):
         schema = self.retrieve(initial_schema)
-        return self.fold_state(schema, state, method)
+        return self.fold_state(
+            schema,
+            state,
+            method,
+            values)
 
 
     def validate(self, schema, state):
@@ -494,18 +503,35 @@ class TypeSystem:
                 update['_react'])
 
         elif isinstance(update, dict) and '_fold' in update:
+            fold = update['_fold']
+
+            if isinstance(fold, dict):
+                method = fold['method']
+                values = {
+                    key: value
+                    for key, value in fold.items()
+                    if key != 'method'}
+
+            elif isinstance(fold, str):
+                method = fold
+                values = {}
+
+            else:
+                raise Exception(f'unknown fold: {pf(update)}')
+
             state = self.fold(
                 schema,
                 state,
-                update['_fold'])
+                method,
+                values)
 
         elif '_apply' in schema and schema['_apply'] != 'any':
             apply_function = self.type_registry.apply_registry.access(schema['_apply'])
             
             state = apply_function(
+                schema,
                 state,
                 update,
-                schema,
                 self)
 
         elif isinstance(schema, str) or isinstance(schema, list):
@@ -544,9 +570,9 @@ class TypeSystem:
             apply_function = self.type_registry.apply_registry.access('set')
             
             state = apply_function(
+                schema,
                 state,
                 update,
-                schema,
                 self)
 
         elif isinstance(schema, str) or isinstance(schema, list):
@@ -591,8 +617,8 @@ class TypeSystem:
                     f'serialize function not in the registry: {schema}')
             else:
                 return serialize_function(
-                    state,
                     found,
+                    state,
                     self)
         else:
             tree = {
@@ -622,8 +648,8 @@ class TypeSystem:
                 encoded = self.default(schema)
 
             return deserialize_function(
-                encoded,
                 found,
+                encoded,
                 self)
 
         elif isinstance(encoded, dict):
@@ -1319,19 +1345,19 @@ class TypeSystem:
         return subschema
 
 
-def check_number(state, schema, core=None):
+def check_number(schema, state, core=None):
     return isinstance(state, numbers.Number)
 
-def check_boolean(state, schema, core=None):
+def check_boolean(schema, state, core=None):
     return isinstance(state, bool)
 
-def check_integer(state, schema, core=None):
+def check_integer(schema, state, core=None):
     return isinstance(state, int) and not isinstance(state, bool)
 
-def check_float(state, schema, core=None):
+def check_float(schema, state, core=None):
     return isinstance(state, float)
 
-def check_string(state, schema, core=None):
+def check_string(schema, state, core=None):
     return isinstance(state, str)
 
 
@@ -1359,7 +1385,7 @@ class Edge:
 # Apply methods #
 #################
 
-def apply_boolean(current: bool, update: bool, schema, core=None) -> bool:
+def apply_boolean(schema, current: bool, update: bool, core=None) -> bool:
     """Performs a bit flip if `current` does not match `update`, returning update. Returns current if they match."""
     if current != update:
         return update
@@ -1367,18 +1393,18 @@ def apply_boolean(current: bool, update: bool, schema, core=None) -> bool:
         return current
 
 
-def serialize_boolean(value: bool, schema, core) -> str:
+def serialize_boolean(schema, value: bool, core) -> str:
     return str(value)
 
 
-def deserialize_boolean(encoded, schema, core) -> bool:
+def deserialize_boolean(schema, encoded, core) -> bool:
     if encoded == 'true':
         return True
     elif encoded == 'false':
         return False
 
 
-def accumulate(current, update, schema, core):
+def accumulate(schema, current, update, core):
     if current is None:
         return update
     if update is None:
@@ -1387,7 +1413,7 @@ def accumulate(current, update, schema, core):
         return current + update
 
 
-def set_apply(current, update, schema, core):
+def set_apply(schema, current, update, core):
     if isinstance(current, dict) and isinstance(update, dict):
         for key, value in update.items():
             current[key] = set_apply(
@@ -1402,13 +1428,16 @@ def set_apply(current, update, schema, core):
         return update        
 
 
-def concatenate(current, update, schema, core=None):
+def concatenate(schema, current, update, core=None):
     return current + update
 
 
-def divide_float(state, schema, core):
-    half = state / 2.0
-    return [half, half]
+def divide_float(schema, state, values, core):
+    divisions = values.get('divisions', 2)
+    portion = float(state) / divisions
+    return [
+        portion
+        for _ in range(divisions)]
 
 
 # ##################
@@ -1417,13 +1446,13 @@ def divide_float(state, schema, core):
 # # support dividing by ratios?
 # # ---> divide_float({...}, [0.1, 0.3, 0.6])
 
-# def divide_float(value, ratios, schema, core=None):
+# def divide_float(schema, value, ratios, core=None):
 #     half = value / 2.0
 #     return (half, half)
 
 
 # support function core for registrys?
-def divide_integer(value, schema, core):
+def divide_integer(schema, value, values, core):
     half = value // 2
     other_half = half
     if value % 2 == 1:
@@ -1431,7 +1460,7 @@ def divide_integer(value, schema, core):
     return [half, other_half]
 
 
-def divide_longest(dimensions, schema, core):
+def divide_longest(schema, dimensions, values, core):
     # any way to declare the required keys for this function in the registry?
     # find a way to ask a function what type its domain and codomain are
 
@@ -1446,24 +1475,24 @@ def divide_longest(dimensions, schema, core):
         return [{'width': width, 'height': x}, {'width': width, 'height': y}]
 
 
-def replace(current, update, schema, core=None):
+def replace(schema, current, update, core=None):
     return update
 
 
-def serialize_string(value, schema, core=None):
+def serialize_string(schema, value, core=None):
     return value
 
 
-def deserialize_string(encoded, schema, core=None):
+def deserialize_string(schema, encoded, core=None):
     if isinstance(encoded, str):
         return encoded
 
 
-def to_string(value, schema, core=None):
+def to_string(schema, value, core=None):
     return str(value)
 
 
-def deserialize_integer(encoded, schema, core=None):
+def deserialize_integer(schema, encoded, core=None):
     value = None
     try:
         value = int(encoded)
@@ -1473,7 +1502,7 @@ def deserialize_integer(encoded, schema, core=None):
     return value
 
 
-def deserialize_float(encoded, schema, core=None):
+def deserialize_float(schema, encoded, core=None):
     value = None
     try:
         value = float(encoded)
@@ -1483,11 +1512,11 @@ def deserialize_float(encoded, schema, core=None):
     return value
 
 
-def evaluate(encoded, schema, core=None):
+def evaluate(schema, encoded, core=None):
     return eval(encoded)
 
 
-def apply_list(current, update, schema, core):
+def apply_list(schema, current, update, core):
     element_type = core.find_parameter(
         schema,
         'element')
@@ -1507,7 +1536,7 @@ def apply_list(current, update, schema, core):
         raise Exception(f'trying to apply an update to an existing list, but the update is not a list: {update}')
 
 
-def check_list(state, schema, core):
+def check_list(schema, state, core):
     element_type = core.find_parameter(
         schema,
         'element')
@@ -1526,7 +1555,7 @@ def check_list(state, schema, core):
         return False
 
 
-def serialize_list(value, schema, core=None):
+def serialize_list(schema, value, core=None):
     element_type = core.find_parameter(
         schema,
         'element')
@@ -1538,7 +1567,7 @@ def serialize_list(value, schema, core=None):
         for element in value]
 
 
-def deserialize_list(encoded, schema, core=None):
+def deserialize_list(schema, encoded, core=None):
     if isinstance(encoded, list):
         element_type = core.find_parameter(
             schema,
@@ -1551,7 +1580,7 @@ def deserialize_list(encoded, schema, core=None):
             for element in encoded]
 
 
-def check_tree(state, schema, core):
+def check_tree(schema, state, core):
     leaf_type = core.find_parameter(
         schema,
         'leaf')
@@ -1573,13 +1602,13 @@ def check_tree(state, schema, core):
         return core.check(leaf_type, state)
 
 
-def serialize_tree(value, schema, core):
+def serialize_tree(schema, value, core):
     if isinstance(value, dict):
         encoded = {}
         for key, subvalue in value.items():
             encoded[key] = serialize_tree(
-                subvalue,
                 schema,
+                subvalue,
                 core)
 
     else:
@@ -1597,11 +1626,11 @@ def serialize_tree(value, schema, core):
     return encoded
 
 
-def deserialize_tree(encoded, schema, core):
+def deserialize_tree(schema, encoded, core):
     if isinstance(encoded, dict):
         tree = {}
         for key, value in encoded.items():
-            tree[key] = deserialize_tree(value, schema, core)
+            tree[key] = deserialize_tree(schema, value, core)
         return tree
 
     else:
@@ -1617,7 +1646,7 @@ def deserialize_tree(encoded, schema, core):
             return encoded
 
 
-def apply_map(current, update, schema, core=None):
+def apply_map(schema, current, update, core=None):
     if not isinstance(current, dict):
         raise Exception(f'trying to apply an update to a value that is not a map:\n  value: {current}\n  update: {update}')
     if not isinstance(update, dict):
@@ -1641,7 +1670,7 @@ def apply_map(current, update, schema, core=None):
     return result
 
 
-def check_map(state, schema, core=None):
+def check_map(schema, state, core=None):
     value_type = core.find_parameter(
         schema,
         'value')
@@ -1656,7 +1685,7 @@ def check_map(state, schema, core=None):
     return True
 
 
-def serialize_map(value, schema, core=None):
+def serialize_map(schema, value, core=None):
     value_type = core.find_parameter(
         schema,
         'value')
@@ -1668,7 +1697,7 @@ def serialize_map(value, schema, core=None):
         for key, subvalue in value.items()}
 
 
-def deserialize_map(encoded, schema, core=None):
+def deserialize_map(schema, encoded, core=None):
     if isinstance(encoded, dict):
         value_type = core.find_parameter(
             schema,
@@ -1681,7 +1710,7 @@ def deserialize_map(encoded, schema, core=None):
             for key, subvalue in encoded.items()}
 
 
-def apply_maybe(current, update, schema, core):
+def apply_maybe(schema, current, update, core):
     if current is None or update is None:
         return update
     else:
@@ -1695,7 +1724,7 @@ def apply_maybe(current, update, schema, core):
             update)
 
 
-def check_maybe(state, schema, core):
+def check_maybe(schema, state, core):
     if state is None:
         return True
     else:
@@ -1706,7 +1735,7 @@ def check_maybe(state, schema, core):
         return core.check(value_type, state)
 
 
-def serialize_maybe(value, schema, core):
+def serialize_maybe(schema, value, core):
     if value is None:
         return NONE_SYMBOL
     else:
@@ -1719,7 +1748,7 @@ def serialize_maybe(value, schema, core):
             value)
 
 
-def deserialize_maybe(encoded, schema, core):
+def deserialize_maybe(schema, encoded, core):
     if encoded == NONE_SYMBOL:
         return None
     else:
@@ -1731,29 +1760,29 @@ def deserialize_maybe(encoded, schema, core):
 
 
 # TODO: deal with all the different unit core
-def apply_units(current, update, schema, core):
+def apply_units(schema, current, update, core):
     return current + update
 
 
-def check_units(state, schema, core):
+def check_units(schema, state, core):
     # TODO: expand this to check the actual units for compatibility
     return isinstance(state, pint.Quantity)
 
 
-def serialize_units(value, schema, core):
+def serialize_units(schema, value, core):
     return str(value)
 
 
-def deserialize_units(encoded, schema, core):
+def deserialize_units(schema, encoded, core):
     return units(encoded)
 
 
-def apply_path(current, update, schema, core):
+def apply_path(schema, current, update, core):
     # paths replace previous paths
     return update
 
 
-def apply_edge(current, update, schema, core):
+def apply_edge(schema, current, update, core):
     result = current.copy()
     result['inputs'] = core.apply(
         'wires',
@@ -1774,15 +1803,15 @@ def check_ports(state, core, key):
         state[key])
 
 
-def check_edge(state, schema, core):
+def check_edge(schema, state, core):
     return isinstance(state, dict) and check_ports(state, core, 'inputs') and check_ports(state, core, 'outputs')
 
 
-def serialize_edge(value, schema, core):
+def serialize_edge(schema, value, core):
     return value
 
 
-def deserialize_edge(encoded, schema, core):
+def deserialize_edge(schema, encoded, core):
     return encoded
 
 
@@ -1796,7 +1825,7 @@ def array_shape(core, schema):
         for parameter in schema['_type_parameters']])
 
 
-def check_array(state, schema, core):
+def check_array(schema, state, core):
     shape_type = core.find_parameter(
         schema,
         'shape')
@@ -1804,11 +1833,11 @@ def check_array(state, schema, core):
     return isinstance(state, np.ndarray) and state.shape == array_shape(core, shape_type) # and state.dtype == bindings['data'] # TODO align numpy data types so we can validate the types of the arrays
 
 
-def apply_array(current, update, schema, core):
+def apply_array(schema, current, update, core):
     return current + update
 
 
-def serialize_array(value, schema, core):
+def serialize_array(schema, value, core):
     ''' Serialize numpy array to bytes '''
 
     if isinstance(value, dict):
@@ -1848,7 +1877,7 @@ def read_shape(shape):
         for x in shape])
 
 
-def deserialize_array(encoded, schema, core):
+def deserialize_array(schema, encoded, core):
     if isinstance(encoded, np.ndarray):
         return encoded
 
@@ -1874,7 +1903,7 @@ def deserialize_array(encoded, schema, core):
                     dtype=dtype)
 
 
-def fold_list(method, state, schema, core):
+def fold_list(schema, state, method, values, core):
     element_type = core.find_parameter(
         schema,
         'element')
@@ -1883,21 +1912,24 @@ def fold_list(method, state, schema, core):
         result = core.fold(
             element_type,
             state,
-            method)
+            method,
+            values)
 
     elif isinstance(state, list):
         subresult = [
             fold_list(
-                method,
-                element,
                 schema,
+                element,
+                method,
+                values, 
                 core)
             for element in state]
 
         result = visit_method(
-            method,
-            subresult,
             schema,
+            subresult,
+            method,
+            values, 
             core)
 
     else:
@@ -1906,7 +1938,7 @@ def fold_list(method, state, schema, core):
     return result
 
 
-def fold_tree(method, state, schema, core):
+def fold_tree(schema, state, method, values, core):
     leaf_type = core.find_parameter(
         schema,
         'leaf')
@@ -1915,7 +1947,8 @@ def fold_tree(method, state, schema, core):
         result = core.fold(
             leaf_type,
             state,
-            method)
+            method,
+            values)
 
     elif isinstance(state, dict):
         subresult = {}
@@ -1925,15 +1958,17 @@ def fold_tree(method, state, schema, core):
                 subresult[key] = branch
             else:
                 subresult[key] = fold_tree(
-                    method,
-                    branch,
                     schema[key] if key in schema else schema,
+                    branch,
+                    method,
+                    values,
                     core)
 
         result = visit_method(
-            method,
-            subresult,
             schema,
+            subresult,
+            method,
+            values,
             core)
 
     else:
@@ -1942,7 +1977,7 @@ def fold_tree(method, state, schema, core):
     return result
 
 
-def fold_map(method, state, schema, core):
+def fold_map(schema, state, method, values, core):
     value_type = core.find_parameter(
         schema,
         'value')
@@ -1953,34 +1988,42 @@ def fold_map(method, state, schema, core):
         subresult[key] = core.fold(
             value_type,
             value,
-            method)
+            method,
+            values)
     
     result = visit_method(
-        method,
-        subresult,
         schema,
+        subresult,
+        method,
+        values,
         core)
 
     return result
 
 
-def fold_maybe(method, state, schema, core):
+def fold_maybe(schema, state, method, values, core):
     value_type = core.find_parameter(
         schema,
         'value')
 
     if state is None:
-        result = [None, None]
+        result = core.fold(
+            'any',
+            state,
+            method,
+            values)
+
     else:
         result = core.fold(
             value_type,
             state,
-            method)
+            method,
+            values)
 
     return result
 
 
-def divide_list(state, schema, core):
+def divide_list(schema, state, values, core):
     element_type = core.find_parameter(
         schema,
         'element')
@@ -1989,13 +2032,15 @@ def divide_list(state, schema, core):
         return core.fold(
             element_type,
             state,
-            core)
+            'divide',
+            values)
 
     elif isinstance(state, list):
-        result = [[], []]
+        divisions = values.get('divisions', 2)
+        result = [[] for _ in range(divisions)]
 
         for elements in state:
-            for index in range(2):
+            for index in range(divisions):
                 result[index].append(
                     elements[index])
 
@@ -2005,7 +2050,7 @@ def divide_list(state, schema, core):
         raise Exception(f'trying to divide list but state does not resemble a list or an element.\n  state: {pf(state)}\n  schema: {pf(schema)}')
 
 
-def divide_tree(state, schema, core):
+def divide_tree(schema, state, values, core):
     leaf_type = core.find_parameter(
         schema,
         'leaf')
@@ -2015,12 +2060,14 @@ def divide_tree(state, schema, core):
             leaf_type,
             state,
             'divide',
-            core)
+            values)
 
     elif isinstance(state, dict):
-        division = [{}, {}]
+        divisions = values.get('divisions', 2)
+        division = [{} for _ in range(divisions)]
+
         for key, value in state.items():
-            for index in range(2):
+            for index in range(divisions):
                 division[index][key] = value[index]
 
         return division
@@ -2029,11 +2076,12 @@ def divide_tree(state, schema, core):
         raise Exception(f'trying to divide tree but state does not resemble a leaf or a tree.\n  state: {pf(state)}\n  schema: {pf(schema)}')
 
 
-def divide_map(state, schema, core):
+def divide_map(schema, state, values, core):
     if isinstance(state, dict):
-        division = [{}, {}]
+        divisions = values.get('divisions', 2)
+        division = [{} for _ in range(divisions)]
         for key, value in state.items():
-            for index in range(2):
+            for index in range(divisions):
                 division[index][key] = value[index]
 
         return division
@@ -3054,15 +3102,21 @@ def test_resolve_schemas(core):
 
 
 def test_apply_schema(core):
-    applied = apply_schema({
+    current = {
         'a': 'number',
         'b': 'map[path]',
-        'd': ('float', 'number', 'list[string]')}, {
+        'd': ('float', 'number', 'list[string]')}
+
+    update = {
         'a': 'float',
         'b': 'map[list[string]]',
         'c': 'string',
-        'd': ('number', 'float', 'path')},
+        'd': ('number', 'float', 'path')}
+
+    applied = apply_schema(
         'schema',
+        current,
+        update,
         core)
 
     assert applied['a']['_type'] == 'float'
@@ -3073,15 +3127,15 @@ def test_apply_schema(core):
     assert applied['d']['_2']['_type'] == 'path'
 
 
-def apply_foursquare(current, update, schema, core):
+def apply_foursquare(schema, current, update, core):
     if isinstance(current, bool) or isinstance(update, bool):
         return update
     else:
         for key, value in update.items():
             current[key] = apply_foursquare(
+                schema,
                 current[key],
                 value,
-                schema,
                 core)
 
         return current
@@ -3884,16 +3938,18 @@ def test_divide(core):
                         'OOO': ['..', '..', 'a', 'w']}}},
             'e': np.zeros((3, 4, 10))}}
 
+    divisions = 3
     division = core.fold(
         schema,
         state,
-        'divide')
+        'divide',
+        {'divisions': divisions})
 
-    assert len(division) == 2
+    assert len(division) == divisions
     assert 'a' in division[0].keys()
     assert len(division[1]['b']) == len(state['b'])
 
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
 
 
 
