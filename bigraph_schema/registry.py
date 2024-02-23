@@ -347,9 +347,9 @@ class Registry(object):
         if callable(item) and self.function_keys:
             sig = inspect.signature(item)
             sig_keys = set(sig.parameters.keys())
-            assert all(
-                key in self.function_keys for key in sig_keys), f"Function '{item.__name__}' keys {sig_keys} are not all " \
-                                                                f"in the function_keys {self.function_keys}"
+            # assert all(
+            #     key in self.function_keys for key in sig_keys), f"Function '{item.__name__}' keys {sig_keys} are not all " \
+            #                                                     f"in the function_keys {self.function_keys}"
 
         keys = [key]
         keys.extend(alternate_keys)

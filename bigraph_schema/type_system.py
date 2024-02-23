@@ -34,32 +34,8 @@ TYPE_SCHEMAS = {
 
 
 def apply_schema(current, update, schema, core):
-    current = core.access(current)
-    update = core.access(update)
-
-    if '_type' in update:
-        if '_type' in current:
-            current = core.resolve_schemas(
-                current,
-                update)
-        else:
-            current['_type'] = update['_type']
-
-    for key, subschema in update.items():
-        if key in type_schema_keys:
-            if key not in ['_type', '_inherit']:
-                current[key] = subschema
-
-        elif key in current:
-            current[key] = apply_schema(
-                current.get(key),
-                subschema,
-                schema,
-                core)
-        else:
-            current[key] = subschema
-
-    return current
+    outcome = core.resolve_schemas(current, update)
+    return outcome
 
 
 class TypeSystem:
@@ -986,9 +962,9 @@ class TypeSystem:
         return True
 
 
-    def resolve_schemas(self, current, update):
-        current = self.access(current)
-        update = self.access(update)
+    def resolve_schemas(self, initial_current, initial_update):
+        current = self.access(initial_current)
+        update = self.access(initial_update)
 
         if self.equivalent(current, update):
             return current
@@ -999,24 +975,38 @@ class TypeSystem:
         elif self.inherits_from(update, current):
             return update
 
-        elif '_type' in current and '_type' in update:
-            raise Exception(f'trying to resolve schemas but they are incompatible:\n  current: {current}\n  update: {update}')
+        elif '_type' in current and '_type' in update and current['_type'] == update['_type']:
+            outcome = current.copy()
 
-        else:
-            outcome = {}
-
-            for key, value in current.items():
-                if key in type_schema_keys or key not in update:
-                    outcome[key] = value
-
+            for key in update:
+                if key == '_type_parameters' and '_type_parameters' in current:
+                    for parameter in update['_type_parameters']:
+                        parameter_key = f'_{parameter}'
+                        if parameter in current['_type_parameters']:
+                            outcome[parameter_key] = self.resolve_schemas(
+                                current[parameter_key],
+                                update[parameter_key])
+                        else:
+                            outcome[parameter_key] = update[parameter_key]
+                elif key in type_schema_keys:
+                    outcome[key] = update[key]
                 else:
                     outcome[key] = self.resolve_schemas(
-                        value,
+                        outcome.get(key),
                         update[key])
 
-            for key, value in update.items():
-                if key not in outcome:
-                    outcome[key] = value
+            return outcome
+
+        else:
+            outcome = current.copy()
+
+            for key in update:
+                if key in type_schema_keys or not key in outcome:
+                    outcome[key] = update[key]
+                else:
+                    outcome[key] = self.resolve_schemas(
+                        outcome[key],
+                        update[key])
 
             return outcome
 
@@ -3065,17 +3055,22 @@ def test_resolve_schemas(core):
 
 def test_apply_schema(core):
     applied = apply_schema({
-        'a': 'float',
-        'b': 'map[list[string]]'}, {
         'a': 'number',
         'b': 'map[path]',
-        'c': 'string'},
+        'd': ('float', 'number', 'list[string]')}, {
+        'a': 'float',
+        'b': 'map[list[string]]',
+        'c': 'string',
+        'd': ('number', 'float', 'path')},
         'schema',
         core)
 
     assert applied['a']['_type'] == 'float'
     assert applied['b']['_value']['_type'] == 'path'
     assert applied['c']['_type'] == 'string'
+    assert applied['d']['_0']['_type'] == 'float'
+    assert applied['d']['_1']['_type'] == 'float'
+    assert applied['d']['_2']['_type'] == 'path'
 
 
 def apply_foursquare(current, update, schema, core):
@@ -3864,11 +3859,8 @@ def test_divide(core):
         'a': 'tree[maybe[float]]',
         'b': 'float~list[string]',
         'c': {
-            'd': 'integer',
-            'e': 'boolean'}}
-        # TODO: 
-        #   'd': 'map[edge]',
-        #   'e': 'array[(3|4|10),float]'}
+            'd': 'map[edge[GGG:float,OOO:float]]',
+            'e': 'array[(3|4|10),float]'}}
 
     state = {
         'a': {
@@ -3879,8 +3871,18 @@ def test_divide(core):
             'w': 44.444},
         'b': ['1', '11', '111', '1111'],
         'c': {
-            'd': 5,
-            'e': False}}
+            'd': {
+                'A': {
+                    'inputs': {
+                        'GGG': ['..', '..', 'a', 'w']},
+                    'outputs': {
+                        'OOO': ['..', '..', 'a', 'x', 'y']}},
+                'B': {
+                    'inputs': {
+                        'GGG': ['..', '..', 'a', 'x', 'y']},
+                    'outputs': {
+                        'OOO': ['..', '..', 'a', 'w']}}},
+            'e': np.zeros((3, 4, 10))}}
 
     division = core.fold(
         schema,
