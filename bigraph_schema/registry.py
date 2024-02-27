@@ -327,7 +327,7 @@ class Registry(object):
         self.main_keys = set([])
         self.function_keys = set(function_keys)
 
-    def register(self, key, item, alternate_keys=tuple(), force=False):
+    def register(self, key, item, alternate_keys=tuple(), strict=False):
         '''
         Add an item to the registry.
 
@@ -340,7 +340,7 @@ class Registry(object):
 
                 This may be useful if you want to be able to look up an
                 item in the registry under multiple keys.
-            force (bool): Force the registration, overriding existing keys. False by default.
+            strict (bool): Disallow re-registration, overriding existing keys. False by default.
         '''
 
         # check that registered function have the required function keys
@@ -354,11 +354,17 @@ class Registry(object):
         keys = [key]
         keys.extend(alternate_keys)
         for registry_key in keys:
-            if registry_key in self.registry and not force:
+            if registry_key in self.registry:
                 if item != self.registry[registry_key]:
-                    raise Exception(
-                        'registry already contains an entry for {}: {} --> {}'.format(
-                            registry_key, self.registry[key], item))
+                    if strict:
+                        raise Exception(
+                            'registry already contains an entry for {}: {} --> {}'.format(
+                                registry_key, self.registry[key], item))
+
+                    else:
+                        self.registry[registry_key] = deep_merge(
+                            self.registry[registry_key],
+                            item)
             else:
                 self.registry[registry_key] = item
         self.main_keys.add(key)
@@ -1021,9 +1027,11 @@ def test_reregister_type():
     type_registry = TypeRegistry()
     type_registry.register('A', {'_default': 'a'})
     with pytest.raises(Exception) as e:
-        type_registry.register('A', {'_default': 'b'})
+        type_registry.register('A', {'_default': 'b'}, strict=True)
 
-    type_registry.register('A', {'_default': 'b'}, force=True)
+    type_registry.register('A', {'_default': 'b'})
+
+    assert type_registry.access('A')['_default'] == 'b'
 
 
 def test_remove_omitted():

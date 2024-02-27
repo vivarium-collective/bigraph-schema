@@ -77,12 +77,6 @@ class TypeSystem:
             reaction)
 
 
-    def register_method(self, method_key, method):
-        self.method_registry.register(
-            method_key,
-            method)
-
-
     def exists(self, type_key):
         return type_key in self.type_registry.registry
 
@@ -1312,11 +1306,6 @@ class TypeSystem:
         return self.access(schema), final_state
         
 
-    def register_method(self, method_key, method):
-        registry = self.type_registry.find_registry(method_key)
-        registry.register_method(method)
-        
-
     def find_method(self, schema, method_key):
         if not isinstance(schema, dict) or method_key not in schema:
             schema = self.access(schema)
@@ -1330,6 +1319,22 @@ class TypeSystem:
                 method = registry.access(method_name)
 
                 return method
+
+
+    def import_types(self, package, strict=False):
+        for type_key, type_data in package.items():
+            if not (strict and self.exists(type_key)):
+                self.register(
+                    type_key,
+                    type_data)
+
+
+    def define(self, method_name, methods):
+        method_key = f'_{method_name}'
+        for type_key, method in methods.items():
+            self.type_registry.register(
+                type_key,
+                {method_key: method})
 
 
     def link_place(self, place, link):
@@ -1417,9 +1422,9 @@ def set_apply(schema, current, update, core):
     if isinstance(current, dict) and isinstance(update, dict):
         for key, value in update.items():
             current[key] = set_apply(
+                schema,
                 current[key],
                 value,
-                schema,
                 core)
 
         return current
@@ -2192,8 +2197,6 @@ base_type_library = {
         '_fold': fold_tree,
         '_divide': divide_tree,
         '_type_parameters': ['leaf'],
-        # '_methods': {
-        #     'divide': 'divide_tree'},
         '_description': 'mapping from str to some type in a potentially nested form'},
 
     'map': {
