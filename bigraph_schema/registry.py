@@ -597,6 +597,35 @@ def apply_any(schema, current, update, core):
         return update
 
 
+def slice_any(schema, state, path, core):
+    if not isinstance(path, (list, tuple)):
+        if path is None:
+            path = ()
+        else:
+            path = [path]
+
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+        step = None
+
+        if isinstance(state, dict):
+            if head not in state:
+                state[head] = {}
+            step = state[head]
+
+        elif hasattr(state, head):
+            step = getattr(state, head)
+
+        return core.slice(
+            schema.get(head, schema),
+            step,
+            tail)
+
+    else:
+        return schema, state
+
+
 def check_any(schema, state, core):
     if isinstance(schema, dict):
         for key, subschema in schema.items():
@@ -650,6 +679,23 @@ def check_tuple(schema, state, core):
             return False
 
     return True
+
+
+def slice_tuple(schema, state, path, core):
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if str(head) in schema['type_parameters']:
+            index = schema['type_parameters'].index(head)
+            index_key = f'_{index}'
+            subschema = core.access(schema[index_key])
+
+            return core.slice(subschema, state[head], tail)
+        else:
+            raise Exception(f'trying to index a tuple with a key that is not an index: {state} {head}')
+    else:
+        return schema, state
 
 
 def serialize_tuple(schema, value, core):
@@ -723,6 +769,19 @@ def check_union(schema, state, core):
     return found is not None and len(found) > 0
 
 
+def slice_union(schema, state, path, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        state)
+
+    return core.slice(
+        union_type,
+        state,
+        path,
+        core)
+
+
 def serialize_union(schema, value, core):
     union_type = find_union_type(
         core,
@@ -753,6 +812,7 @@ def deserialize_union(schema, encoded, core):
 registry_types = {
     'any': {
         '_type': 'any',
+        '_slice': slice_any,
         '_apply': apply_any,
         '_check': check_any,
         '_serialize': serialize_any,
@@ -762,9 +822,10 @@ registry_types = {
 
     'tuple': {
         '_type': 'tuple',
-        '_default': '()',
+        '_default': (),
         '_apply': apply_tuple,
         '_check': check_tuple,
+        '_slice': slice_tuple,
         '_serialize': serialize_tuple,
         '_deserialize': deserialize_tuple,
         '_fold': fold_tuple,
@@ -776,6 +837,7 @@ registry_types = {
         '_default': NONE_SYMBOL,
         '_apply': apply_union,
         '_check': check_union,
+        '_slice': slice_union,
         '_serialize': serialize_union,
         '_deserialize': deserialize_union,
         '_fold': fold_union,

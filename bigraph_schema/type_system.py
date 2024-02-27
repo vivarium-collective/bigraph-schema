@@ -251,6 +251,37 @@ class TypeSystem:
         return default
 
 
+    def slice(self, schema, state, path):
+        if isinstance(schema, str) or isinstance(schema, list):
+            schema = self.access(schema)
+            return self.slice(schema, state, path)
+
+        if not isinstance(path, (list, tuple)):
+            if path is None:
+                path = ()
+            else:
+                path = [path]
+
+        if isinstance(state, dict) and '_slice' in state:
+            slice_key = state['_slice']
+
+        elif '_slice' in schema:
+            slice_key = schema['_slice']
+
+        else:
+            any_type = self.access('any')
+            slice_key = any_type['_slice']
+
+        slice_function = self.type_registry.slice_registry.access(
+            slice_key)
+
+        return slice_function(
+            schema,
+            state,
+            path,
+            self)
+
+
     def match_node(self, schema, state, pattern):
         if isinstance(pattern, dict):
             if not isinstance(state, dict):
@@ -921,9 +952,12 @@ class TypeSystem:
             states)
 
 
-    def equivalent(self, current, question):
-        current = self.access(current)
-        question = self.access(question)
+    def equivalent(self, icurrent, iquestion):
+        if icurrent == iquestion:
+            return True
+
+        current = self.access(icurrent)
+        question = self.access(iquestion)
 
         if '_type' in current:
             if '_type' in question:
@@ -955,13 +989,6 @@ class TypeSystem:
         ancestor = self.access(ancestor)
 
         if '_type' in descendant:
-            if '_type_parameters' in descendant:
-                for type_parameter in descendant['_type_parameters']:
-                    parameter_key = f'_{type_parameter}'
-                    if parameter_key in ancestor:
-                        if not self.inherits_from(descendant[parameter_key], ancestor[parameter_key]):
-                            return False
-
             if '_inherit' in descendant:
                 for inherit in descendant['_inherit']:
 
@@ -969,7 +996,15 @@ class TypeSystem:
                         return True
 
                 return False
-            elif '_type' not in ancestor or descendant['_type'] != ancestor['_type']:
+
+            elif '_type_parameters' in descendant:
+                for type_parameter in descendant['_type_parameters']:
+                    parameter_key = f'_{type_parameter}'
+                    if parameter_key in ancestor:
+                        if not self.inherits_from(descendant[parameter_key], ancestor[parameter_key]):
+                            return False
+
+            if '_type' not in ancestor or descendant['_type'] != ancestor['_type']:
                 return False
 
         else:
@@ -1560,6 +1595,24 @@ def check_list(schema, state, core):
         return False
 
 
+def slice_list(schema, state, path, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if not isinstance(head, int) or head >= len(path):
+            raise Exception(f'bad index for list: {path} for {state}')
+
+        step = state[head]
+        return core.slice(element_type, step, tail)
+    else:
+        return schema, state
+
+
 def serialize_list(schema, value, core=None):
     element_type = core.find_parameter(
         schema,
@@ -1605,6 +1658,27 @@ def check_tree(schema, state, core):
         return True
     else:
         return core.check(leaf_type, state)
+
+
+def slice_tree(schema, state, path, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if not head in state:
+            state[head] = {}
+
+        step = state[head]
+        if core.check(leaf_type, step):
+            return core.slice(leaf_type, step, tail)
+        else:
+            return core.slice(schema, step, tail)
+    else:
+        return schema, state
 
 
 def serialize_tree(schema, value, core):
@@ -1690,6 +1764,28 @@ def check_map(schema, state, core=None):
     return True
 
 
+def slice_map(schema, state, path, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if not head in state:
+            state[head] = core.default(
+                value_type)
+
+        step = state[head]
+        return core.slice(
+            value_type,
+            step,
+            tail)
+    else:
+        return schema, state
+
+
 def serialize_map(schema, value, core=None):
     value_type = core.find_parameter(
         schema,
@@ -1738,6 +1834,21 @@ def check_maybe(schema, state, core):
             'value')
 
         return core.check(value_type, state)
+
+
+def slice_maybe(schema, state, path, core):
+    if state is None:
+        return schema, None
+
+    else:
+        value_type = core.find_parameter(
+            schema,
+            'value')
+
+        return core.slice(
+            value_type,
+            state,
+            path)
 
 
 def serialize_maybe(schema, value, core):
@@ -1836,6 +1947,34 @@ def check_array(schema, state, core):
         'shape')
 
     return isinstance(state, np.ndarray) and state.shape == array_shape(core, shape_type) # and state.dtype == bindings['data'] # TODO align numpy data types so we can validate the types of the arrays
+
+
+
+def slice_array(schema, state, path, core):
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+        step = state[head]
+
+        if isinstance(step, np.ndarray):
+            sliceschema = schema.copy()
+            sliceschema['_shape'] = step.shape
+            return core.slice(
+                sliceschema,
+                step,
+                tail)
+        else:
+            data_type = core.find_parameter(
+                schema,
+                'data')
+
+            return core.slice(
+                data_type,
+                step,
+                tail)
+
+    else:
+        return schema, state
 
 
 def apply_array(schema, current, update, core):
@@ -2178,6 +2317,7 @@ base_type_library = {
         '_type': 'list',
         '_default': [],
         '_check': check_list,
+        '_slice': slice_list,
         '_apply': apply_list,
         '_serialize': serialize_list,
         '_deserialize': deserialize_list,
@@ -2191,6 +2331,7 @@ base_type_library = {
         '_type': 'tree',
         '_default': {},
         '_check': check_tree,
+        '_slice': slice_tree,
         '_apply': apply_tree,
         '_serialize': serialize_tree,
         '_deserialize': deserialize_tree,
@@ -2206,6 +2347,7 @@ base_type_library = {
         '_serialize': serialize_map,
         '_deserialize': deserialize_map,
         '_check': check_map,
+        '_slice': slice_map,
         '_fold': fold_map,
         '_divide': divide_map,
         '_type_parameters': ['value'],
@@ -2216,6 +2358,7 @@ base_type_library = {
         '_default': {
             '_data': 'float'},
         '_check': check_array,
+        '_slice': slice_array,
         '_apply': apply_array,
         '_serialize': serialize_array,
         '_deserialize': deserialize_array,
@@ -2227,8 +2370,9 @@ base_type_library = {
     'maybe': {
         '_type': 'maybe',
         '_default': NONE_SYMBOL,
-        '_check': check_maybe,
         '_apply': apply_maybe,
+        '_check': check_maybe,
+        '_slice': slice_maybe,
         '_serialize': serialize_maybe,
         '_deserialize': deserialize_maybe,
         '_fold': fold_maybe,
@@ -3952,8 +4096,35 @@ def test_divide(core):
     assert 'a' in division[0].keys()
     assert len(division[1]['b']) == len(state['b'])
 
-    # import ipdb; ipdb.set_trace()
 
+# def test_slice(core):
+#     schema, state = core.slice(
+#         'map[float]',
+#         {'aaaa': 55.555},
+#         ['aaaa'])
+
+#     schema, state = core.complete({}, {
+#         'top': {
+#             '_type': 'tree[list[maybe[(float|integer)~string]]]',
+#             'AAAA': {
+#                 'BBBB': {
+#                     'CCCC': [(1.3, 5), 'okay', (55.555, 1), None, 'what', 'is']}},
+#             'DDDD': [(3333.1, 88), 'in', 'between', (66.8, -3), None, None, 'later']}})
+
+#     import ipdb; ipdb.set_trace()
+
+#     float_schema, float_state = core.slice(
+#         schema,
+#         state,
+#         ['top', 'AAAA', 'BBBB', 'CCCC', 2, 0])
+
+#     assert float_schema['_type'] == 'float'
+#     assert float_state == 55.555
+
+#     assert core.slice(
+#         schema,
+#         state,
+#         ['top', 'AAAA', 'BBBB', 'CCCC', 3])[1] is None
 
 
 if __name__ == '__main__':
@@ -3993,5 +4164,5 @@ if __name__ == '__main__':
     test_edge_type(core)
     test_foursquare(core)
     test_divide(core)
-    
+    # test_slice(core)
 
