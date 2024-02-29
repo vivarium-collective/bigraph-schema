@@ -52,11 +52,10 @@ class TypeSystem:
         register_base_reactions(self)
 
 
-    def find_registry(self, underscore_key):
+    def lookup_registry(self, underscore_key):
         """Find the registry for a given underscore key"""
-        root = underscore_key.trim('_')
-        registry_key = f'{root}_registry'
-        return getattr(self, registry_key)
+
+        return self.type_registry.lookup_registry(underscore_key)
 
 
     def register(self, type_key, type_data, force=False):
@@ -251,29 +250,33 @@ class TypeSystem:
         return default
 
 
-    def slice(self, schema, state, path):
-        if isinstance(schema, str) or isinstance(schema, list):
-            schema = self.access(schema)
-            return self.slice(schema, state, path)
+    def choose_method(self, schema, state, method_name):
+        method_key = f'_{method_name}'
 
-        if not isinstance(path, (list, tuple)):
-            if path is None:
-                path = ()
-            else:
-                path = [path]
+        if isinstance(state, dict) and method_key in state:
+            found = state[method_key]
 
-        if isinstance(state, dict) and '_slice' in state:
-            slice_key = state['_slice']
-
-        elif '_slice' in schema:
-            slice_key = schema['_slice']
+        elif method_key in schema:
+            found = schema[method_key]
 
         else:
             any_type = self.access('any')
-            slice_key = any_type['_slice']
+            found = any_type[method_key]
 
-        slice_function = self.type_registry.slice_registry.access(
-            slice_key)
+        registry = self.lookup_registry(method_key)
+        method_function = registry.access(
+            found)
+
+        return method_function
+
+
+    def slice(self, schema, state, path):
+        schema = self.access(schema)
+
+        slice_function = self.choose_method(
+            schema,
+            state,
+            'slice')
 
         return slice_function(
             schema,
@@ -436,24 +439,13 @@ class TypeSystem:
 
 
     def check_state(self, schema, state):
-        if isinstance(schema, str) or isinstance(schema, list):
-            # this assumes access always returns a dict
-            schema = self.access(schema)
-            return self.check_state(schema, state)
+        schema = self.access(schema)
 
-        elif isinstance(state, dict) and '_check' in state:
-            check_key = state['_check']
+        check_function = self.choose_method(
+            schema,
+            state,
+            'check')
 
-        elif '_check' in schema:
-            check_key = schema['_check']
-
-        else:
-            any_type = self.access('any')
-            check_key = any_type['_check']
-
-        check_function = self.type_registry.check_registry.access(
-            check_key)
-            
         return check_function(
             schema,
             state,
@@ -466,28 +458,13 @@ class TypeSystem:
     
 
     def fold_state(self, schema, state, method, values):
-        if isinstance(schema, str) or isinstance(schema, list):
-            # this assumes access always returns a dict
-            schema = self.access(schema)
-            return self.fold_state(
-                schema,
-                state,
-                method,
-                values)
+        schema = self.access(schema)
 
-        elif isinstance(state, dict) and '_fold' in state:
-            fold_key = state['_fold']
+        fold_function = self.choose_method(
+            schema,
+            state,
+            'fold')
 
-        elif '_fold' in schema:
-            fold_key = schema['_fold']
-
-        else:
-            any_type = self.access('any')
-            fold_key = any_type['_fold']
-
-        fold_function = self.type_registry.fold_registry.access(
-            fold_key)
-            
         return fold_function(
             schema,
             state,
@@ -511,13 +488,6 @@ class TypeSystem:
         #   return information about what doesn't match
 
         return {}
-
-
-    def lookup_method(self, data, method_key, default_method):
-        if method_key not in data:
-            return default_method
-        else:
-            pass
 
 
     def apply_update(self, schema, state, update):
@@ -628,67 +598,36 @@ class TypeSystem:
     def set(self, original_schema, initial, update):
         schema = self.access(original_schema)
         state = copy.deepcopy(initial)
+
         return self.set_update(schema, initial, update)
 
 
     def serialize(self, schema, state):
-        found = self.access(schema)
-        if '_serialize' in found:
-            serialize_function = self.type_registry.serialize_registry.access(
-                found['_serialize'])
+        schema = self.retrieve(schema)
 
-            if serialize_function is None:
-                raise Exception(
-                    f'serialize function not in the registry: {schema}')
-            else:
-                return serialize_function(
-                    found,
-                    state,
-                    self)
-        else:
-            tree = {
-                key: self.serialize(
-                    schema[key],
-                    state.get(key))
-                for key in non_schema_keys(schema)}
+        serialize_function = self.choose_method(
+            schema,
+            state,
+            'serialize')
 
-            return tree
+        return serialize_function(
+            schema,
+            state,
+            self)
 
-    def deserialize(self, schema, encoded):
-        found = self.retrieve(schema)
 
-        if '_deserialize' in found:
-            deserialize = found['_deserialize']
-            if isinstance(deserialize, str):
-                deserialize_function = self.type_registry.deserialize_registry.access(
-                    deserialize)
-            else:
-                deserialize_function = deserialize
+    def deserialize(self, schema, state):
+        schema = self.retrieve(schema)
 
-            if deserialize_function is None:
-                raise Exception(
-                    f'deserialize function not in the registry: {deserialize}')
+        deserialize_function = self.choose_method(
+            schema,
+            state,
+            'deserialize')
 
-            if encoded is None:
-                encoded = self.default(schema)
-
-            return deserialize_function(
-                found,
-                encoded,
-                self)
-
-        elif isinstance(encoded, dict):
-            result = {}
-            for key, branch in encoded.items():
-                if key in schema:
-                    result[key] = self.deserialize(
-                        schema[key],
-                        branch)
-            return result
-
-        else:
-            return self.default(
-                schema)
+        return deserialize_function(
+            schema,
+            state,
+            self)
 
 
     def fill_ports(self, schema, wires=None, state=None, top=None, path=None):
@@ -1604,7 +1543,7 @@ def slice_list(schema, state, path, core):
         head = path[0]
         tail = path[1:]
 
-        if not isinstance(head, int) or head >= len(path):
+        if not isinstance(head, int) or head >= len(state):
             raise Exception(f'bad index for list: {path} for {state}')
 
         step = state[head]
@@ -1709,7 +1648,9 @@ def deserialize_tree(schema, encoded, core):
     if isinstance(encoded, dict):
         tree = {}
         for key, value in encoded.items():
-            tree[key] = deserialize_tree(schema, value, core)
+            if not key.startswith('_'):
+                tree[key] = deserialize_tree(schema, value, core)
+
         return tree
 
     else:
@@ -1865,7 +1806,7 @@ def serialize_maybe(schema, value, core):
 
 
 def deserialize_maybe(schema, encoded, core):
-    if encoded == NONE_SYMBOL:
+    if encoded == NONE_SYMBOL or encoded is None:
         return None
     else:
         value_type = core.find_parameter(
@@ -4097,34 +4038,32 @@ def test_divide(core):
     assert len(division[1]['b']) == len(state['b'])
 
 
-# def test_slice(core):
-#     schema, state = core.slice(
-#         'map[float]',
-#         {'aaaa': 55.555},
-#         ['aaaa'])
+def test_slice(core):
+    schema, state = core.slice(
+        'map[float]',
+        {'aaaa': 55.555},
+        ['aaaa'])
 
-#     schema, state = core.complete({}, {
-#         'top': {
-#             '_type': 'tree[list[maybe[(float|integer)~string]]]',
-#             'AAAA': {
-#                 'BBBB': {
-#                     'CCCC': [(1.3, 5), 'okay', (55.555, 1), None, 'what', 'is']}},
-#             'DDDD': [(3333.1, 88), 'in', 'between', (66.8, -3), None, None, 'later']}})
+    schema, state = core.complete({}, {
+        'top': {
+            '_type': 'tree[list[maybe[(float|integer)~string]]]',
+            'AAAA': {
+                'BBBB': {
+                    'CCCC': [(1.3, 5), 'okay', (55.555, 1), None, 'what', 'is']}},
+            'DDDD': [(3333.1, 88), 'in', 'between', (66.8, -3), None, None, 'later']}})
 
-#     import ipdb; ipdb.set_trace()
+    float_schema, float_state = core.slice(
+        schema,
+        state,
+        ['top', 'AAAA', 'BBBB', 'CCCC', 2, 0])
 
-#     float_schema, float_state = core.slice(
-#         schema,
-#         state,
-#         ['top', 'AAAA', 'BBBB', 'CCCC', 2, 0])
+    assert float_schema['_type'] == 'float'
+    assert float_state == 55.555
 
-#     assert float_schema['_type'] == 'float'
-#     assert float_state == 55.555
-
-#     assert core.slice(
-#         schema,
-#         state,
-#         ['top', 'AAAA', 'BBBB', 'CCCC', 3])[1] is None
+    assert core.slice(
+        schema,
+        state,
+        ['top', 'AAAA', 'BBBB', 'CCCC', 3])[1] is None
 
 
 if __name__ == '__main__':
@@ -4164,5 +4103,5 @@ if __name__ == '__main__':
     test_edge_type(core)
     test_foursquare(core)
     test_divide(core)
-    # test_slice(core)
+    test_slice(core)
 
