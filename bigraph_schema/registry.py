@@ -646,12 +646,37 @@ def check_any(schema, state, core):
         return True
 
 
-def serialize_any(schema, value, core):
-    return str(value)
+def serialize_any(schema, state, core):
+    if isinstance(state, dict):
+        tree = {}
+
+        for key in non_schema_keys(schema):
+            encoded = core.serialize(
+                schema.get(key, schema),
+                state.get(key))
+            tree[key] = encoded
+
+        return tree
+
+    else:
+        return str(state)
 
 
-def deserialize_any(schema, encoded, core):
-    return encoded
+def deserialize_any(schema, state, core):
+    if isinstance(state, dict):
+        tree = {}
+
+        for key in non_schema_keys(schema):
+            decoded = core.deserialize(
+                schema.get(key, schema),
+                state.get(key))
+
+            tree[key] = decoded
+
+        return tree
+
+    else:
+        return state
 
 
 def apply_tuple(schema, current, update, core):
@@ -686,8 +711,11 @@ def slice_tuple(schema, state, path, core):
         head = path[0]
         tail = path[1:]
 
-        if str(head) in schema['type_parameters']:
-            index = schema['type_parameters'].index(head)
+        if str(head) in schema['_type_parameters']:
+            try:
+                index = schema['_type_parameters'].index(str(head))
+            except:
+                raise Exception(f'step {head} in path {path} is not a type parameter of\n  schema: {pf(schema)}\n  state: {pf(state)}')
             index_key = f'_{index}'
             subschema = core.access(schema[index_key])
 
@@ -712,11 +740,17 @@ def serialize_tuple(schema, value, core):
     return tuple(result)
 
 
-def deserialize_tuple(schema, encoded, core):
+def deserialize_tuple(schema, state, core):
     parameters = core.parameters_for(schema)
     result = []
 
-    for parameter, code in zip(parameters, encoded):
+    if isinstance(state, str):
+        if (state[0] == '(' and state[-1] == ')') or (state[0] == '[' and state[-1] == ']'):
+            state = state[1:-1].split(',')
+        else:
+            return None
+
+    for parameter, code in zip(parameters, state):
         element = core.deserialize(
             parameter,
             code)
@@ -778,8 +812,7 @@ def slice_union(schema, state, path, core):
     return core.slice(
         union_type,
         state,
-        path,
-        core)
+        path)
 
 
 def serialize_union(schema, value, core):
@@ -1012,21 +1045,11 @@ class TypeRegistry(Registry):
                     union_schema)
 
             elif '_type' in schema:
-                found = self.access(schema['_type'])
-                found_keys = overridable_schema_keys & schema.keys()
-
-                if found_keys or '_type_parameters' in found:
-                    bad_keys = schema.keys() & nonoverridable_schema_keys
-                    if bad_keys:
-                        raise Exception(
-                            f'trying to override a non-overridable key: {bad_keys}')
-
-                    found = copy.deepcopy(found)
-                    found = deep_merge(found, schema)
-
-                if '_type_parameters' in found:
-                    for type_parameter in found['_type_parameters']:
-                        parameter_key = f'_{type_parameter}'
+                registry_type = self.access(schema['_type'])
+                found = schema.copy()
+                for key, value in registry_type.items():
+                    if  key == '_type' or key not in found:
+                        found[key] = value
 
             else:
                 found = {
