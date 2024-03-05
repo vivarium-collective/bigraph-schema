@@ -1045,7 +1045,7 @@ class TypeRegistry(Registry):
                     union_schema)
 
             elif '_type' in schema:
-                registry_type = self.access(schema['_type'])
+                registry_type = self.retrieve(schema['_type'])
                 found = schema.copy()
                 for key, value in registry_type.items():
                     if  key == '_type' or key not in found:
@@ -1102,7 +1102,16 @@ class TypeRegistry(Registry):
                     traceback.print_exc()
                     
         return found
+    
+    def retrieve(self, schema):
+        '''
+        like access(schema) but raises an exception if nothing is found
+        '''
 
+        found = self.access(schema)
+        if found is None:
+            raise Exception(f'schema not found for type: {schema}')
+        return found
 
     def lookup(self, type_key, attribute):
         return self.access(type_key).get(attribute)
