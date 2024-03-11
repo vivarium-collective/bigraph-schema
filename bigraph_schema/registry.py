@@ -9,8 +9,9 @@ import copy
 import collections
 import pytest
 import traceback
-from pydantic import create_model
+from pydantic import create_model, Field
 import inspect
+from typing import Any, Dict, List, Optional, Tuple, Callable, Union
 
 from pprint import pformat as pf
 
@@ -320,6 +321,16 @@ def remove_path(tree, path):
     return tree
 
 
+def map_type_to_pydantic(custom_type: str):
+    """Map custom type strings to Pydantic types."""
+    type_mapping = {
+        'float': float,
+        'int': int,
+        'any': Any
+        # Add more mappings as necessary
+    }
+    return type_mapping.get(custom_type, str)  # Default to str if type is unknown
+
 class Registry(object):
     '''A Registry holds a collection of functions or objects'''
 
@@ -419,20 +430,28 @@ class Registry(object):
     def generate_pydantic_model(self, key):
         found = self.access(key)
         if found is None:
-            raise ValueError(f"'{key}' not found in the registry.")
+            raise ValueError(f"Process '{key}' not found in the registry.")
 
         # Assuming the process class or function has a 'config_schema' attribute
-        # that defines the configuration schema in a dict format where keys are
-        # field names and values are types or Pydantic field definitions.
-        if hasattr(found, 'config_schema'):
-            config_schema = found.config_schema
-        else:
-            # Fallback or default schema if none provided
-            config_schema = {}
+        config_schema = getattr(found, 'config_schema', {})
 
-        # Generate Pydantic model
-        model_name = f"{process_key}ConfigModel"
-        model = create_model(model_name, **config_schema)
+        # Convert custom schema to Pydantic schema
+        pydantic_fields = {}
+        for field_name, field_info in config_schema.items():
+            field_type = field_info.get('_type')
+            default_value = field_info.get('_default')
+
+            # Map your custom types to Pydantic types here
+            pydantic_type = map_type_to_pydantic(field_type)
+
+            # Use default value if specified
+            if default_value is not None:
+                pydantic_fields[field_name] = (pydantic_type, Field(default=default_value))
+            else:
+                pydantic_fields[field_name] = (pydantic_type, ...)
+
+        model_name = f"{key}ConfigModel"
+        model = create_model(model_name, **pydantic_fields)
         return model
 
     def get_pydantic_model(self, key):
