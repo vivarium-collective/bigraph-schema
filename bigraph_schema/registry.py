@@ -9,6 +9,8 @@ import copy
 import collections
 import pytest
 import traceback
+from pydantic import create_model
+import inspect
 
 from pprint import pformat as pf
 
@@ -327,6 +329,8 @@ class Registry(object):
         self.main_keys = set([])
         self.function_keys = set(function_keys)
 
+        self.pydantic_models_cache = {}
+
     def register(self, key, item, alternate_keys=tuple(), strict=False):
         '''
         Add an item to the registry.
@@ -409,7 +413,35 @@ class Registry(object):
         return list(self.main_keys)
 
     def validate(self, item):
+        # TODO -- need more to validate
         return True
+
+    def generate_pydantic_model(self, key):
+        found = self.access(key)
+        if found is None:
+            raise ValueError(f"'{key}' not found in the registry.")
+
+        # Assuming the process class or function has a 'config_schema' attribute
+        # that defines the configuration schema in a dict format where keys are
+        # field names and values are types or Pydantic field definitions.
+        if hasattr(found, 'config_schema'):
+            config_schema = found.config_schema
+        else:
+            # Fallback or default schema if none provided
+            config_schema = {}
+
+        # Generate Pydantic model
+        model_name = f"{process_key}ConfigModel"
+        model = create_model(model_name, **config_schema)
+        return model
+
+    def get_pydantic_model(self, key):
+        if key in self.pydantic_models_cache:
+            return self.pydantic_models_cache[key]
+
+        model = self.generate_pydantic_model(key)
+        self.pydantic_models_cache[key] = model
+        return model
 
 
 def visit_method(schema, state, method, values, core):
