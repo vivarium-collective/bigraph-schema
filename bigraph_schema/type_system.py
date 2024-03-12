@@ -76,6 +76,12 @@ class TypeSystem:
             reaction)
 
 
+    def types(self):
+        return {
+            type_key: type_data
+            for type_key, type_data in self.type_registry.registry.items()}
+
+
     def exists(self, type_key):
         return type_key in self.type_registry.registry
 
@@ -3918,7 +3924,6 @@ def test_infer_edge(core):
         initial_state)
 
     assert core.check(schema, state)
-    assert core.check(schema, update)
     assert not core.check(schema, 15)
 
     result = core.apply(
@@ -3977,7 +3982,6 @@ def test_edge_type(core):
                 'green': ['green', 'green', 'green']}}}
 
     assert core.check(schema, state)
-    assert core.check(schema, update)
     assert not core.check(schema, 15)
 
     result = core.apply(

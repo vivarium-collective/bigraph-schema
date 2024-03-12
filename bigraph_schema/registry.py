@@ -638,6 +638,8 @@ def check_any(schema, state, core):
 
                         if not check:
                             return False
+                    else:
+                        return False
                 else:
                     return False
 
