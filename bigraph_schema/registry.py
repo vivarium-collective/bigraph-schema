@@ -326,7 +326,9 @@ def map_type_to_pydantic(custom_type: str):
     type_mapping = {
         'float': float,
         'int': int,
-        'any': Any
+        'any': Any,
+        'tree': dict,
+        'list': list
         # Add more mappings as necessary
     }
     return type_mapping.get(custom_type, str)  # Default to str if type is unknown

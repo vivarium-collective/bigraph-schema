@@ -40,5 +40,6 @@ setup(
         "fire",
         "pytest",
         "pint",
+        "pydantic",
     ],
 )
