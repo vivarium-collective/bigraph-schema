@@ -331,7 +331,13 @@ def map_type_to_pydantic(custom_type: str):
         'list': list
         # Add more mappings as necessary
     }
-    return type_mapping.get(custom_type, str)  # Default to str if type is unknown
+    if 'tree' in custom_type:
+        return type_mapping['tree']
+    elif 'list' in custom_type:
+        return type_mapping['list']
+    else:
+        return type_mapping.get(custom_type, Any)
+
 
 class Registry(object):
     '''A Registry holds a collection of functions or objects'''
