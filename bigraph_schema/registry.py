@@ -417,9 +417,9 @@ class Registry(object):
         return function_name, module_key
 
 
-    def register_multiple(self, schemas, force=False):
+    def register_multiple(self, schemas, strict=False):
         for key, schema in schemas.items():
-            self.register(key, schema, force=force)
+            self.register(key, schema, strict=strict)
 
     def access(self, key):
         '''
@@ -1199,7 +1199,10 @@ def test_remove_omitted():
 
 
 def test_pydantic_class_from_registry():
+    from bigraph_schema.type_system import base_type_library
+
     r = Registry()
+    r.register_multiple(base_type_library)
     r.register('A', {'_type': 'tuple', '_type_parameters': ['a', 'b']})
 
     r.register('step', {
@@ -1218,6 +1221,8 @@ def test_pydantic_class_from_registry():
 
     # create pydantic class for process
     process_pydantic = r.generate_pydantic_model('process')
+
+    float_pydantic = r.generate_pydantic_model('float')
 
     pass
 
