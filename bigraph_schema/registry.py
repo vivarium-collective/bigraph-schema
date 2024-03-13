@@ -1198,6 +1198,32 @@ def test_remove_omitted():
     assert 'd' not in result['b']
 
 
+def test_pydantic_class_from_registry():
+    r = Registry()
+    r.register('A', {'_type': 'tuple', '_type_parameters': ['a', 'b']})
+
+    r.register('step', {
+        '_type': 'step',
+        '_inherit': 'edge',
+        'address': 'string',
+        'config': 'schema'})
+
+    r.register('process', {
+        '_type': 'process',
+        '_inherit': 'step',
+        'interval': 'float'})
+
+    process_type = r.access('process')
+    print(process_type)
+
+    # create pydantic class for process
+    process_pydantic = r.generate_pydantic_model('process')
+
+    pass
+
+
+
 if __name__ == '__main__':
-    test_reregister_type()
-    test_remove_omitted()
+    # test_reregister_type()
+    # test_remove_omitted()
+    test_pydantic_class_from_registry()
