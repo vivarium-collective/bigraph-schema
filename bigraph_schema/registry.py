@@ -321,7 +321,7 @@ def remove_path(tree, path):
     return tree
 
 
-def map_type_to_pydantic(custom_type: str):
+def map_type_to_pydantic(custom_type: str = None):
     """Map custom type strings to Pydantic types."""
     type_mapping = {
         'float': float,
@@ -331,10 +331,11 @@ def map_type_to_pydantic(custom_type: str):
         'list': list
         # Add more mappings as necessary
     }
-    if 'tree' in custom_type:
-        return type_mapping['tree']
-    elif 'list' in custom_type:
-        return type_mapping['list']
+    if custom_type is not None:
+        if 'tree' in custom_type:
+            return type_mapping['tree']
+        elif 'list' in custom_type:
+            return type_mapping['list']
     else:
         return type_mapping.get(custom_type, Any)
 
