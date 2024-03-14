@@ -328,7 +328,8 @@ def map_type_to_pydantic(custom_type: str = None):
         'int': int,
         'any': Any,
         'tree': dict,
-        'list': list
+        'list': list,
+        'object': object
         # Add more mappings as necessary
     }
     if custom_type is not None:
@@ -336,8 +337,10 @@ def map_type_to_pydantic(custom_type: str = None):
             return type_mapping['tree']
         elif 'list' in custom_type:
             return type_mapping['list']
+        else: 
+            return type_mapping['object']
     else:
-        return type_mapping.get(custom_type, Any)
+        return type_mapping.get(custom_type, object)
 
 
 class Registry(object):
