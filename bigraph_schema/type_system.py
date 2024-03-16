@@ -4049,8 +4049,21 @@ def test_slice(core):
             '_type': 'tree[list[maybe[(float|integer)~string]]]',
             'AAAA': {
                 'BBBB': {
-                    'CCCC': [(1.3, 5), 'okay', (55.555, 1), None, 'what', 'is']}},
-            'DDDD': [(3333.1, 88), 'in', 'between', (66.8, -3), None, None, 'later']}})
+                    'CCCC': [
+                        (1.3, 5),
+                        'okay',
+                        (55.555, 1),
+                        None,
+                        'what',
+                        'is']}},
+            'DDDD': [
+                (3333.1, 88),
+                'in',
+                'between',
+                (66.8, -3),
+                None,
+                None,
+                'later']}})
 
     float_schema, float_state = core.slice(
         schema,
