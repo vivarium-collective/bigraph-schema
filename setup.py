@@ -36,6 +36,7 @@ setup(
     install_requires=[
         # List your package dependencies here
         # "bigraph",
+        "numpy",
         "parsimonious",
         "fire",
         "pytest",
