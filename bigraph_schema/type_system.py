@@ -74,10 +74,10 @@ class TypeSystem:
 
 
     def register(self, type_key, type_data, force=False):
-        '''
+        """
         register the provided type_data under the given type_key, looking up
         the module of any functions provided
-        '''
+        """
 
         self.type_registry.register(
             type_key,
@@ -108,9 +108,9 @@ class TypeSystem:
 
 
     def retrieve(self, schema):
-        '''
+        """
         like access(schema) but raises an exception if nothing is found
-        '''
+        """
 
         found = self.access(schema)
         if found is None:
@@ -1991,7 +1991,7 @@ def apply_array(schema, current, update, core):
 
 
 def serialize_array(schema, value, core):
-    ''' Serialize numpy array to bytes '''
+    """ Serialize numpy array to bytes """
 
     if isinstance(value, dict):
         return value
