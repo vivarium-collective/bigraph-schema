@@ -691,6 +691,51 @@ class TypeSystem:
             self)
 
 
+    def wire(self, schema, state, path, port_key, wires):
+        if isinstance(wires, str):
+            wires = (wires,)
+
+        if len(path) == 0:
+            raise Exception(
+                f'cannot wire {port_key} as we are already at the top level {schema}')
+
+
+
+                    # absolute = resolve_path(
+                    #     path[:-1] + subwires)
+
+                    # destination = self.slice(
+                    #     top_schema,
+                    #     top_state,
+                    #     absolute[:-1])
+                    # destination_key = absolute[-1]
+
+        peer = get_path(
+            state,
+            path[:-1])
+
+        destination = establish_path(
+            peer,
+            wires[:-1],
+            top=state,
+            cursor=path[:-1])
+
+        destination_key = wires[-1]
+
+        if destination_key in destination:
+            # TODO: validate and handle update to more specific type
+            pass
+
+        else:
+            try:
+                destination[destination_key] = self.default(
+                    schema)
+            except:
+                raise Exception(f"schema '{schema}' not found at path {path} port '{port_key}'")
+
+        return state
+
+
     def fill_ports(self, schema, wires=None, state=None, top_schema=None, top_state=None, path=None):
         # deal with wires
         if wires is None:
@@ -720,52 +765,25 @@ class TypeSystem:
                             top_state=top_state,
                             path=path)
                 else:
-                    if isinstance(subwires, str):
-                        subwires = (subwires,)
-
-                    if len(path) == 0:
-                        raise Exception(
-                            f'cannot wire {port_key} as we are already at the top level {schema}')
-
-                    
-
-                    # absolute = resolve_path(
-                    #     path[:-1] + subwires)
-
-                    # destination = self.slice(
-                    #     top_schema,
-                    #     top_state,
-                    #     absolute[:-1])
-                    # destination_key = absolute[-1]
-
-                    peer = get_path(
+                    top_state = self.wire(
+                        port_schema,
                         top_state,
-                        path[:-1])
+                        path,
+                        port_key,
+                        subwires)
 
-                    destination = establish_path(
-                        peer,
-                        subwires[:-1],
-                        top=top_state,
-                        cursor=path[:-1])
-
-                    destination_key = subwires[-1]
-
-                    if destination_key in destination:
-                        pass
-                        # validate_state(
-                        #     port_schema,
-                        #     destination[destination_key])
-                    else:
-                        try:
-                            destination[destination_key] = self.default(
-                                port_schema)
-                        except:
-                            raise Exception(f"schema '{port_schema}' not found at path {path} port '{port_key}'")
             else:
-                # handle unconnected ports
-                pass
+                subwires = [port_key]
+                # wires[port_key] = subwires
+                # top_state = self.wire(
+                #     port_schema,
+                #     top_state,
+                #     path,
+                #     port_key,
+                #     subwires)
 
         return state
+
 
     def fill_state(self, schema, state=None, top_schema=None, top_state=None, path=None, type_key=None, context=None):
         # if a port is disconnected, build a store
@@ -2721,6 +2739,8 @@ def test_fill_ports(core):
                     'inputs': {'DNA': ['chromosome']},
                     'outputs': {
                         'RNA': [ '..', 'cytoplasm']}}}}}
+
+    import ipdb; ipdb.set_trace()
 
     schema, state = core.complete(
         {},
