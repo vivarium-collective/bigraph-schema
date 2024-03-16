@@ -1,7 +1,9 @@
 """
-===============================================
-Protocols for retrieving processes from address
-===============================================
+=========
+Protocols
+=========
+
+This module contains the protocols for retrieving processes from address.
 """
 
 import sys
@@ -10,6 +12,9 @@ import importlib
 
 
 def function_module(function):
+    """
+    Retrieves the fully qualified name of a given function.
+    """
     module = inspect.getmodule(function)
 
     return f'{module.__name__}.{function.__name__}'

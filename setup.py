@@ -30,7 +30,7 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     install_requires=[
         # List your package dependencies here
         "numpy",

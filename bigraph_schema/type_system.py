@@ -33,6 +33,21 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
+def resolve_path(path):
+    resolve = []
+
+    for step in path:
+        if step == '..':
+            if len(resolve) == 0:
+                raise Exception(f'cannot go above the top in path: "{path}"')
+            else:
+                resolve = resolve[:-1]
+        else:
+            resolve.append(step)
+
+    return resolve
+
+
 def apply_schema(schema, current, update, core):
     outcome = core.resolve_schemas(current, update)
     return outcome
@@ -59,10 +74,10 @@ class TypeSystem:
 
 
     def register(self, type_key, type_data, force=False):
-        '''
+        """
         register the provided type_data under the given type_key, looking up
         the module of any functions provided
-        '''
+        """
 
         self.type_registry.register(
             type_key,
@@ -76,6 +91,12 @@ class TypeSystem:
             reaction)
 
 
+    def types(self):
+        return {
+            type_key: type_data
+            for type_key, type_data in self.type_registry.registry.items()}
+
+
     def exists(self, type_key):
         return type_key in self.type_registry.registry
 
@@ -87,9 +108,9 @@ class TypeSystem:
 
 
     def retrieve(self, schema):
-        '''
+        """
         like access(schema) but raises an exception if nothing is found
-        '''
+        """
 
         found = self.access(schema)
         if found is None:
@@ -272,6 +293,8 @@ class TypeSystem:
 
     def slice(self, schema, state, path):
         schema = self.access(schema)
+        if '..' in path:
+            path = resolve_path(path)
 
         slice_function = self.choose_method(
             schema,
@@ -599,7 +622,45 @@ class TypeSystem:
         schema = self.access(original_schema)
         state = copy.deepcopy(initial)
 
-        return self.set_update(schema, initial, update)
+        return self.set_update(schema, state, update)
+
+
+    def bind(self, schema, state, key, target_schema, target_state):
+        schema = self.retrieve(schema)
+
+        bind_function = self.choose_method(
+            schema,
+            state,
+            'bind')
+
+        return bind_function(
+            schema,
+            state,
+            key,
+            target_schema,
+            target_state,
+            self)
+
+
+    def set_slice(self, schema, state, path, target_schema, target_state):
+        if len(path) == 0:
+            return target_schema, target_state
+        else:
+            target_path = path[:-1]
+            target_key = path[-1]
+            destination_schema, destination_state = core.slice(
+                schema,
+                state,
+                target_path)
+
+            result_schema, result_state = core.bind(
+                destination_schema,
+                destination_state,
+                target_key,
+                target_schema,
+                target_state)
+
+            return schema, state
 
 
     def serialize(self, schema, state):
@@ -630,14 +691,61 @@ class TypeSystem:
             self)
 
 
-    def fill_ports(self, schema, wires=None, state=None, top=None, path=None):
+    def wire(self, schema, state, path, port_key, wires):
+        if isinstance(wires, str):
+            wires = (wires,)
+
+        if len(path) == 0:
+            raise Exception(
+                f'cannot wire {port_key} as we are already at the top level {schema}')
+
+
+
+                    # absolute = resolve_path(
+                    #     path[:-1] + subwires)
+
+                    # destination = self.slice(
+                    #     top_schema,
+                    #     top_state,
+                    #     absolute[:-1])
+                    # destination_key = absolute[-1]
+
+        peer = get_path(
+            state,
+            path[:-1])
+
+        destination = establish_path(
+            peer,
+            wires[:-1],
+            top=state,
+            cursor=path[:-1])
+
+        destination_key = wires[-1]
+
+        if destination_key in destination:
+            # TODO: validate and handle update to more specific type
+            pass
+
+        else:
+            try:
+                destination[destination_key] = self.default(
+                    schema)
+            except:
+                raise Exception(f"schema '{schema}' not found at path {path} port '{port_key}'")
+
+        return state
+
+
+    def fill_ports(self, schema, wires=None, state=None, top_schema=None, top_state=None, path=None):
         # deal with wires
         if wires is None:
             wires = {}
         if state is None:
             state = {}
-        if top is None:
-            top = state
+        if top_schema is None:
+            top_schema = schema
+        if top_state is None:
+            top_state = state
         if path is None:
             path = []
 
@@ -653,46 +761,31 @@ class TypeSystem:
                             port_schema,
                             wires=subwires,
                             state=state.get(port_key),
-                            top=top,
+                            top_schema=top_schema,
+                            top_state=top_state,
                             path=path)
                 else:
-                    if isinstance(subwires, str):
-                        subwires = (subwires,)
+                    top_state = self.wire(
+                        port_schema,
+                        top_state,
+                        path,
+                        port_key,
+                        subwires)
 
-                    if len(path) == 0:
-                        raise Exception(
-                            f'cannot wire {port_key} as we are already at the top level {schema}')
-
-                    peer = get_path(
-                        top,
-                        path[:-1])
-
-                    destination = establish_path(
-                        peer,
-                        subwires[:-1],
-                        top=top,
-                        cursor=path[:-1])
-
-                    destination_key = subwires[-1]
-
-                    if destination_key in destination:
-                        pass
-                        # validate_state(
-                        #     port_schema,
-                        #     destination[destination_key])
-                    else:
-                        try:
-                            destination[destination_key] = self.default(
-                                port_schema)
-                        except:
-                            raise Exception(f"schema '{port_schema}' not found at path {path} port '{port_key}'")
             else:
-                # handle unconnected ports
-                pass
+                subwires = [port_key]
+                # wires[port_key] = subwires
+                # top_state = self.wire(
+                #     port_schema,
+                #     top_state,
+                #     path,
+                #     port_key,
+                #     subwires)
 
         return state
 
-    def fill_state(self, schema, state=None, top=None, path=None, type_key=None, context=None):
+
+    def fill_state(self, schema, state=None, top_schema=None, top_state=None, path=None, type_key=None, context=None):
         # if a port is disconnected, build a store
         # for it under the '_open' key in the current
         # node (?)
@@ -704,8 +797,10 @@ class TypeSystem:
             return None
         if state is None:
             state = self.default(schema)
-        if top is None:
-            top = state
+        if top_schema is None:
+            top_schema = schema
+        if top_state is None:
+            top_state = state
         if path is None:
             path = []
 
@@ -715,7 +810,8 @@ class TypeSystem:
                 schema['_inputs'],
                 wires=inputs,
                 state=state,
-                top=top,
+                top_schema=top_schema,
+                top_state=top_state,
                 path=path)
 
         if '_outputs' in schema:
@@ -724,7 +820,8 @@ class TypeSystem:
                 schema['_outputs'],
                 wires=outputs,
                 state=state,
-                top=top,
+                top_schema=top_schema,
+                top_state=top_state,
                 path=path)
 
         if isinstance(schema, str):
@@ -738,7 +835,8 @@ class TypeSystem:
                 state[branch] = self.fill_state(
                     schema[branch],
                     state=state.get(branch),
-                    top=top,
+                    top_schema=top_schema,
+                    top_state=top_state,
                     path=subpath)
 
         return state
@@ -1225,37 +1323,8 @@ class TypeSystem:
         return schema, top_state
         
 
-    def hydrate_state(self, schema, state):
-        if isinstance(state, str) or '_deserialize' in schema:
-            result = self.deserialize(
-                schema,
-                state)
-
-        elif isinstance(state, dict):
-            if isinstance(schema, str):
-                schema = self.access(schema)
-                return self.hydrate_state(schema, state)
-            else:
-                result = state.copy()
-                for key, value in schema.items():
-                    if key in schema:
-                        subschema = schema[key]
-                    else:
-                        subschema = schema
-
-                    if key in state:
-                        result[key] = self.hydrate_state(
-                            subschema,
-                            state.get(key))
-        else:
-            result = state
-
-        return result
-
-
     def hydrate(self, schema, state):
-        # TODO: support partial hydration (!)
-        hydrated = self.hydrate_state(schema, state)
+        hydrated = self.deserialize(schema, state)
         return self.fill(schema, hydrated)
 
 
@@ -1263,8 +1332,7 @@ class TypeSystem:
         full_schema = self.access(
             initial_schema)
 
-        # hydrate the state given the initial composition
-        state = self.hydrate(
+        state = self.deserialize(
             full_schema,
             initial_state)
 
@@ -1923,7 +1991,7 @@ def apply_array(schema, current, update, core):
 
 
 def serialize_array(schema, value, core):
-    ''' Serialize numpy array to bytes '''
+    """ Serialize numpy array to bytes """
 
     if isinstance(value, dict):
         return value
@@ -3918,7 +3986,6 @@ def test_infer_edge(core):
         initial_state)
 
     assert core.check(schema, state)
-    assert core.check(schema, update)
     assert not core.check(schema, 15)
 
     result = core.apply(
@@ -3977,7 +4044,6 @@ def test_edge_type(core):
                 'green': ['green', 'green', 'green']}}}
 
     assert core.check(schema, state)
-    assert core.check(schema, update)
     assert not core.check(schema, 15)
 
     result = core.apply(
@@ -3994,6 +4060,42 @@ def test_edge_type(core):
     assert np.equal(
         decode['yellow'],
         state['yellow']).all()
+
+
+def test_edge_complete(core):
+    edge_schema = {
+        '_type': 'edge',
+        '_inputs': {
+            'concentration': 'float',
+            'field': 'map[boolean]'},
+        '_outputs': {
+            'target': 'boolean',
+            'total': 'integer',
+            'delta': 'float'}}    
+
+    edge_state = {
+        'inputs': {
+            'concentration': ['molecules', 'glucose'],
+            'field': ['states']},
+        'outputs': {
+            'target': ['states', 'X'],
+            'total': ['emitter', 'total molecules'],
+            'delta': ['molecules', 'glucose']}}
+
+    # edge_state = {
+    #     'inputs': {
+    #         'concentration': ['..', 'molecules', 'glucose'],
+    #         'field': ['..', 'states']},
+    #     'outputs': {
+    #         'target': ['..', 'states', 'X'],
+    #         'total': ['..', 'emitter', 'total molecules'],
+    #         'delta': ['..', 'molecules', 'glucose']}}
+
+    full_schema, full_state = core.complete(
+        {'edge': edge_schema},
+        {'edge': edge_state})
+
+    assert full_schema['states']['_type'] == 'map'
 
 
 def test_divide(core):
@@ -4114,6 +4216,7 @@ if __name__ == '__main__':
     test_union_values(core)
     test_infer_edge(core)
     test_edge_type(core)
+    test_edge_complete(core)
     test_foursquare(core)
     test_divide(core)
     test_slice(core)

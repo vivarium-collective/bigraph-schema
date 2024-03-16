@@ -1,6 +1,26 @@
+"""
+=====
+React
+=====
+"""
 
 
 def react_divide_counts(config):
+    """
+    Divides counts among daughters based on their ratios in a reaction configuration.
+
+    This function constructs a reaction configuration to divide counts among daughter entities based on specified
+    ratios. If no ratio is specified for a daughter, the counts are divided evenly. The configuration includes the
+    setup for input ('redex'), output ('reactum'), and the division operation ('calls').
+
+    Args:
+    - config (dict): Configuration dict with keys 'id' (string), 'state_key' (string), 'daughters' (list of dicts).
+        Each daughter dict may include 'id' (string) and optionally 'ratio' (float).
+
+    Returns:
+    - dict: A dictionary with keys 'redex', 'reactum', and 'calls', detailing the reaction setup.
+    """
+
     redex = {
         config['id']: {
             config['state_key']: '@counts'}}
@@ -28,5 +48,3 @@ def react_divide_counts(config):
         'redex': redex,
         'reactum': reactum,
         'calls': calls}
-
-
