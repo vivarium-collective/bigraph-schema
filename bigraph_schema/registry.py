@@ -214,7 +214,7 @@ def establish_path(tree, path, top=None, cursor=()):
 
         head = path[0]
         if head == '..':
-            if cursor == ():
+            if len(cursor) == 0:
                 raise Exception(
                     f'trying to travel above the top of the tree: {path}')
             else:
@@ -668,12 +668,23 @@ def deserialize_any(schema, state, core):
     if isinstance(state, dict):
         tree = {}
 
-        for key in non_schema_keys(schema):
-            decoded = core.deserialize(
-                schema.get(key, schema),
-                state.get(key))
+        for key, value in state.items():
+            if key.startswith('_'):
+                decoded = value
+            else:
+                decoded = core.deserialize(
+                    schema.get(key, 'any'),
+                    value)
 
             tree[key] = decoded
+
+        for key in non_schema_keys(schema):
+            if key not in tree:
+                decoded = core.deserialize(
+                    schema[key],
+                    state.get(key))
+
+                tree[key] = decoded
 
         return tree
 

@@ -1305,37 +1305,8 @@ class TypeSystem:
         return schema, top_state
         
 
-    def hydrate_state(self, schema, state):
-        if isinstance(state, str) or '_deserialize' in schema:
-            result = self.deserialize(
-                schema,
-                state)
-
-        elif isinstance(state, dict):
-            if isinstance(schema, str):
-                schema = self.access(schema)
-                return self.hydrate_state(schema, state)
-            else:
-                result = state.copy()
-                for key, value in schema.items():
-                    if key in schema:
-                        subschema = schema[key]
-                    else:
-                        subschema = schema
-
-                    if key in state:
-                        result[key] = self.hydrate_state(
-                            subschema,
-                            state.get(key))
-        else:
-            result = state
-
-        return result
-
-
     def hydrate(self, schema, state):
-        # TODO: support partial hydration (!)
-        hydrated = self.hydrate_state(schema, state)
+        hydrated = self.deserialize(schema, state)
         return self.fill(schema, hydrated)
 
 
@@ -1343,8 +1314,7 @@ class TypeSystem:
         full_schema = self.access(
             initial_schema)
 
-        # hydrate the state given the initial composition
-        state = self.hydrate(
+        state = self.deserialize(
             full_schema,
             initial_state)
 
@@ -4087,18 +4057,29 @@ def test_edge_complete(core):
 
     edge_state = {
         'inputs': {
-            'concentration': ['..', 'molecules', 'glucose'],
-            'field': ['..', 'states']},
+            'concentration': ['molecules', 'glucose'],
+            'field': ['states']},
         'outputs': {
-            'target': ['..', 'states', 'X'],
-            'total': ['..', 'emitter', 'total molecules'],
-            'delta': ['..', 'molecules', 'glucose']}}
+            'target': ['states', 'X'],
+            'total': ['emitter', 'total molecules'],
+            'delta': ['molecules', 'glucose']}}
 
-    import ipdb; ipdb.set_trace()
+    # edge_state = {
+    #     'inputs': {
+    #         'concentration': ['..', 'molecules', 'glucose'],
+    #         'field': ['..', 'states']},
+    #     'outputs': {
+    #         'target': ['..', 'states', 'X'],
+    #         'total': ['..', 'emitter', 'total molecules'],
+    #         'delta': ['..', 'molecules', 'glucose']}}
 
     full_schema, full_state = core.complete(
         {'edge': edge_schema},
         {'edge': edge_state})
+
+    import ipdb; ipdb.set_trace()
+
+    assert full_schema['states']['_type'] == 'map'
 
 
 def test_divide(core):
