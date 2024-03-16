@@ -9,8 +9,8 @@ import copy
 import collections
 import pytest
 import traceback
-from pydantic import create_model, Field
 import inspect
+from dataclasses import dataclass, field, make_dataclass
 from typing import Any, Dict, List, Optional, Tuple, Callable, Union
 
 from pprint import pformat as pf
@@ -321,8 +321,8 @@ def remove_path(tree, path):
     return tree
 
 
-def map_type_to_pydantic(custom_type: str):
-    """Map custom type strings to Pydantic types."""
+def map_type_to_python(custom_type: str):
+    """Map custom type strings to python types."""
     type_mapping = {
         'float': float,
         'int': int,
@@ -348,7 +348,7 @@ class Registry(object):
         self.main_keys = set([])
         self.function_keys = set(function_keys)
 
-        self.pydantic_models_cache = {}
+        self.dataclass_cache = {}
 
     def register(self, key, item, alternate_keys=tuple(), strict=False):
         '''
@@ -435,40 +435,34 @@ class Registry(object):
         # TODO -- need more to validate
         return True
 
-    def generate_pydantic_model(self, key):
+    def generate_dataclass(self, key):
         found = self.access(key)
         if found is None:
             raise ValueError(f"Process '{key}' not found in the registry.")
 
-        # Assuming the process class or function has a 'config_schema' attribute
         config_schema = getattr(found, 'config_schema', {})
 
-        # Convert custom schema to Pydantic schema
-        pydantic_fields = {}
+        fields = []
         for field_name, field_info in config_schema.items():
             field_type = field_info.get('_type')
-            default_value = field_info.get('_default')
+            default_value = field_info.get('_default', field(default=None))  # Use field() for default values
 
-            # Map your custom types to Pydantic types here
-            pydantic_type = map_type_to_pydantic(field_type)
+            # Convert your custom types to Python standard types here
+            python_type = map_type_to_python(field_type)  # You would need to implement or adjust this function
 
-            # Use default value if specified
-            if default_value is not None:
-                pydantic_fields[field_name] = (pydantic_type, Field(default=default_value))
-            else:
-                pydantic_fields[field_name] = (pydantic_type, ...)
+            fields.append((field_name, python_type, default_value))
 
-        model_name = f"{key}ConfigModel"
-        model = create_model(model_name, **pydantic_fields)
+        model = make_dataclass(key + "Config", fields)
         return model
 
-    def get_pydantic_model(self, key):
-        if key in self.pydantic_models_cache:
-            return self.pydantic_models_cache[key]
+    def get_dataclass(self, key):
+        if key in self.dataclass_cache:
+            return self.dataclass_cache[key]
 
-        model = self.generate_pydantic_model(key)
-        self.pydantic_models_cache[key] = model
+        model = self.generate_dataclass(key)
+        self.dataclass_cache[key] = model
         return model
+
 
 
 def visit_method(schema, state, method, values, core):
@@ -1198,7 +1192,7 @@ def test_remove_omitted():
     assert 'd' not in result['b']
 
 
-def test_pydantic_class_from_registry():
+def test_dataclass_from_registry():
     from bigraph_schema.type_system import base_type_library
 
     r = Registry()
@@ -1219,10 +1213,10 @@ def test_pydantic_class_from_registry():
     process_type = r.access('process')
     print(process_type)
 
-    # create pydantic class for process
-    process_pydantic = r.generate_pydantic_model('process')
+    # create dataclass for process
+    process_dataclass= r.generate_dataclass('process')
 
-    float_pydantic = r.generate_pydantic_model('float')
+    float_dataclass = r.generate_dataclass('float')
 
     pass
 
@@ -1231,4 +1225,4 @@ def test_pydantic_class_from_registry():
 if __name__ == '__main__':
     # test_reregister_type()
     # test_remove_omitted()
-    test_pydantic_class_from_registry()
+    test_dataclass_from_registry()
