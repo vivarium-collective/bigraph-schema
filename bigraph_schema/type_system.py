@@ -2740,8 +2740,6 @@ def test_fill_ports(core):
                     'outputs': {
                         'RNA': [ '..', 'cytoplasm']}}}}}
 
-    import ipdb; ipdb.set_trace()
-
     schema, state = core.complete(
         {},
         cell_state)
@@ -4096,8 +4094,6 @@ def test_edge_complete(core):
     full_schema, full_state = core.complete(
         {'edge': edge_schema},
         {'edge': edge_state})
-
-    import ipdb; ipdb.set_trace()
 
     assert full_schema['states']['_type'] == 'map'
 
