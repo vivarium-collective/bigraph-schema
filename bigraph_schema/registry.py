@@ -436,9 +436,24 @@ class Registry(object):
         return True
 
     def generate_dataclass(self, key):
+        """
+        Generates a Python data class based on a specified key's configuration schema.
+
+        Parameters:
+            key (str): The key associated with the item for which a data class should be generated.
+
+        Returns:
+            type: A dynamically generated data class with attributes based on the bigraph-schema type
+        """
         found = self.access(key)
         if found is None:
             raise ValueError(f"Process '{key}' not found in the registry.")
+
+        # Check if the found item has a 'config_schema' attribute and it's not empty
+        if not hasattr(found, 'config_schema') or not getattr(found, 'config_schema'):
+            raise ValueError(
+                f"'{key}' does not have a config_schema or it is empty. "
+                f"Only types with config_schemas are currently supported.")
 
         config_schema = getattr(found, 'config_schema', {})
 
