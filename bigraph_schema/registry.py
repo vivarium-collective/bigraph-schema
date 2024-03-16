@@ -1228,12 +1228,12 @@ def test_dataclass_from_registry():
     process_type = r.access('process')
     print(process_type)
 
-    # create dataclass for process
-    process_dataclass= r.generate_dataclass('process')
-
-    float_dataclass = r.generate_dataclass('float')
-
-    pass
+    # # create dataclass for process
+    # process_dataclass= r.generate_dataclass('process')
+    #
+    # float_dataclass = r.generate_dataclass('float')
+    #
+    # pass
 
 
 
