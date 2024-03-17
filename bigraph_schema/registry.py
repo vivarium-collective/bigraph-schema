@@ -451,28 +451,30 @@ class Registry(object):
         """
         found = self.access(key)
         if found is None:
-            raise ValueError(f"Process '{key}' not found in the registry.")
+            raise ValueError(f"'{key}' not found in the registry.")
 
         # Check if the found item has a 'config_schema' attribute and it's not empty
-        if not hasattr(found, 'config_schema') or not getattr(found, 'config_schema'):
+        if hasattr(found, 'config_schema') and getattr(found, 'config_schema'):
+            config_schema = getattr(found, 'config_schema', {})
+
+            fields = []
+            for field_name, field_info in config_schema.items():
+                field_type = field_info.get('_type')
+                default_value = field_info.get('_default', field(default=None))  # Use field() for default values
+
+                # Convert your custom types to Python standard types here
+                python_type = map_type_to_python(field_type)  # You would need to implement or adjust this function
+                fields.append((field_name, python_type, default_value))
+
+            model = make_dataclass(key + "Config", fields)
+            return model
+
+        else:
+            # this is a non-process type
+            # TODO -- support non-process types
             raise ValueError(
                 f"'{key}' does not have a config_schema or it is empty. "
                 f"Only types with config_schemas are currently supported.")
-
-        config_schema = getattr(found, 'config_schema', {})
-
-        fields = []
-        for field_name, field_info in config_schema.items():
-            field_type = field_info.get('_type')
-            default_value = field_info.get('_default', field(default=None))  # Use field() for default values
-
-            # Convert your custom types to Python standard types here
-            python_type = map_type_to_python(field_type)  # You would need to implement or adjust this function
-
-            fields.append((field_name, python_type, default_value))
-
-        model = make_dataclass(key + "Config", fields)
-        return model
 
     def get_dataclass(self, key):
         if key in self.dataclass_cache:
