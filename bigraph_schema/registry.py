@@ -9,6 +9,9 @@ import copy
 import collections
 import pytest
 import traceback
+import inspect
+from dataclasses import dataclass, field, make_dataclass
+from typing import Any, Dict, List, Optional, Tuple, Callable, Union
 
 from pprint import pformat as pf
 
@@ -73,6 +76,9 @@ merge_schema_keys = (
 
 
 def non_schema_keys(schema):
+    """
+    Filters out schema keys with the underscore prefix
+    """
     return [
         element
         for element in schema.keys()
@@ -80,18 +86,17 @@ def non_schema_keys(schema):
 
             
 def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
-    """Recursively merge type definitions, never overwrite.
+    """
+    Recursively merge type definitions, never overwrite.
+
     Args:
-        dct: The dictionary to merge into. This dictionary is mutated
-            and ends up being the merged dictionary.  If you want to
-            keep dct you could call it like
-            ``deep_merge_check(copy.deepcopy(dct), merge_dct)``.
-        merge_dct: The dictionary to merge into ``dct``.
-        path: If the ``dct`` is nested within a larger dictionary, the
-            path to ``dct``. This is normally an empty tuple (the
-            default) for the end user but is used for recursive calls.
+    - dct: The dictionary to merge into. This dictionary is mutated and ends up being the merged dictionary.  If you 
+        want to keep dct you could call it like ``deep_merge_check(copy.deepcopy(dct), merge_dct)``.
+    - merge_dct: The dictionary to merge into ``dct``.
+    - path: If the ``dct`` is nested within a larger dictionary, the path to ``dct``. This is normally an empty tuple 
+        (the default) for the end user but is used for recursive calls.
     Returns:
-        ``dct``
+    - dct
     """
     for k in merge_dct:
         if not k in dct or k in overridable_schema_keys:
@@ -116,7 +121,8 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
 
 
 def deep_merge(dct, merge_dct):
-    """ Recursive dict merge
+    """Recursive dict merge
+    
     This mutates dct - the contents of merge_dct are added to dct (which is also returned).
     If you want to keep dct you could call it like deep_merge(copy.deepcopy(dct), merge_dct)
     """
@@ -134,7 +140,8 @@ def deep_merge(dct, merge_dct):
 
 
 def validate_merge(state, dct, merge_dct):
-    """ Recursive dict merge
+    """Recursive dict merge
+    
     This mutates dct - the contents of merge_dct are added to dct (which is also returned).
     If you want to keep dct you could call it like deep_merge(copy.deepcopy(dct), merge_dct)
     """
@@ -164,16 +171,16 @@ def validate_merge(state, dct, merge_dct):
 
 
 def get_path(tree, path):
-    '''
-    given a tree and a path, find the subtree at that path
+    """
+    Given a tree and a path, find the subtree at that path
+    
     Args:
-        tree: the tree we are looking in (a nested dict)
-        path: a list/tuple of keys we follow down the tree
-            to find the subtree we are looking for
+    - tree: the tree we are looking in (a nested dict)
+    - path: a list/tuple of keys we follow down the tree to find the subtree we are looking for
+    
     Returns:
-        subtree: the subtree found by following the list of keys
-            down the tree
-    '''
+    - subtree: the subtree found by following the list of keys down the tree
+    """
 
     if len(path) == 0:
         return tree
@@ -186,18 +193,20 @@ def get_path(tree, path):
 
 
 def establish_path(tree, path, top=None, cursor=()):
-    '''
-    given a tree and a path in the tree that may or may not yet exist,
+    """
+    Given a tree and a path in the tree that may or may not yet exist,
     add nodes along the path and return the final node which is now at the
     given path.
+    
     Args:
-        tree: the tree we are establishing a path in
-        path: where the new subtree will be located in the tree
-        top: (None) a reference to the top of the tree
-        cursor: (()) the current location we are visiting in the tree
+    - tree: the tree we are establishing a path in
+    - path: where the new subtree will be located in the tree
+    - top: (None) a reference to the top of the tree
+    - cursor: (()) the current location we are visiting in the tree
+    
     Returns:
-        node: the new node of the tree that exists at the given path
-    '''
+    - node: the new node of the tree that exists at the given path
+    """
 
     if tree is None:
         tree = {}
@@ -214,7 +223,7 @@ def establish_path(tree, path, top=None, cursor=()):
 
         head = path[0]
         if head == '..':
-            if cursor == ():
+            if len(cursor) == 0:
                 raise Exception(
                     f'trying to travel above the top of the tree: {path}')
             else:
@@ -232,18 +241,20 @@ def establish_path(tree, path, top=None, cursor=()):
 
 
 def set_path(tree, path, value, top=None, cursor=None):
-    '''
-    given a tree, a path, and a value, sets the location
+    """
+    Given a tree, a path, and a value, sets the location
     in the tree corresponding to the path to the given value
+    
     Args:
-        tree: the tree we are setting a value in
-        path: where the new value will be located in the tree
-        value: the value to set at the given path in the tree
-        top: (None) a reference to the top of the tree
-        cursor: (()) the current location we are visiting in the tree
+    - tree: the tree we are setting a value in
+    - path: where the new value will be located in the tree
+    - value: the value to set at the given path in the tree
+    - top: (None) a reference to the top of the tree
+    - cursor: (()) the current location we are visiting in the tree
+    
     Returns:
-        node: the new node of the tree that exists at the given path
-    '''
+    - node: the new node of the tree that exists at the given path
+    """
 
     if value is None:
         return None
@@ -258,19 +269,18 @@ def set_path(tree, path, value, top=None, cursor=None):
 
 
 def transform_path(tree, path, transform):
-    '''
-    given a tree, a path, and a transform (function), 
-    mutate the tree by replacing the subtree at the path by
-    whatever is returned from applying the transform to the
-    existing value
+    """
+    Given a tree, a path, and a transform (function), mutate the tree by replacing the subtree at the path by whatever 
+    is returned from applying the transform to the existing value.
+    
     Args:
-        tree: the tree we are setting a value in
-        path: where the new value will be located in the tree
-        transform: the function to apply to whatever currently lives
-            at the given path in the tree
+    - tree: the tree we are setting a value in
+    - path: where the new value will be located in the tree
+    - transform: the function to apply to whatever currently lives at the given path in the tree
+    
     Returns:
-        node: the node of the tree that exists at the given path
-    '''
+    - node: the node of the tree that exists at the given path
+    """
     before = establish_path(tree, path)
     after = transform(before)
 
@@ -278,9 +288,9 @@ def transform_path(tree, path, transform):
 
 
 def remove_omitted(before, after, tree):
-    '''
-    removes anything in tree that was in before but not in after
-    '''
+    """
+    Removes anything in tree that was in before but not in after
+    """
 
     if isinstance(before, dict):
         if not isinstance(tree, dict):
@@ -305,9 +315,9 @@ def remove_omitted(before, after, tree):
 
 
 def remove_path(tree, path):
-    '''
-    removes whatever subtree lives at the given path
-    '''
+    """
+    Removes whatever subtree lives at the given path
+    """
 
     if path is None or len(path) == 0:
         return None
@@ -318,8 +328,26 @@ def remove_path(tree, path):
     return tree
 
 
+def map_type_to_python(custom_type: str):
+    """Map custom type strings to python types."""
+    type_mapping = {
+        'float': float,
+        'int': int,
+        'any': Any,
+        'tree': dict,
+        'list': list
+        # Add more mappings as necessary
+    }
+    if 'tree' in custom_type:
+        return type_mapping['tree']
+    elif 'list' in custom_type:
+        return type_mapping['list']
+    else:
+        return type_mapping.get(custom_type, Any)
+
+
 class Registry(object):
-    '''A Registry holds a collection of functions or objects'''
+    """A Registry holds a collection of functions or objects"""
 
     def __init__(self, function_keys=None):
         function_keys = function_keys or []
@@ -327,21 +355,20 @@ class Registry(object):
         self.main_keys = set([])
         self.function_keys = set(function_keys)
 
+        self.dataclass_cache = {}
+
     def register(self, key, item, alternate_keys=tuple(), strict=False):
-        '''
+        """
         Add an item to the registry.
 
         Args:
-            key: Item key.
-            item: The item to add.
-            alternate_keys: Additional keys under which to register the
-                item. These keys will not be included in the list
-                returned by ``Registry.list()``.
-
-                This may be useful if you want to be able to look up an
-                item in the registry under multiple keys.
-            strict (bool): Disallow re-registration, overriding existing keys. False by default.
-        '''
+        - key: Item key.
+        - item: The item to add.
+        - alternate_keys: Additional keys under which to register the item. These keys will not be included in the list
+            returned by ``Registry.list()``. This may be useful if you want to be able to look up an item in the
+            registry under multiple keys.
+        - strict (bool): Disallow re-registration, overriding existing keys. False by default.
+        """
 
         # check that registered function have the required function keys
         if callable(item) and self.function_keys:
@@ -394,14 +421,14 @@ class Registry(object):
         return function_name, module_key
 
 
-    def register_multiple(self, schemas, force=False):
+    def register_multiple(self, schemas, strict=False):
         for key, schema in schemas.items():
-            self.register(key, schema, force=force)
+            self.register(key, schema, strict=strict)
 
     def access(self, key):
-        '''
+        """
         get an item by key from the registry.
-        '''
+        """
 
         return self.registry.get(key)
 
@@ -409,7 +436,54 @@ class Registry(object):
         return list(self.main_keys)
 
     def validate(self, item):
+        # TODO -- need more to validate
         return True
+
+    def generate_dataclass(self, key):
+        """
+        Generates a Python data class based on a specified key's configuration schema.
+
+        Parameters:
+            key (str): The key associated with the item for which a data class should be generated.
+
+        Returns:
+            type: A dynamically generated data class with attributes based on the bigraph-schema type
+        """
+        found = self.access(key)
+        if found is None:
+            raise ValueError(f"'{key}' not found in the registry.")
+
+        # Check if the found item has a 'config_schema' attribute and it's not empty
+        if hasattr(found, 'config_schema') and getattr(found, 'config_schema'):
+            config_schema = getattr(found, 'config_schema', {})
+
+            fields = []
+            for field_name, field_info in config_schema.items():
+                field_type = field_info.get('_type')
+                default_value = field_info.get('_default', field(default=None))  # Use field() for default values
+
+                # Convert your custom types to Python standard types here
+                python_type = map_type_to_python(field_type)  # You would need to implement or adjust this function
+                fields.append((field_name, python_type, default_value))
+
+            model = make_dataclass(key + "Config", fields)
+            return model
+
+        else:
+            # this is a non-process type
+            # TODO -- support non-process types
+            raise ValueError(
+                f"'{key}' does not have a config_schema or it is empty. "
+                f"Only types with config_schemas are currently supported.")
+
+    def get_dataclass(self, key):
+        if key in self.dataclass_cache:
+            return self.dataclass_cache[key]
+
+        model = self.generate_dataclass(key)
+        self.dataclass_cache[key] = model
+        return model
+
 
 
 def visit_method(schema, state, method, values, core):
@@ -638,6 +712,8 @@ def check_any(schema, state, core):
 
                         if not check:
                             return False
+                    else:
+                        return False
                 else:
                     return False
 
@@ -666,12 +742,23 @@ def deserialize_any(schema, state, core):
     if isinstance(state, dict):
         tree = {}
 
-        for key in non_schema_keys(schema):
-            decoded = core.deserialize(
-                schema.get(key, schema),
-                state.get(key))
+        for key, value in state.items():
+            if key.startswith('_'):
+                decoded = value
+            else:
+                decoded = core.deserialize(
+                    schema.get(key, 'any'),
+                    value)
 
             tree[key] = decoded
+
+        for key in non_schema_keys(schema):
+            if key not in tree:
+                decoded = core.deserialize(
+                    schema[key],
+                    state.get(key))
+
+                tree[key] = decoded
 
         return tree
 
@@ -927,9 +1014,9 @@ class TypeRegistry(Registry):
 
 
     def lookup_registry(self, underscore_key):
-        '''
+        """
         access the registry for the given key
-        '''
+        """
 
         if underscore_key == '_type':
             return self
@@ -940,10 +1027,10 @@ class TypeRegistry(Registry):
 
 
     def find_registry(self, underscore_key):
-        '''
+        """
         access the registry for the given key
         and create if it doesn't exist
-        '''
+        """
 
         registry = self.lookup_registry(underscore_key)
         if registry is None:
@@ -957,9 +1044,9 @@ class TypeRegistry(Registry):
 
 
     def register(self, key, schema, alternate_keys=tuple(), force=False):
-        '''
+        """
         register the schema under the given key in the registry
-        '''
+        """
 
         if isinstance(schema, str):
             schema = self.access(schema)
@@ -1011,9 +1098,9 @@ class TypeRegistry(Registry):
 
 
     def resolve_parameters(self, type_parameters, schema):
-        '''
+        """
         find the types associated with any type parameters in the schema
-        '''
+        """
 
         return {
             type_parameter: self.access(
@@ -1022,9 +1109,9 @@ class TypeRegistry(Registry):
 
 
     def access(self, schema):
-        '''
+        """
         expand the schema to its full type information from the type registry
-        '''
+        """
 
         found = None
 
@@ -1104,9 +1191,9 @@ class TypeRegistry(Registry):
         return found
     
     def retrieve(self, schema):
-        '''
+        """
         like access(schema) but raises an exception if nothing is found
-        '''
+        """
 
         found = self.access(schema)
         if found is None:
@@ -1139,6 +1226,37 @@ def test_remove_omitted():
     assert 'd' not in result['b']
 
 
+def test_dataclass_from_registry():
+    from bigraph_schema.type_system import base_type_library
+
+    r = Registry()
+    r.register_multiple(base_type_library)
+    r.register('A', {'_type': 'tuple', '_type_parameters': ['a', 'b']})
+
+    r.register('step', {
+        '_type': 'step',
+        '_inherit': 'edge',
+        'address': 'string',
+        'config': 'schema'})
+
+    r.register('process', {
+        '_type': 'process',
+        '_inherit': 'step',
+        'interval': 'float'})
+
+    process_type = r.access('process')
+    print(process_type)
+
+    # # create dataclass for process
+    # process_dataclass= r.generate_dataclass('process')
+    #
+    # float_dataclass = r.generate_dataclass('float')
+    #
+    # pass
+
+
+
 if __name__ == '__main__':
-    test_reregister_type()
-    test_remove_omitted()
+    # test_reregister_type()
+    # test_remove_omitted()
+    test_dataclass_from_registry()
