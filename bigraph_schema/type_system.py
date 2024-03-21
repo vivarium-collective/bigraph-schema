@@ -1449,6 +1449,8 @@ def deserialize_boolean(schema, encoded, core) -> bool:
         return True
     elif encoded == 'false':
         return False
+    elif encoded == True or encoded == False:
+        return encoded
 
 
 def accumulate(schema, current, update, core):
