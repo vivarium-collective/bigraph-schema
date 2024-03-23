@@ -7528,7 +7528,7 @@ a.anchor-link {
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="what-is-a-bigraph?">what is a bigraph?<a class="anchor-link" href="#what-is-a-bigraph?">¶</a></h2><p>A bigraph has three components - a set of nodes, a "place graph" over those nodes (a tree), and a "link graph" involving the same set of nodes (a hypergraph).</p>
-<center><img alt="No description has been provided for this image" src="images/place-link.png" width="60%"/></center>
+<center><img alt="No description has been provided for this image" src="https://raw.githubusercontent.com/vivarium-collective/bigraph-schema/main/notebooks/images/place-link.png" width="60%"/></center>
 <p>Bigraphs were invented by <a href="https://en.wikipedia.org/wiki/Robin_Milner">Robin Milner</a> who made a series of "process calculi" culminating in <a href="https://www.cl.cam.ac.uk/archive/rm135/Bigraphs-draft.pdf">bigraphs</a> - he later implemented all of his previous process calculi as instances of bigraphs. Traditional "chemical reaction network" formalisms are instances of the π-calculus, the predecessor to bigraphs. Adding the tree (place graph) to the hypergraph allows us to express ideas of containment, nesting, and scale relationships, all critical things for biological applications. Also, even though the place and link graphs could be considered independent, their potential for interaction through shared nodes opens a new universe of relationships and transformations a system could embody.</p>
 </div>
 </div>
@@ -7542,11 +7542,11 @@ a.anchor-link {
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="reactions">reactions<a class="anchor-link" href="#reactions">¶</a></h2><p>In addition to this structure, bigraphs are also capable of "motion" in the form of "reactions" - a pair of bigraphs used as a match and substitution respectively (known as the "redex" and the "reactum"). This means bigraphs update their structure and relationships over the course of a simulation.</p>
 <p>Given a reaction that looks like this (the <em>redex</em> is on the left, <em>reactum</em> on the right):</p>
-<center><img alt="No description has been provided for this image" src="images/redex-reactum.png" width="60%"/></center>
+<center><img alt="No description has been provided for this image" src="https://raw.githubusercontent.com/vivarium-collective/bigraph-schema/main/notebooks/images/redex-reactum.png" width="60%"/></center>
 <p>and some bigraphical state that matches the redex of the reaction:</p>
-<center><img alt="No description has been provided for this image" src="images/reaction-before.png" width="40%"/></center>
+<center><img alt="No description has been provided for this image" src="https://raw.githubusercontent.com/vivarium-collective/bigraph-schema/main/notebooks/images/reaction-before.png" width="40%"/></center>
 <p>We can apply the reaction to the bigraph to achieve the resulting bigraph:</p>
-<center><img alt="No description has been provided for this image" src="images/reaction-after.png" width="40%"/></center>
+<center><img alt="No description has been provided for this image" src="https://raw.githubusercontent.com/vivarium-collective/bigraph-schema/main/notebooks/images/reaction-after.png" width="40%"/></center>
 </div>
 </div>
 </div>
