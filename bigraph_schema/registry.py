@@ -429,7 +429,6 @@ class Registry(object):
         """
         get an item by key from the registry.
         """
-
         return self.registry.get(key)
 
     def list(self):
@@ -440,41 +439,43 @@ class Registry(object):
         return True
 
     def generate_dataclass(self, key):
-        """
-        Generates a Python data class based on a specified key's configuration schema.
+        raise Exception('this registry does not support dataclasses')
 
-        Parameters:
-            key (str): The key associated with the item for which a data class should be generated.
-
-        Returns:
-            type: A dynamically generated data class with attributes based on the bigraph-schema type
-        """
-        found = self.access(key)
-        if found is None:
-            raise ValueError(f"'{key}' not found in the registry.")
-
-        # Check if the found item has a 'config_schema' attribute and it's not empty
-        if hasattr(found, 'config_schema') and getattr(found, 'config_schema'):
-            config_schema = getattr(found, 'config_schema', {})
-
-            fields = []
-            for field_name, field_info in config_schema.items():
-                field_type = field_info.get('_type')
-                default_value = field_info.get('_default', field(default=None))  # Use field() for default values
-
-                # Convert your custom types to Python standard types here
-                python_type = map_type_to_python(field_type)  # You would need to implement or adjust this function
-                fields.append((field_name, python_type, default_value))
-
-            model = make_dataclass(key + "Config", fields)
-            return model
-
-        else:
-            # this is a non-process type
-            # TODO -- support non-process types
-            raise ValueError(
-                f"'{key}' does not have a config_schema or it is empty. "
-                f"Only types with config_schemas are currently supported.")
+        # """
+        # Generates a Python data class based on a specified key's configuration schema.
+        #
+        # Parameters:
+        #     key (str): The key associated with the item for which a data class should be generated.
+        #
+        # Returns:
+        #     type: A dynamically generated data class with attributes based on the bigraph-schema type
+        # """
+        # found = self.access(key)
+        # if found is None:
+        #     raise ValueError(f"'{key}' not found in the registry.")
+        #
+        # # Check if the found item has a 'config_schema' attribute and it's not empty
+        # if hasattr(found, 'config_schema') and getattr(found, 'config_schema'):
+        #     config_schema = getattr(found, 'config_schema', {})
+        #
+        #     fields = []
+        #     for field_name, field_info in config_schema.items():
+        #         field_type = field_info.get('_type')
+        #         default_value = field_info.get('_default', field(default=None))  # Use field() for default values
+        #
+        #         # Convert your custom types to Python standard types here
+        #         python_type = map_type_to_python(field_type)  # You would need to implement or adjust this function
+        #         fields.append((field_name, python_type, default_value))
+        #
+        #     model = make_dataclass(key + "Config", fields)
+        #     return model
+        #
+        # else:
+        #     # this is a non-process type
+        #     # TODO -- support non-process types
+        #     raise ValueError(
+        #         f"'{key}' does not have a config_schema or it is empty. "
+        #         f"Only types with config_schemas are currently supported.")
 
     def get_dataclass(self, key):
         if key in self.dataclass_cache:
@@ -1221,10 +1222,21 @@ def test_remove_omitted():
         {'b': {'c': {}}},
         {'a': {'X': 1111}, 'b': {'c': {'Y': 4444}, 'd': {'Z': 99999}}})
 
-    assert 'a' not in result
+    assert 'a' not in result, "a should have been removed"
     assert result['b']['c']['Y'] == 4444
     assert 'd' not in result['b']
 
+
+def test_equal_mass():
+    previous_glucose = 0
+    for t, datum in data.items():
+        total_glucose = np.sum(datum['fields']['glucose'])
+        if t == 0:
+            previous_glucose = total_glucose
+            continue
+
+        assert total_glucose == previous_glucose, f"total_glucose: {total_glucose} != previous_glucose: {previous_glucose}"
+        previous_glucose = total_glucose
 
 def test_dataclass_from_registry():
     from bigraph_schema.type_system import base_type_library
@@ -1247,12 +1259,12 @@ def test_dataclass_from_registry():
     process_type = r.access('process')
     print(process_type)
 
-    # # create dataclass for process
-    # process_dataclass= r.generate_dataclass('process')
-    #
-    # float_dataclass = r.generate_dataclass('float')
-    #
-    # pass
+    # create dataclass for process
+    process_dataclass= r.generate_dataclass('process')
+
+    float_dataclass = r.generate_dataclass('float')
+
+    pass
 
 
 
