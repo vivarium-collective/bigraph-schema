@@ -23,8 +23,8 @@ pip install bigraph-schema
 
 To get started with bigraph-schema, check out our resources:
 
-* [Demo notebook](https://vivarium-collective.github.io/bigraph-schema/notebooks/demo.html): An interactive Jupyter notebook providing a hands-on demonstration of the functionality of bigraph-schema.
-* [Bigraph Schema Basics Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html): A comprehensive tutorial covering the essential aspects of the bigraph-schema library. 
+* [Type System Overview](https://vivarium-collective.github.io/bigraph-schema/notebooks/core.html): A tutorial demonstrating the functionality of bigraph-schema's type system, "core".
+* [Bigraph Schema Basics Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html): A  tutorial covering the essential aspects of the bigraph-schema library. 
 This resource will guide you through the core concepts and methods, helping you to master the basic operations.
 
 ## License
