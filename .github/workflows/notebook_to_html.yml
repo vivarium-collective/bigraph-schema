@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'notebooks/demo.ipynb'
+      - 'notebooks/core.ipynb'
 
 jobs:
   convert:
@@ -28,6 +29,7 @@ jobs:
     - name: Convert Jupyter Notebook to HTML
       run: |
         jupyter nbconvert --to html notebooks/demo.ipynb
+        jupyter nbconvert --to html notebooks/core.ipynb
 
     - name: Commit and push HTML to gh-pages branch
       run: |
@@ -35,9 +37,12 @@ jobs:
         git config --local user.name "GitHub Action"
         git fetch origin
         mv notebooks/demo.html /tmp/demo.html
+        mv notebooks/core.html /tmp/core.html
         git checkout gh-pages || git checkout -b gh-pages
         git pull origin gh-pages
         mv /tmp/demo.html notebooks/demo.html
+        mv /tmp/core.html notebooks/core.html 
         git add notebooks/demo.html
-        git diff-index --quiet HEAD || git commit -m "Update HTML file"
+        git add notebooks/core.html
+        git diff-index --quiet HEAD || git commit -m "Update HTML files" 
         git push origin gh-pages || true
