@@ -13,6 +13,7 @@ import inspect
 import numbers
 import numpy as np
 
+from pint import Quantity
 from pprint import pformat as pf
 
 from bigraph_schema.units import units, render_units_type
@@ -1893,7 +1894,7 @@ def apply_units(schema, current, update, core):
 
 def check_units(schema, state, core):
     # TODO: expand this to check the actual units for compatibility
-    return isinstance(state, pint.Quantity)
+    return isinstance(state, Quantity)
 
 
 def serialize_units(schema, value, core):
@@ -1901,7 +1902,10 @@ def serialize_units(schema, value, core):
 
 
 def deserialize_units(schema, encoded, core):
-    return units(encoded)
+    if isinstance(encoded, Quantity):
+        return encoded
+    else:
+        return units(encoded)
 
 
 def apply_path(schema, current, update, core):
