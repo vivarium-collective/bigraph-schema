@@ -124,7 +124,8 @@ class TypeSystem:
         if schema_key not in schema:
             schema = self.access(schema)
         if schema_key not in schema:
-            raise Exception(f'parameter {parameter} not found in schema:\n  {schema}')
+            return 'any'
+            # raise Exception(f'parameter {parameter} not found in schema:\n  {schema}')
 
         parameter_type = self.access(
             schema[schema_key])
@@ -1466,9 +1467,20 @@ def accumulate(schema, current, update, core):
 def set_apply(schema, current, update, core):
     if isinstance(current, dict) and isinstance(update, dict):
         for key, value in update.items():
+            # TODO: replace this with type specific functions (??)
+            if key in schema:
+                subschema = schema[key]
+            elif '_leaf' in schema:
+                if core.check(schema['_leaf'], value):
+                    subschema = schema['_leaf']
+                else:
+                    subschema = schema
+            elif '_value' in schema:
+                subschema = schema['_value']
+
             current[key] = set_apply(
-                schema,
-                current[key],
+                subschema,
+                current.get(key),
                 value,
                 core)
 
@@ -1572,14 +1584,14 @@ def apply_list(schema, current, update, core):
         'element')
 
     if isinstance(update, list):
-        result = []
-        for current_element, update_element in zip(current, update):
-            applied = core.apply(
-                element_type,
-                current_element,
-                update_element)
+        result = current + update
+        # for current_element, update_element in zip(current, update):
+        #     applied = core.apply(
+        #         element_type,
+        #         current_element,
+        #         update_element)
 
-            result.append(applied)
+        #     result.append(applied)
 
         return result
     else:
