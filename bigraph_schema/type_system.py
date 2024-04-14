@@ -879,6 +879,8 @@ class TypeSystem:
             result = {}
             for port_key, port_path in wires.items():
                 if isinstance(port_path, dict) or get_path(instance, port_path) is not None:
+                    if isinstance(schema, str):
+                        schema = self.access(schema)
                     inner_view = self.view(
                         schema[port_key],
                         port_path,
