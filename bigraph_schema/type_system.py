@@ -279,12 +279,12 @@ class TypeSystem:
         if isinstance(state, dict) and method_key in state:
             found = state[method_key]
 
-        elif method_key in schema:
-            found = schema[method_key]
-
-        else:
+        elif schema is None or method_key not in schema:
             any_type = self.access('any')
             found = any_type[method_key]
+
+        else:
+            found = schema[method_key]
 
         registry = self.lookup_registry(method_key)
         method_function = registry.access(
@@ -294,6 +294,9 @@ class TypeSystem:
 
 
     def slice(self, schema, state, path):
+        if not isinstance(path, (list, tuple)):
+            path = [path]
+
         schema = self.access(schema)
         if '..' in path:
             path = resolve_path(path)
@@ -627,6 +630,21 @@ class TypeSystem:
         return self.set_update(schema, state, update)
 
 
+    def merge(self, schema, current_state, new_state):
+        schema = self.access(schema)
+
+        merge_function = self.choose_method(
+            schema,
+            current_state,
+            'merge')
+
+        return merge_function(
+            schema,
+            current_state,
+            new_state,
+            self)
+
+
     def bind(self, schema, state, key, target_schema, target_state):
         schema = self.retrieve(schema)
 
@@ -646,19 +664,43 @@ class TypeSystem:
 
     def set_slice(self, schema, state, path, target_schema, target_state):
         if len(path) == 0:
-            return target_schema, target_state
-        else:
-            target_path = path[:-1]
-            target_key = path[-1]
-            destination_schema, destination_state = core.slice(
+            return schema, self.merge(
                 schema,
                 state,
-                target_path)
+                target_state)
 
-            result_schema, result_state = core.bind(
+        elif len(path) == 1:
+            key = path[0]
+            destination_schema, destination_state = self.slice(
+                schema,
+                state,
+                key)
+
+            result_state = self.merge(
                 destination_schema,
                 destination_state,
-                target_key,
+                target_state)
+
+            return self.bind(
+                schema,
+                state,
+                key,
+                destination_schema,
+                result_state)
+
+        else:
+            head = path[0]
+            tail = path[1:]
+            
+            down_schema, down_state = self.slice(
+                schema,
+                state,
+                head)
+
+            result_schema, result_state = self.set_slice(
+                down_schema,
+                down_state,
+                tail,
                 target_schema,
                 target_state)
 
@@ -1049,11 +1091,13 @@ class TypeSystem:
                 return False
 
         else:
-            for key, value in descendant.items():
+            for key, value in ancestor.items():
                 if key not in type_schema_keys:
-                    if key in ancestor:
-                        if not self.inherits_from(value, ancestor[key]):
+                    if key in descendant:
+                        if not self.inherits_from(descendant[key], value):
                             return False
+                    else:
+                        return False
 
         return True
 
@@ -1165,26 +1209,31 @@ class TypeSystem:
                     destination_key = port_wires[-1]
                     if destination_key in destination:
                         current = destination[destination_key]
-                        if isinstance(current, str):
-                            if isinstance(port_schema, str):
-                                port_schema = self.resolve_schemas(
-                                    current,
-                                    port_schema)
+                        port_schema = self.resolve_schemas(
+                            current,
+                            port_schema)
+                        # if isinstance(current, str):
+                        #     if isinstance(port_schema, str):
+                        #         port_schema = self.resolve_schemas(
+                        #             current,
+                        #             port_schema)
 
-                            else:
-                                port_schema['_type'] = current
+                        #     else:
+                        #         port_schema['_type'] = current
 
-                        elif isinstance(port_schema, str):
-                            current['_type'] = port_schema
-                            port_schema = current
+                        # elif isinstance(port_schema, str):
+                        #     current['_type'] = port_schema
+                        #     port_schema = current
 
-                        else:
-                            port_schema = apply_schema(
-                                current,
-                                port_schema,
-                                'schema',
-                                self)
+                        # else:
+                        #     port_schema = apply_schema(
+                        #         current,
+                        #         port_schema,
+                        #         'schema',
+                        #         self)
 
+                    if isinstance(destination, tuple):
+                        import ipdb; ipdb.set_trace()
                     destination[destination_key] = self.access(
                         port_schema)
 
@@ -1261,10 +1310,6 @@ class TypeSystem:
                     top_state,
                     path,
                     hydrated_state)
-
-                update = state_type
-                def merge_schema(existing):
-                    return apply_schema(existing, update, 'schema', self)
 
                 path_schema = set_path(
                     schema,
@@ -1733,7 +1778,9 @@ def deserialize_tree(schema, encoded, core):
     if isinstance(encoded, dict):
         tree = {}
         for key, value in encoded.items():
-            if not key.startswith('_'):
+            if key.startswith('_'):
+                tree[key] = value
+            else:
                 tree[key] = deserialize_tree(schema, value, core)
 
         return tree
@@ -4160,6 +4207,95 @@ def test_divide(core):
     assert len(division[1]['b']) == len(state['b'])
 
 
+def test_merge(core):
+    current_schema = {
+        'a': 'tree[maybe[float]]',
+        'b': 'float~list[string]',
+        'c': {
+            'd': 'map[edge[GGG:float,OOO:float]]',
+            'e': 'array[(3|4|10),float]'}}
+
+    current_state = {
+        'a': {
+            'x': {
+                'oooo': None,
+                'y': 1.1,
+                'z': 33.33},
+            'w': 44.444},
+        'b': ['1', '11', '111', '1111'],
+        'c': {
+            'd': {
+                'A': {
+                    'inputs': {
+                        'GGG': ['..', '..', 'a', 'w']},
+                    'outputs': {
+                        'OOO': ['..', '..', 'a', 'x', 'y']}},
+                'B': {
+                    'inputs': {
+                        'GGG': ['..', '..', 'a', 'x', 'y']},
+                    'outputs': {
+                        'OOO': ['..', '..', 'a', 'w']}}},
+            'e': np.zeros((3, 4, 10))}}
+
+    merge_state = {
+        'z': 555.55,
+        'b': ['333333333'],
+        'a': {
+            'x': {
+                'x': {
+                    'o': 99999.11}}}}
+
+    result = core.merge(
+        current_schema,
+        current_state,
+        merge_state)
+
+    assert result['z'] == merge_state['z']
+    assert result['b'] == merge_state['b']
+    assert result['a']['x']['x']['o'] == merge_state['a']['x']['x']['o']
+
+
+def test_bind(core):
+    current_schema = {
+        'a': 'tree[maybe[float]]',
+        'b': 'float~list[string]',
+        'c': {
+            'd': 'map[edge[GGG:float,OOO:float]]',
+            'e': 'array[(3|4|10),float]'}}
+
+    current_state = {
+        'a': {
+            'x': {
+                'oooo': None,
+                'y': 1.1,
+                'z': 33.33},
+            'w': 44.444},
+        'b': ['1', '11', '111', '1111'],
+        'c': {
+            'd': {
+                'A': {
+                    'inputs': {
+                        'GGG': ['..', '..', 'a', 'w']},
+                    'outputs': {
+                        'OOO': ['..', '..', 'a', 'x', 'y']}},
+                'B': {
+                    'inputs': {
+                        'GGG': ['..', '..', 'a', 'x', 'y']},
+                    'outputs': {
+                        'OOO': ['..', '..', 'a', 'w']}}},
+            'e': np.zeros((3, 4, 10))}}
+
+    result_schema, result_state = core.bind(
+        current_schema,
+        current_state,
+        'z',
+        'float',
+        555.55)
+
+    assert result_schema['z']['_type'] == 'float'
+    assert result_state['z'] == 555.55
+
+
 def test_slice(core):
     schema, state = core.slice(
         'map[float]',
@@ -4201,6 +4337,45 @@ def test_slice(core):
         ['top', 'AAAA', 'BBBB', 'CCCC', 3])[1] is None
 
 
+def test_set_slice(core):
+    schema, state = core.slice(
+        'map[float]',
+        {'aaaa': 55.555},
+        ['aaaa'])
+
+    schema, state = core.complete({}, {
+        'top': {
+            '_type': 'tree[list[maybe[(float|integer)~string]]]',
+            'AAAA': {
+                'BBBB': {
+                    'CCCC': [
+                        (1.3, 5),
+                        'okay',
+                        (55.555, 1),
+                        None,
+                        'what',
+                        'is']}},
+            'DDDD': [
+                (3333.1, 88),
+                'in',
+                'between',
+                (66.8, -3),
+                None,
+                None,
+                'later']}})
+
+    import ipdb; ipdb.set_trace()
+
+    float_schema, float_state = core.set_slice(
+        schema,
+        state,
+        ['top', 'AAAA', 'BBBB', 'CCCC', 2, 0],
+        'integer',
+        33)
+
+    assert float_state['top']['AAAA']['BBBB']['CCCC'][2][0] == 33
+
+
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -4239,5 +4414,8 @@ if __name__ == '__main__':
     test_edge_complete(core)
     test_foursquare(core)
     test_divide(core)
+    test_merge(core)
+    test_bind(core)
     test_slice(core)
+    test_set_slice(core)
 

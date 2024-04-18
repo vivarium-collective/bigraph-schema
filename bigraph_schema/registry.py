@@ -696,6 +696,34 @@ def deserialize_any(schema, state, core):
         return state
 
 
+def merge_any(schema, current_state, new_state, core):
+    # overwrites in place!
+    # TODO: this operation could update the schema (by merging a key not
+    #   already in the schema) but that is not represented currently....
+    if isinstance(new_state, dict):
+        if isinstance(current_state, dict):
+            for key, value in new_state.items():
+                current_state[key] = core.merge(
+                    schema.get(key),
+                    current_state.get(key),
+                    value)
+            return current_state
+        else:
+            return new_state
+    else:
+        return new_state
+
+
+def bind_any(schema, state, key, subschema, substate, core):
+    result_schema = core.resolve_schemas(
+          schema,
+          {key: subschema})
+
+    state[key] = substate
+
+    return result_schema, state
+
+
 def apply_tuple(schema, current, update, core):
     parameters = core.parameters_for(schema)
     result = []
@@ -777,6 +805,15 @@ def deserialize_tuple(schema, state, core):
     return tuple(result)
 
 
+def bind_tuple(schema, state, key, subschema, substate, core):
+    new_schema = schema.copy()
+    new_schema[f'_{key}'] = subschema
+    open = list(state)
+    open[key] = substate
+
+    return new_schema, tuple(open)
+
+
 def find_union_type(core, schema, state):
     parameters = core.parameters_for(schema)
 
@@ -832,6 +869,20 @@ def slice_union(schema, state, path, core):
         path)
 
 
+def bind_union(schema, state, key, subschema, substate, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        state)
+
+    return core.bind(
+        union_type,
+        state,
+        key,
+        subschema,
+        substate)
+
+
 def serialize_union(schema, value, core):
     union_type = find_union_type(
         core,
@@ -854,7 +905,6 @@ def deserialize_union(schema, encoded, core):
                 parameter,
                 encoded)
 
-
             if value is not None:
                 return value
 
@@ -868,6 +918,8 @@ registry_types = {
         '_serialize': serialize_any,
         '_deserialize': deserialize_any,
         '_fold': fold_any,
+        '_merge': merge_any,
+        '_bind': bind_any,
         '_divide': divide_any},
 
     'tuple': {
@@ -880,6 +932,7 @@ registry_types = {
         '_deserialize': deserialize_tuple,
         '_fold': fold_tuple,
         '_divide': divide_tuple,
+        '_bind': bind_tuple,
         '_description': 'tuple of an ordered set of typed values'},
 
     'union': {
@@ -1045,7 +1098,10 @@ class TypeRegistry(Registry):
 
         found = None
 
-        if isinstance(schema, dict):
+        if schema is None:
+            return self.access('any')
+
+        elif isinstance(schema, dict):
             if '_description' in schema:
                 return schema
 
