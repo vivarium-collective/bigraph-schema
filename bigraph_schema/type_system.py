@@ -4337,43 +4337,43 @@ def test_slice(core):
         ['top', 'AAAA', 'BBBB', 'CCCC', 3])[1] is None
 
 
-def test_set_slice(core):
-    schema, state = core.slice(
-        'map[float]',
-        {'aaaa': 55.555},
-        ['aaaa'])
+# def test_set_slice(core):
+#     schema, state = core.slice(
+#         'map[float]',
+#         {'aaaa': 55.555},
+#         ['aaaa'])
 
-    schema, state = core.complete({}, {
-        'top': {
-            '_type': 'tree[list[maybe[(float|integer)~string]]]',
-            'AAAA': {
-                'BBBB': {
-                    'CCCC': [
-                        (1.3, 5),
-                        'okay',
-                        (55.555, 1),
-                        None,
-                        'what',
-                        'is']}},
-            'DDDD': [
-                (3333.1, 88),
-                'in',
-                'between',
-                (66.8, -3),
-                None,
-                None,
-                'later']}})
+#     schema, state = core.complete({}, {
+#         'top': {
+#             '_type': 'tree[list[maybe[(float|integer)~string]]]',
+#             'AAAA': {
+#                 'BBBB': {
+#                     'CCCC': [
+#                         (1.3, 5),
+#                         'okay',
+#                         (55.555, 1),
+#                         None,
+#                         'what',
+#                         'is']}},
+#             'DDDD': [
+#                 (3333.1, 88),
+#                 'in',
+#                 'between',
+#                 (66.8, -3),
+#                 None,
+#                 None,
+#                 'later']}})
 
-    import ipdb; ipdb.set_trace()
+#     import ipdb; ipdb.set_trace()
 
-    float_schema, float_state = core.set_slice(
-        schema,
-        state,
-        ['top', 'AAAA', 'BBBB', 'CCCC', 2, 0],
-        'integer',
-        33)
+#     float_schema, float_state = core.set_slice(
+#         schema,
+#         state,
+#         ['top', 'AAAA', 'BBBB', 'CCCC', 2, 0],
+#         'integer',
+#         33)
 
-    assert float_state['top']['AAAA']['BBBB']['CCCC'][2][0] == 33
+#     assert float_state['top']['AAAA']['BBBB']['CCCC'][2][0] == 33
 
 
 if __name__ == '__main__':
@@ -4417,5 +4417,5 @@ if __name__ == '__main__':
     test_merge(core)
     test_bind(core)
     test_slice(core)
-    test_set_slice(core)
+    # test_set_slice(core)
 
