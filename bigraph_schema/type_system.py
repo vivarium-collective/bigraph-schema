@@ -711,6 +711,10 @@ class TypeSystem:
                 result_schema,
                 result_state)
 
+            # state[head] = result_state
+            # return schema, state
+
+
 
     def serialize(self, schema, state):
         schema = self.retrieve(schema)
@@ -1236,9 +1240,9 @@ class TypeSystem:
                         #         port_schema,
                         #         'schema',
                         #         self)
-
                     if isinstance(destination, tuple):
                         import ipdb; ipdb.set_trace()
+
                     destination[destination_key] = self.access(
                         port_schema)
 
@@ -4343,10 +4347,15 @@ def test_slice(core):
 
 
 def test_set_slice(core):
-    schema, state = core.slice(
+    float_schema, float_state = core.set_slice(
         'map[float]',
         {'aaaa': 55.555},
-        ['aaaa'])
+        ['bbbbb'],
+        'float',
+        888.88888)
+
+    assert float_schema['_type'] == 'map'
+    assert float_state['bbbbb'] == 888.88888
 
     schema, state = core.complete({}, {
         'top': {
@@ -4369,16 +4378,22 @@ def test_set_slice(core):
                 None,
                 'later']}})
 
-    import ipdb; ipdb.set_trace()
-
-    float_schema, float_state = core.set_slice(
+    leaf_schema, leaf_state = core.set_slice(
         schema,
         state,
         ['top', 'AAAA', 'BBBB', 'CCCC', 2, 1],
         'integer',
         33)
 
-    assert float_state['top']['AAAA']['BBBB']['CCCC'][2][1] == 33
+    assert core.slice(
+        leaf_schema,
+        leaf_state, [
+            'top',
+            'AAAA',
+            'BBBB',
+            'CCCC',
+            2,
+            1])[1] == 33
 
 
 if __name__ == '__main__':
