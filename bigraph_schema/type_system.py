@@ -279,6 +279,13 @@ class TypeSystem:
         if isinstance(state, dict) and method_key in state:
             found = state[method_key]
 
+        elif isinstance(state, dict) and '_type' in state:
+            method_type = self.access(state['_type'])
+            found = method_type.get(method_key)
+            if found is None:
+                any_type = self.access('any')
+                found = any_type[method_key]
+
         elif schema is None or method_key not in schema:
             any_type = self.access('any')
             found = any_type[method_key]
@@ -4146,6 +4153,8 @@ def test_edge_complete(core):
             'field': 'map[boolean]'},
         '_outputs': {
             'target': 'boolean',
+            # 'inner': {
+            #     'nested': 'boolean'},
             'total': 'integer',
             'delta': 'float'}}    
 
@@ -4155,6 +4164,8 @@ def test_edge_complete(core):
             'field': ['states']},
         'outputs': {
             'target': ['states', 'X'],
+            # 'inner': {
+            #     'nested': ['states', 'A']},
             'total': ['emitter', 'total molecules'],
             'delta': ['molecules', 'glucose']}}
 
@@ -4167,11 +4178,14 @@ def test_edge_complete(core):
     #         'total': ['..', 'emitter', 'total molecules'],
     #         'delta': ['..', 'molecules', 'glucose']}}
 
+    # import ipdb; ipdb.set_trace()
+
     full_schema, full_state = core.complete(
         {'edge': edge_schema},
         {'edge': edge_state})
 
     assert full_schema['states']['_type'] == 'map'
+
 
 
 def test_divide(core):
