@@ -608,26 +608,34 @@ def slice_any(schema, state, path, core):
         else:
             path = [path]
 
-    if len(path) > 0:
+    if len(path) == 0:
+        return schema, state
+
+    elif len(path) > 0:
         head = path[0]
         tail = path[1:]
         step = None
 
         if isinstance(state, dict):
             if head not in state:
-                state[head] = {}
+                state[head] = core.default(
+                    schema.get(head))
             step = state[head]
 
         elif hasattr(state, head):
             step = getattr(state, head)
 
-        return core.slice(
-            schema.get(head, schema),
-            step,
-            tail)
-
-    else:
-        return schema, state
+        if head in schema:
+            return core.slice(
+                schema[head],
+                step,
+                tail)
+        else:
+            return slice_any(
+                {},
+                step,
+                tail,
+                core)
 
 
 def check_any(schema, state, core):
@@ -700,7 +708,13 @@ def merge_any(schema, current_state, new_state, core):
     # overwrites in place!
     # TODO: this operation could update the schema (by merging a key not
     #   already in the schema) but that is not represented currently....
-    if isinstance(new_state, dict):
+    if current_state is None or current_state == {}:
+        return new_state
+
+    elif new_state is None or new_state == {}:
+        return current_state
+    
+    elif isinstance(new_state, dict):
         if isinstance(current_state, dict):
             for key, value in new_state.items():
                 current_state[key] = core.merge(

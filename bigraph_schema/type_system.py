@@ -267,7 +267,7 @@ class TypeSystem:
         else:
             default = {}
             for key, subschema in found.items():
-                if key not in type_schema_keys:
+                if not key.startswith('_'):
                     default[key] = self.default(subschema)
 
         return default
@@ -669,7 +669,7 @@ class TypeSystem:
             self)
 
 
-    def set_slice(self, schema, state, path, target_schema, target_state):
+    def set_slice(self, schema, state, path, target_schema, target_state, overwrite=False):
         if len(path) == 0:
             return schema, self.merge(
                 schema,
@@ -683,16 +683,27 @@ class TypeSystem:
                 state,
                 key)
 
-            result_state = self.merge(
+            final_schema = self.resolve_schemas(
                 destination_schema,
-                destination_state,
-                target_state)
+                target_schema)
+
+            if overwrite:
+                result_state = self.merge(
+                    final_schema,
+                    destination_state,
+                    target_state)
+
+            else:
+                result_state = self.merge(
+                    final_schema,
+                    target_state,
+                    destination_state)
 
             return self.bind(
                 schema,
                 state,
                 key,
-                destination_schema,
+                final_schema,
                 result_state)
 
         else:
@@ -825,12 +836,19 @@ class TypeSystem:
                             top_state=top_state,
                             path=path)
                 else:
-                    top_state = self.wire(
-                        port_schema,
+                    subschema, substate = self.set_slice(
+                        top_schema,
                         top_state,
-                        path,
-                        port_key,
-                        subwires)
+                        path[:-1] + subwires,
+                        port_schema,
+                        self.default(port_schema))
+
+                    # top_state = self.wire(
+                    #     port_schema,
+                    #     top_state,
+                    #     path,
+                    #     port_key,
+                    #     subwires)
 
             else:
                 subwires = [port_key]
@@ -1058,7 +1076,10 @@ class TypeSystem:
         current = self.access(icurrent)
         question = self.access(iquestion)
 
-        if '_type' in current:
+        if current == {}:
+            return question == {}
+
+        elif '_type' in current:
             if '_type' in question:
                 if current['_type'] == question['_type']:
                     if '_type_parameters' in current:
@@ -1074,9 +1095,17 @@ class TypeSystem:
                     return False
             else:
                 return False
+        else:
+            if '_type' in question:
+                return False
 
         for key, value in current.items():
-            if key not in type_schema_keys:
+            if not key.startswith('_'): # key not in type_schema_keys:
+                if key not in question or not self.equivalent(current[key], question[key]):
+                    return False
+
+        for key, value in set(question.items()) - set(current.items()):
+            if not key.startswith('_'): # key not in type_schema_keys:
                 if key not in question or not self.equivalent(current[key], question[key]):
                     return False
 
@@ -1086,6 +1115,9 @@ class TypeSystem:
     def inherits_from(self, descendant, ancestor):
         descendant = self.access(descendant)
         ancestor = self.access(ancestor)
+
+        if descendant == {}:
+            return ancestor == {}
 
         if '_type' in descendant:
             if '_inherit' in descendant:
@@ -3163,18 +3195,25 @@ def test_project(cube_types):
                 '1': 'integer',
                 '2': 'float',
                 '3': 'string',
+                'inner': {
+                    'chamber': 'map[integer]'},
                 '4': 'tree[integer]'},
             '_outputs': {
                 '1': 'integer',
                 '2': 'float',
                 '3': 'string',
+                'inner': {
+                    'chamber': 'map[integer]'},
                 '4': 'tree[integer]'}},
         'a0': {
             'a0.0': 'integer',
             'a0.1': 'float',
             'a0.2': {
                 'a0.2.0': 'string'}},
-        'a1': 'tree[integer]'}
+        'a1': {
+            '_type': 'tree[integer]',
+            'a1.0': {
+                'X': 'integer'}}}
 
     path_format = {
         '1': 'a0>a0.0',
@@ -3192,17 +3231,26 @@ def test_project(cube_types):
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
                 '3': ['a0', 'a0.2', 'a0.2.0'],
+                'inner': {
+                    'chamber': ['a1', 'a1.0']},
                 '4': ['a1']},
             'outputs': {
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
                 '3': ['a0', 'a0.2', 'a0.2.0'],
+                'inner': {
+                    'chamber': {
+                        'X': ['a1', 'a1.0', 'Y']}},
                 '4': ['a1']}},
         'a1': {
+            'a1.0': {
+                'X': 555},
             'branch1': {
                 'branch2': 11,
                 'branch3': 22},
             'branch4': 44}}
+
+    import ipdb; ipdb.set_trace()
 
     instance = cube_types.fill(schema, instance)
 
