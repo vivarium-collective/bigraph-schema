@@ -836,6 +836,21 @@ class TypeSystem:
                             top_state=top_state,
                             path=path)
                 else:
+                    if isinstance(subwires, str):
+                        subwires = [subwires]
+
+                    # destination_schema, destination_state = self.slice(
+                    #     top_schema,
+                    #     top_state,
+                    #     path[:-1])
+
+                    # subschema, substate = self.set_slice(
+                    #     destination_schema,
+                    #     destination_state,
+                    #     subwires,
+                    #     port_schema,
+                    #     self.default(port_schema))
+
                     subschema, substate = self.set_slice(
                         top_schema,
                         top_state,
@@ -1076,6 +1091,9 @@ class TypeSystem:
         current = self.access(icurrent)
         question = self.access(iquestion)
 
+        if current is None:
+            return question is None
+
         if current == {}:
             return question == {}
 
@@ -1101,12 +1119,12 @@ class TypeSystem:
 
         for key, value in current.items():
             if not key.startswith('_'): # key not in type_schema_keys:
-                if key not in question or not self.equivalent(current[key], question[key]):
+                if key not in question or not self.equivalent(current.get(key), question[key]):
                     return False
 
-        for key, value in set(question.items()) - set(current.items()):
+        for key in set(question.keys()) - set(current.keys()):
             if not key.startswith('_'): # key not in type_schema_keys:
-                if key not in question or not self.equivalent(current[key], question[key]):
+                if key not in question or not self.equivalent(current.get(key), question[key]):
                     return False
 
         return True
@@ -2946,33 +2964,9 @@ def test_expected_schema(core):
             'outputs': {
                 'output_process': ['store1']}}}
     
-    outcome = core.fill(test_schema, test_state)
+    import ipdb; ipdb.set_trace()
 
-    # assert outcome == {
-    #     'process3': {
-    #         'inputs': {
-    #             'input_process': ['store1']},
-    #         'outputs': {
-    #             'output_process': ['store1']}},
-    #     'store1': {
-    #         'process1': {
-    #             'inputs': {
-    #                 'input1': ['store1.1'],
-    #                 'input2': ['store1.2']},
-    #             'outputs': {
-    #                 'output1': ['store2.1'],
-    #                 'output2': ['store2.2']}},
-    #         'process2': {
-    #             'inputs': {
-    #                 'input1': ['store2.1'],
-    #                 'input2': ['store2.2']},
-    #             'outputs': {
-    #                 'output1': ['store1.1'],
-    #                 'output2': ['store1.2']}},
-    #         'store1.1': 0.0,
-    #         'store1.2': 0,
-    #         'store2.1': 0.0,
-    #         'store2.2': 0}}
+    outcome = core.fill(test_schema, test_state)
 
     assert outcome == {
         'store1': {
