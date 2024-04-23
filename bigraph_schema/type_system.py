@@ -807,7 +807,7 @@ class TypeSystem:
         return state
 
 
-    def fill_ports(self, schema, wires=None, state=None, top_schema=None, top_state=None, path=None):
+    def fill_ports(self, interface, wires=None, state=None, top_schema=None, top_state=None, path=None):
         # deal with wires
         if wires is None:
             wires = {}
@@ -820,36 +820,28 @@ class TypeSystem:
         if path is None:
             path = []
 
-        if isinstance(schema, str):
-            schema = self.access(schema)
+        if isinstance(interface, str):
+            schema = self.access(interface)
 
-        for port_key, port_schema in schema.items():
+        for port_key, port_schema in interface.items():
+            if port_key == 'chamber':
+                import ipdb; ipdb.set_trace()
+
             if port_key in wires:
                 subwires = wires[port_key]
                 if isinstance(subwires, dict):
                     if isinstance(state, dict):
-                        state[port_key] = self.fill_ports(
+                        state = self.fill_ports(
                             port_schema,
                             wires=subwires,
-                            state=state.get(port_key),
+                            state=state,
                             top_schema=top_schema,
                             top_state=top_state,
                             path=path)
+
                 else:
                     if isinstance(subwires, str):
                         subwires = [subwires]
-
-                    # destination_schema, destination_state = self.slice(
-                    #     top_schema,
-                    #     top_state,
-                    #     path[:-1])
-
-                    # subschema, substate = self.set_slice(
-                    #     destination_schema,
-                    #     destination_state,
-                    #     subwires,
-                    #     port_schema,
-                    #     self.default(port_schema))
 
                     subschema, substate = self.set_slice(
                         top_schema,
@@ -857,13 +849,6 @@ class TypeSystem:
                         path[:-1] + subwires,
                         port_schema,
                         self.default(port_schema))
-
-                    # top_state = self.wire(
-                    #     port_schema,
-                    #     top_state,
-                    #     path,
-                    #     port_key,
-                    #     subwires)
 
             else:
                 subwires = [port_key]
@@ -2964,36 +2949,61 @@ def test_expected_schema(core):
             'outputs': {
                 'output_process': ['store1']}}}
     
-    import ipdb; ipdb.set_trace()
-
     outcome = core.fill(test_schema, test_state)
 
     assert outcome == {
+        'process3': {
+            'inputs': {
+                'input_process': ['store1']},
+            'outputs': {
+                'output_process': ['store1']}},
         'store1': {
-            'store1.1': 0.0,
-            'store1.2': 0,
-            'store2.1': 0.0,
-            'store2.2': 0,
-
             'process1': {
                 'inputs': {
-                    'input1': ['store1.1'],
-                    'input2': ['store1.2']},
+                    'input1': ['store2.1'],
+                    'input2': ['store2.2']},
                 'outputs': {
-                    'output1': ['store2.1'],
-                    'output2': ['store2.2']}},
+                    'output1': ['store1.1'],
+                    'output2': ['store1.2']}},
             'process2': {
                 'inputs': {
                     'input1': ['store2.1'],
                     'input2': ['store2.2']},
                 'outputs': {
                     'output1': ['store1.1'],
-                    'output2': ['store1.2']}}},
-        'process3': {
-            'inputs': {
-                'input_process': ['store1']},
-            'outputs': {
-                'output_process': ['store1']}}}
+                    'output2': ['store1.2']}},
+            'store1.1': 0.0,
+            'store1.2': 0,
+            'store2.1': 0.0,
+            'store2.2': 0}}
+
+
+    # assert outcome == {
+    #     'store1': {
+    #         'store1.1': 0.0,
+    #         'store1.2': 0,
+    #         'store2.1': 0.0,
+    #         'store2.2': 0,
+
+    #         'process1': {
+    #             'inputs': {
+    #                 'input1': ['store1.1'],
+    #                 'input2': ['store1.2']},
+    #             'outputs': {
+    #                 'output1': ['store2.1'],
+    #                 'output2': ['store2.2']}},
+    #         'process2': {
+    #             'inputs': {
+    #                 'input1': ['store2.1'],
+    #                 'input2': ['store2.2']},
+    #             'outputs': {
+    #                 'output1': ['store1.1'],
+    #                 'output2': ['store1.2']}}},
+    #     'process3': {
+    #         'inputs': {
+    #             'input_process': ['store1']},
+    #         'outputs': {
+    #             'output_process': ['store1']}}}
 
 
 def test_link_place(core):
