@@ -532,6 +532,12 @@ def divide_any(schema, state, values, core):
         return result
 
     else:
+        # TODO: division operates on and returns dictionaries
+#         return {
+#             id: copy.deepcopy(state),
+#             for generate_new_id(existing_id, division) in range(divisions)}
+# ?????
+
         return [
             copy.deepcopy(state)
             for _ in range(divisions)]
