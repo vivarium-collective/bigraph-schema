@@ -34,6 +34,10 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
+def is_schema_key(schema, key):
+    return key.strip('_') not in schema.get('_type_parameters', []) and key.startswith('_')
+
+
 def resolve_path(path):
     resolve = []
 
@@ -312,6 +316,9 @@ class TypeSystem:
             schema,
             state,
             'slice')
+
+        if slice_function is None:
+            import ipdb; ipdb.set_trace()
 
         return slice_function(
             schema,
@@ -669,7 +676,7 @@ class TypeSystem:
             self)
 
 
-    def set_slice(self, schema, state, path, target_schema, target_state, overwrite=False):
+    def set_slice(self, schema, state, path, target_schema, target_state, defer=False):
         if len(path) == 0:
             return schema, self.merge(
                 schema,
@@ -687,7 +694,7 @@ class TypeSystem:
                 destination_schema,
                 target_schema)
 
-            if overwrite:
+            if not defer:
                 result_state = self.merge(
                     final_schema,
                     destination_state,
@@ -722,7 +729,8 @@ class TypeSystem:
                 down_state,
                 tail,
                 target_schema,
-                target_state)
+                target_state,
+                defer=defer)
 
             return self.bind(
                 schema,
@@ -730,10 +738,6 @@ class TypeSystem:
                 head,
                 result_schema,
                 result_state)
-
-            # state[head] = result_state
-            # return schema, state
-
 
 
     def serialize(self, schema, state):
@@ -762,51 +766,6 @@ class TypeSystem:
             schema,
             state,
             self)
-
-
-    def wire(self, schema, state, path, port_key, wires):
-        if isinstance(wires, str):
-            wires = (wires,)
-
-        if len(path) == 0:
-            raise Exception(
-                f'cannot wire {port_key} as we are already at the top level {schema}')
-
-
-
-                    # absolute = resolve_path(
-                    #     path[:-1] + subwires)
-
-                    # destination = self.slice(
-                    #     top_schema,
-                    #     top_state,
-                    #     absolute[:-1])
-                    # destination_key = absolute[-1]
-
-        peer = get_path(
-            state,
-            path[:-1])
-
-        destination = establish_path(
-            peer,
-            wires[:-1],
-            top=state,
-            cursor=path[:-1])
-
-        destination_key = wires[-1]
-
-        if destination_key in destination:
-            # TODO: validate and handle update to more specific type
-            pass
-
-        else:
-            try:
-                destination[destination_key] = self.default(
-                    schema)
-            except:
-                raise Exception(f"schema '{schema}' not found at path {path} port '{port_key}'")
-
-        return state
 
 
     def fill_ports(self, interface, wires=None, state=None, top_schema=None, top_state=None, path=None):
@@ -853,52 +812,10 @@ class TypeSystem:
                     top_state,
                     path[:-1] + subwires,
                     port_schema,
-                    self.default(port_schema))
+                    self.default(port_schema),
+                    defer=True)
 
         return state
-
-                        # state[port_key] = self.fill_ports(
-                        #     port_schema,
-                        #     wires=subwires,
-                        #     state=state.get(port_key),
-                        #     top_schema=top_schema,
-                        #     top_state=top_state,
-                        #     path=path)
-
-        # for port_key, port_schema in interface.items():
-        #     if port_key == 'chamber':
-        #         import ipdb; ipdb.set_trace()
-
-        #     if port_key in wires:
-        #         subwires = wires[port_key]
-        #         if isinstance(subwires, dict):
-        #             if isinstance(state, dict):
-        #                 state = self.fill_ports(
-        #                     port_schema,
-        #                     wires=subwires,
-        #                     state=state,
-        #                     top_schema=top_schema,
-        #                     top_state=top_state,
-        #                     path=path)
-
-                        # # state[port_key] = self.fill_ports(
-                        # #     port_schema,
-                        # #     wires=subwires,
-                        # #     state=state.get(port_key),
-                        # #     top_schema=top_schema,
-                        # #     top_state=top_state,
-                        # #     path=path)
-            # else:
-            #     subwires = [port_key]
-            #     # wires[port_key] = subwires
-            #     # top_state = self.wire(
-            #     #     port_schema,
-            #     #     top_state,
-            #     #     path,
-            #     #     port_key,
-            #     #     subwires)
-
-        # return state
 
 
     def fill_state(self, schema, state=None, top_schema=None, top_state=None, path=None, type_key=None, context=None):
@@ -1056,7 +973,7 @@ class TypeSystem:
         elif isinstance(wires, dict):
             branches = []
             for key in wires.keys():
-                subports, substates = core.slice(ports, states, key)
+                subports, substates = self.slice(ports, states, key)
                 projection = self.project(
                     subports,
                     wires[key],
@@ -1065,14 +982,6 @@ class TypeSystem:
                 
                 if projection is not None:
                     branches.append(projection)
-
-            # branches = [
-            #     self.project(
-            #         ports.get(key),
-            #         wires[key],
-            #         path,
-            #         states.get(key))
-            #     for key in wires.keys()]
 
             branches = [
                 branch
@@ -1232,8 +1141,10 @@ class TypeSystem:
                                 update[parameter_key])
                         else:
                             outcome[parameter_key] = update[parameter_key]
-                elif key in type_schema_keys:
-                    outcome[key] = update[key]
+                elif key not in outcome or is_schema_key(current, key):
+                    key_update = update[key]
+                    if key_update:
+                        outcome[key] = key_update
                 else:
                     outcome[key] = self.resolve_schemas(
                         outcome.get(key),
@@ -1245,11 +1156,13 @@ class TypeSystem:
             outcome = current.copy()
 
             for key in update:
-                if key in type_schema_keys or not key in outcome:
-                    outcome[key] = update[key]
+                if not key in outcome or is_schema_key(update, key):
+                    key_update = update[key]
+                    if key_update:
+                        outcome[key] = key_update
                 else:
                     outcome[key] = self.resolve_schemas(
-                        outcome[key],
+                        outcome.get(key),
                         update[key])
 
             return outcome
@@ -1316,25 +1229,7 @@ class TypeSystem:
                         port_schema = self.resolve_schemas(
                             current,
                             port_schema)
-                        # if isinstance(current, str):
-                        #     if isinstance(port_schema, str):
-                        #         port_schema = self.resolve_schemas(
-                        #             current,
-                        #             port_schema)
 
-                        #     else:
-                        #         port_schema['_type'] = current
-
-                        # elif isinstance(port_schema, str):
-                        #     current['_type'] = port_schema
-                        #     port_schema = current
-
-                        # else:
-                        #     port_schema = apply_schema(
-                        #         current,
-                        #         port_schema,
-                        #         'schema',
-                        #         self)
                     if isinstance(destination, tuple):
                         import ipdb; ipdb.set_trace()
 
@@ -1445,8 +1340,6 @@ class TypeSystem:
             else:
                 for key, value in state.items():
                     inner_path = path + (key,)
-                    # if get_path(schema, inner_path) is None or get_path(state, inner_path) is None:
-
                     schema, top_state = self.infer_schema(
                         schema,
                         value,
@@ -2623,9 +2516,6 @@ def register_cube(core):
 
     return core
 
-    # core.type_registry.register_multiple(
-    #     cube_schema)
-
 
 @pytest.fixture
 def core():
@@ -3029,34 +2919,6 @@ def test_expected_schema(core):
             'store1.2': 0,
             'store2.1': 0.0,
             'store2.2': 0}}
-
-
-    # assert outcome == {
-    #     'store1': {
-    #         'store1.1': 0.0,
-    #         'store1.2': 0,
-    #         'store2.1': 0.0,
-    #         'store2.2': 0,
-
-    #         'process1': {
-    #             'inputs': {
-    #                 'input1': ['store1.1'],
-    #                 'input2': ['store1.2']},
-    #             'outputs': {
-    #                 'output1': ['store2.1'],
-    #                 'output2': ['store2.2']}},
-    #         'process2': {
-    #             'inputs': {
-    #                 'input1': ['store2.1'],
-    #                 'input2': ['store2.2']},
-    #             'outputs': {
-    #                 'output1': ['store1.1'],
-    #                 'output2': ['store1.2']}}},
-    #     'process3': {
-    #         'inputs': {
-    #             'input_process': ['store1']},
-    #         'outputs': {
-    #             'output_process': ['store1']}}}
 
 
 def test_link_place(core):
@@ -4290,8 +4152,6 @@ def test_edge_complete(core):
     #         'total': ['..', 'emitter', 'total molecules'],
     #         'delta': ['..', 'molecules', 'glucose']}}
 
-    # import ipdb; ipdb.set_trace()
-
     full_schema, full_state = core.complete(
         {'edge': edge_schema},
         {'edge': edge_state})
@@ -4473,8 +4333,6 @@ def test_slice(core):
 
 
 def test_set_slice(core):
-    import ipdb; ipdb.set_trace()
-
     float_schema, float_state = core.set_slice(
         'map[float]',
         {'aaaa': 55.555},
