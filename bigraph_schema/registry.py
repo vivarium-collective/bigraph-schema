@@ -10,6 +10,8 @@ import collections
 import pytest
 import traceback
 
+import numpy as np
+
 from pprint import pformat as pf
 
 from bigraph_schema.parse import parse_expression
@@ -710,14 +712,23 @@ def deserialize_any(schema, state, core):
         return state
 
 
+def is_empty(value):
+    if isinstance(value, np.ndarray):
+        return False
+    elif value is None or value == {}:
+        return True
+    else:
+        return False
+
+
 def merge_any(schema, current_state, new_state, core):
     # overwrites in place!
     # TODO: this operation could update the schema (by merging a key not
     #   already in the schema) but that is not represented currently....
-    if current_state is None or current_state == {}:
+    if is_empty(current_state):
         return new_state
 
-    elif new_state is None or new_state == {}:
+    elif is_empty(new_state):
         return current_state
     
     elif isinstance(new_state, dict):

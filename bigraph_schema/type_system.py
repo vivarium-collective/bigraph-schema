@@ -707,6 +707,8 @@ class TypeSystem:
                 result_state)
 
         else:
+            path = resolve_path(path)
+
             head = path[0]
             tail = path[1:]
             
@@ -821,46 +823,82 @@ class TypeSystem:
             path = []
 
         if isinstance(interface, str):
-            schema = self.access(interface)
+            interface = {'_type': interface}
 
-        for port_key, port_schema in interface.items():
-            if port_key == 'chamber':
-                import ipdb; ipdb.set_trace()
+        for port_key, subwires in wires.items():
+            if port_key in interface:
+                port_schema = interface[port_key]
+            else:
+                port_schema, subwires = self.slice(
+                    interface,
+                    wires,
+                    port_key)
 
-            if port_key in wires:
-                subwires = wires[port_key]
-                if isinstance(subwires, dict):
-                    if isinstance(state, dict):
-                        state = self.fill_ports(
-                            port_schema,
-                            wires=subwires,
-                            state=state,
-                            top_schema=top_schema,
-                            top_state=top_state,
-                            path=path)
-
-                else:
-                    if isinstance(subwires, str):
-                        subwires = [subwires]
-
-                    subschema, substate = self.set_slice(
-                        top_schema,
-                        top_state,
-                        path[:-1] + subwires,
+            if isinstance(subwires, dict):
+                if isinstance(state, dict):
+                    state = self.fill_ports(
                         port_schema,
-                        self.default(port_schema))
+                        wires=subwires,
+                        state=state,
+                        top_schema=top_schema,
+                        top_state=top_state,
+                        path=path)
 
             else:
-                subwires = [port_key]
-                # wires[port_key] = subwires
-                # top_state = self.wire(
-                #     port_schema,
-                #     top_state,
-                #     path,
-                #     port_key,
-                #     subwires)
+                if isinstance(subwires, str):
+                    subwires = [subwires]
+
+                subschema, substate = self.set_slice(
+                    top_schema,
+                    top_state,
+                    path[:-1] + subwires,
+                    port_schema,
+                    self.default(port_schema))
 
         return state
+
+                        # state[port_key] = self.fill_ports(
+                        #     port_schema,
+                        #     wires=subwires,
+                        #     state=state.get(port_key),
+                        #     top_schema=top_schema,
+                        #     top_state=top_state,
+                        #     path=path)
+
+        # for port_key, port_schema in interface.items():
+        #     if port_key == 'chamber':
+        #         import ipdb; ipdb.set_trace()
+
+        #     if port_key in wires:
+        #         subwires = wires[port_key]
+        #         if isinstance(subwires, dict):
+        #             if isinstance(state, dict):
+        #                 state = self.fill_ports(
+        #                     port_schema,
+        #                     wires=subwires,
+        #                     state=state,
+        #                     top_schema=top_schema,
+        #                     top_state=top_state,
+        #                     path=path)
+
+                        # # state[port_key] = self.fill_ports(
+                        # #     port_schema,
+                        # #     wires=subwires,
+                        # #     state=state.get(port_key),
+                        # #     top_schema=top_schema,
+                        # #     top_state=top_state,
+                        # #     path=path)
+            # else:
+            #     subwires = [port_key]
+            #     # wires[port_key] = subwires
+            #     # top_state = self.wire(
+            #     #     port_schema,
+            #     #     top_state,
+            #     #     path,
+            #     #     port_key,
+            #     #     subwires)
+
+        # return state
 
 
     def fill_state(self, schema, state=None, top_schema=None, top_state=None, path=None, type_key=None, context=None):
@@ -1016,13 +1054,25 @@ class TypeSystem:
                 states)
 
         elif isinstance(wires, dict):
-            branches = [
-                self.project(
-                    ports.get(key),
+            branches = []
+            for key in wires.keys():
+                subports, substates = core.slice(ports, states, key)
+                projection = self.project(
+                    subports,
                     wires[key],
                     path,
-                    states.get(key))
-                for key in wires.keys()]
+                    substates)
+                
+                if projection is not None:
+                    branches.append(projection)
+
+            # branches = [
+            #     self.project(
+            #         ports.get(key),
+            #         wires[key],
+            #         path,
+            #         states.get(key))
+            #     for key in wires.keys()]
 
             branches = [
                 branch
@@ -1121,6 +1171,9 @@ class TypeSystem:
 
         if descendant == {}:
             return ancestor == {}
+
+        if descendant is None:
+            return ancestor is None
 
         if '_type' in descendant:
             if '_inherit' in descendant:
@@ -3215,9 +3268,7 @@ def test_project(cube_types):
             'a0.2': {
                 'a0.2.0': 'string'}},
         'a1': {
-            '_type': 'tree[integer]',
-            'a1.0': {
-                'X': 'integer'}}}
+            '_type': 'tree[integer]'}}
 
     path_format = {
         '1': 'a0>a0.0',
@@ -3254,8 +3305,6 @@ def test_project(cube_types):
                 'branch3': 22},
             'branch4': 44}}
 
-    import ipdb; ipdb.set_trace()
-
     instance = cube_types.fill(schema, instance)
 
     states = cube_types.view_edge(
@@ -3276,6 +3325,9 @@ def test_project(cube_types):
             'a0.2': {
                 'a0.2.0': ''}},
         'a1': {
+            'a1.0': {
+                'X': 555,
+                'Y': 0},
             'branch1': {
                 'branch2': 11,
                 'branch3': 22},
@@ -3316,9 +3368,12 @@ def test_project(cube_types):
             'a0.2': {
                 'a0.2.0': ''}},
         'a1': {
+            'a1.0': {
+                'X': 1110,
+                'Y': 0},
             'branch1': {
-                'branch7': 4444,
-                'branch3': 44},
+                'branch3': 44,
+                'branch7': 4444},
             'branch5': 55,
             'branch6': 111},
         'edge1': {
@@ -3326,12 +3381,17 @@ def test_project(cube_types):
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
                 '3': ['a0', 'a0.2', 'a0.2.0'],
-                '4': ['a1']},
+                '4': ['a1'],
+                'inner': {
+                    'chamber': ['a1', 'a1.0']}},
             'outputs': {
                 '1': ['a0', 'a0.0'],
                 '2': ['a0', 'a0.1'],
                 '3': ['a0', 'a0.2', 'a0.2.0'],
-                '4': ['a1']}}}
+                '4': ['a1'],
+                'inner': {
+                    'chamber': {
+                        'X': ['a1', 'a1.0', 'Y']}}}}}
 
 
 def test_check(core):
@@ -4413,6 +4473,8 @@ def test_slice(core):
 
 
 def test_set_slice(core):
+    import ipdb; ipdb.set_trace()
+
     float_schema, float_state = core.set_slice(
         'map[float]',
         {'aaaa': 55.555},
