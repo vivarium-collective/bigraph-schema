@@ -533,7 +533,14 @@ class TypeSystem:
 
 
     def apply_update(self, schema, state, update):
-        if isinstance(update, dict) and '_react' in update:
+        if isinstance(update, list):
+            for subupdate in update:
+                state = self.apply_update(
+                    schema,
+                    state,
+                    subupdate)
+
+        elif isinstance(update, dict) and '_react' in update:
             state = self.react(
                 schema,
                 state,
@@ -1096,7 +1103,7 @@ class TypeSystem:
             elif '_type_parameters' in descendant:
                 for type_parameter in descendant['_type_parameters']:
                     parameter_key = f'_{type_parameter}'
-                    if parameter_key in ancestor:
+                    if parameter_key in ancestor and parameter_key in descendant:
                         if not self.inherits_from(descendant[parameter_key], ancestor[parameter_key]):
                             return False
 
@@ -1106,6 +1113,7 @@ class TypeSystem:
         else:
             for key, value in ancestor.items():
                 if key not in type_schema_keys:
+                # if not key.startswith('_'):
                     if key in descendant:
                         if not self.inherits_from(descendant[key], value):
                             return False
@@ -1627,7 +1635,13 @@ def apply_list(schema, current, update, core):
         schema,
         'element')
 
-    if isinstance(update, list):
+    if current is None:
+        current = []
+
+    if core.check(element_type, update):
+        result = current + [update]
+
+    elif isinstance(update, list):
         result = current + update
         # for current_element, update_element in zip(current, update):
         #     applied = core.apply(
@@ -1639,7 +1653,7 @@ def apply_list(schema, current, update, core):
 
         return result
     else:
-        raise Exception(f'trying to apply an update to an existing list, but the update is not a list: {update}')
+        raise Exception(f'trying to apply an update to an existing list, but the update is not a list or of element type:\n  update: {update}\n  element type: {pf(element_type)}')
 
 
 def check_list(schema, state, core):

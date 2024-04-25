@@ -48,7 +48,10 @@ TYPE_FUNCTION_KEYS = [
     '_divide',
     '_react',
     '_serialize',
-    '_deserialize']
+    '_deserialize',
+    '_slice',
+    '_bind',
+    '_merge']
 
 overridable_schema_keys = set([
     '_type',
@@ -59,6 +62,9 @@ overridable_schema_keys = set([
     '_deserialize',
     '_fold',
     '_divide',
+    '_slice',
+    '_bind',
+    '_merge',
     '_type_parameters',
     '_value',
     '_description',
