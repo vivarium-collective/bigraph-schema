@@ -213,16 +213,6 @@ class TypeSystem:
 
         return report
 
-        # # We will need this when building states to check to see if we are
-        # # trying to instantiate an abstract type, but we can still register
-        # # register abstract types so it is not invalid
-        # if len(schema_keys) > 0 and len(branches) == 0:
-        #     undeclared = set(type_schema_keys) - schema_keys
-        #     if len(undeclared) > 0:
-        #         for key in undeclared:
-        #             if not key in optional_schema_keys:
-        #                 report[key] = f'missing required key: {key} for declaring atomic type'
-
 
     # TODO: if its an edge, ensure ports match wires
     def validate_state(self, original_schema, state):
@@ -533,14 +523,7 @@ class TypeSystem:
 
 
     def apply_update(self, schema, state, update):
-        if isinstance(update, list):
-            for subupdate in update:
-                state = self.apply_update(
-                    schema,
-                    state,
-                    subupdate)
-
-        elif isinstance(update, dict) and '_react' in update:
+        if isinstance(update, dict) and '_react' in update:
             state = self.react(
                 schema,
                 state,
@@ -1640,6 +1623,7 @@ def apply_list(schema, current, update, core):
 
     if core.check(element_type, update):
         result = current + [update]
+        return result
 
     elif isinstance(update, list):
         result = current + update
