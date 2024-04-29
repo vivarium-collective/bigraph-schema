@@ -431,10 +431,11 @@ class TypeSystem:
         # TODO: after the reaction, fill in the state with missing values
         #   from the schema
 
-        if 'redex' in reaction or 'reactum' in reaction or 'calls' in reaction:
+        if 'redex' in reaction or 'reactum' in reaction or 'fold' in reaction:
             redex = reaction.get('redex', {})
             reactum = reaction.get('reactum', {})
-            calls = reaction.get('calls', {})
+            fold = reaction.get('fold', {})
+
         else:
             # single key with reaction name
             reaction_key = list(reaction.keys())[0]
@@ -446,7 +447,7 @@ class TypeSystem:
 
             redex = react.get('redex', {})
             reactum = react.get('reactum', {})
-            calls = react.get('calls', {})
+            fold = react.get('fold', {})
 
         paths = self.match(
             schema,
@@ -460,11 +461,19 @@ class TypeSystem:
                 reactum,
                 before)
 
-            return deep_merge(
+            applied = deep_merge(
                 remaining,
                 reactum)
 
+            return applied
+
+        # TODO: add the ability to fold into a reaction (for division)
         for path in paths:
+            subschema, substate = self.slice(
+                schema,
+                state,
+                path)
+
             state = transform_path(
                 state,
                 path,
@@ -3621,16 +3630,16 @@ def test_replace_reaction(compartment_types):
         'replace',
         replace_reaction)
 
-    replace_config = {
-        'path': ['environment', 'inner'],
-        'before': {'0': {'A': '?1'}},
-        'after': {
-            '2': {
-                'counts': {
-                    'A': {'function': 'divide', 'arguments': ['?1', 0.5], }}},
-            '3': {
-                'counts': {
-                    'A': '@1'}}}}
+    # replace_config = {
+    #     'path': ['environment', 'inner'],
+    #     'before': {'0': {'A': '?1'}},
+    #     'after': {
+    #         '2': {
+    #             'counts': {
+    #                 'A': {'function': 'divide', 'arguments': ['?1', 0.5], }}},
+    #         '3': {
+    #             'counts': {
+    #                 'A': '@1'}}}}
 
     replace_config = {
         'path': ['environment', 'inner'],
@@ -3650,6 +3659,8 @@ def test_replace_reaction(compartment_types):
     assert '0' in state['environment']['inner']
     assert '1' in state['environment']['inner']
 
+    import ipdb; ipdb.set_trace()
+
     result = compartment_types.apply(
         schema,
         state, {
@@ -3660,6 +3671,52 @@ def test_replace_reaction(compartment_types):
     assert '1' in result['environment']['inner']
     assert '2' in result['environment']['inner']
     assert '3' in result['environment']['inner']
+
+
+def test_divide_reaction(compartment_types):
+    single_node = {
+        'environment': {
+            '_type': 'compartment',
+            'counts': {'A': 144},
+            'inner': {
+                '0': {
+                    'counts': {'A': 13},
+                    'inner': {}},
+                '1': {
+                    'counts': {'A': 13},
+                    'inner': {}}}}}
+
+    def divide_reaction(config):
+        path = config.get('path', ())
+
+        redex = {}
+        node = establish_path(
+            redex,
+            path)
+
+        for before_key, before_state in config.get('before', {}).items():
+            node[before_key] = before_state
+
+        reactum = {}
+        node = establish_path(
+            reactum,
+            path)
+
+        for after_key, after_state in config.get('after', {}).items():
+            node[after_key] = after_state
+
+        fold = {}
+
+        return {
+            'redex': redex,
+            'reactum': reactum,
+            'fold': fold}
+
+    compartment_types.react_registry.register(
+        'divide',
+        divide_reaction)
+
+    
 
 
 def test_reaction(compartment_types):
