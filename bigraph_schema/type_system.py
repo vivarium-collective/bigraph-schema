@@ -954,33 +954,38 @@ class TypeSystem:
             wires = [wires]
 
         if isinstance(wires, (list, tuple)):
-            destination = list(path) + list(wires)
+            destination = resolve_path(list(path) + list(wires))
             result = set_path(
                 result,
                 destination,
                 states)
 
         elif isinstance(wires, dict):
-            branches = []
-            for key in wires.keys():
-                subports, substates = self.slice(ports, states, key)
-                projection = self.project(
-                    subports,
-                    wires[key],
-                    path,
-                    substates)
+            if isinstance(states, list):
+                result = [
+                    self.project(ports, wires, path, state)
+                    for state in states]
+            else:
+                branches = []
+                for key in wires.keys():
+                    subports, substates = self.slice(ports, states, key)
+                    projection = self.project(
+                        subports,
+                        wires[key],
+                        path,
+                        substates)
                 
-                if projection is not None:
-                    branches.append(projection)
+                    if projection is not None:
+                        branches.append(projection)
 
-            branches = [
-                branch
-                for branch in branches
-                if branch is not None] # and list(branch)[0][1] is not None]
+                branches = [
+                    branch
+                    for branch in branches
+                    if branch is not None] # and list(branch)[0][1] is not None]
 
-            result = {}
-            for branch in branches:
-                deep_merge(result, branch)
+                result = {}
+                for branch in branches:
+                    deep_merge(result, branch)
         else:
             raise Exception(
                 f'inverting state\n  {states}\naccording to ports schema\n  {ports}\nbut wires are not recognized\n  {wires}')
@@ -991,8 +996,8 @@ class TypeSystem:
     def project_edge(self, schema, instance, edge_path, states, ports_key='outputs'):
         """
         Given states from the perspective of an edge (through its ports), produce states aligned to the tree
-          the wires point to.
-          (inverse of view)
+        the wires point to.
+        (inverse of view)
         """
 
         if schema is None:
@@ -1220,9 +1225,6 @@ class TypeSystem:
                         port_schema = self.resolve_schemas(
                             current,
                             port_schema)
-
-                    if isinstance(destination, tuple):
-                        import ipdb; ipdb.set_trace()
 
                     destination[destination_key] = self.access(
                         port_schema)
@@ -3566,6 +3568,8 @@ def test_replace_reaction(compartment_types):
                     'counts': {'A': 13},
                     'inner': {}}}}}
 
+    # TODO: pull these out of the test and make them available as
+    #   general reactions
     def replace_reaction(config):
         path = config.get('path', ())
 
