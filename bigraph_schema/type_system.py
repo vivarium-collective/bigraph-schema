@@ -438,8 +438,10 @@ class TypeSystem:
             make_reaction = self.react_registry.access(
                 reaction_key)
             react = make_reaction(
-                reaction.get(
-                    reaction_key, {}))
+                schema,
+                state,
+                reaction.get(reaction_key, {}),
+                self)
 
             redex = react.get('redex', {})
             reactum = react.get('reactum', {})
@@ -2399,7 +2401,6 @@ base_type_library = {
         '_type_parameters': ['element'],
         '_description': 'general list type (or sublists)'},
 
-    # TODO: tree should behave as if the leaf type is a valid tree
     'tree': {
         '_type': 'tree',
         '_default': {},
@@ -2482,10 +2483,108 @@ base_type_library = {
         'outputs': 'wires'}}
 
 
+def add_reaction(schema, state, reaction, core):
+    path = reaction.get('path')
+
+    redex = {}
+    establish_path(
+        redex,
+        path)
+
+    reactum = {}
+    node = establish_path(
+        reactum,
+        path)
+
+    deep_merge(
+        node,
+        reaction.get('add', {}))
+
+    return {
+        'redex': redex,
+        'reactum': reactum}
+
+
+def remove_reaction(schema, state, reaction, core):
+    path = reaction.get('path', ())
+    redex = {}
+    node = establish_path(
+        redex,
+        path)
+
+    for remove in reaction.get('remove', []):
+        node[remove] = {}
+
+    reactum = {}
+    establish_path(
+        reactum,
+        path)
+
+    return {
+        'redex': redex,
+        'reactum': reactum}
+
+
+def replace_reaction(schema, state, reaction, core):
+    path = reaction.get('path', ())
+
+    redex = {}
+    node = establish_path(
+        redex,
+        path)
+
+    for before_key, before_state in reaction.get('before', {}).items():
+        node[before_key] = before_state
+
+    reactum = {}
+    node = establish_path(
+        reactum,
+        path)
+
+    for after_key, after_state in reaction.get('after', {}).items():
+        node[after_key] = after_state
+
+    return {
+        'redex': redex,
+        'reactum': reactum}
+
+
+def divide_reaction(schema, state, reaction, core):
+    mother = reaction.get('mother', '0')
+    daughters = reaction.get('daugthers', [f'{mother}_{mother}', f'{mother}_1'])
+
+    mother_schema, mother_state = core.slice(
+        schema,
+        state,
+        mother)
+
+    division = core.fold(
+        schema,
+        state,
+        'divide', {
+            'divisions': len(daughters)})
+
+    after = {
+        daughter: daughter_state
+        for daughter, daughter_state in zip(daughters, division)}
+
+    replace = {
+        'before': {
+            mother: {}},
+        'after': after}
+
+    return replace_reaction(
+        schema,
+        state,
+        replace,
+        core)
+
+
 def register_base_reactions(core):
-    core.register_reaction(
-        'divide_counts',
-        react_divide_counts)
+    core.register_reaction('add', add_reaction)
+    core.register_reaction('remove', remove_reaction)
+    core.register_reaction('replace', replace_reaction)
+    core.register_reaction('divide', divide_reaction)
 
 
 def register_cube(core):
@@ -3444,31 +3543,6 @@ def test_add_reaction(compartment_types):
                     'counts': {'A': 13},
                     'inner': {}}}}}
 
-    def add_reaction(config):
-        path = config.get('path')
-
-        redex = {}
-        establish_path(
-            redex,
-            path)
-
-        reactum = {}
-        node = establish_path(
-            reactum,
-            path)
-
-        deep_merge(
-            node,
-            config.get('add', {}))
-
-        return {
-            'redex': redex,
-            'reactum': reactum}
-
-    compartment_types.react_registry.register(
-        'add',
-        add_reaction)
-
     add_config = {
         'path': ['environment', 'inner'],
         'add': {
@@ -3510,30 +3584,6 @@ def test_remove_reaction(compartment_types):
                     'counts': {'A': 13},
                     'inner': {}}}}}
 
-    # TODO: register these for general access
-    def remove_reaction(config):
-        path = config.get('path', ())
-        redex = {}
-        node = establish_path(
-            redex,
-            path)
-
-        for remove in config.get('remove', []):
-            node[remove] = {}
-
-        reactum = {}
-        establish_path(
-            reactum,
-            path)
-
-        return {
-            'redex': redex,
-            'reactum': reactum}
-
-    compartment_types.react_registry.register(
-        'remove',
-        remove_reaction)
-
     remove_config = {
         'path': ['environment', 'inner'],
         'remove': ['0']}
@@ -3568,45 +3618,16 @@ def test_replace_reaction(compartment_types):
                     'counts': {'A': 13},
                     'inner': {}}}}}
 
-    # TODO: pull these out of the test and make them available as
-    #   general reactions
-    def replace_reaction(config):
-        path = config.get('path', ())
-
-        redex = {}
-        node = establish_path(
-            redex,
-            path)
-
-        for before_key, before_state in config.get('before', {}).items():
-            node[before_key] = before_state
-
-        reactum = {}
-        node = establish_path(
-            reactum,
-            path)
-
-        for after_key, after_state in config.get('after', {}).items():
-            node[after_key] = after_state
-
-        return {
-            'redex': redex,
-            'reactum': reactum}
-
-    compartment_types.react_registry.register(
-        'replace',
-        replace_reaction)
-
-    replace_config = {
-        'path': ['environment', 'inner'],
-        'before': {'0': {'A': '?1'}},
-        'after': {
-            '2': {
-                'counts': {
-                    'A': {'function': 'divide', 'arguments': ['?1', 0.5], }}},
-            '3': {
-                'counts': {
-                    'A': '@1'}}}}
+    # replace_config = {
+    #     'path': ['environment', 'inner'],
+    #     'before': {'0': {'A': '?1'}},
+    #     'after': {
+    #         '2': {
+    #             'counts': {
+    #                 'A': {'function': 'divide', 'arguments': ['?1', 0.5], }}},
+    #         '3': {
+    #             'counts': {
+    #                 'A': '@1'}}}}
 
     replace_config = {
         'path': ['environment', 'inner'],
