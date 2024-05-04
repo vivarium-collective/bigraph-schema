@@ -453,6 +453,12 @@ class TypeSystem:
             redex,
             mode=mode)
         
+        # for path in paths:
+        #     path_schema, path_state = self.slice(
+        #         schema,
+        #         state,
+        #         path)
+
         def merge_state(before):
             remaining = remove_omitted(
                 redex,
@@ -2550,8 +2556,10 @@ def replace_reaction(schema, state, reaction, core):
 
 
 def divide_reaction(schema, state, reaction, core):
-    mother = reaction.get('mother', '0')
-    daughters = reaction.get('daugthers', [f'{mother}_{mother}', f'{mother}_1'])
+    mother = reaction['mother']
+    daughters = reaction.get(
+        'daughters',
+        [f'{mother}0', f'{mother}1'])
 
     mother_schema, mother_state = core.slice(
         schema,
@@ -2559,8 +2567,8 @@ def divide_reaction(schema, state, reaction, core):
         mother)
 
     division = core.fold(
-        schema,
-        state,
+        mother_schema,
+        mother_state,
         'divide', {
             'divisions': len(daughters)})
 
