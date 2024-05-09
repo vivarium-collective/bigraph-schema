@@ -13,6 +13,7 @@ import traceback
 import numpy as np
 
 from pprint import pformat as pf
+from dataclasses import dataclass, field, make_dataclass
 
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.protocols import local_lookup_module, function_module
@@ -549,6 +550,22 @@ def divide_any(schema, state, values, core):
         return [
             copy.deepcopy(state)
             for _ in range(divisions)]
+
+
+def dataclass_any(schema, state, method, values, core):
+    # core.register('rectangle', {'width': 'float', 'height': 'float'})
+
+    # class Rectangle(Dataclass):
+
+
+    if isinstance(state, dict):
+        type_name = state.get(
+            '_type',
+            schema.get('_type', 'Branch'))
+
+        model = make_dataclass(
+            type_name,
+            dataclass_tree)
 
 
 def divide_tuple(schema, state, values, core):

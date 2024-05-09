@@ -1539,6 +1539,14 @@ def concatenate(schema, current, update, core=None):
     return current + update
 
 
+def dataclass_float(schema, state, method, values, core):
+    return float, state or core.default(schema)
+
+
+def dataclass_integer(schema, state, method, values, core):
+    return int, state or core.default(schema)
+
+
 def divide_float(schema, state, values, core):
     divisions = values.get('divisions', 2)
     portion = float(state) / divisions
