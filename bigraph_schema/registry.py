@@ -14,10 +14,11 @@ import numpy as np
 
 from pprint import pformat as pf
 from typing import Any, Tuple, Union, Optional, Mapping
-from dataclasses import dataclass, field, make_dataclass
+from dataclasses import field, make_dataclass
 
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.protocols import local_lookup_module, function_module
+import bigraph_schema.data
 
 
 NONE_SYMBOL = '!nil'
@@ -530,7 +531,7 @@ def fold_union(schema, state, method, values, core):
 def type_parameters_for(schema):
     parameters = []
     for key in schema['_type_parameters']:
-        subschema = schema.get(key, 'any')
+        subschema = schema.get(f'_{key}', 'any')
         parameters.append(subschema)
 
     return parameters
@@ -538,11 +539,18 @@ def type_parameters_for(schema):
 
 def dataclass_union(schema, path, core):
     parameters = type_parameters_for(schema)
-    subtypes = [
-        core.dataclass(
+    subtypes = []
+    for parameter in parameters:
+        dataclass = core.dataclass(
             parameter,
             path)
-        for parameter in parameters]
+
+        if isinstance(dataclass, str):
+            subtypes.append(dataclass)
+        elif isinstance(dataclass, type):
+            subtypes.append(dataclass.__name__)
+        else:
+            subtypes.append(str(dataclass))
 
     parameter_block = ', '.join(subtypes)
     return eval(f'Union[{parameter_block}]')
@@ -590,14 +598,24 @@ def dataclass_any(schema, path, core):
                     subschema,
                     path + [key])
 
-                branches[key] = branch
+                branches[key] = (
+                    key,
+                    branch)
 
         dataclass = make_dataclass(
             dataclass_name,
-            branches)
+            branches,
+            namespace={
+                '__module__': 'bigraph_schema.data'})
+
+        setattr(
+            bigraph_schema.data,
+            dataclass_name,
+            dataclass)
 
     else:
-        dataclass = Any
+        schema = core.access(schema)
+        dataclass = core.dataclass(schema, path)
 
     return dataclass
 

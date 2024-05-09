@@ -9,13 +9,15 @@ import pint
 import pprint
 import pytest
 import random
+import typing
 import inspect
 import numbers
 import numpy as np
 
 from pint import Quantity
 from pprint import pformat as pf
-from typing import Any, Tuple, Union, Optional, Mapping, Callable
+from typing import Any, Tuple, Union, Optional, Mapping, Callable, NewType
+from pydantic import TypeAdapter
 
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.react import react_divide_counts
@@ -29,6 +31,7 @@ from bigraph_schema.registry import (
     remove_omitted
 )
 
+import bigraph_schema.data as data
 
 
 TYPE_SCHEMAS = {
@@ -1774,15 +1777,18 @@ def dataclass_tree(schema, path, core):
         schema,
         'leaf')
 
-    dataclass = core.dataclass(
+    leaf_dataclass = core.dataclass(
         leaf_type,
         path + ['leaf'])
 
     dataclass_name = '_'.join(path)
-    block = f"{dataclass_name} = Union[{dataclass}, Mapping[str, 'dataclass_name']]"
+    # block = f"{dataclass_name} = NewType('{dataclass_name}', Union[{leaf_dataclass}, Mapping[str, '{dataclass_name}']])"
+    block = f"NewType('{dataclass_name}', Union[{leaf_dataclass}, Mapping[str, '{dataclass_name}']])"
 
-    eval(block)
-    return eval(dataclass_name)
+    dataclass = eval(block)
+    setattr(data, dataclass_name, dataclass)
+
+    return dataclass
 
 
 def slice_tree(schema, state, path, core):
@@ -2161,16 +2167,16 @@ def serialize_array(schema, value, core):
     if isinstance(value, dict):
         return value
     else:
-        data = 'string'
+        array_data = 'string'
         dtype = value.dtype.name
         if dtype.startswith('int'):
-            data = 'integer'
+            array_data = 'integer'
         elif dtype.startswith('float'):
-            data = 'float'
+            array_data = 'float'
 
         return {
             'bytes': value.tobytes(),
-            'data': data,
+            'data': array_data,
             'shape': value.shape}
 
 
@@ -4533,13 +4539,50 @@ def test_dataclass(core):
         simple_schema,
         ['simple'])
 
-    simple_instance = simple_dataclass(
+    simple_state = {
+        'a': 88.888,
+        'b': 11111,
+        'c': False,
+        'x': 'not a string'}
+
+    simple_instance = TypeAdapter(
+        simple_dataclass).validate_python(
+            simple_state)
+
+    simple_new = simple_dataclass(
         a=1.11,
         b=33,
         c=True,
         x='what')
 
-    import ipdb; ipdb.set_trace()
+    nested_schema = {
+        'a': {
+            'a': {
+                'a': 'float',
+                'b': 'float'},
+            'x': 'float'}}
+
+    nested_dataclass = core.dataclass(
+        nested_schema,
+        ['nested'])
+
+    nested_state = {
+        'a': {
+            'a': {
+                'a': 13.4444,
+                'b': 888.88},
+            'x': 111.11111}}
+
+    nested_new = data.nested(
+        data.nested_a(
+            data.nested_a_a(
+                a=222.22,
+                b=3.3333),
+            5555.55))
+
+    nested_instance = TypeAdapter(
+        nested_dataclass).validate_python(
+            nested_state)
 
     complex_schema = {
         'a': 'tree[maybe[float]]',
@@ -4549,7 +4592,35 @@ def test_dataclass(core):
             'e': 'array[(3|4|10),float]'}}
 
     complex_dataclass = core.dataclass(
-        complex_schema)
+        complex_schema,
+        ['complex'])
+
+    complex_state = {
+        'a': {
+            'x': {
+                'oooo': None,
+                'y': 1.1,
+                'z': 33.33},
+            'w': 44.444},
+        'b': ['1', '11', '111', '1111'],
+        'c': {
+            'd': {
+                'A': {
+                    'inputs': {
+                        'GGG': ['..', '..', 'a', 'w']},
+                    'outputs': {
+                        'OOO': ['..', '..', 'a', 'x', 'y']}},
+                'B': {
+                    'inputs': {
+                        'GGG': ['..', '..', 'a', 'x', 'y']},
+                    'outputs': {
+                        'OOO': ['..', '..', 'a', 'w']}}},
+            'e': np.zeros((3, 4, 10))}}
+
+    complex_instance = TypeAdapter(
+        complex_dataclass).validate_python(
+            complex_state)
+
 
 if __name__ == '__main__':
     core = TypeSystem()
