@@ -604,7 +604,7 @@ def dataclass_any(schema, path, core):
 
         dataclass = make_dataclass(
             dataclass_name,
-            branches,
+            branches.values(),
             namespace={
                 '__module__': 'bigraph_schema.data'})
 

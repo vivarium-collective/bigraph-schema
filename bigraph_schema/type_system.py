@@ -16,8 +16,7 @@ import numpy as np
 
 from pint import Quantity
 from pprint import pformat as pf
-from typing import Any, Tuple, Union, Optional, Mapping, Callable, NewType
-from pydantic import TypeAdapter
+from typing import Any, Tuple, Union, Optional, Mapping, Callable, NewType, get_origin, get_args
 
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.react import react_divide_counts
@@ -4528,6 +4527,27 @@ def test_set_slice(core):
             1])[1] == 33
 
 
+def from_state(dataclass, state):
+    if hasattr(dataclass, '__dataclass_fields__'):
+        fields = dataclass.__dataclass_fields__
+        state = state or {}
+
+        init = {}
+        for key, field in fields.items():
+            substate = from_state(
+                field.type,
+                state.get(key))
+            init[key] = substate
+        instance = dataclass(**init)
+    # elif get_origin(dataclass) in [typing.Union, typing.Mapping]:
+    #     instance = state
+    else:
+        instance = state
+        # instance = dataclass(state)
+
+    return instance
+
+
 def test_dataclass(core):
     simple_schema = {
         'a': 'float',
@@ -4545,15 +4565,15 @@ def test_dataclass(core):
         'c': False,
         'x': 'not a string'}
 
-    simple_instance = TypeAdapter(
-        simple_dataclass).validate_python(
-            simple_state)
-
     simple_new = simple_dataclass(
         a=1.11,
         b=33,
         c=True,
         x='what')
+
+    simple_from = from_state(
+       simple_dataclass,
+       simple_state)
 
     nested_schema = {
         'a': {
@@ -4580,9 +4600,9 @@ def test_dataclass(core):
                 b=3.3333),
             5555.55))
 
-    nested_instance = TypeAdapter(
-        nested_dataclass).validate_python(
-            nested_state)
+    nested_from = from_state(
+        nested_dataclass,
+        nested_state)
 
     complex_schema = {
         'a': 'tree[maybe[float]]',
@@ -4617,9 +4637,13 @@ def test_dataclass(core):
                         'OOO': ['..', '..', 'a', 'w']}}},
             'e': np.zeros((3, 4, 10))}}
 
-    complex_instance = TypeAdapter(
-        complex_dataclass).validate_python(
-            complex_state)
+    complex_from = from_state(
+        complex_dataclass,
+        complex_state)
+
+    assert complex_from.a['x']['oooo'] is None
+    assert len(complex_from.c.d['A']['inputs']['GGG'])
+    assert isinstance(complex_from.c.e, np.ndarray)
 
 
 if __name__ == '__main__':
