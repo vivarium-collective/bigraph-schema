@@ -13,6 +13,7 @@ import traceback
 import numpy as np
 
 from pprint import pformat as pf
+from typing import Any, Tuple, Union, Optional, Mapping
 from dataclasses import dataclass, field, make_dataclass
 
 from bigraph_schema.parse import parse_expression
@@ -526,6 +527,27 @@ def fold_union(schema, state, method, values, core):
     return result
 
 
+def type_parameters_for(schema):
+    parameters = []
+    for key in schema['_type_parameters']:
+        subschema = schema.get(key, 'any')
+        parameters.append(subschema)
+
+    return parameters
+
+
+def dataclass_union(schema, path, core):
+    parameters = type_parameters_for(schema)
+    subtypes = [
+        core.dataclass(
+            parameter,
+            path)
+        for parameter in parameters]
+
+    parameter_block = ', '.join(subtypes)
+    return eval(f'Union[{parameter_block}]')
+
+
 def divide_any(schema, state, values, core):
     divisions = values.get('divisions', 2)
 
@@ -552,20 +574,48 @@ def divide_any(schema, state, values, core):
             for _ in range(divisions)]
 
 
-def dataclass_any(schema, state, method, values, core):
-    # core.register('rectangle', {'width': 'float', 'height': 'float'})
+def dataclass_any(schema, path, core):
+    parts = path
+    if not parts:
+        parts = ['top']
+    dataclass_name = '_'.join(parts)
 
-    # class Rectangle(Dataclass):
+    if isinstance(schema, dict):
+        type_name = schema.get('_type', 'any')
+
+        branches = {}
+        for key, subschema in schema.items():
+            if not key.startswith('_'):
+                branch = core.dataclass(
+                    subschema,
+                    path + [key])
+
+                branches[key] = branch
+
+        dataclass = make_dataclass(
+            dataclass_name,
+            branches)
+
+    else:
+        dataclass = Any
+
+    return dataclass
 
 
-    if isinstance(state, dict):
-        type_name = state.get(
-            '_type',
-            schema.get('_type', 'Branch'))
+def dataclass_tuple(schema, path, core):
+    parameters = type_parameters_for(schema)
+    subtypes = []
 
-        model = make_dataclass(
-            type_name,
-            dataclass_tree)
+    for index, key in enumerate(schema['type_parameters']):
+        subschema = schema.get(key, 'any')
+        subtype = core.dataclass(
+            subschema,
+            path + [index])
+
+        subtypes.append(subtype)
+
+    parameter_block = ', '.join(subtypes)
+    return eval(f'tuple[{parameter_block}]')
 
 
 def divide_tuple(schema, state, values, core):
@@ -971,6 +1021,7 @@ registry_types = {
         '_check': check_any,
         '_serialize': serialize_any,
         '_deserialize': deserialize_any,
+        '_dataclass': dataclass_any,
         '_fold': fold_any,
         '_merge': merge_any,
         '_bind': bind_any,
@@ -984,6 +1035,7 @@ registry_types = {
         '_slice': slice_tuple,
         '_serialize': serialize_tuple,
         '_deserialize': deserialize_tuple,
+        '_dataclass': dataclass_tuple,
         '_fold': fold_tuple,
         '_divide': divide_tuple,
         '_bind': bind_tuple,
@@ -997,6 +1049,7 @@ registry_types = {
         '_slice': slice_union,
         '_serialize': serialize_union,
         '_deserialize': deserialize_union,
+        '_dataclass': dataclass_union,
         '_fold': fold_union,
         '_description': 'union of a set of possible types'}}
 

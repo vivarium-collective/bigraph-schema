@@ -15,6 +15,7 @@ import numpy as np
 
 from pint import Quantity
 from pprint import pformat as pf
+from typing import Any, Tuple, Union, Optional, Mapping, Callable
 
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.react import react_divide_counts
@@ -477,6 +478,20 @@ class TypeSystem:
 
         return state
 
+
+    def dataclass(self, schema, path=None):
+        path = path or []
+
+        dataclass_function = self.choose_method(
+            schema,
+            {},
+            'dataclass')
+
+        return dataclass_function(
+            schema,
+            path,
+            self)
+        
 
     def check_state(self, schema, state):
         schema = self.access(schema)
@@ -1539,12 +1554,12 @@ def concatenate(schema, current, update, core=None):
     return current + update
 
 
-def dataclass_float(schema, state, method, values, core):
-    return float, state or core.default(schema)
+def dataclass_float(schema, path, core):
+    return float
 
 
-def dataclass_integer(schema, state, method, values, core):
-    return int, state or core.default(schema)
+def dataclass_integer(schema, path, core):
+    return int
 
 
 def divide_float(schema, state, values, core):
@@ -1677,6 +1692,18 @@ def check_list(schema, state, core):
         return False
 
 
+def dataclass_list(schema, path, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+
+    dataclass = core.dataclass(
+        element_type,
+        path + ['element'])
+
+    return list[dataclass]
+
+
 def slice_list(schema, state, path, core):
     element_type = core.find_parameter(
         schema,
@@ -1740,6 +1767,22 @@ def check_tree(schema, state, core):
         return True
     else:
         return core.check(leaf_type, state)
+
+
+def dataclass_tree(schema, path, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+
+    dataclass = core.dataclass(
+        leaf_type,
+        path + ['leaf'])
+
+    dataclass_name = '_'.join(path)
+    block = f"{dataclass_name} = Union[{dataclass}, Mapping[str, 'dataclass_name']]"
+
+    eval(block)
+    return eval(dataclass_name)
 
 
 def slice_tree(schema, state, path, core):
@@ -1835,6 +1878,18 @@ def apply_map(schema, current, update, core=None):
     return result
 
 
+def dataclass_map(schema, path, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    dataclass = core.dataclass(
+        value_type,
+        path + ['value'])
+    
+    return Mapping[str, dataclass]
+
+
 def check_map(schema, state, core=None):
     value_type = core.find_parameter(
         schema,
@@ -1909,6 +1964,18 @@ def apply_maybe(schema, current, update, core):
             value_type,
             current,
             update)
+
+
+def dataclass_maybe(schema, path, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    dataclass = core.dataclass(
+        value_type,
+        path + ['value'])
+    
+    return Optional[dataclass]
 
 
 def check_maybe(schema, state, core):
@@ -2002,6 +2069,20 @@ def apply_edge(schema, current, update, core):
     return result
 
 
+def dataclass_edge(schema, path, core):
+    inputs = schema.get('_inputs', {})
+    inputs_dataclass = core.dataclass(
+        inputs,
+        path + ['inputs'])
+
+    outputs = schema.get('_outputs', {})
+    outputs_dataclass = core.dataclass(
+        outputs,
+        path + ['outputs'])
+
+    return Callable[[inputs_dataclass], outputs_dataclass]
+
+
 def check_ports(state, core, key):
     return key in state and core.check(
         'wires',
@@ -2037,6 +2118,10 @@ def check_array(schema, state, core):
 
     return isinstance(state, np.ndarray) and state.shape == array_shape(core, shape_type) # and state.dtype == bindings['data'] # TODO align numpy data types so we can validate the types of the arrays
 
+
+
+def dataclass_array(schema, path, core):
+    return np.ndarray
 
 
 def slice_array(schema, state, path, core):
@@ -2357,6 +2442,14 @@ def register_units(core, units):
 
 
 
+def dataclass_boolean(schema, path, core):
+    return bool
+
+
+def dataclass_string(schema, path, core):
+    return str
+
+
 base_type_library = {
     'boolean': {
         '_type': 'boolean',
@@ -2365,7 +2458,7 @@ base_type_library = {
         '_apply': apply_boolean,
         '_serialize': serialize_boolean,
         '_deserialize': deserialize_boolean,
-    },
+        '_dataclass': dataclass_boolean},
 
     # abstract number type
     'number': {
@@ -2381,6 +2474,7 @@ base_type_library = {
         # inherit _apply and _serialize from number type
         '_check': check_integer,
         '_deserialize': deserialize_integer,
+        '_dataclass': dataclass_integer,
         '_description': '64-bit integer',
         '_inherit': 'number'},
 
@@ -2390,6 +2484,7 @@ base_type_library = {
         '_check': check_float,
         '_deserialize': deserialize_float,
         '_divide': divide_float,
+        '_dataclass': dataclass_float,
         '_description': '64-bit floating point precision number',
         '_inherit': 'number'},
 
@@ -2400,6 +2495,7 @@ base_type_library = {
         '_apply': replace,
         '_serialize': serialize_string,
         '_deserialize': deserialize_string,
+        '_dataclass': dataclass_string,
         '_description': '64-bit integer'},
 
     'list': {
@@ -2410,6 +2506,7 @@ base_type_library = {
         '_apply': apply_list,
         '_serialize': serialize_list,
         '_deserialize': deserialize_list,
+        '_dataclass': dataclass_list,
         '_fold': fold_list,
         '_divide': divide_list,
         '_type_parameters': ['element'],
@@ -2423,6 +2520,7 @@ base_type_library = {
         '_apply': apply_tree,
         '_serialize': serialize_tree,
         '_deserialize': deserialize_tree,
+        '_dataclass': dataclass_tree,
         '_fold': fold_tree,
         '_divide': divide_tree,
         '_type_parameters': ['leaf'],
@@ -2434,6 +2532,7 @@ base_type_library = {
         '_apply': apply_map,
         '_serialize': serialize_map,
         '_deserialize': deserialize_map,
+        '_dataclass': dataclass_map,
         '_check': check_map,
         '_slice': slice_map,
         '_fold': fold_map,
@@ -2450,6 +2549,7 @@ base_type_library = {
         '_apply': apply_array,
         '_serialize': serialize_array,
         '_deserialize': deserialize_array,
+        '_dataclass': dataclass_array,
         '_type_parameters': [
             'shape',
             'data'],
@@ -2463,6 +2563,7 @@ base_type_library = {
         '_slice': slice_maybe,
         '_serialize': serialize_maybe,
         '_deserialize': deserialize_maybe,
+        '_dataclass': dataclass_maybe,
         '_fold': fold_maybe,
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
@@ -2482,7 +2583,6 @@ base_type_library = {
         '_apply': apply_schema},
 
     'edge': {
-        # TODO: do we need to have defaults informed by type parameters?
         '_type': 'edge',
         '_default': {
             'inputs': {},
@@ -2490,6 +2590,7 @@ base_type_library = {
         '_apply': apply_edge,
         '_serialize': serialize_edge,
         '_deserialize': deserialize_edge,
+        '_dataclass': dataclass_edge,
         '_check': check_edge,
         '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
@@ -4421,6 +4522,35 @@ def test_set_slice(core):
             1])[1] == 33
 
 
+def test_dataclass(core):
+    simple_schema = {
+        'a': 'float',
+        'b': 'integer',
+        'c': 'boolean',
+        'x': 'string'}
+
+    simple_dataclass = core.dataclass(
+        simple_schema,
+        ['simple'])
+
+    simple_instance = simple_dataclass(
+        a=1.11,
+        b=33,
+        c=True,
+        x='what')
+
+    import ipdb; ipdb.set_trace()
+
+    complex_schema = {
+        'a': 'tree[maybe[float]]',
+        'b': 'float~list[string]',
+        'c': {
+            'd': 'map[edge[GGG:float,OOO:float]]',
+            'e': 'array[(3|4|10),float]'}}
+
+    complex_dataclass = core.dataclass(
+        complex_schema)
+
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -4463,4 +4593,4 @@ if __name__ == '__main__':
     test_bind(core)
     test_slice(core)
     test_set_slice(core)
-
+    test_dataclass(core)
