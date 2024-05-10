@@ -598,9 +598,13 @@ def dataclass_any(schema, path, core):
                     subschema,
                     path + [key])
 
+                def default(subschema=subschema):
+                    return core.default(subschema)
+
                 branches[key] = (
                     key,
-                    branch)
+                    branch,
+                    field(default_factory=default))
 
         dataclass = make_dataclass(
             dataclass_name,

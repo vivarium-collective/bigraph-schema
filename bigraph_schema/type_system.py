@@ -17,6 +17,7 @@ import numpy as np
 from pint import Quantity
 from pprint import pformat as pf
 from typing import Any, Tuple, Union, Optional, Mapping, Callable, NewType, get_origin, get_args
+from dataclasses import asdict
 
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.react import react_divide_counts
@@ -481,6 +482,7 @@ class TypeSystem:
         return state
 
 
+    # TODO: maybe all fields are optional?
     def dataclass(self, schema, path=None):
         path = path or []
 
@@ -4555,6 +4557,7 @@ def test_dataclass(core):
         'c': 'boolean',
         'x': 'string'}
 
+    # TODO: accept just a string instead of only a path
     simple_dataclass = core.dataclass(
         simple_schema,
         ['simple'])
@@ -4640,6 +4643,10 @@ def test_dataclass(core):
     complex_from = from_state(
         complex_dataclass,
         complex_state)
+
+    complex_dict = asdict(complex_from)
+
+    # assert complex_dict == complex_state ? 
 
     assert complex_from.a['x']['oooo'] is None
     assert len(complex_from.c.d['A']['inputs']['GGG'])
