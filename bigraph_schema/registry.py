@@ -829,10 +829,13 @@ def merge_any(schema, current_state, new_state, core):
     elif isinstance(new_state, dict):
         if isinstance(current_state, dict):
             for key, value in new_state.items():
-                current_state[key] = core.merge(
-                    schema.get(key),
-                    current_state.get(key),
-                    value)
+                if key.startswith('_'):
+                    current_state[key] = value
+                else:
+                    current_state[key] = core.merge(
+                        schema.get(key),
+                        current_state.get(key),
+                        value)
             return current_state
         else:
             return new_state

@@ -1370,21 +1370,16 @@ class TypeSystem:
             pass
 
         else:
-            type_schema = TYPE_SCHEMAS.get(str(type(state)), schema)
+            type_schema = TYPE_SCHEMAS.get(
+                type(state).__name__,
+                'any')
 
-            peer = get_path(schema, path)
-            destination = establish_path(
-                peer,
-                path[:-1],
-                top=schema,
-                cursor=path[:-1])
-
-            path_key = path[-1]
-            if path_key in destination:
-                # TODO: validate
-                pass
-            else:
-                destination[path_key] = type_schema
+            schema, top_state = self.set_slice(
+                schema,
+                top_state,
+                path,
+                type_schema,
+                state)
 
         return schema, top_state
         
