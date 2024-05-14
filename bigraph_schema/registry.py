@@ -15,6 +15,8 @@ import numpy as np
 from pprint import pformat as pf
 from typing import Any, Tuple, Union, Optional, Mapping
 from dataclasses import field, make_dataclass
+from pydantic import Field
+from pydantic.dataclasses import dataclass as pdataclass
 
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.protocols import local_lookup_module, function_module
@@ -604,13 +606,15 @@ def dataclass_any(schema, path, core):
                 branches[key] = (
                     key,
                     branch,
-                    field(default_factory=default))
+                    Field(default_factory=default))
 
-        dataclass = make_dataclass(
+        innerclass = make_dataclass(
             dataclass_name,
             branches.values(),
             namespace={
                 '__module__': 'bigraph_schema.data'})
+
+        dataclass = pdataclass(innerclass)
 
         setattr(
             bigraph_schema.data,
