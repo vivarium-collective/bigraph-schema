@@ -469,6 +469,8 @@ class TypeSystem:
                 remaining,
                 reactum)
 
+        # import ipdb; ipdb.set_trace()
+
         for path in paths:
             state = transform_path(
                 state,
@@ -917,16 +919,12 @@ class TypeSystem:
     def ports_schema(self, schema, instance, edge_path, ports_key='inputs'):
         found = self.access(schema)
 
-        ports_schema = {}
-        ports = {}
+        edge_schema, edge_state = self.slice(
+            schema,
+            instance,
+            edge_path)
 
-        edge_schema = get_path(found, edge_path)
         ports_schema = edge_schema.get(f'_{ports_key}')
-
-        edge_state = get_path(instance, edge_path)
-        if edge_state is None:
-            import ipdb; ipdb.set_trace()
-            
         ports = edge_state.get(ports_key)
         
         return ports_schema, ports
@@ -1904,8 +1902,6 @@ def resolve_map(schema, update, core):
     if isinstance(update, dict):
         value_schema = schema.get('_value', {})
         for key, subschema in update.items():
-            if key == '0':
-                import ipdb; ipdb.set_trace()
             value_schema = core.resolve_schemas(
                 value_schema,
                 subschema)
