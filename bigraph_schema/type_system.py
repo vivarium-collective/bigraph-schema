@@ -428,6 +428,8 @@ class TypeSystem:
         # TODO: after the reaction, fill in the state with missing values
         #   from the schema
 
+        # TODO: add schema to redex and reactum
+
         if 'redex' in reaction or 'reactum' in reaction or 'calls' in reaction:
             redex = reaction.get('redex', {})
             reactum = reaction.get('reactum', {})
