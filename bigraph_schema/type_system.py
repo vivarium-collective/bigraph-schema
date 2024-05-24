@@ -465,9 +465,11 @@ class TypeSystem:
                 reactum,
                 before)
 
-            return deep_merge(
+            merged = deep_merge(
                 remaining,
                 reactum)
+
+            return merged
 
         for path in paths:
             state = transform_path(
@@ -562,10 +564,12 @@ class TypeSystem:
 
     def apply_update(self, schema, state, update):
         if isinstance(update, dict) and '_react' in update:
-            state = self.react(
+            new_state = self.react(
                 schema,
                 state,
                 update['_react'])
+
+            state = self.deserialize(schema, new_state)
 
         elif isinstance(update, dict) and '_fold' in update:
             fold = update['_fold']
@@ -2720,6 +2724,8 @@ def divide_reaction(schema, state, reaction, core):
         'before': {
             mother: {}},
         'after': after}
+
+    import ipdb; ipdb.set_trace()
 
     return replace_reaction(
         schema,
