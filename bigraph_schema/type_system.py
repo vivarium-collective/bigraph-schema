@@ -2701,9 +2701,7 @@ def replace_reaction(schema, state, reaction, core):
 
 def divide_reaction(schema, state, reaction, core):
     mother = reaction['mother']
-    daughters = reaction.get(
-        'daughters',
-        [f'{mother}0', f'{mother}1'])
+    daughters = reaction['daughters']
 
     mother_schema, mother_state = core.slice(
         schema,
@@ -2714,18 +2712,17 @@ def divide_reaction(schema, state, reaction, core):
         mother_schema,
         mother_state,
         'divide', {
-            'divisions': len(daughters)})
+            'divisions': len(daughters),
+            'daughter_configs': [daughter[1] for daughter in daughters]})
 
     after = {
-        daughter: daughter_state
+        daughter[0]: daughter_state
         for daughter, daughter_state in zip(daughters, division)}
 
     replace = {
         'before': {
             mother: {}},
         'after': after}
-
-    import ipdb; ipdb.set_trace()
 
     return replace_reaction(
         schema,
