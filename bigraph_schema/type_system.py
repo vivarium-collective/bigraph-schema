@@ -54,7 +54,7 @@ def resolve_path(path):
         else:
             resolve.append(step)
 
-    return resolve
+    return tuple(resolve)
 
 
 def apply_schema(schema, current, update, core):
@@ -1235,18 +1235,13 @@ class TypeSystem:
                     raise Exception(f'no wires at port "{port_key}" in ports {ports} with state {state}')
 
                 else:
-                    peer = get_path(
-                        top_schema,
-                        path[:-1])
-
+                    compound_path = resolve_path(path[:-1] + tuple(port_wires))
                     destination = establish_path(
-                        peer,
-                        port_wires[:-1],
-                        top=top_schema,
-                        cursor=path[:-1])
+                        top_schema,
+                        compound_path[:-1])
 
                     # TODO: validate the schema/state
-                    destination_key = port_wires[-1]
+                    destination_key = compound_path[-1]
                     if destination_key in destination:
                         current = destination[destination_key]
                         port_schema = self.resolve_schemas(
