@@ -469,8 +469,6 @@ class TypeSystem:
                 remaining,
                 reactum)
 
-        # import ipdb; ipdb.set_trace()
-
         for path in paths:
             state = transform_path(
                 state,
