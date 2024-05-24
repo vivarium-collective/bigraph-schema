@@ -24,7 +24,7 @@ from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
     NONE_SYMBOL,
     Registry, TypeRegistry, 
-    type_schema_keys, non_schema_keys,
+    type_schema_keys, non_schema_keys, is_schema_key,
     apply_tree, visit_method,
     type_merge, deep_merge,
     get_path, establish_path, set_path, transform_path, remove_path,
@@ -36,10 +36,6 @@ import bigraph_schema.data as data
 
 TYPE_SCHEMAS = {
     'float': 'float'}
-
-
-def is_schema_key(schema, key):
-    return key.strip('_') not in schema.get('_type_parameters', []) and key.startswith('_')
 
 
 def resolve_path(path):
@@ -497,6 +493,21 @@ class TypeSystem:
             self)
         
 
+    def resolve(self, schema, update):
+        if update is None:
+            return schema
+        else:
+            resolve_function = self.choose_method(
+                schema,
+                {},
+                'resolve')
+
+            return resolve_function(
+                schema,
+                update,
+                self)
+
+
     def check_state(self, schema, state):
         schema = self.access(schema)
 
@@ -913,6 +924,9 @@ class TypeSystem:
         ports_schema = edge_schema.get(f'_{ports_key}')
 
         edge_state = get_path(instance, edge_path)
+        if edge_state is None:
+            import ipdb; ipdb.set_trace()
+            
         ports = edge_state.get(ports_key)
         
         return ports_schema, ports
@@ -1143,13 +1157,13 @@ class TypeSystem:
         update = self.access(initial_update)
 
         if self.equivalent(current, update):
-            return current
+            outcome = current
 
         elif self.inherits_from(current, update):
-            return current
+            outcome = current
 
         elif self.inherits_from(update, current):
-            return update
+            outcome = update
 
         elif '_type' in current and '_type' in update and current['_type'] == update['_type']:
             outcome = current.copy()
@@ -1173,22 +1187,33 @@ class TypeSystem:
                         outcome.get(key),
                         update[key])
 
-            return outcome
+        elif '_type' in update and '_type' not in current:
+            outcome = self.resolve(update, current)
 
         else:
-            outcome = current.copy()
+            outcome = self.resolve(current, update)
 
-            for key in update:
-                if not key in outcome or is_schema_key(update, key):
-                    key_update = update[key]
-                    if key_update:
-                        outcome[key] = key_update
-                else:
-                    outcome[key] = self.resolve_schemas(
-                        outcome.get(key),
-                        update[key])
+        # elif '_type' in current:
+        #     outcome = self.resolve(current, update)
 
-            return outcome
+        # elif '_type' in update:
+        #     outcome = self.resolve(update, current)
+
+        # else:
+        #     outcome = self.resolve(current, update)
+        #     outcome = current.copy()
+
+        #     for key in update:
+        #         if not key in outcome or is_schema_key(update, key):
+        #             key_update = update[key]
+        #             if key_update:
+        #                 outcome[key] = key_update
+        #         else:
+        #             outcome[key] = self.resolve_schemas(
+        #                 outcome.get(key),
+        #                 update[key])
+
+        return outcome
 
 
     def infer_wires(self, ports, state, wires, top_schema=None, path=None):
@@ -1875,6 +1900,20 @@ def apply_map(schema, current, update, core=None):
     return result
 
 
+def resolve_map(schema, update, core):
+    if isinstance(update, dict):
+        value_schema = schema.get('_value', {})
+        for key, subschema in update.items():
+            if key == '0':
+                import ipdb; ipdb.set_trace()
+            value_schema = core.resolve_schemas(
+                value_schema,
+                subschema)
+        schema['_value'] = value_schema
+
+    return schema
+
+
 def dataclass_map(schema, path, core):
     value_type = core.find_parameter(
         schema,
@@ -2529,6 +2568,7 @@ base_type_library = {
         '_apply': apply_map,
         '_serialize': serialize_map,
         '_deserialize': deserialize_map,
+        '_resolve': resolve_map,
         '_dataclass': dataclass_map,
         '_check': check_map,
         '_slice': slice_map,

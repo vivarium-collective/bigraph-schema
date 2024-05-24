@@ -582,6 +582,26 @@ def divide_any(schema, state, values, core):
             for _ in range(divisions)]
 
 
+def is_schema_key(schema, key):
+    return key.strip('_') not in schema.get('_type_parameters', []) and key.startswith('_')
+
+
+def resolve_any(schema, update, core):
+    outcome = schema.copy()
+
+    for key in update:
+        if not key in outcome or is_schema_key(update, key):
+            key_update = update[key]
+            if key_update:
+                outcome[key] = key_update
+            else:
+                outcome[key] = self.resolve_schemas(
+                    outcome.get(key),
+                    update[key])
+
+    return outcome
+
+
 def dataclass_any(schema, path, core):
     parts = path
     if not parts:
@@ -1047,6 +1067,7 @@ registry_types = {
         '_serialize': serialize_any,
         '_deserialize': deserialize_any,
         '_dataclass': dataclass_any,
+        '_resolve': resolve_any,
         '_fold': fold_any,
         '_merge': merge_any,
         '_bind': bind_any,
