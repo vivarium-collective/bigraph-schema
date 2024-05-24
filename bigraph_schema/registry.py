@@ -589,15 +589,14 @@ def is_schema_key(schema, key):
 def resolve_any(schema, update, core):
     outcome = schema.copy()
 
-    for key in update:
+    for key, subschema in update.items():
         if not key in outcome or is_schema_key(update, key):
-            key_update = update[key]
-            if key_update:
-                outcome[key] = key_update
-            else:
-                outcome[key] = self.resolve_schemas(
-                    outcome.get(key),
-                    update[key])
+            if subschema:
+                outcome[key] = subschema
+        else:
+            outcome[key] = core.resolve_schemas(
+                outcome.get(key),
+                update[key])
 
     return outcome
 
