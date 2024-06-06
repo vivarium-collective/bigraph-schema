@@ -590,13 +590,22 @@ def resolve_any(schema, update, core):
     outcome = schema.copy()
 
     for key, subschema in update.items():
-        if not key in outcome or is_schema_key(update, key):
+        if key == '_type' and key in outcome:
+            if outcome[key] != subschema:
+                if core.inherits_from(outcome[key], subschema):
+                    continue
+                elif core.inherits_from(subschema, outcome[key]):
+                    outcome[key] = subschema
+                else:
+                    raise Exception(f'cannot resolve types when updating\ncurrent type: {schema}\nupdate type: {update}')
+
+        elif not key in outcome or is_schema_key(update, key):
             if subschema:
                 outcome[key] = subschema
         else:
             outcome[key] = core.resolve_schemas(
                 outcome.get(key),
-                update[key])
+                subschema)
 
     return outcome
 

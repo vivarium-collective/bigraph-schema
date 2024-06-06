@@ -512,6 +512,70 @@ class TypeSystem:
                 self)
 
 
+    def resolve_schemas(self, initial_current, initial_update):
+        current = self.access(initial_current)
+        update = self.access(initial_update)
+
+        if self.equivalent(current, update):
+            outcome = current
+
+        elif self.inherits_from(current, update):
+            outcome = current
+
+        elif self.inherits_from(update, current):
+            outcome = update
+
+        elif '_type' in current and '_type' in update and current['_type'] == update['_type']:
+            outcome = current.copy()
+
+            for key in update:
+                if key == '_type_parameters' and '_type_parameters' in current:
+                    for parameter in update['_type_parameters']:
+                        parameter_key = f'_{parameter}'
+                        if parameter in current['_type_parameters']:
+                            outcome[parameter_key] = self.resolve_schemas(
+                                current[parameter_key],
+                                update[parameter_key])
+                        else:
+                            outcome[parameter_key] = update[parameter_key]
+                elif key not in outcome or is_schema_key(current, key):
+                    key_update = update[key]
+                    if key_update:
+                        outcome[key] = key_update
+                else:
+                    outcome[key] = self.resolve_schemas(
+                        outcome.get(key),
+                        update[key])
+
+        elif '_type' in update and '_type' not in current:
+            outcome = self.resolve(update, current)
+
+        else:
+            outcome = self.resolve(current, update)
+
+        # elif '_type' in current:
+        #     outcome = self.resolve(current, update)
+
+        # elif '_type' in update:
+        #     outcome = self.resolve(update, current)
+
+        # else:
+        #     outcome = self.resolve(current, update)
+        #     outcome = current.copy()
+
+        #     for key in update:
+        #         if not key in outcome or is_schema_key(update, key):
+        #             key_update = update[key]
+        #             if key_update:
+        #                 outcome[key] = key_update
+        #         else:
+        #             outcome[key] = self.resolve_schemas(
+        #                 outcome.get(key),
+        #                 update[key])
+
+        return outcome
+
+
     def check_state(self, schema, state):
         schema = self.access(schema)
 
@@ -1122,7 +1186,10 @@ class TypeSystem:
         if descendant is None:
             return ancestor is None
 
-        if '_type' in descendant:
+        if '_type' in ancestor and ancestor['_type'] == 'any':
+            return True
+
+        elif '_type' in descendant:
             if '_inherit' in descendant:
                 for inherit in descendant['_inherit']:
 
@@ -1152,70 +1219,6 @@ class TypeSystem:
                         return False
 
         return True
-
-
-    def resolve_schemas(self, initial_current, initial_update):
-        current = self.access(initial_current)
-        update = self.access(initial_update)
-
-        if self.equivalent(current, update):
-            outcome = current
-
-        elif self.inherits_from(current, update):
-            outcome = current
-
-        elif self.inherits_from(update, current):
-            outcome = update
-
-        elif '_type' in current and '_type' in update and current['_type'] == update['_type']:
-            outcome = current.copy()
-
-            for key in update:
-                if key == '_type_parameters' and '_type_parameters' in current:
-                    for parameter in update['_type_parameters']:
-                        parameter_key = f'_{parameter}'
-                        if parameter in current['_type_parameters']:
-                            outcome[parameter_key] = self.resolve_schemas(
-                                current[parameter_key],
-                                update[parameter_key])
-                        else:
-                            outcome[parameter_key] = update[parameter_key]
-                elif key not in outcome or is_schema_key(current, key):
-                    key_update = update[key]
-                    if key_update:
-                        outcome[key] = key_update
-                else:
-                    outcome[key] = self.resolve_schemas(
-                        outcome.get(key),
-                        update[key])
-
-        elif '_type' in update and '_type' not in current:
-            outcome = self.resolve(update, current)
-
-        else:
-            outcome = self.resolve(current, update)
-
-        # elif '_type' in current:
-        #     outcome = self.resolve(current, update)
-
-        # elif '_type' in update:
-        #     outcome = self.resolve(update, current)
-
-        # else:
-        #     outcome = self.resolve(current, update)
-        #     outcome = current.copy()
-
-        #     for key in update:
-        #         if not key in outcome or is_schema_key(update, key):
-        #             key_update = update[key]
-        #             if key_update:
-        #                 outcome[key] = key_update
-        #         else:
-        #             outcome[key] = self.resolve_schemas(
-        #                 outcome.get(key),
-        #                 update[key])
-
-        return outcome
 
 
     def infer_wires(self, ports, state, wires, top_schema=None, path=None):
@@ -1913,6 +1916,37 @@ def resolve_map(schema, update, core):
 
     return schema
 
+# def resolve_tree(schema, update, core):
+#     import ipdb; ipdb.set_trace()
+
+#     if isinstance(update, dict):
+#         leaf_schema = schema.get('_leaf', {})
+
+#         if '_type' in update:
+#             if update['_type'] == 'map':
+#                 value_schema = update.get('_value', {})
+#                 leaf_schema = core.resolve_schemas(
+#                     leaf_schema,
+#                     value_schema)
+
+#             elif update['_type'] == 'tree':
+#                 for key, subschema in update.items():
+#                     if not key.startswith('_'):
+#                         leaf_schema = core.resolve_schemas(
+#                             leaf_schema,
+#                             subschema)
+#             else:
+#                 leaf_schema = core.resolve_schemas(
+#                     leaf_schema,
+#                     update)
+
+#             schema['_leaf'] = leaf_schema
+#         else:
+#             for key, subupdate in 
+
+#     return schema
+
+
 
 def dataclass_map(schema, path, core):
     value_type = core.find_parameter(
@@ -2548,20 +2582,6 @@ base_type_library = {
         '_type_parameters': ['element'],
         '_description': 'general list type (or sublists)'},
 
-    'tree': {
-        '_type': 'tree',
-        '_default': {},
-        '_check': check_tree,
-        '_slice': slice_tree,
-        '_apply': apply_tree,
-        '_serialize': serialize_tree,
-        '_deserialize': deserialize_tree,
-        '_dataclass': dataclass_tree,
-        '_fold': fold_tree,
-        '_divide': divide_tree,
-        '_type_parameters': ['leaf'],
-        '_description': 'mapping from str to some type in a potentially nested form'},
-
     'map': {
         '_type': 'map',
         '_default': {},
@@ -2576,6 +2596,21 @@ base_type_library = {
         '_divide': divide_map,
         '_type_parameters': ['value'],
         '_description': 'flat mapping from keys of strings to values of any type'},
+
+    'tree': {
+        '_type': 'tree',
+        '_default': {},
+        '_check': check_tree,
+        '_slice': slice_tree,
+        '_apply': apply_tree,
+        '_serialize': serialize_tree,
+        '_deserialize': deserialize_tree,
+        '_dataclass': dataclass_tree,
+        '_fold': fold_tree,
+        '_divide': divide_tree,
+        # '_resolve': resolve_tree,
+        '_type_parameters': ['leaf'],
+        '_description': 'mapping from str to some type in a potentially nested form'},
 
     'array': {
         '_type': 'array',
@@ -3367,14 +3402,14 @@ def test_project(cube_types):
                 '2': 'float',
                 '3': 'string',
                 'inner': {
-                    'chamber': 'map[integer]'},
+                    'chamber': 'tree[integer]'},
                 '4': 'tree[integer]'},
             '_outputs': {
                 '1': 'integer',
                 '2': 'float',
                 '3': 'string',
                 'inner': {
-                    'chamber': 'map[integer]'},
+                    'chamber': 'tree[integer]'},
                 '4': 'tree[integer]'}},
         'a0': {
             'a0.0': 'integer',
@@ -3441,7 +3476,7 @@ def test_project(cube_types):
         'a1': {
             'a1.0': {
                 'X': 555,
-                'Y': 0},
+                'Y': {}},
             'branch1': {
                 'branch2': 11,
                 'branch3': 22},
@@ -3484,7 +3519,7 @@ def test_project(cube_types):
         'a1': {
             'a1.0': {
                 'X': 1110,
-                'Y': 0},
+                'Y': {}},
             'branch1': {
                 'branch3': 44,
                 'branch7': 4444},
@@ -3564,6 +3599,19 @@ def test_resolve_schemas(core):
     assert resolved['a']['_type'] == 'float'
     assert resolved['b']['_value']['_type'] == 'path'
     assert resolved['c']['_type'] == 'string'
+
+    raises_on_incompatible_schemas = False
+    try:
+        core.resolve_schemas({
+            'a': 'string',
+            'b': 'map[list[string]]'}, {
+                'a': 'number',
+                'b': 'map[path]',
+                'c': 'string'})
+    except:
+        raises_on_incompatible_schemas = True
+
+    assert raises_on_incompatible_schemas
 
 
 def test_apply_schema(core):
