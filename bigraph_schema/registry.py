@@ -359,6 +359,7 @@ class Registry(object):
         """
 
         # check that registered function have the required function keys
+        # TODO -- make this work to check the function keys
         if callable(item) and self.function_keys:
             sig = inspect.signature(item)
             sig_keys = set(sig.parameters.keys())
@@ -375,11 +376,13 @@ class Registry(object):
                         raise Exception(
                             'registry already contains an entry for {}: {} --> {}'.format(
                                 registry_key, self.registry[key], item))
-
-                    else:
+                    elif isinstance(item, dict):
                         self.registry[registry_key] = deep_merge(
                             self.registry[registry_key],
                             item)
+                    else:
+                        self.registry[registry_key] = item
+
             else:
                 self.registry[registry_key] = item
         self.main_keys.add(key)
@@ -1219,8 +1222,7 @@ class TypeRegistry(Registry):
             for subkey, subschema in schema.items():
                 parameters = schema.get('_type_parameters', [])
                 if subkey in TYPE_FUNCTION_KEYS or is_method_key(subkey, parameters):
-                    registry = self.find_registry(
-                        subkey)
+                    registry = self.find_registry(subkey)
                     function_name, module_key = registry.register_function(subschema)
 
                     schema[subkey] = function_name

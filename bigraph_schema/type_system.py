@@ -83,7 +83,6 @@ class TypeSystem:
         register the provided type_data under the given type_key, looking up
         the module of any functions provided
         """
-
         self.type_registry.register(
             type_key,
             type_data,
@@ -275,6 +274,10 @@ class TypeSystem:
 
         elif isinstance(state, dict) and '_type' in state:
             method_type = self.access(state['_type'])
+
+            if method_type is None:
+                raise Exception(f'the type {state["_type"]} was not found in the registry')
+
             found = method_type.get(method_key)
             if found is None:
                 any_type = self.access('any')
