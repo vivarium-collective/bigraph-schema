@@ -5,30 +5,26 @@ Type System
 """
 
 import copy
-import pint
 import pprint
 import pytest
 import random
-import typing
 import inspect
 import numbers
 import numpy as np
 
 from pint import Quantity
 from pprint import pformat as pf
-from typing import Any, Tuple, Union, Optional, Mapping, Callable, NewType, get_origin, get_args
+from typing import Optional, Mapping, Callable
 from dataclasses import asdict
 
 from bigraph_schema.units import units, render_units_type
-from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
     NONE_SYMBOL,
-    Registry, TypeRegistry, 
-    type_schema_keys, non_schema_keys, is_schema_key,
+    Registry, TypeRegistry,
+    type_schema_keys, non_schema_keys, is_schema_key, type_parameter_key,
     apply_tree, visit_method,
-    type_merge, deep_merge,
-    get_path, establish_path, set_path, transform_path, remove_path,
-    remove_omitted
+    deep_merge,
+    get_path, establish_path, set_path, transform_path, remove_omitted
 )
 
 import bigraph_schema.data as data
@@ -260,7 +256,7 @@ class TypeSystem:
         else:
             default = {}
             for key, subschema in found.items():
-                if not key.startswith('_'):
+                if not is_schema_key(key):
                     default[key] = self.default(subschema)
 
         return default
@@ -310,8 +306,8 @@ class TypeSystem:
             state,
             'slice')
 
-        if slice_function is None:
-            import ipdb; ipdb.set_trace()
+        # if slice_function is None:
+        #     import ipdb; ipdb.set_trace()
 
         return slice_function(
             schema,
@@ -541,7 +537,7 @@ class TypeSystem:
                                 update[parameter_key])
                         else:
                             outcome[parameter_key] = update[parameter_key]
-                elif key not in outcome or is_schema_key(current, key):
+                elif key not in outcome or type_parameter_key(current, key):
                     key_update = update[key]
                     if key_update:
                         outcome[key] = key_update
@@ -908,6 +904,9 @@ class TypeSystem:
                 if isinstance(subwires, str):
                     subwires = [subwires]
 
+                if '..' in subwires:
+                    import ipdb; ipdb.set_trace()
+
                 subschema, substate = self.set_slice(
                     top_schema,
                     top_state,
@@ -1167,12 +1166,12 @@ class TypeSystem:
                 return False
 
         for key, value in current.items():
-            if not key.startswith('_'): # key not in type_schema_keys:
+            if not is_schema_key(key): # key not in type_schema_keys:
                 if key not in question or not self.equivalent(current.get(key), question[key]):
                     return False
 
         for key in set(question.keys()) - set(current.keys()):
-            if not key.startswith('_'): # key not in type_schema_keys:
+            if not is_schema_key(key): # key not in type_schema_keys:
                 if key not in question or not self.equivalent(current.get(key), question[key]):
                     return False
 

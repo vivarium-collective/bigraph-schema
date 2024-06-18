@@ -90,7 +90,7 @@ def non_schema_keys(schema):
     return [
         element
         for element in schema.keys()
-        if not element.startswith('_')]
+        if not is_schema_key(element)]
 
             
 def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
@@ -585,7 +585,11 @@ def divide_any(schema, state, values, core):
             for _ in range(divisions)]
 
 
-def is_schema_key(schema, key):
+def is_schema_key(key):
+    return isinstance(key, str) and key.startswith('_')
+
+
+def type_parameter_key(schema, key):
     return key.strip('_') not in schema.get('_type_parameters', []) and key.startswith('_')
 
 
@@ -602,7 +606,7 @@ def resolve_any(schema, update, core):
                 else:
                     raise Exception(f'cannot resolve types when updating\ncurrent type: {schema}\nupdate type: {update}')
 
-        elif not key in outcome or is_schema_key(update, key):
+        elif not key in outcome or type_parameter_key(update, key):
             if subschema:
                 outcome[key] = subschema
         else:
@@ -815,7 +819,7 @@ def deserialize_any(schema, state, core):
         tree = {}
 
         for key, value in state.items():
-            if key.startswith('_'):
+            if is_schema_key(key):
                 decoded = value
             else:
                 decoded = core.deserialize(
