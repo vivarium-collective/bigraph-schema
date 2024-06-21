@@ -306,9 +306,6 @@ class TypeSystem:
             state,
             'slice')
 
-        # if slice_function is None:
-        #     import ipdb; ipdb.set_trace()
-
         return slice_function(
             schema,
             state,
@@ -904,9 +901,6 @@ class TypeSystem:
                 if isinstance(subwires, str):
                     subwires = [subwires]
 
-                if '..' in subwires:
-                    import ipdb; ipdb.set_trace()
-
                 subschema, substate = self.set_slice(
                     top_schema,
                     top_state,
@@ -1256,7 +1250,8 @@ class TypeSystem:
 
                 if isinstance(port_wires, dict):
                     top_schema = self.infer_wires(
-                        ports,
+                        # ports,
+                        port_schema,
                         state.get(port_key),
                         port_wires,
                         top_schema,
