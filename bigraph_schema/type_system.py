@@ -14,7 +14,8 @@ import numpy as np
 
 from pint import Quantity
 from pprint import pformat as pf
-from typing import Optional, Mapping, Callable
+import typing
+from typing import Optional, Mapping, Callable, NewType, Union
 from dataclasses import asdict
 
 from bigraph_schema.units import units, render_units_type
