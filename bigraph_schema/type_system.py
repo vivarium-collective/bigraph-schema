@@ -14,6 +14,7 @@ import numpy as np
 
 from pint import Quantity
 from pprint import pformat as pf
+
 import typing
 from typing import Optional, Mapping, Callable, NewType, Union
 from dataclasses import asdict
@@ -1218,9 +1219,10 @@ class TypeSystem:
         return True
 
 
-    def infer_wires(self, ports, state, wires, top_schema=None, path=None):
+    def infer_wires(self, ports, state, wires, top_schema=None, path=None, internal_path=None):
         top_schema = top_schema or {}
         path = path or ()
+        internal_path = internal_path or ()
 
         if isinstance(ports, str):
             ports = self.access(ports)
@@ -1247,37 +1249,37 @@ class TypeSystem:
 
         else:
             for port_key, port_wires in wires.items():
-                port_schema = ports.get(port_key, {})
+                subschema, substate = self.slice(
+                    ports,
+                    {},
+                    port_key)
 
                 if isinstance(port_wires, dict):
                     top_schema = self.infer_wires(
-                        # ports,
-                        port_schema,
-                        state.get(port_key),
+                        subschema,
+                        substate,
                         port_wires,
-                        top_schema,
-                        path + (port_key,))
+                        top_schema=top_schema,
+                        path=path,
+                        internal_path=internal_path+(port_key,))
 
                 # port_wires must be a list
                 elif len(port_wires) == 0:
                     raise Exception(f'no wires at port "{port_key}" in ports {ports} with state {state}')
 
                 else:
-                    compound_path = resolve_path(path[:-1] + tuple(port_wires))
-                    destination = establish_path(
+                    compound_path = resolve_path(
+                        path[:-1] + tuple(port_wires))
+
+                    compound_schema, _ = self.set_slice(
+                        {}, {},
+                        compound_path,
+                        subschema or 'any',
+                        self.default(subschema))
+
+                    top_schema = self.resolve(
                         top_schema,
-                        compound_path[:-1])
-
-                    # TODO: validate the schema/state
-                    destination_key = compound_path[-1]
-                    if destination_key in destination:
-                        current = destination[destination_key]
-                        port_schema = self.resolve_schemas(
-                            current,
-                            port_schema)
-
-                    destination[destination_key] = self.access(
-                        port_schema)
+                        compound_schema)
 
         return top_schema
 
@@ -1913,6 +1915,57 @@ def resolve_map(schema, update, core):
         schema['_value'] = value_schema
 
     return schema
+
+
+def resolve_array(schema, update, core):
+    if not '_shape' in schema:
+        schema = core.access(schema)
+    if not '_shape' in schema:
+        raise Exception(f'array must have a "_shape" key, not {schema}')
+
+    data_schema = schema.get('_data', {})
+
+    if '_type' in update:
+        data_schema = core.resolve_schemas(
+            data_schema,
+            update.get('_data', {}))
+
+        if update['_type'] == 'array':
+            if '_shape' in update:
+                if update['_shape'] != schema['_shape']:
+                    raise Exception(f'arrays must be of the same shape, not \n  {schema}\nand\n  {update}')
+
+        elif core.inherits_from(update, schema):
+            schema.update(update)
+
+        elif not core.inherits_from(schema, update):
+            raise Exception(f'cannot resolve incompatible array schemas:\n  {schema}\n  {update}')
+
+    else:
+        for key, subschema in update.items():
+            if isinstance(key, int):
+                key = (key,)
+
+            if len(key) > len(schema['_shape']):
+                raise Exception(f'key is longer than array dimension: {key}\n{schema}\n{update}')
+            elif len(key) == len(schema['_shape']):
+                data_schema = core.resolve_schemas(
+                    data_schema,
+                    subschema)
+            else:
+                subshape = schema['_shape'][len(key):]
+                inner_schema = schema.copy()
+                inner_schema['_shape'] = subshape
+                inner_schema = core.resolve_schemas(
+                    inner_schema,
+                    subschema)
+
+                data_schema = inner_schema['_data']
+
+    schema['_data'] = data_schema
+
+    return schema
+
 
 # def resolve_tree(schema, update, core):
 #     import ipdb; ipdb.set_trace()
@@ -2620,6 +2673,7 @@ base_type_library = {
         '_serialize': serialize_array,
         '_deserialize': deserialize_array,
         '_dataclass': dataclass_array,
+        '_resolve': resolve_array,
         '_type_parameters': [
             'shape',
             'data'],
