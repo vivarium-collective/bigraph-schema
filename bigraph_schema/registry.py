@@ -295,6 +295,26 @@ def transform_path(tree, path, transform):
     return set_path(tree, path, after)
 
 
+def hierarchy_depth(hierarchy, path=()):
+    """
+    Create a mapping of every path in the hierarchy to the node living at
+    that path in the hierarchy.
+    """
+
+    base = {}
+
+    for key, inner in hierarchy.items():
+        down = tuple(path + (key,))
+        if is_schema_key(key):
+            base[path] = inner
+        elif isinstance(inner, dict) and 'instance' not in inner:
+            base.update(hierarchy_depth(inner, down))
+        else:
+            base[down] = inner
+
+    return base
+
+
 def remove_omitted(before, after, tree):
     """
     Removes anything in tree that was in before but not in after

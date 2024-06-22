@@ -25,7 +25,7 @@ from bigraph_schema.registry import (
     Registry, TypeRegistry,
     type_schema_keys, non_schema_keys, is_schema_key, type_parameter_key,
     apply_tree, visit_method,
-    deep_merge,
+    deep_merge, hierarchy_depth,
     get_path, establish_path, set_path, transform_path, remove_omitted
 )
 
@@ -696,6 +696,45 @@ class TypeSystem:
         schema = self.access(original_schema)
         state = copy.deepcopy(initial)
         return self.apply_update(schema, state, update)
+
+
+    def apply_slice(self, schema, state, path, update):
+        path = path or ()
+        if len(path) == 0:
+            result = self.apply(
+                schema,
+                state,
+                update)
+
+        else:
+            subschema, substate = self.slice(
+                schema,
+                state,
+                path[0])
+
+            if len(path) == 1:
+                subresult = self.apply(
+                    subschema,
+                    substate,
+                    update)
+
+                result = self.bind(
+                    schema,
+                    state,
+                    path[1:],
+                    subschema,
+                    subresult)
+
+            else:
+                subresult = self.apply_slice(
+                    subschema,
+                    substate,
+                    path[1:],
+                    update)
+
+                result = state
+
+        return result
 
 
     def set_update(self, schema, state, update):
@@ -2280,7 +2319,19 @@ def slice_array(schema, state, path, core):
 
 
 def apply_array(schema, current, update, core):
-    return current + update
+    if isinstance(update, dict):
+        paths = hierarchy_depth(update)
+        for path, inner_update in paths.items():
+            if len(path) > len(schema['_shape']):
+                raise Exception(f'index is too large for array update: {path}\n  {schema}')
+            else:
+                index = tuple(path)
+                current[index] += inner_update
+
+        return current
+
+    else:
+        return current + update
 
 
 def serialize_array(schema, value, core):
