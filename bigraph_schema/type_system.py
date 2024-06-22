@@ -972,9 +972,6 @@ class TypeSystem:
 
 
     def fill(self, original_schema, state=None):
-        # # Removing deepcopy means the state may be updated
-        # if state is not None:
-        #     state = copy.deepcopy(state)
         schema = self.access(original_schema)
 
         return self.fill_state(
@@ -996,47 +993,56 @@ class TypeSystem:
         return ports_schema, ports
 
 
-    def view(self, schema, wires, path, instance):
+    def view(self, schema, wires, path, top_schema=None, top_state=None):
         result = {}
+
         if isinstance(wires, str):
             wires = [wires]
+
         if isinstance(wires, (list, tuple)):
-            result = get_path(instance, list(path) + list(wires))
+            _, result = self.slice(
+                top_schema,
+                top_state,
+                list(path) + list(wires))
+
         elif isinstance(wires, dict):
             result = {}
             for port_key, port_path in wires.items():
-                if isinstance(port_path, dict) or get_path(instance, port_path) is not None:
-                    if isinstance(schema, str):
-                        schema = self.access(schema)
-                    inner_view = self.view(
-                        schema[port_key],
-                        port_path,
-                        path,
-                        instance)
+                subschema, _ = self.slice(
+                    schema,
+                    {},
+                    port_key)
 
-                    if inner_view is not None:
-                        result[port_key] = inner_view
+                inner_view = self.view(
+                    subschema,
+                    port_path,
+                    path,
+                    top_schema=top_schema,
+                    top_state=top_state)
+
+                if inner_view is not None:
+                    result[port_key] = inner_view
         else:
             raise Exception(f'trying to project state with these ports:\n{schema}\nbut not sure what these wires are:\n{wires}')
 
         return result
 
 
-    def view_edge(self, schema, instance, edge_path=None, ports_key='inputs'):
+    def view_edge(self, schema, state, edge_path=None, ports_key='inputs'):
         """
-        project the state of the current instance into a form the edge expects, based on its ports.
+        project the current state into a form the edge expects, based on its ports.
         """
 
         if schema is None:
             return None
-        if instance is None:
-            instance = self.default(schema)
+        if state is None:
+            state = self.default(schema)
         if edge_path is None:
             edge_path = []
 
         ports_schema, ports = self.ports_schema(
             schema,
-            instance,
+            state,
             edge_path=edge_path,
             ports_key=ports_key)
 
@@ -1049,7 +1055,8 @@ class TypeSystem:
             ports_schema,
             ports,
             edge_path[:-1],
-            instance)
+            top_schema=schema,
+            top_state=state)
 
 
     def project(self, ports, wires, path, states):
@@ -1086,7 +1093,7 @@ class TypeSystem:
                 branches = [
                     branch
                     for branch in branches
-                    if branch is not None] # and list(branch)[0][1] is not None]
+                    if branch is not None]
 
                 result = {}
                 for branch in branches:
