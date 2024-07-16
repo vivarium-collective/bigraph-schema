@@ -90,7 +90,7 @@ def non_schema_keys(schema):
     return [
         element
         for element in schema.keys()
-        if not element.startswith('_')]
+        if not is_schema_key(element)]
 
             
 def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
@@ -293,6 +293,26 @@ def transform_path(tree, path, transform):
     after = transform(before)
 
     return set_path(tree, path, after)
+
+
+def hierarchy_depth(hierarchy, path=()):
+    """
+    Create a mapping of every path in the hierarchy to the node living at
+    that path in the hierarchy.
+    """
+
+    base = {}
+
+    for key, inner in hierarchy.items():
+        down = tuple(path + (key,))
+        if is_schema_key(key):
+            base[path] = inner
+        elif isinstance(inner, dict) and 'instance' not in inner:
+            base.update(hierarchy_depth(inner, down))
+        else:
+            base[down] = inner
+
+    return base
 
 
 def remove_omitted(before, after, tree):
@@ -585,7 +605,23 @@ def divide_any(schema, state, values, core):
             for _ in range(divisions)]
 
 
-def is_schema_key(schema, key):
+def is_schema_key(key):
+    return isinstance(key, str) and key.startswith('_')
+
+def strip_schema_keys(state):
+    """remove schema keys from a state dictionary, including nested dictionaries"""
+    if isinstance(state, dict):
+        output = {}
+        for key, value in state.items():
+            if not is_schema_key(key):
+                output[key] = strip_schema_keys(value)
+    else:
+        output = state
+    return output
+                
+                
+
+def type_parameter_key(schema, key):
     return key.strip('_') not in schema.get('_type_parameters', []) and key.startswith('_')
 
 
@@ -602,7 +638,7 @@ def resolve_any(schema, update, core):
                 else:
                     raise Exception(f'cannot resolve types when updating\ncurrent type: {schema}\nupdate type: {update}')
 
-        elif not key in outcome or is_schema_key(update, key):
+        elif not key in outcome or type_parameter_key(update, key):
             if subschema:
                 outcome[key] = subschema
         else:
@@ -815,7 +851,7 @@ def deserialize_any(schema, state, core):
         tree = {}
 
         for key, value in state.items():
-            if key.startswith('_'):
+            if is_schema_key(key):
                 decoded = value
             else:
                 decoded = core.deserialize(

@@ -5,30 +5,28 @@ Type System
 """
 
 import copy
-import pint
 import pprint
 import pytest
 import random
-import typing
 import inspect
 import numbers
 import numpy as np
 
 from pint import Quantity
 from pprint import pformat as pf
-from typing import Any, Tuple, Union, Optional, Mapping, Callable, NewType, get_origin, get_args
+
+import typing
+from typing import Optional, Mapping, Callable, NewType, Union
 from dataclasses import asdict
 
 from bigraph_schema.units import units, render_units_type
-from bigraph_schema.react import react_divide_counts
 from bigraph_schema.registry import (
     NONE_SYMBOL,
-    Registry, TypeRegistry, 
-    type_schema_keys, non_schema_keys, is_schema_key,
+    Registry, TypeRegistry,
+    type_schema_keys, non_schema_keys, is_schema_key, type_parameter_key,
     apply_tree, visit_method,
-    type_merge, deep_merge,
-    get_path, establish_path, set_path, transform_path, remove_path,
-    remove_omitted
+    deep_merge, hierarchy_depth,
+    get_path, establish_path, set_path, transform_path, remove_omitted
 )
 
 import bigraph_schema.data as data
@@ -260,7 +258,7 @@ class TypeSystem:
         else:
             default = {}
             for key, subschema in found.items():
-                if not key.startswith('_'):
+                if not is_schema_key(key):
                     default[key] = self.default(subschema)
 
         return default
@@ -309,9 +307,6 @@ class TypeSystem:
             schema,
             state,
             'slice')
-
-        if slice_function is None:
-            import ipdb; ipdb.set_trace()
 
         return slice_function(
             schema,
@@ -541,7 +536,7 @@ class TypeSystem:
                                 update[parameter_key])
                         else:
                             outcome[parameter_key] = update[parameter_key]
-                elif key not in outcome or is_schema_key(current, key):
+                elif key not in outcome or type_parameter_key(current, key):
                     key_update = update[key]
                     if key_update:
                         outcome[key] = key_update
@@ -701,6 +696,45 @@ class TypeSystem:
         schema = self.access(original_schema)
         state = copy.deepcopy(initial)
         return self.apply_update(schema, state, update)
+
+
+    def apply_slice(self, schema, state, path, update):
+        path = path or ()
+        if len(path) == 0:
+            result = self.apply(
+                schema,
+                state,
+                update)
+
+        else:
+            subschema, substate = self.slice(
+                schema,
+                state,
+                path[0])
+
+            if len(path) == 1:
+                subresult = self.apply(
+                    subschema,
+                    substate,
+                    update)
+
+                result = self.bind(
+                    schema,
+                    state,
+                    path[1:],
+                    subschema,
+                    subresult)
+
+            else:
+                subresult = self.apply_slice(
+                    subschema,
+                    substate,
+                    path[1:],
+                    update)
+
+                result = state
+
+        return result
 
 
     def set_update(self, schema, state, update):
@@ -977,9 +1011,6 @@ class TypeSystem:
 
 
     def fill(self, original_schema, state=None):
-        # # Removing deepcopy means the state may be updated
-        # if state is not None:
-        #     state = copy.deepcopy(state)
         schema = self.access(original_schema)
 
         return self.fill_state(
@@ -1001,47 +1032,56 @@ class TypeSystem:
         return ports_schema, ports
 
 
-    def view(self, schema, wires, path, instance):
+    def view(self, schema, wires, path, top_schema=None, top_state=None):
         result = {}
+
         if isinstance(wires, str):
             wires = [wires]
+
         if isinstance(wires, (list, tuple)):
-            result = get_path(instance, list(path) + list(wires))
+            _, result = self.slice(
+                top_schema,
+                top_state,
+                list(path) + list(wires))
+
         elif isinstance(wires, dict):
             result = {}
             for port_key, port_path in wires.items():
-                if isinstance(port_path, dict) or get_path(instance, port_path) is not None:
-                    if isinstance(schema, str):
-                        schema = self.access(schema)
-                    inner_view = self.view(
-                        schema[port_key],
-                        port_path,
-                        path,
-                        instance)
+                subschema, _ = self.slice(
+                    schema,
+                    {},
+                    port_key)
 
-                    if inner_view is not None:
-                        result[port_key] = inner_view
+                inner_view = self.view(
+                    subschema,
+                    port_path,
+                    path,
+                    top_schema=top_schema,
+                    top_state=top_state)
+
+                if inner_view is not None:
+                    result[port_key] = inner_view
         else:
             raise Exception(f'trying to project state with these ports:\n{schema}\nbut not sure what these wires are:\n{wires}')
 
         return result
 
 
-    def view_edge(self, schema, instance, edge_path=None, ports_key='inputs'):
+    def view_edge(self, schema, state, edge_path=None, ports_key='inputs'):
         """
-        project the state of the current instance into a form the edge expects, based on its ports.
+        project the current state into a form the edge expects, based on its ports.
         """
 
         if schema is None:
             return None
-        if instance is None:
-            instance = self.default(schema)
+        if state is None:
+            state = self.default(schema)
         if edge_path is None:
             edge_path = []
 
         ports_schema, ports = self.ports_schema(
             schema,
-            instance,
+            state,
             edge_path=edge_path,
             ports_key=ports_key)
 
@@ -1054,7 +1094,8 @@ class TypeSystem:
             ports_schema,
             ports,
             edge_path[:-1],
-            instance)
+            top_schema=schema,
+            top_state=state)
 
 
     def project(self, ports, wires, path, states):
@@ -1091,7 +1132,7 @@ class TypeSystem:
                 branches = [
                     branch
                     for branch in branches
-                    if branch is not None] # and list(branch)[0][1] is not None]
+                    if branch is not None]
 
                 result = {}
                 for branch in branches:
@@ -1167,12 +1208,12 @@ class TypeSystem:
                 return False
 
         for key, value in current.items():
-            if not key.startswith('_'): # key not in type_schema_keys:
+            if not is_schema_key(key): # key not in type_schema_keys:
                 if key not in question or not self.equivalent(current.get(key), question[key]):
                     return False
 
         for key in set(question.keys()) - set(current.keys()):
-            if not key.startswith('_'): # key not in type_schema_keys:
+            if not is_schema_key(key): # key not in type_schema_keys:
                 if key not in question or not self.equivalent(current.get(key), question[key]):
                     return False
 
@@ -1224,9 +1265,10 @@ class TypeSystem:
         return True
 
 
-    def infer_wires(self, ports, state, wires, top_schema=None, path=None):
+    def infer_wires(self, ports, state, wires, top_schema=None, path=None, internal_path=None):
         top_schema = top_schema or {}
         path = path or ()
+        internal_path = internal_path or ()
 
         if isinstance(ports, str):
             ports = self.access(ports)
@@ -1253,36 +1295,37 @@ class TypeSystem:
 
         else:
             for port_key, port_wires in wires.items():
-                port_schema = ports.get(port_key, {})
+                subschema, substate = self.slice(
+                    ports,
+                    {},
+                    port_key)
 
                 if isinstance(port_wires, dict):
                     top_schema = self.infer_wires(
-                        ports,
-                        state.get(port_key),
+                        subschema,
+                        substate,
                         port_wires,
-                        top_schema,
-                        path + (port_key,))
+                        top_schema=top_schema,
+                        path=path,
+                        internal_path=internal_path+(port_key,))
 
                 # port_wires must be a list
                 elif len(port_wires) == 0:
                     raise Exception(f'no wires at port "{port_key}" in ports {ports} with state {state}')
 
                 else:
-                    compound_path = resolve_path(path[:-1] + tuple(port_wires))
-                    destination = establish_path(
+                    compound_path = resolve_path(
+                        path[:-1] + tuple(port_wires))
+
+                    compound_schema, _ = self.set_slice(
+                        {}, {},
+                        compound_path,
+                        subschema or 'any',
+                        self.default(subschema))
+
+                    top_schema = self.resolve(
                         top_schema,
-                        compound_path[:-1])
-
-                    # TODO: validate the schema/state
-                    destination_key = compound_path[-1]
-                    if destination_key in destination:
-                        current = destination[destination_key]
-                        port_schema = self.resolve_schemas(
-                            current,
-                            port_schema)
-
-                    destination[destination_key] = self.access(
-                        port_schema)
+                        compound_schema)
 
         return top_schema
 
@@ -1919,6 +1962,57 @@ def resolve_map(schema, update, core):
 
     return schema
 
+
+def resolve_array(schema, update, core):
+    if not '_shape' in schema:
+        schema = core.access(schema)
+    if not '_shape' in schema:
+        raise Exception(f'array must have a "_shape" key, not {schema}')
+
+    data_schema = schema.get('_data', {})
+
+    if '_type' in update:
+        data_schema = core.resolve_schemas(
+            data_schema,
+            update.get('_data', {}))
+
+        if update['_type'] == 'array':
+            if '_shape' in update:
+                if update['_shape'] != schema['_shape']:
+                    raise Exception(f'arrays must be of the same shape, not \n  {schema}\nand\n  {update}')
+
+        elif core.inherits_from(update, schema):
+            schema.update(update)
+
+        elif not core.inherits_from(schema, update):
+            raise Exception(f'cannot resolve incompatible array schemas:\n  {schema}\n  {update}')
+
+    else:
+        for key, subschema in update.items():
+            if isinstance(key, int):
+                key = (key,)
+
+            if len(key) > len(schema['_shape']):
+                raise Exception(f'key is longer than array dimension: {key}\n{schema}\n{update}')
+            elif len(key) == len(schema['_shape']):
+                data_schema = core.resolve_schemas(
+                    data_schema,
+                    subschema)
+            else:
+                subshape = schema['_shape'][len(key):]
+                inner_schema = schema.copy()
+                inner_schema['_shape'] = subshape
+                inner_schema = core.resolve_schemas(
+                    inner_schema,
+                    subschema)
+
+                data_schema = inner_schema['_data']
+
+    schema['_data'] = data_schema
+
+    return schema
+
+
 # def resolve_tree(schema, update, core):
 #     import ipdb; ipdb.set_trace()
 
@@ -2225,7 +2319,19 @@ def slice_array(schema, state, path, core):
 
 
 def apply_array(schema, current, update, core):
-    return current + update
+    if isinstance(update, dict):
+        paths = hierarchy_depth(update)
+        for path, inner_update in paths.items():
+            if len(path) > len(schema['_shape']):
+                raise Exception(f'index is too large for array update: {path}\n  {schema}')
+            else:
+                index = tuple(path)
+                current[index] += inner_update
+
+        return current
+
+    else:
+        return current + update
 
 
 def serialize_array(schema, value, core):
@@ -2625,6 +2731,7 @@ base_type_library = {
         '_serialize': serialize_array,
         '_deserialize': deserialize_array,
         '_dataclass': dataclass_array,
+        '_resolve': resolve_array,
         '_type_parameters': [
             'shape',
             'data'],
