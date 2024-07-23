@@ -1941,7 +1941,8 @@ def apply_map(schema, current, update, core=None):
 
     for key, update_value in update.items():
         if key not in current:
-            raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
+            result[key] = update_value
+            # raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
 
         result[key] = core.apply(
             value_type,
