@@ -2630,6 +2630,96 @@ def dataclass_string(schema, path, core):
     return str
 
 
+def apply_enum(schema, current, update, core):
+    parameters = core.parameters_for(schema)
+    if update in parameters:
+        return update
+    else:
+        raise Exception(f'{update} is not in the enum, options are: {parameters}')
+
+
+def check_enum(schema, state, core):
+    if not isinstance(state, str):
+        return False
+
+    parameters = core.parameters_for(schema)
+    return state in parameters
+
+
+def slice_string(schema, state, path, core):
+    raise Exception(f'cannot slice into an string: {path}\n{state}\n{schema}')
+
+
+def serialize_enum(schema, value, core):
+    return value
+
+
+def deserialize_enum(schema, state, core):
+    return value
+
+
+def bind_enum(schema, state, key, subschema, substate, core):
+    new_schema = schema.copy()
+    new_schema[f'_{key}'] = subschema
+    open = list(state)
+    open[key] = substate
+
+    return new_schema, tuple(open)
+
+
+def fold_enum(schema, state, method, values, core):
+    if not isinstance(state, (tuple, list)):
+        return visit_method(
+            schema,
+            state,
+            method,
+            values,
+            core)
+    else:
+        parameters = core.parameters_for(schema)
+        result = []
+        for parameter, element in zip(parameters, state):
+            fold = core.fold(
+                parameter,
+                element,
+                method,
+                values)
+            result.append(fold)
+
+        result = tuple(result)
+
+        return visit_method(
+            schema,
+            result,
+            method,
+            values,
+            core)
+
+
+def dataclass_enum(schema, path, core):
+    parameters = type_parameters_for(schema)
+    subtypes = []
+
+    for index, key in enumerate(schema['type_parameters']):
+        subschema = schema.get(key, 'any')
+        subtype = core.dataclass(
+            subschema,
+            path + [index])
+
+        subtypes.append(subtype)
+
+    parameter_block = ', '.join(subtypes)
+    return eval(f'tuple[{parameter_block}]')
+
+
+def divide_enum(schema, state, values, core):
+    divisions = values.get('divisions', 2)
+
+    return [
+        tuple([item[index] for item in state])
+        for index in range(divisions)]
+
+
 base_type_library = {
     'boolean': {
         '_type': 'boolean',
@@ -2677,6 +2767,16 @@ base_type_library = {
         '_deserialize': deserialize_string,
         '_dataclass': dataclass_string,
         '_description': '64-bit integer'},
+
+    'enum': {
+        '_type': 'enum',
+        '_default': None,
+        '_apply': apply_enum,
+        '_check': check_enum,
+        '_serialize': serialize_string,
+        '_deserialize': deserialize_string,
+        '_dataclass': dataclass_string,
+        '_description': 'enumeration type for a selection of key values'},
 
     'list': {
         '_type': 'list',
@@ -4841,6 +4941,67 @@ def test_dataclass(core):
     assert isinstance(complex_from.c.e, np.ndarray)
 
 
+def test_enum_type(core):
+    # core.register(
+    #     'planet',
+    #     'enum[mercury,venus,earth,mars,jupiter,saturn,neptune]')
+
+    core.register('planet', {
+        '_type': 'enum',
+        '_type_parameters': ['0', '1', '2', '3', '4', '5', '6'],
+        '_0': 'mercury',
+        '_1': 'venus',
+        '_2': 'earth',
+        '_3': 'mars',
+        '_4': 'jupiter',
+        '_5': 'saturn',
+        '_6': 'neptune'})
+
+    solar_system_schema = {
+        'planets': 'map[planet]'}
+
+    solar_system = {
+        'planets': {
+            '3': 'earth',
+            '4': 'mars'}}
+
+    jupiter_update = {
+        'planets': {
+            '5': 'jupiter'}}
+
+    pluto_update = {
+        'planets': { 
+            '7': 'pluto'}}
+
+    assert core.check(
+        solar_system_schema,
+        solar_system)
+
+    assert core.check(
+        solar_system_schema,
+        jupiter_update)
+
+    assert not core.check(
+        solar_system_schema,
+        pluto_update)
+
+    with_jupiter = core.apply(
+        solar_system_schema,
+        solar_system,
+        jupiter_update)
+
+    try:
+        core.apply(
+            solar_system_schema,
+            solar_system,
+            pluto_update)
+
+        assert False
+    except Exception as e:
+        print(e)
+        assert True
+
+
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -4884,3 +5045,4 @@ if __name__ == '__main__':
     test_slice(core)
     test_set_slice(core)
     test_dataclass(core)
+    test_enum_type(core)

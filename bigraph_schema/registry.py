@@ -44,6 +44,8 @@ optional_schema_keys = set([
 
 type_schema_keys = required_schema_keys | optional_schema_keys
 
+SYMBOL_TYPES = ['enum']
+
 TYPE_FUNCTION_KEYS = [
     '_apply',
     '_check',
@@ -419,7 +421,7 @@ class Registry(object):
 
                 if found is None:
                     raise Exception(
-                        f'function "{subschema}" not found for type data:\n  {pf(schema)}')
+                        f'function "{module_key}" not found for type data')
 
         elif inspect.isfunction(function):
             found = function
@@ -1264,13 +1266,16 @@ class TypeRegistry(Registry):
                     schema[subkey] = function_name
 
                 elif subkey not in type_schema_keys:
-                    lookup = self.access(subschema)
-                    if lookup is None:
-                        raise Exception(
-                            f'trying to register a new type ({key}), '
-                            f'but it depends on a type ({subkey}) which is not in the registry')
+                    if schema['_type'] in SYMBOL_TYPES:
+                        schema[subkey] = subschema
                     else:
-                        schema[subkey] = lookup
+                        lookup = self.access(subschema)
+                        if lookup is None:
+                            raise Exception(
+                                f'trying to register a new type ({key}), '
+                                f'but it depends on a type ({subkey}) which is not in the registry')
+                        else:
+                            schema[subkey] = lookup
         else:
             raise Exception(
                 f'all type definitions must be dicts '
