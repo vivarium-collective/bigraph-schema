@@ -103,6 +103,10 @@ class TypeSystem:
         return type_key in self.type_registry.registry
 
 
+    def find(self, schema):
+        return self.type_registry.find(
+            schema)
+
     def access(self, schema):
         found = self.type_registry.access(
             schema)
@@ -114,7 +118,7 @@ class TypeSystem:
         like access(schema) but raises an exception if nothing is found
         """
 
-        found = self.access(schema)
+        found = self.find(schema)
         if found is None:
             raise Exception(f'schema not found for type: {schema}')
         return found
@@ -271,7 +275,7 @@ class TypeSystem:
             found = state[method_key]
 
         elif isinstance(state, dict) and '_type' in state:
-            method_type = self.access(state['_type'])
+            method_type = self.find(state['_type'])
 
             if method_type is None:
                 raise Exception(f'the type {state["_type"]} was not found in the registry')
@@ -3031,9 +3035,10 @@ def cube_types(core):
 
 
 def register_compartment(core):
-    core.register('compartment', {
-        'counts': 'tree[float]',
-        'inner': 'tree[compartment]'})
+    core.register(
+        'compartment', {
+            'counts': 'tree[float]',
+            'inner': 'tree[compartment]'})
 
     return core
 

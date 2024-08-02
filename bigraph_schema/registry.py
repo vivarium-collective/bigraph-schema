@@ -9,7 +9,7 @@ import copy
 import collections
 import pytest
 import traceback
-
+import functools
 import numpy as np
 
 from pprint import pformat as pf
@@ -413,7 +413,7 @@ class Registry(object):
     def register_function(self, function):
         if isinstance(function, str):
             module_key = function
-            found = self.access(module_key)
+            found = self.find(module_key)
 
             if found is None:
                 found = local_lookup_module(
@@ -438,12 +438,16 @@ class Registry(object):
         for key, schema in schemas.items():
             self.register(key, schema, force=force)
 
+    def find(self, key):
+        return self.registry.get(key)
+        
+
     def access(self, key):
         """
         get an item by key from the registry.
         """
 
-        return self.registry.get(key)
+        return self.find(key)
 
     def list(self):
         return list(self.main_keys)
@@ -1154,6 +1158,61 @@ def is_method_key(key, parameters):
         f'_{parameter}' for parameter in parameters]
 
 
+# def freezeargs(func):
+#     """Convert a mutable dictionary into immutable.
+#     Useful to be compatible with cache
+#     """
+
+#     @functools.wraps(func)
+#     def wrapped(*args, **kwargs):
+#         args = (frozendict(arg) if isinstance(arg, dict) else arg for arg in args)
+#         kwargs = {k: frozendict(v) if isinstance(v, dict) else v for k, v in kwargs.items()}
+#         return func(*args, **kwargs)
+#     return wrapped
+
+def hash_dict(func):
+    class HList(list):
+        def __hash__(self):
+            return hash(frozenset(self))
+
+    class HDict(dict):
+        def __hash__(self):
+            return hash(frozenset(self.items()))
+
+    def make_hash(x):
+        if isinstance(x, dict):
+            hash = {
+                key: make_hash(value)
+                for key, value in x.items()}
+                
+            return HDict(hash)
+
+        elif isinstance(x, list):
+            hash = [
+                make_hash(value)
+                for value in x]
+
+            return HList(hash)
+
+        elif isinstance(x, tuple):
+            hash = [
+                make_hash(value)
+                for value in x]
+
+            return tuple(hash)
+
+        else:
+            return x
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        args = tuple([make_hash(arg) for arg in args])
+        kwargs = {k: make_hash(v) for k, v in kwargs.items()}
+        return func(*args, **kwargs)
+
+    return wrapped
+
+
 class TypeRegistry(Registry):
     """
     registry for holding type information
@@ -1234,7 +1293,7 @@ class TypeRegistry(Registry):
         """
 
         if isinstance(schema, str):
-            schema = self.access(schema)
+            schema = self.find(schema)
         schema = copy.deepcopy(schema)
 
         if '_type' not in schema:
@@ -1269,7 +1328,7 @@ class TypeRegistry(Registry):
                     if schema['_type'] in SYMBOL_TYPES:
                         schema[subkey] = subschema
                     else:
-                        lookup = self.access(subschema)
+                        lookup = self.find(subschema)
                         if lookup is None:
                             raise Exception(
                                 f'trying to register a new type ({key}), '
@@ -1295,7 +1354,7 @@ class TypeRegistry(Registry):
             for type_parameter in type_parameters}
 
 
-    def access(self, schema):
+    def find(self, schema):
         """
         expand the schema to its full type information from the type registry
         """
@@ -1380,15 +1439,23 @@ class TypeRegistry(Registry):
                     
         return found
     
+
+    @hash_dict
+    @functools.lru_cache(maxsize=None)
+    def access(self, schema):
+        return self.find(schema)
+
+
     def retrieve(self, schema):
         """
         like access(schema) but raises an exception if nothing is found
         """
 
-        found = self.access(schema)
+        found = self.find(schema)
         if found is None:
             raise Exception(f'schema not found for type: {schema}')
         return found
+
 
     def lookup(self, type_key, attribute):
         return self.access(type_key).get(attribute)
