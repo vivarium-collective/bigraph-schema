@@ -788,7 +788,7 @@ class TypeSystem:
 
         merge_function = self.choose_method(
             schema,
-            current_state,
+            new_state,
             'merge')
 
         return merge_function(
@@ -2724,6 +2724,10 @@ def divide_enum(schema, state, values, core):
         for index in range(divisions)]
 
 
+def merge_edge(schema, current_state, new_state, core):
+    return core.deserialize(schema, new_state)
+
+
 base_type_library = {
     'boolean': {
         '_type': 'boolean',
@@ -2879,6 +2883,7 @@ base_type_library = {
         '_deserialize': deserialize_edge,
         '_dataclass': dataclass_edge,
         '_check': check_edge,
+        '_merge': merge_edge,
         '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
         'inputs': 'wires',

@@ -893,27 +893,35 @@ def merge_any(schema, current_state, new_state, core):
     # overwrites in place!
     # TODO: this operation could update the schema (by merging a key not
     #   already in the schema) but that is not represented currently....
+    merge_state = None
+
     if is_empty(current_state):
-        return new_state
+        merge_state = new_state
 
     elif is_empty(new_state):
-        return current_state
+        merge_state = current_state
     
     elif isinstance(new_state, dict):
         if isinstance(current_state, dict):
             for key, value in new_state.items():
-                if key.startswith('_'):
+                if is_schema_key(key):
                     current_state[key] = value
                 else:
                     current_state[key] = core.merge(
                         schema.get(key),
                         current_state.get(key),
                         value)
-            return current_state
+            merge_state = current_state
         else:
-            return new_state
+            merge_state = new_state
     else:
-        return new_state
+        merge_state = new_state
+
+    return merge_state
+
+    # return core.deserialize(
+    #     schema,
+    #     merge_state)
 
 
 def bind_any(schema, state, key, subschema, substate, core):
