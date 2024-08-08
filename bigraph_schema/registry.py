@@ -1166,61 +1166,6 @@ def is_method_key(key, parameters):
         f'_{parameter}' for parameter in parameters]
 
 
-# def freezeargs(func):
-#     """Convert a mutable dictionary into immutable.
-#     Useful to be compatible with cache
-#     """
-
-#     @functools.wraps(func)
-#     def wrapped(*args, **kwargs):
-#         args = (frozendict(arg) if isinstance(arg, dict) else arg for arg in args)
-#         kwargs = {k: frozendict(v) if isinstance(v, dict) else v for k, v in kwargs.items()}
-#         return func(*args, **kwargs)
-#     return wrapped
-
-def hash_dict(func):
-    class HList(list):
-        def __hash__(self):
-            return hash(frozenset(self))
-
-    class HDict(dict):
-        def __hash__(self):
-            return hash(frozenset(self.items()))
-
-    def make_hash(x):
-        if isinstance(x, dict):
-            hash = {
-                key: make_hash(value)
-                for key, value in x.items()}
-                
-            return HDict(hash)
-
-        elif isinstance(x, list):
-            hash = [
-                make_hash(value)
-                for value in x]
-
-            return HList(hash)
-
-        elif isinstance(x, tuple):
-            hash = [
-                make_hash(value)
-                for value in x]
-
-            return tuple(hash)
-
-        else:
-            return x
-
-    @functools.wraps(func)
-    def wrapped(*args, **kwargs):
-        args = tuple([make_hash(arg) for arg in args])
-        kwargs = {k: make_hash(v) for k, v in kwargs.items()}
-        return func(*args, **kwargs)
-
-    return wrapped
-
-
 class TypeRegistry(Registry):
     """
     registry for holding type information
@@ -1446,13 +1391,16 @@ class TypeRegistry(Registry):
                     traceback.print_exc()
                     
         return found
-    
 
-    @hash_dict
-    @functools.lru_cache(maxsize=None)
     def access(self, schema):
-        return self.find(schema)
+        if isinstance(schema, str):
+            return self.access_str(schema)
+        else:
+            return self.find(schema)
 
+    @functools.lru_cache(maxsize=None)
+    def access_str(self, schema):
+        return self.find(schema)
 
     def retrieve(self, schema):
         """
