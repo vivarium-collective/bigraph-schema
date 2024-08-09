@@ -216,6 +216,8 @@ class TypeSystem:
 
 
     # TODO: if its an edge, ensure ports match wires
+    # TODO: make this work again, return information about what is wrong
+    #   with the schema
     def validate_state(self, original_schema, state):
         schema = self.access(original_schema)
         validation = {}
@@ -250,11 +252,14 @@ class TypeSystem:
         return validation
 
 
+    # TODO: should default be a method?
     def default(self, schema):
         default = None
         found = self.retrieve(schema)
 
-        if '_default' in found:
+        if found and '_type' in found and found['_type'] == 'enum':
+            return found['_0']
+        elif '_default' in found:
             if not '_deserialize' in found:
                 raise Exception(
                     f'asking for default but no deserialize in {found}')
@@ -3411,18 +3416,16 @@ def test_expected_schema(core):
         'store1': {
             'process1': {
                 'inputs': {
-                    'input1': ['store2.1'],
-                    'input2': ['store2.2']},
+                    'input1': ['store1.1'],
+                    'input2': ['store1.2']},
                 'outputs': {
-                    'output1': ['store1.1'],
-                    'output2': ['store1.2']}},
+                    'output1': ['store2.1'],
+                    'output2': ['store2.2']}},
             'process2': {
-                'inputs': {
-                    'input1': ['store2.1'],
-                    'input2': ['store2.2']},
-                'outputs': {
-                    'output1': ['store1.1'],
-                    'output2': ['store1.2']}},
+                'inputs': {'input1': ['store2.1'],
+                           'input2': ['store2.2']},
+                'outputs': {'output1': ['store1.1'],
+                            'output2': ['store1.2']}},
             'store1.1': 0.0,
             'store1.2': 0,
             'store2.1': 0.0,
@@ -4966,6 +4969,8 @@ def test_enum_type(core):
         '_4': 'jupiter',
         '_5': 'saturn',
         '_6': 'neptune'})
+
+    assert core.default('planet') == 'mercury'
 
     solar_system_schema = {
         'planets': 'map[planet]'}
