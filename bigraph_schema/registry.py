@@ -358,6 +358,12 @@ def remove_path(tree, path):
     return tree
 
 
+def default(type, default):
+    return {
+        '_type': type,
+        '_default': default}
+
+
 class Registry(object):
     """A Registry holds a collection of functions or objects"""
 
