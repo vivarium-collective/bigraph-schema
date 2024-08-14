@@ -20,6 +20,8 @@ parameter_examples = {
     'typed_parameters': 'edge[a:int|b:(x:length|y:float),v[zz:float|xx:what]]',
     'inputs_and_outputs': 'edge[input1:float|input2:int,output1:float|output2:int]',
     'tuple': 'what[is,happening|(with:yellow|this:green)|this:now]',
+    'single': 'hello[(3),over]',
+    'double': 'hello[(3|4),over]',
     'units_type': 'length^2*mass/time^1_5'}
 
 
@@ -98,10 +100,15 @@ class ParameterVisitor(NodeVisitor):
         return visit[0]
 
     def visit_group(self, node, visit):
-        return visit[1]
+        # return visit[1]
+        if isinstance(visit[1], (list, tuple, dict)):
+            return visit[1]
+        else:
+            return tuple([visit[1]])
 
     def visit_nest(self, node, visit):
-        return {visit[0]: visit[2]}
+        return {
+            visit[0]: visit[2]}
 
     def visit_type_name(self, node, visit):
         type_name = visit[0]
