@@ -24,6 +24,7 @@ from bigraph_schema.registry import (
     NONE_SYMBOL,
     Registry, TypeRegistry,
     type_schema_keys, non_schema_keys, is_schema_key, type_parameter_key,
+    slice_any,
     apply_tree, visit_method,
     deep_merge, hierarchy_depth,
     get_path, establish_path, set_path, transform_path, remove_omitted
@@ -304,7 +305,10 @@ class TypeSystem:
         return method_function
 
 
-    def slice(self, schema, state, path):
+    def slice(self, schema, state, path, top_schema=None, top_state=None):
+        top_schema = top_schema or schema
+        top_state = top_state or state
+
         if not isinstance(path, (list, tuple)):
             path = [path]
 
@@ -321,7 +325,9 @@ class TypeSystem:
             schema,
             state,
             path,
-            self)
+            self,
+            top_schema=top_schema,
+            top_state=top_state)
 
 
     def match_node(self, schema, state, pattern):
@@ -1801,6 +1807,31 @@ def slice_list(schema, state, path, core):
         return schema, state
 
 
+# def find_wire(state, wires, path):
+#     if not path:
+#         return wires
+#     else:
+#         head = path[0]
+#         tail = path[1:]
+
+#         if isinstance(wires, dict):
+            
+
+def slice_edge(schema, state, path, core):
+    import ipdb; ipdb.set_trace()
+
+    if not path:
+        return schema, state
+    else:
+        head = path[0]
+        tail = path[1:]
+
+        if head == 'inputs' or head == 'outputs':
+            core.view_edge(schema, state, ports_key=head)
+
+    return slice_any(schema, state, path, core)
+
+
 def serialize_list(schema, value, core=None):
     element_type = core.find_parameter(
         schema,
@@ -2888,6 +2919,7 @@ base_type_library = {
         '_deserialize': deserialize_edge,
         '_dataclass': dataclass_edge,
         '_check': check_edge,
+        '_slice': slice_edge,
         '_merge': merge_edge,
         '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
@@ -4539,6 +4571,19 @@ def test_edge_type(core):
     schema, state = core.complete(
         initial_schema,
         initial_state)
+
+    import ipdb; ipdb.set_trace()
+
+    target_schema, target_state = core.slice(
+        schema,
+        state,
+        ['fade', 'inputs', 'yellow', 0, 0])
+
+    assert target_schema['_shape']['_0'] == 10
+    assert target_state[0] == 0.0
+
+    # TODO: update to wires should complete the state the new wires
+    #   refer to if they are absent
 
     update = {
         'yellow': np.ones((3, 4, 10)),
