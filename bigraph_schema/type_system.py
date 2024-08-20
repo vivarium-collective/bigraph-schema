@@ -1239,7 +1239,13 @@ class TypeSystem:
         if descendant is None:
             return ancestor is None
 
-        if '_type' in ancestor and ancestor['_type'] == 'any':
+        if isinstance(ancestor, int):
+            if isinstance(descendant, int):
+                return ancestor == descendant
+            else:
+                return False
+
+        elif '_type' in ancestor and ancestor['_type'] == 'any':
             return True
 
         elif '_type' in descendant:
@@ -2112,7 +2118,7 @@ def serialize_map(schema, value, core=None):
     return {
         key: core.serialize(
             value_type,
-            subvalue)
+            subvalue) if not is_schema_key(key) else subvalue
         for key, subvalue in value.items()}
 
 
@@ -2349,6 +2355,8 @@ def serialize_array(schema, value, core):
 
     if isinstance(value, dict):
         return value
+    elif isinstance(value, str):
+        import ipdb; ipdb.set_trace()
     else:
         array_data = 'string'
         dtype = value.dtype.name

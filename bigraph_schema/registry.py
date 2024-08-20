@@ -1351,9 +1351,14 @@ class TypeRegistry(Registry):
                    key: self.access(branch)
                    for key, branch in schema.items()}
 
-        elif isinstance(schema, (tuple, int)):
-            if isinstance(schema, int):
-                schema = tuple([schema])
+        elif isinstance(schema, int):
+            return schema
+
+        elif isinstance(schema, tuple):
+            # import ipdb; ipdb.set_trace()
+
+            # if isinstance(schema, int):
+            #     schema = tuple([schema])
 
             tuple_schema = {
                 '_type': 'tuple',
