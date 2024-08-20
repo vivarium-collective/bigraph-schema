@@ -2353,7 +2353,7 @@ def serialize_array(schema, value, core):
             array_data = 'float'
 
         return {
-            'bytes': value.tobytes(),
+            'bytes': value.tolist(),
             'data': array_data,
             'shape': value.shape}
 
