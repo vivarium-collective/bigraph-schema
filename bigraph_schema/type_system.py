@@ -2345,7 +2345,7 @@ def apply_array(schema, current, update, core):
 
 
 def serialize_array(schema, value, core):
-    """ Serialize numpy array to bytes """
+    """ Serialize numpy array to list """
 
     if isinstance(value, dict):
         return value
@@ -2358,7 +2358,7 @@ def serialize_array(schema, value, core):
             array_data = 'float'
 
         return {
-            'bytes': value.tobytes(),
+            'list': value.tolist(),
             'data': array_data,
             'shape': value.shape}
 
@@ -2399,9 +2399,9 @@ def deserialize_array(schema, encoded, core):
                 core.parameters_for(
                     schema['_shape']))
 
-            if 'bytes' in encoded:
-                return np.frombuffer(
-                    encoded['bytes'],
+            if 'list' in encoded:
+                return np.array(
+                    encoded['list'],
                     dtype=dtype).reshape(
                         shape)
             else:
