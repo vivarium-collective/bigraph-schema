@@ -1245,6 +1245,15 @@ class TypeSystem:
             else:
                 return False
 
+        elif isinstance(ancestor, list):
+            if isinstance(descendant, list):
+                if len(ancestor) == len(descendant):
+                    for a, d in zip(ancestor, descendant):
+                        if not self.inherits_from(d, a):
+                            return False
+                else:
+                    return False
+
         elif '_type' in ancestor and ancestor['_type'] == 'any':
             return True
 
@@ -2015,7 +2024,10 @@ def resolve_array(schema, update, core):
                     data_schema,
                     subschema)
             else:
-                subshape = schema['_shape'][len(key):]
+                shape = tuple_from_type(
+                    schema['_shape'])
+
+                subshape = shape[len(key):]
                 inner_schema = schema.copy()
                 inner_schema['_shape'] = subshape
                 inner_schema = core.resolve_schemas(
@@ -2027,6 +2039,24 @@ def resolve_array(schema, update, core):
     schema['_data'] = data_schema
 
     return schema
+
+
+def tuple_from_type(tuple_type):
+    if isinstance(tuple_type, tuple):
+        return tuple_type
+
+    elif isinstance(tuple_type, list):
+        return tuple(tuple_type)
+
+    elif isinstance(tuple_type, dict):
+        tuple_list = [
+            tuple_type[f'_{parameter}']
+            for parameter in tuple_type['_type_parameters']]
+
+        return tuple(tuple_list)
+
+    else:
+        raise Exception(f'do not recognize this type as a tuple: {tuple_type}')
 
 
 # def resolve_tree(schema, update, core):
@@ -2368,7 +2398,7 @@ def serialize_array(schema, value, core):
         return {
             'list': value.tolist(),
             'data': array_data,
-            'shape': value.shape}
+            'shape': list(value.shape)}
 
 
 DTYPE_MAP = {
@@ -2403,9 +2433,10 @@ def deserialize_array(schema, encoded, core):
             dtype = lookup_dtype(
                 encoded.get('data'))
 
-            shape = read_shape(
-                core.parameters_for(
-                    schema['_shape']))
+            shape = [
+                int(x)
+                for x in tuple_from_type(
+                    schema['_shape'])]
 
             if 'list' in encoded:
                 return np.array(
@@ -2414,7 +2445,7 @@ def deserialize_array(schema, encoded, core):
                         shape)
             else:
                 return np.zeros(
-                    shape,
+                    tuple(shape),
                     dtype=dtype)
 
 
@@ -2741,6 +2772,14 @@ def merge_edge(schema, current_state, new_state, core):
     return core.deserialize(schema, new_state)
 
 
+def serialize_schema(schema, state, core):
+    return state
+
+
+def deserialize_schema(schema, state, core):
+    return state
+
+
 base_type_library = {
     'boolean': {
         '_type': 'boolean',
@@ -2884,7 +2923,9 @@ base_type_library = {
     'schema': {
         '_type': 'schema',
         '_inherit': 'tree[any]',
-        '_apply': apply_schema},
+        '_apply': apply_schema,
+        '_serialize': serialize_schema,
+        '_deserialize': deserialize_schema},
 
     'edge': {
         '_type': 'edge',
@@ -4461,7 +4502,7 @@ def test_array_type(core):
     assert result['b'][0, 0, 0] == 10.999
 
     encode = core.serialize(schema, state)
-    assert encode['b']['shape'] == (3, 4, 10)
+    assert encode['b']['shape'] == [3, 4, 10]
     assert encode['a']['data'] == 'float'
 
     decode = core.deserialize(schema, encode)

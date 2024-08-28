@@ -1355,11 +1355,6 @@ class TypeRegistry(Registry):
             return schema
 
         elif isinstance(schema, tuple):
-            # import ipdb; ipdb.set_trace()
-
-            # if isinstance(schema, int):
-            #     schema = tuple([schema])
-
             tuple_schema = {
                 '_type': 'tuple',
                 '_type_parameters': []}
@@ -1372,6 +1367,9 @@ class TypeRegistry(Registry):
                 tuple_schema)
 
         elif isinstance(schema, list):
+            if isinstance(schema[0], int):
+                return schema
+
             bindings = []
             if len(schema) > 1:
                 schema, bindings = schema
