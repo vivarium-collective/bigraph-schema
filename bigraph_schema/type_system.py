@@ -1618,6 +1618,15 @@ def accumulate(schema, current, update, core):
         return current + update
 
 
+def nonnegative_accumulate(schema, current, update, core):
+    if current is None:
+        return max(update, 0)
+    if update is None:
+        return max(current, 0)
+    else:
+        return max(current + update, 0)
+
+
 def set_apply(schema, current, update, core):
     if isinstance(current, dict) and isinstance(update, dict):
         for key, value in update.items():
@@ -2635,6 +2644,47 @@ def divide_map(schema, state, values, core):
         raise Exception(f'trying to divide a map but state is not a dict.\n  state: {pf(state)}\n  schema: {pf(schema)}')        
 
 
+def apply_dictionary(schema, current, update, core=None):
+    """Dictionary Updater
+    Updater that translates _add and _delete -style updates
+    into operations on a dictionary.
+
+    Expects current to be a dictionary, with no restriction on the types of objects
+    stored within it, and no defaults values.
+    """
+    result = current
+
+    for key, value in update.items():
+        if key == "_add":
+            for added_value in value:
+                added_key = added_value["key"]
+                added_state = added_value["state"]
+                result[added_key] = added_state
+        elif key == "_delete":
+            for k in value:
+                del result[k]
+        elif key in result:
+            result[key].update(value)
+        else:
+            raise Exception(f"Invalid dict_value_updater key: {key}")
+
+    return result
+
+
+def apply_merge(schema, current, update, core=None):
+    if not isinstance(current, dict):
+        raise Exception(f'trying to apply an update to a value that is not a map:\n  value: {current}\n  update: {update}')
+    if not isinstance(update, dict):
+        raise Exception(f'trying to apply an update that is not a map:\n  value: {current}\n  update: {update}')
+
+    result = current.copy()
+
+    for key, update_value in update.items():
+        result[key] = update_value
+
+    return result
+
+
 def register_types(core, type_library):
     for type_key, type_data in type_library.items():
         if not core.exists(type_key):
@@ -2643,6 +2693,17 @@ def register_types(core, type_library):
                 type_data)
 
     core.type_registry.apply_registry.register('set', set_apply)
+    core.type_registry.apply_registry.register(
+        'nonnegative_accumulate',
+        nonnegative_accumulate)
+
+    core.type_registry.apply_registry.register(
+        'apply_dictionary',
+        apply_dictionary)
+
+    core.type_registry.apply_registry.register(
+        'apply_merge',
+        apply_merge)
 
     return core
         
@@ -2780,6 +2841,10 @@ def deserialize_schema(schema, state, core):
     return state
 
 
+def apply_constant(schema, current, update, core=None):
+    return current
+
+
 base_type_library = {
     'boolean': {
         '_type': 'boolean',
@@ -2789,6 +2854,11 @@ base_type_library = {
         '_serialize': serialize_boolean,
         '_deserialize': deserialize_boolean,
         '_dataclass': dataclass_boolean},
+
+    'constant': {
+        '_type': 'constant',
+        '_type_parameters': ['value'],
+        '_apply': apply_constant}
 
     # abstract number type
     'number': {
