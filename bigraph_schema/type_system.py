@@ -3762,11 +3762,13 @@ def test_project(cube_types):
         '4': {
             'branch6': 111,
             'branch1': {
-                '_add': [{
-                    'branch7': 4444}],
+                '_add': {
+                    'branch7': 4444,
+                    'branch8': 555,
+                },
                 '_remove': ['branch2']},
-            '_add': [{
-                'branch5': 55}],
+            '_add': {
+                'branch5': 55},
             '_remove': ['branch4']}}
 
     inverted_update = cube_types.project_edge(
@@ -3805,7 +3807,8 @@ def test_project(cube_types):
                 'Y': {}},
             'branch1': {
                 'branch3': 44,
-                'branch7': 4444},
+                'branch7': 4444,
+                'branch8': 555,},
             'branch6': 111,
             'branch5': 55}}
 
