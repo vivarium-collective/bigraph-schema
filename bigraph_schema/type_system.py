@@ -2929,9 +2929,6 @@ base_type_library = {
 
     'edge': {
         '_type': 'edge',
-        '_default': {
-            'inputs': {},
-            'outputs': {}},
         '_apply': apply_edge,
         '_serialize': serialize_edge,
         '_deserialize': deserialize_edge,
