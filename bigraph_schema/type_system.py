@@ -3762,11 +3762,11 @@ def test_project(cube_types):
         '4': {
             'branch6': 111,
             'branch1': {
-                '_add': {
-                    'branch7': 4444},
+                '_add': [{
+                    'branch7': 4444}],
                 '_remove': ['branch2']},
-            '_add': {
-                'branch5': 55},
+            '_add': [{
+                'branch5': 55}],
             '_remove': ['branch4']}}
 
     inverted_update = cube_types.project_edge(
@@ -3786,6 +3786,19 @@ def test_project(cube_types):
             'a0.1': 0.0,
             'a0.2': {
                 'a0.2.0': ''}},
+        'edge1': {'inputs': {'1': ['a0', 'a0.0'],
+                             '2': ['a0', 'a0.1'],
+                             '3': ['a0', 'a0.2', 'a0.2.0'],
+                             'inner': {
+                                 'chamber': ['a1', 'a1.0']},
+                             '4': ['a1']},
+                  'outputs': {'1': ['a0', 'a0.0'],
+                              '2': ['a0', 'a0.1'],
+                              '3': ['a0', 'a0.2', 'a0.2.0'],
+                              'inner': {
+                                  'chamber': {
+                                      'X': ['a1', 'a1.0', 'Y']}},
+                              '4': ['a1']}},
         'a1': {
             'a1.0': {
                 'X': 1110,
@@ -3793,24 +3806,8 @@ def test_project(cube_types):
             'branch1': {
                 'branch3': 44,
                 'branch7': 4444},
-            'branch5': 55,
-            'branch6': 111},
-        'edge1': {
-            'inputs': {
-                '1': ['a0', 'a0.0'],
-                '2': ['a0', 'a0.1'],
-                '3': ['a0', 'a0.2', 'a0.2.0'],
-                '4': ['a1'],
-                'inner': {
-                    'chamber': ['a1', 'a1.0']}},
-            'outputs': {
-                '1': ['a0', 'a0.0'],
-                '2': ['a0', 'a0.1'],
-                '3': ['a0', 'a0.2', 'a0.2.0'],
-                '4': ['a1'],
-                'inner': {
-                    'chamber': {
-                        'X': ['a1', 'a1.0', 'Y']}}}}}
+            'branch6': 111,
+            'branch5': 55}}
 
 
 def test_check(core):

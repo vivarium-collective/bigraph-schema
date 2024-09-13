@@ -738,9 +738,13 @@ def apply_tree(schema, current, update, core):
     if isinstance(current, dict) and isinstance(update, dict):
         for key, branch in update.items():
             if key == '_add':
-                current.update(branch)
+                for added_state in branch:
+                    current.update(added_state)
             elif key == '_remove':
-                current = remove_path(current, branch)
+                for removed_path in branch:
+                    if isinstance(removed_path, str):
+                        removed_path = [removed_path]
+                    current = remove_path(current, removed_path)
             elif isinstance(branch, dict):
                 subschema = schema
                 if key in schema:
