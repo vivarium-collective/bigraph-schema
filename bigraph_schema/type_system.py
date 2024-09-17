@@ -1965,14 +1965,21 @@ def apply_map(schema, current, update, core=None):
     result = current.copy()
 
     for key, update_value in update.items():
-        if key not in current:
+        if key == '_add':
+            result.update(update_value)
+        elif key == '_remove':
+            for remove_key in update_value:
+                if remove_key in result:
+                    del result[remove_key]
+        elif key not in current:
+            # This supports adding without the '_add' key, if the key is not in the state
             result[key] = update_value
             # raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
-
-        result[key] = core.apply(
-            value_type,
-            result[key],
-            update_value)
+        else:
+            result[key] = core.apply(
+                value_type,
+                result[key],
+                update_value)
 
     return result
 
