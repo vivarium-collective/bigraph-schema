@@ -1035,7 +1035,8 @@ class TypeSystem:
             instance,
             edge_path)
 
-        ports_schema = edge_schema.get(f'_{ports_key}')
+        ports_schema = edge_state.get(f'_{ports_key}', 
+                                      edge_schema.get(f'_{ports_key}'))
         ports = edge_state.get(ports_key)
         
         return ports_schema, ports
