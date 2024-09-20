@@ -1363,12 +1363,23 @@ class TypeSystem:
 
 
     def infer_edge(self, schema, state, top_schema=None, top_state=None, path=None):
-        if self.check('edge', state):
-            schema = schema or {}
-            top_schema = top_schema or schema
-            top_state = top_state or state
-            path = path or ()
+        '''
+        given the schema and state for this edge, and its path relative to
+        the top_schema and top_state, make all the necessary completions to
+        both the schema and the state according to the input and output schemas
+        of this edge in '_inputs' and '_outputs', along the wires in its state
+        under 'inputs' and 'outputs'.
 
+        returns the top_schema and top_state, even if the edge is deeply embedded,
+        as the particular wires could have implications anywhere in the tree.
+        '''
+
+        schema = schema or {}
+        top_schema = top_schema or schema
+        top_state = top_state or state
+        path = path or ()
+
+        if self.check('edge', state):
             for port_key in ['inputs', 'outputs']:
                 ports = state.get(port_key)
                 schema_key = f'_{port_key}'
