@@ -510,7 +510,7 @@ class TypeSystem:
         else:
             resolve_function = self.choose_method(
                 schema,
-                {},
+                update,
                 'resolve')
 
             return resolve_function(
@@ -1290,8 +1290,9 @@ class TypeSystem:
         return True
 
 
-    def infer_wires(self, ports, state, wires, top_schema=None, path=None, internal_path=None):
+    def infer_wires(self, ports, state, wires, top_schema=None, top_state=None, path=None, internal_path=None):
         top_schema = top_schema or {}
+        top_state = top_state or state
         path = path or ()
         internal_path = internal_path or ()
 
@@ -1300,37 +1301,38 @@ class TypeSystem:
 
         if isinstance(wires, (list, tuple)):
             if len(wires) == 0:
-                destination = top_schema
+                destination_schema, destination_state = top_schema, top_state
+
             else:
-                peer = get_path(
+                destination_schema, destination_state = self.slice(
                     top_schema,
-                    path[:-1])
+                    top_state,
+                    path[:-1] + wires)
 
-                destination = establish_path(
-                    peer,
-                    wires,
-                    top=top_schema,
-                    cursor=path[:-1])
-
-            merged = apply_schema(
-                destination,
-                ports,
+            merged_schema = apply_schema(
                 'schema',
+                destination_schema,
+                ports,
                 self)
+
+            merged_state = self.complete(
+                merged_schema,
+                destination_state)
 
         else:
             for port_key, port_wires in wires.items():
                 subschema, substate = self.slice(
                     ports,
-                    {},
+                    state,
                     port_key)
 
                 if isinstance(port_wires, dict):
-                    top_schema = self.infer_wires(
+                    top_schema, top_state = self.infer_wires(
                         subschema,
                         substate,
                         port_wires,
                         top_schema=top_schema,
+                        top_state=top_state,
                         path=path,
                         internal_path=internal_path+(port_key,))
 
@@ -1342,7 +1344,7 @@ class TypeSystem:
                     compound_path = resolve_path(
                         path[:-1] + tuple(port_wires))
 
-                    compound_schema, _ = self.set_slice(
+                    compound_schema, compound_state = self.set_slice(
                         {}, {},
                         compound_path,
                         subschema or 'any',
@@ -1352,49 +1354,45 @@ class TypeSystem:
                         top_schema,
                         compound_schema)
 
-        return top_schema
+                    top_state = self.merge(
+                        top_schema,
+                        compound_state,
+                        top_state)
+
+        return top_schema, top_state
 
 
-    def infer_edge(self, schema, state, top_state=None, path=None):
-        schema = schema or {}
-        top_state = top_state or state
-        path = path or ()
-
-        state_schema = get_path(schema, path)
-
+    def infer_edge(self, schema, state, top_schema=None, top_state=None, path=None):
         if self.check('edge', state):
-            inputs = state.get('inputs')
-            if '_inputs' not in state_schema:
-                state_schema['_inputs'] = state.get(
-                    '_inputs',
-                    'any')
+            schema = schema or {}
+            top_schema = top_schema or schema
+            top_state = top_state or state
+            path = path or ()
 
-            if inputs:
-                schema = self.infer_wires(
-                    state_schema['_inputs'],
-                    state,
-                    inputs,
-                    top_schema=schema,
-                    path=path)
+            for port_key in ['inputs', 'outputs']:
+                ports = state.get(port_key)
+                schema_key = f'_{port_key}'
+                port_schema = schema.get(schema_key, {})
+                state_schema = state.get(schema_key, 'any')
 
-            outputs = state.get('outputs')
-            if '_outputs' not in state_schema:
-                state_schema['_outputs'] = state.get(
-                    '_outputs',
-                    'any')
+                schema[schema_key] = self.resolve(
+                    port_schema,
+                    self.access(
+                        state_schema))
 
-            if outputs:
-                schema = self.infer_wires(
-                    state_schema['_outputs'],
-                    state,
-                    outputs,
-                    top_schema=schema,
-                    path=path)
+                if ports:
+                    top_schema, top_state = self.infer_wires(
+                        schema[schema_key],
+                        state,
+                        ports,
+                        top_schema=top_schema,
+                        top_state=top_state,
+                        path=path)
 
-        return schema
+        return top_schema, top_state
 
 
-    def infer_schema(self, schema, state, top_state=None, path=None):
+    def infer_schema(self, schema, state, top_schema=None, top_state=None, path=None):
         """
         Given a schema fragment and an existing state with _type keys,
         return the full schema required to describe that state,
@@ -1406,59 +1404,53 @@ class TypeSystem:
         # path is used to access it (!)
 
         schema = schema or {}
+        top_schema = top_schema or schema
         top_state = top_state or state
         path = path or ()
 
         if isinstance(state, dict):
-            inner_schema = establish_path(schema, path)
-
+            state_schema = None
             if '_type' in state:
                 state_type = {
                     key: value
                     for key, value in state.items()
-                    if key.startswith('_')}
-                state_schema = self.access(
+                    if is_schema_key(key)}
+
+                schema = self.resolve(
+                    schema,
                     state_type)
 
-                hydrated_state = self.deserialize(state_schema, state)
-                top_state = set_path(
+            if '_type' in schema:
+                hydrated_state = self.deserialize(
+                    schema,
+                    state)
+
+                top_schema, top_state = self.set_slice(
+                    top_schema,
                     top_state,
                     path,
+                    schema,
                     hydrated_state)
 
-                path_schema = set_path(
-                    schema,
-                    path,
-                    state_type)
-
-                schema = self.infer_edge(
+                top_schema, top_state = self.infer_edge(
                     schema,
                     hydrated_state,
+                    top_schema,
                     top_state,
                     path)
-
-            elif '_type' in inner_schema:
-                hydrated_state = self.deserialize(
-                    inner_schema,
-                    state)
-
-                schema = self.infer_edge(
-                    schema,
-                    hydrated_state,
-                    top_state,
-                    path)
-
-                top_state = set_path(
-                    top_state,
-                    path,
-                    state)
 
             else:
-                for key, value in state.items():
+                for key in state:
                     inner_path = path + (key,)
-                    schema, top_state = self.infer_schema(
+                    inner_schema, inner_state = self.slice(
                         schema,
-                        value,
+                        state,
+                        key)
+
+                    top_schema, top_state = self.infer_schema(
+                        inner_schema,
+                        inner_state,
+                        top_schema=top_schema,
                         top_state=top_state,
                         path=inner_path)
 
@@ -1470,14 +1462,14 @@ class TypeSystem:
                 type(state).__name__,
                 'any')
 
-            schema, top_state = self.set_slice(
-                schema,
+            top_schema, top_state = self.set_slice(
+                top_schema,
                 top_state,
                 path,
                 type_schema,
                 state)
 
-        return schema, top_state
+        return top_schema, top_state
         
 
     def hydrate(self, schema, state):
