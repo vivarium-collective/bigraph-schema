@@ -1296,6 +1296,8 @@ class TypeSystem:
         path = path or ()
         internal_path = internal_path or ()
 
+        import ipdb; ipdb.set_trace()
+
         if isinstance(ports, str):
             ports = self.access(ports)
 
@@ -1381,10 +1383,12 @@ class TypeSystem:
 
         if self.check('edge', state):
             for port_key in ['inputs', 'outputs']:
+                import ipdb; ipdb.set_trace()
+
                 ports = state.get(port_key)
                 schema_key = f'_{port_key}'
                 port_schema = schema.get(schema_key, {})
-                state_schema = state.get(schema_key, 'any')
+                state_schema = state.get(schema_key, {})
 
                 schema[schema_key] = self.resolve(
                     port_schema,
@@ -4263,6 +4267,43 @@ def test_map_type(core):
     assert decode == update
 
 
+def test_map_schema(core):
+    schema = {
+        'greetings': 'map[hello:string]',
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'various': {
+                    '_type': 'map',
+                    '_value': {
+                        'world': 'string'}}},
+            '_outputs': {
+                'referent': 'float'}}}
+
+    state = {
+        'edge': {
+            'inputs': {
+                'various': ['greetings']},
+            'outputs': {
+                'referent': ['where']}},
+
+        'greetings': {
+            'a': {
+                'hello': 'yes'},
+            'b': {
+                'hello': 'again',
+                'world': 'present'},
+            'c': {}}}
+
+    import ipdb; ipdb.set_trace()
+
+    complete_schema, complete_state = core.complete(
+        schema,
+        state)
+
+    import ipdb; ipdb.set_trace()
+
+
 def test_tree_type(core):
     schema = 'tree[maybe[integer]]'
 
@@ -5080,41 +5121,42 @@ if __name__ == '__main__':
     register_compartment(core)
     register_cube(core)
 
-    test_generate_default(core)
-    test_apply_update(core)
-    test_validate_schema(core)
-    test_fill_integer(core)
-    test_fill_cube(core)
-    test_establish_path(core)
-    test_fill_in_missing_nodes(core)
-    test_fill_from_parse(core)
-    test_fill_ports(core)
-    test_expected_schema(core)
-    test_units(core)
-    test_serialize_deserialize(core)
-    test_project(core)
-    test_inherits_from(core)
-    test_apply_schema(core)
-    test_resolve_schemas(core)
-    test_add_reaction(core)
-    test_remove_reaction(core)
-    test_replace_reaction(core)
-    test_unit_conversion(core)
-    test_map_type(core)
-    test_tree_type(core)
-    test_maybe_type(core)
-    test_tuple_type(core)
-    test_array_type(core)
-    test_union_type(core)
-    test_union_values(core)
-    test_infer_edge(core)
-    test_edge_type(core)
-    test_edge_complete(core)
-    test_foursquare(core)
-    test_divide(core)
-    test_merge(core)
-    test_bind(core)
-    test_slice(core)
-    test_set_slice(core)
-    test_dataclass(core)
-    test_enum_type(core)
+    # test_generate_default(core)
+    # test_apply_update(core)
+    # test_validate_schema(core)
+    # test_fill_integer(core)
+    # test_fill_cube(core)
+    # test_establish_path(core)
+    # test_fill_in_missing_nodes(core)
+    # test_fill_from_parse(core)
+    # test_fill_ports(core)
+    # test_expected_schema(core)
+    # test_units(core)
+    # test_serialize_deserialize(core)
+    # test_project(core)
+    # test_inherits_from(core)
+    # test_apply_schema(core)
+    # test_resolve_schemas(core)
+    # test_add_reaction(core)
+    # test_remove_reaction(core)
+    # test_replace_reaction(core)
+    # test_unit_conversion(core)
+    # test_map_type(core)
+    # test_tree_type(core)
+    # test_maybe_type(core)
+    # test_tuple_type(core)
+    # test_array_type(core)
+    # test_union_type(core)
+    # test_union_values(core)
+    # test_infer_edge(core)
+    # test_edge_type(core)
+    # test_edge_complete(core)
+    # test_foursquare(core)
+    # test_divide(core)
+    # test_merge(core)
+    # test_bind(core)
+    # test_slice(core)
+    # test_set_slice(core)
+    # test_dataclass(core)
+    # test_enum_type(core)
+    test_map_schema(core)

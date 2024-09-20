@@ -877,9 +877,13 @@ def deserialize_any(schema, state, core):
 
         for key in non_schema_keys(schema):
             if key not in tree:
-                decoded = core.deserialize(
-                    schema[key],
-                    state.get(key))
+                if key not in state:
+                    decoded = core.default(
+                        schema[key])
+                else:
+                    decoded = core.deserialize(
+                        schema[key],
+                        state[key])
 
                 tree[key] = decoded
 
