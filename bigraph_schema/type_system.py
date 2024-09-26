@@ -20,6 +20,7 @@ from typing import Optional, Mapping, Callable, NewType, Union
 from dataclasses import asdict
 
 from bigraph_schema.units import units, render_units_type
+from bigraph_schema.parse import parse_expression
 from bigraph_schema.registry import (
     NONE_SYMBOL,
     Registry, TypeRegistry,
@@ -250,6 +251,54 @@ class TypeSystem:
                             validation[key] = subvalidation
 
         return validation
+
+
+    def representation(self, schema):
+        if isinstance(schema, str):
+            return schema
+
+        elif isinstance(schema, tuple):
+            inner = [
+                self.representation(element)
+                for element in schema]
+
+            pipes = '|'.join(inner)
+            return f'({pipes})'
+            
+        elif isinstance(schema, dict):
+            if '_type' in schema:
+                type = schema['_type']
+
+                inner = []
+                block = ''
+                if '_type_parameters' in schema:
+                    for parameter_key in schema['_type_parameters']:
+                        parameter = self.representation(
+                            schema[f'_{parameter_key}'])
+                        inner.append(parameter)
+                    commas = ','.join(inner)
+                    block = f'[{commas}]'
+
+                if type == 'tuple':
+                    pipes = '|'.join(inner)
+                    return f'({pipes})'
+                else:
+                    return f"{type}{block}"
+
+            else:
+                inner = {}
+                for key in non_schema_keys(schema):
+                    subschema = self.representation(
+                        schema[key])
+
+                    inner[key] = subschema
+
+                colons = [
+                    f'{key}:{value}'
+                    for key, value in inner.items()]
+
+                pipes = '|'.join(colons)
+                return f'({pipes})'
 
 
     # TODO: should default be a method?
@@ -5130,6 +5179,22 @@ def test_map_schema(core):
     assert complete_schema['greetings']['_value']['world']['_type'] == 'string'
 
 
+def test_representation(core):
+    schema_examples = [
+        'map[float]',
+        '(string|float)',
+        'tree[(a:float|b:map[string])]',
+        'array[(5|11),maybe[integer]]',
+        'edge[(x:float|y:tree[(z:float)]),(w:(float|float|float))]']
+
+    for example in schema_examples:
+        full_type = core.access(example)
+        representation = core.representation(full_type)
+
+        if example != representation:
+            raise Exception(f'did not receive the same type after parsing and finding the representation:\n  {example}\n  {representation}')
+
+
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -5175,3 +5240,4 @@ if __name__ == '__main__':
     test_dataclass(core)
     test_enum_type(core)
     test_map_schema(core)
+    test_representation(core)
