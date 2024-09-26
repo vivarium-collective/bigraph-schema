@@ -320,7 +320,9 @@ class TypeSystem:
                 if default_method and callable(default_method):
                     default = default_method(found, core)
                 else:
-                    default = default_value
+                    default = self.deserialize(
+                        found,
+                        default_value)
 
             elif not '_deserialize' in found:
                 raise Exception(
