@@ -273,9 +273,14 @@ class TypeSystem:
                 block = ''
                 if '_type_parameters' in schema:
                     for parameter_key in schema['_type_parameters']:
-                        parameter = self.representation(
-                            schema[f'_{parameter_key}'])
-                        inner.append(parameter)
+                        schema_key = f'_{parameter_key}'
+                        if schema_key in schema:
+                            parameter = self.representation(
+                                schema[schema_key])
+                            inner.append(parameter)
+                        else:
+                            inner.append('()')
+
                     commas = ','.join(inner)
                     block = f'[{commas}]'
 
@@ -299,6 +304,9 @@ class TypeSystem:
 
                 pipes = '|'.join(colons)
                 return f'({pipes})'
+        else:
+            print(f'no representation for {schema}')
+            return str(schema)
 
 
     # TODO: should default be a method?
@@ -2054,11 +2062,19 @@ def apply_map(schema, current, update, core=None):
 
 def resolve_map(schema, update, core):
     if isinstance(update, dict):
-        value_schema = schema.get('_value', {})
+        value_schema = update.get(
+            '_value',
+            schema.get('_value', {}))
+
         for key, subschema in update.items():
-            value_schema = core.resolve_schemas(
-                value_schema,
-                subschema)
+            if not is_schema_key(key):
+                value_schema = core.resolve_schemas(
+                    value_schema,
+                    subschema)
+
+        schema['_type'] = update.get(
+            '_type',
+            schema.get('_type', 'map'))
         schema['_value'] = value_schema
 
     return schema
