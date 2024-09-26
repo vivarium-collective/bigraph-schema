@@ -1290,7 +1290,8 @@ class TypeSystem:
         return True
 
 
-    def infer_wires(self, ports, state, wires, top_schema=None, top_state=None, path=None, internal_path=None):
+    # def infer_wires(self, ports, state, wires, top_schema=None, top_state=None, path=None, internal_path=None):
+    def infer_wires(self, ports, wires, top_schema=None, top_state=None, path=None, internal_path=None):
         top_schema = top_schema or {}
         top_state = top_state or state
         path = path or ()
@@ -1325,13 +1326,13 @@ class TypeSystem:
             for port_key, port_wires in wires.items():
                 subschema, substate = self.slice(
                     ports,
-                    state,
+                    {},
                     port_key)
 
                 if isinstance(port_wires, dict):
                     top_schema, top_state = self.infer_wires(
                         subschema,
-                        substate,
+                        # substate,
                         port_wires,
                         top_schema=top_schema,
                         top_state=top_state,
@@ -1398,7 +1399,7 @@ class TypeSystem:
                 if ports:
                     top_schema, top_state = self.infer_wires(
                         schema[schema_key],
-                        state,
+                        # state,
                         ports,
                         top_schema=top_schema,
                         top_state=top_state,
@@ -4267,43 +4268,6 @@ def test_map_type(core):
     assert decode == update
 
 
-def test_map_schema(core):
-    schema = {
-        'greetings': 'map[hello:string]',
-        'edge': {
-            '_type': 'edge',
-            '_inputs': {
-                'various': {
-                    '_type': 'map',
-                    '_value': {
-                        'world': 'string'}}},
-            '_outputs': {
-                'referent': 'float'}}}
-
-    state = {
-        'edge': {
-            'inputs': {
-                'various': ['greetings']},
-            'outputs': {
-                'referent': ['where']}},
-
-        'greetings': {
-            'a': {
-                'hello': 'yes'},
-            'b': {
-                'hello': 'again',
-                'world': 'present'},
-            'c': {}}}
-
-    import ipdb; ipdb.set_trace()
-
-    complete_schema, complete_state = core.complete(
-        schema,
-        state)
-
-    import ipdb; ipdb.set_trace()
-
-
 def test_tree_type(core):
     schema = 'tree[maybe[integer]]'
 
@@ -5113,6 +5077,43 @@ def test_enum_type(core):
     except Exception as e:
         print(e)
         assert True
+
+
+def test_map_schema(core):
+    schema = {
+        'greetings': 'map[hello:string]',
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'various': {
+                    '_type': 'map',
+                    '_value': {
+                        'world': 'string'}}},
+            '_outputs': {
+                'referent': 'float'}}}
+
+    state = {
+        'edge': {
+            'inputs': {
+                'various': ['greetings']},
+            'outputs': {
+                'referent': ['where']}},
+
+        'greetings': {
+            'a': {
+                'hello': 'yes'},
+            'b': {
+                'hello': 'again',
+                'world': 'present'},
+            'c': {}}}
+
+    import ipdb; ipdb.set_trace()
+
+    complete_schema, complete_state = core.complete(
+        schema,
+        state)
+
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':
