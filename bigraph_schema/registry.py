@@ -1190,6 +1190,10 @@ class TypeRegistry(Registry):
         # inheritance tracking
         self.inherits = {}
 
+        self.default_registry = Registry(function_keys=[
+            'schema',
+            'core'])
+
         self.check_registry = Registry(function_keys=[
             'state',
             'schema',
@@ -1284,11 +1288,14 @@ class TypeRegistry(Registry):
 
             for subkey, subschema in schema.items():
                 parameters = schema.get('_type_parameters', [])
-                if subkey in TYPE_FUNCTION_KEYS or is_method_key(subkey, parameters):
-                    registry = self.find_registry(subkey)
-                    function_name, module_key = registry.register_function(subschema)
+                if subkey == '_default' or subkey in TYPE_FUNCTION_KEYS or is_method_key(subkey, parameters):
+                    if callable(subschema):
+                        registry = self.find_registry(subkey)
+                        function_name, module_key = registry.register_function(subschema)
 
-                    schema[subkey] = function_name
+                        schema[subkey] = function_name
+                    else:
+                        schema[subkey] = subschema
 
                 elif subkey not in type_schema_keys:
                     if schema['_type'] in SYMBOL_TYPES:
@@ -1296,6 +1303,7 @@ class TypeRegistry(Registry):
                     else:
                         lookup = self.find(subschema)
                         if lookup is None:
+                            import ipdb; ipdb.set_trace()
                             raise Exception(
                                 f'trying to register a new type ({key}), '
                                 f'but it depends on a type ({subkey}) which is not in the registry')

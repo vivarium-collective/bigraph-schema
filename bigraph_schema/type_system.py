@@ -198,7 +198,7 @@ class TypeSystem:
                 elif key in type_schema_keys:
                     schema_keys.add(key)
                     registry = self.type_registry.lookup_registry(key)
-                    if registry is None:
+                    if registry is None or key == '_default':
                         # deserialize and serialize back and check it is equal
                         pass
                     elif isinstance(value, str):
@@ -309,18 +309,26 @@ class TypeSystem:
             return str(schema)
 
 
-    # TODO: should default be a method?
     def default(self, schema):
         default = None
         found = self.retrieve(schema)
 
-        if found and '_type' in found and found['_type'] == 'enum':
-            return found['_0']
-        elif '_default' in found:
-            if not '_deserialize' in found:
+        if '_default' in found:
+            default_value = found['_default']
+            if isinstance(default_value, str):
+                default_method = self.type_registry.default_registry.access(default_value)
+                if default_method and callable(default_method):
+                    default = default_method(found, core)
+                else:
+                    default = default_value
+
+            elif not '_deserialize' in found:
                 raise Exception(
                     f'asking for default but no deserialize in {found}')
-            default = self.deserialize(found, found['_default'])
+
+            else:
+                default = self.deserialize(found, found['_default'])
+
         else:
             default = {}
             for key, subschema in found.items():
@@ -2042,14 +2050,25 @@ def apply_map(schema, current, update, core=None):
 
     for key, update_value in update.items():
         if key == '_add':
-            result.update(update_value)
+            import ipdb; ipdb.set_trace()
+            filled = core.hydrate(
+                value_type,
+                update_value)
+
+            result.update(filled)
+
         elif key == '_remove':
             for remove_key in update_value:
                 if remove_key in result:
                     del result[remove_key]
+
         elif key not in current:
             # This supports adding without the '_add' key, if the key is not in the state
-            result[key] = update_value
+            filled = core.hydrate(
+                value_type,
+                update_value)
+            result[key] = filled
+
             # raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
         else:
             result[key] = core.apply(
@@ -2872,6 +2891,11 @@ def deserialize_schema(schema, state, core):
     return state
 
 
+def default_enum(schema, core):
+    parameter = schema['_type_parameters'][0]
+    return schema[f'_{parameter}']
+
+
 base_type_library = {
     'boolean': {
         '_type': 'boolean',
@@ -2892,7 +2916,7 @@ base_type_library = {
 
     'integer': {
         '_type': 'integer',
-        '_default': '0',
+        '_default': 0,
         # inherit _apply and _serialize from number type
         '_check': check_integer,
         '_deserialize': deserialize_integer,
@@ -2902,7 +2926,7 @@ base_type_library = {
 
     'float': {
         '_type': 'float',
-        '_default': '0.0',
+        '_default': 0.0,
         '_check': check_float,
         '_deserialize': deserialize_float,
         '_divide': divide_float,
@@ -2922,7 +2946,7 @@ base_type_library = {
 
     'enum': {
         '_type': 'enum',
-        '_default': None,
+        '_default': default_enum,
         '_apply': apply_enum,
         '_check': check_enum,
         '_serialize': serialize_string,
@@ -5093,20 +5117,20 @@ def test_dataclass(core):
 
 
 def test_enum_type(core):
-    # core.register(
-    #     'planet',
-    #     'enum[mercury,venus,earth,mars,jupiter,saturn,neptune]')
+    core.register(
+        'planet',
+        'enum[mercury,venus,earth,mars,jupiter,saturn,neptune]')
 
-    core.register('planet', {
-        '_type': 'enum',
-        '_type_parameters': ['0', '1', '2', '3', '4', '5', '6'],
-        '_0': 'mercury',
-        '_1': 'venus',
-        '_2': 'earth',
-        '_3': 'mars',
-        '_4': 'jupiter',
-        '_5': 'saturn',
-        '_6': 'neptune'})
+    # core.register('planet', {
+    #     '_type': 'enum',
+    #     '_type_parameters': ['0', '1', '2', '3', '4', '5', '6'],
+    #     '_0': 'mercury',
+    #     '_1': 'venus',
+    #     '_2': 'earth',
+    #     '_3': 'mars',
+    #     '_4': 'jupiter',
+    #     '_5': 'saturn',
+    #     '_6': 'neptune'})
 
     assert core.default('planet') == 'mercury'
 
