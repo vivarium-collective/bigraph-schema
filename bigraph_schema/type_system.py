@@ -2875,6 +2875,21 @@ base_type_library = {
         '_type_parameters': ['value'],
         '_description': 'flat mapping from keys of strings to values of any type'},
 
+    'dictionary': {
+        '_type': 'dictionary',
+        '_default': {},
+        '_apply': apply_dictionary,
+        '_serialize': serialize_dictionary,
+        '_deserialize': deserialize_dictionary,
+        '_resolve': resolve_dictionary,
+        '_dataclass': dataclass_dictionary,
+        '_check': check_dictionary,
+        '_slice': slice_dictionary,
+        '_fold': fold_dictionary,
+        '_divide': divide_dictionary,
+        '_type_parameters': ['key', 'value'],
+        '_description': 'flat mapping from keys of strings to values of any type'},
+
     'tree': {
         '_type': 'tree',
         '_default': {},
