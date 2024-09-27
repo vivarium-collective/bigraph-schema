@@ -253,7 +253,7 @@ class TypeSystem:
         return validation
 
 
-    def representation(self, schema):
+    def representation(self, schema, level=None):
         if isinstance(schema, str):
             return schema
 
@@ -2053,11 +2053,13 @@ def apply_map(schema, current, update, core=None):
     for key, update_value in update.items():
         if key == '_add':
             import ipdb; ipdb.set_trace()
-            filled = core.hydrate(
-                value_type,
-                update_value)
 
-            result.update(filled)
+            for addition_key, addition in update_value.items():
+                filled = core.hydrate(
+                    value_type,
+                    addition)
+
+                result[addition_key] = filled
 
         elif key == '_remove':
             for remove_key in update_value:
