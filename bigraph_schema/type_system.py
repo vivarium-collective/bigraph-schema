@@ -318,7 +318,7 @@ class TypeSystem:
             if isinstance(default_value, str):
                 default_method = self.type_registry.default_registry.access(default_value)
                 if default_method and callable(default_method):
-                    default = default_method(found, core)
+                    default = default_method(found, self)
                 else:
                     default = self.deserialize(
                         found,
@@ -2528,13 +2528,19 @@ def lookup_dtype(data_name):
     if dtype_name is None:
         raise Exception(f'unknown data type for array: {data_name}')
 
-    dtype = np.dtype(dtype_name)
+    return np.dtype(dtype_name)
+
+
+def read_datatype(data_schema):
+    return lookup_dtype(
+        data_schema['_type'])
 
 
 def read_shape(shape):
     return tuple([
         int(x)
-        for x in shape])
+        for x in tuple_from_type(
+            shape)])
 
 
 def deserialize_array(schema, encoded, core):
@@ -2545,13 +2551,16 @@ def deserialize_array(schema, encoded, core):
         if 'value' in encoded:
             return encoded['value']
         else:
-            dtype = lookup_dtype(
-                encoded.get('data'))
+            found = core.retrieve(
+                encoded.get(
+                    'data',
+                    schema['_data']))
 
-            shape = [
-                int(x)
-                for x in tuple_from_type(
-                    schema['_shape'])]
+            dtype = read_datatype(
+                found)
+
+            shape = read_shape(
+                schema['_shape'])
 
             if 'list' in encoded:
                 return np.array(
@@ -2562,6 +2571,22 @@ def deserialize_array(schema, encoded, core):
                 return np.zeros(
                     tuple(shape),
                     dtype=dtype)
+
+
+def default_array(schema, core):
+    data_schema = core.find_parameter(
+        schema,
+        'data')
+
+    dtype = read_datatype(
+        data_schema)
+
+    shape = read_shape(
+        schema['_shape'])
+
+    return np.zeros(
+        shape,
+        dtype=dtype)
 
 
 def fold_list(schema, state, method, values, core):
@@ -3004,8 +3029,7 @@ base_type_library = {
 
     'array': {
         '_type': 'array',
-        '_default': {
-            '_data': 'float'},
+        '_default': default_array,
         '_check': check_array,
         '_slice': slice_array,
         '_apply': apply_array,
@@ -4588,23 +4612,30 @@ def test_union_values(core):
 
 
 def test_array_type(core):
+    shape = (3, 4, 10)
+    shape_representation = core.representation(shape)
+    shape_commas = ','.join([
+        str(x)
+        for x in shape])
+
     schema = {
         '_type': 'map',
         '_value': {
             '_type': 'array',
-            '_shape': '(3|4|10)',
+            # '_shape': '(3|4|10)',
+            '_shape': shape_representation,
             '_data': 'float'}}
 
-    schema = 'map[array[tuple[3,4,10],float]]'
-    schema = 'map[array[(3|4|10),float]]'
+    schema = f'map[array[tuple[{shape_commas}],float]]'
+    schema = f'map[array[{shape_representation},float]]'
 
     state = {
-        'a': np.zeros((3, 4, 10)),
-        'b': np.ones((3, 4, 10))}
+        'a': np.zeros(shape),
+        'b': np.ones(shape)}
 
     update = {
-        'a': np.full((3, 4, 10), 5.555),
-        'b': np.full((3, 4, 10), 9.999)}
+        'a': np.full(shape, 5.555),
+        'b': np.full(shape, 9.999)}
 
     assert core.check(schema, state)
     assert core.check(schema, update)
@@ -4619,7 +4650,7 @@ def test_array_type(core):
     assert result['b'][0, 0, 0] == 10.999
 
     encode = core.serialize(schema, state)
-    assert encode['b']['shape'] == [3, 4, 10]
+    assert encode['b']['shape'] == list(shape)
     assert encode['a']['data'] == 'float'
 
     decode = core.deserialize(schema, encode)
@@ -4628,6 +4659,14 @@ def test_array_type(core):
         assert np.equal(
             decode[key],
             state[key]).all()
+
+    found = core.find(
+        schema)
+
+    default = core.default(
+        found['_value'])
+
+    assert default.shape == shape
 
 
 def test_infer_edge(core):

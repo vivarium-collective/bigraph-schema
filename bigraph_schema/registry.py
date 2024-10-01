@@ -1133,9 +1133,38 @@ def deserialize_union(schema, encoded, core):
                 return value
 
 
+def default_any(schema, core):
+    default = {}
+
+    for key, subschema in schema.items():
+        if not is_schema_key(key):
+            default[key] = self.default(
+                subschema)
+
+    return default
+
+
+def default_tuple(schema, core):
+    parts = []
+    for parameter in schema['_type_parameters']:
+        subschema = schema[f'_{parameter}']
+        part = core.default(subschema, core)
+        parts.append(part)
+
+    return tuple(parts)
+
+
+def default_union(schema, core):
+    final_parameter = schema['_type_parameters'][-1]
+    subschema = schema[f'_{final_parameter}']
+
+    return core.default(subschema)
+
+
 registry_types = {
     'any': {
         '_type': 'any',
+        '_default': default_any,
         '_slice': slice_any,
         '_apply': apply_any,
         '_check': check_any,
@@ -1150,7 +1179,7 @@ registry_types = {
 
     'tuple': {
         '_type': 'tuple',
-        '_default': (),
+        '_default': default_tuple,
         '_apply': apply_tuple,
         '_check': check_tuple,
         '_slice': slice_tuple,
@@ -1164,7 +1193,7 @@ registry_types = {
 
     'union': {
         '_type': 'union',
-        '_default': NONE_SYMBOL,
+        '_default': default_union,
         '_apply': apply_union,
         '_check': check_union,
         '_slice': slice_union,
