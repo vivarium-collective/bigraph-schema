@@ -25,10 +25,10 @@ from bigraph_schema.registry import (
     NONE_SYMBOL,
     Registry, TypeRegistry,
     type_schema_keys, non_schema_keys, is_schema_key, type_parameter_key,
-    apply_tree, visit_method,
+    default,
+    generate_any, apply_tree, visit_method,
     deep_merge, hierarchy_depth,
-    get_path, establish_path, set_path, transform_path, remove_omitted
-)
+    establish_path, set_path, transform_path, remove_omitted)
 
 import bigraph_schema.data as data
 
@@ -140,6 +140,10 @@ class TypeSystem:
 
 
     def parameters_for(self, initial_schema):
+        '''
+        find any type parameters for this schema if they are present
+        '''
+
         if '_type_parameters' in initial_schema:
             schema = initial_schema
         else:
@@ -254,6 +258,12 @@ class TypeSystem:
 
 
     def representation(self, schema, level=None):
+        '''
+        produce a string representation of the schema
+        * intended to be the inverse of parse_expression()
+        '''
+
+
         if isinstance(schema, str):
             return schema
 
@@ -310,6 +320,10 @@ class TypeSystem:
 
 
     def default(self, schema):
+        '''
+        produce the default value for the provided schema
+        '''
+
         default = None
         found = self.retrieve(schema)
 
@@ -341,6 +355,11 @@ class TypeSystem:
 
 
     def choose_method(self, schema, state, method_name):
+        '''
+        find in the provided state, or schema if not there,
+        a method for the given method_name
+        '''
+
         method_key = f'_{method_name}'
 
         if isinstance(state, dict) and method_key in state:
@@ -372,6 +391,11 @@ class TypeSystem:
 
 
     def slice(self, schema, state, path):
+        '''
+        find the subschema and substate at a node in the place graph
+        given by the provided path
+        '''
+
         if not isinstance(path, (list, tuple)):
             path = [path]
 
@@ -1591,6 +1615,23 @@ class TypeSystem:
         return self.access(schema), final_state
         
 
+    def generate(self, schema, state, top_schema=None, top_state=None, path=None):
+        found = self.retrieve(schema)
+
+        generate_function = self.choose_method(
+            found,
+            state,
+            'generate')
+
+        return generate_function(
+            self,
+            found,
+            state,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
+
+
     def find_method(self, schema, method_key):
         if not isinstance(schema, dict) or method_key not in schema:
             schema = self.access(schema)
@@ -2382,6 +2423,83 @@ def apply_path(schema, current, update, core):
     return update
 
 
+def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    wires = wires or {}
+    top_schema = top_schema or schema
+    top_state = top_state or {}
+    path = path or []
+
+    if isinstance(schema, str):
+        schema = {'_type': schema}
+
+    for port_key, subwires in wires.items():
+        if port_key in schema:
+            port_schema = schema[port_key]
+        else:
+            port_schema, subwires = core.slice(
+                schema,
+                wires,
+                port_key)
+
+        if isinstance(subwires, dict):
+            top_schema, top_state = self.generate_ports(
+                port_schema,
+                wires=subwires,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path)
+
+        else:
+            if isinstance(subwires, str):
+                subwires = [subwires]
+
+            default_state = core.default(
+                port_schema)
+
+            top_schema, top_state = core.set_slice(
+                top_schema,
+                top_state,
+                path[:-1] + subwires,
+                port_schema,
+                default_state,
+                defer=True)
+            
+    return top_schema, top_state
+
+
+def generate_edge(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or {}
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    generate_schema, generate_state = generate_any(
+        core,
+        schema,
+        state,
+        top_schema=top_schema,
+        top_state=top_state,
+        path=path)
+
+    for port_key in ['inputs', 'outputs']:
+        port_schema = generate_schema.get(
+            f'_{port_key}', {})
+        ports = generate_state.get(
+            port_key, {})
+
+        top_schema, top_state = generate_ports(
+            core,
+            port_schema,
+            ports,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
+
+    return generate_schema, generate_state
+
+
 def apply_edge(schema, current, update, core):
     result = current.copy()
     result['inputs'] = core.apply(
@@ -2908,8 +3026,14 @@ def divide_enum(schema, state, values, core):
         for index in range(divisions)]
 
 
-def merge_edge(schema, current_state, new_state, core):
-    return core.deserialize(schema, new_state)
+# def merge_edge(schema, current_state, new_state, core):
+#     merge = deep_merge(
+#         current_state,
+#         new_state)
+
+#     return core.deserialize(
+#         schema,
+#         merge)
 
 
 def serialize_schema(schema, state, core):
@@ -2923,6 +3047,15 @@ def deserialize_schema(schema, state, core):
 def default_enum(schema, core):
     parameter = schema['_type_parameters'][0]
     return schema[f'_{parameter}']
+
+
+def default_edge(schema, core):
+    return {
+        # '_type': schema['_type'],
+        'inputs': core.default(
+            schema['inputs']),
+        'outputs': core.default(
+            schema['outputs'])}
 
 
 base_type_library = {
@@ -3073,12 +3206,14 @@ base_type_library = {
 
     'edge': {
         '_type': 'edge',
+        '_default': default_edge,
+        '_generate': generate_edge,
         '_apply': apply_edge,
         '_serialize': serialize_edge,
         '_deserialize': deserialize_edge,
         '_dataclass': dataclass_edge,
         '_check': check_edge,
-        '_merge': merge_edge,
+        # '_merge': merge_edge,
         '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
         'inputs': 'wires',
@@ -3363,8 +3498,11 @@ def test_fill_integer(core):
 
     full_state = core.fill(test_schema)
     direct_state = core.fill('integer')
+    generated_schema, generated_state = core.generate(
+        test_schema, None)
 
-    assert full_state == direct_state == 0
+    assert generated_schema['_type'] == 'integer'
+    assert full_state == direct_state == 0 == generated_state
 
 
 def test_fill_cube(cube_types):
@@ -3404,6 +3542,36 @@ def test_fill_in_missing_nodes(core):
 
     assert filled == {
         'a': 0.0,
+        'edge 1': {
+            'inputs': {
+                'I': ['a']},
+            'outputs': {
+                'O': ['a']}}}
+
+
+def test_overwrite_existing(core):
+    test_schema = {
+        'edge 1': {
+            '_type': 'edge',
+            '_inputs': {
+                'I': 'float'},
+            '_outputs': {
+                'O': 'float'}}}
+
+    test_state = {
+        'a': 11.111,
+        'edge 1': {
+            'inputs': {
+                'I': ['a']},
+            'outputs': {
+                'O': ['a']}}}
+
+    filled = core.fill(
+        test_schema,
+        test_state)
+
+    assert filled == {
+        'a': 11.111,
         'edge 1': {
             'inputs': {
                 'I': ['a']},
@@ -5278,6 +5446,42 @@ def test_representation(core):
             raise Exception(f'did not receive the same type after parsing and finding the representation:\n  {example}\n  {representation}')
 
 
+def test_edge_cycle(core):
+    core.register('metaedge', {
+        '_inherit': 'edge',
+        '_inputs': {
+            'before': 'metaedge'},
+        '_outputs': {
+            'after': 'metaedge'}})
+
+    schema = {
+        'A': {
+            '_type': 'metaedge',
+            '_inputs': {
+                'before': {
+                    '_type': 'metaedge',
+                    'inputs': default('wires', {'before': ['B']}),
+                    'outputs': default('wires', {'after': ['A']})}},
+            '_outputs': {
+                'after': {
+                    '_type': 'metaedge',
+                    'inputs': default('wires', {'before': ['A']}),
+                    'outputs': default('wires', {'after': ['C']})}},
+            'inputs': default('wires', {'before': ['C']}),
+            'outputs': default('wires', {'after': ['B']})}}
+
+    state = {}
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    filled_state = core.fill(
+        schema, {})
+
+    completed_schema, completed_state = core.complete(
+        schema, {})
+
+
 if __name__ == '__main__':
     core = TypeSystem()
 
@@ -5290,6 +5494,7 @@ if __name__ == '__main__':
     test_fill_integer(core)
     test_fill_cube(core)
     test_establish_path(core)
+    test_overwrite_existing(core)
     test_fill_in_missing_nodes(core)
     test_fill_from_parse(core)
     test_fill_ports(core)
@@ -5324,3 +5529,4 @@ if __name__ == '__main__':
     test_enum_type(core)
     test_map_schema(core)
     test_representation(core)
+    test_edge_cycle(core)

@@ -1161,6 +1161,54 @@ def default_union(schema, core):
     return core.default(subschema)
 
 
+def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    generate_schema = {}
+    generate_state = {}
+
+    if isinstance(state, dict):
+        visited = set([])
+        for key in schema:
+            generate_schema[key] = schema[key]
+            if not is_schema_key(key):
+                visited.add(key)
+                subschema, substate = core.generate(
+                    schema[key],
+                    state.get(key),
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path+[key])
+
+                generate_schema[key] = subschema
+                generate_state[key] = substate
+
+        state_keys = list(state.keys())
+        for key in state_keys:
+            if is_schema_key(key):
+                generate_schema[key] = state[key]
+            elif key not in visited:
+                visited.add(key)
+                subschema, substate = core.generate(
+                    schema.get(key),
+                    state[key],
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path+[key])
+
+                generate_schema[key] = subschema
+                generate_state[key] = substate
+    else:
+        generate_schema = schema
+        generate_state = state
+
+    return generate_schema, generate_state
+
+
 registry_types = {
     'any': {
         '_type': 'any',
@@ -1168,6 +1216,7 @@ registry_types = {
         '_slice': slice_any,
         '_apply': apply_any,
         '_check': check_any,
+        '_generate': generate_any,
         '_serialize': serialize_any,
         '_deserialize': deserialize_any,
         '_dataclass': dataclass_any,
