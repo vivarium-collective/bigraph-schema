@@ -3356,48 +3356,42 @@ def register_cube(core):
 
 @pytest.fixture
 def core():
-    return TypeSystem()
+    core = TypeSystem()
+    return register_test_types(core)
 
 
-@pytest.fixture
-def base_types():
-    return TypeSystem()
+def register_test_types(core):
+    register_cube(core)
 
+    core.register('compartment', {
+        'counts': 'tree[float]',
+        'inner': 'tree[compartment]'})
 
-@pytest.fixture
-def cube_types(core):
-    return register_cube(core)
-
-
-def register_compartment(core):
-    core.register(
-        'compartment', {
-            'counts': 'tree[float]',
-            'inner': 'tree[compartment]'})
+    core.register('metaedge', {
+        '_inherit': 'edge',
+        '_inputs': {
+            'before': 'metaedge'},
+        '_outputs': {
+            'after': 'metaedge'}})
 
     return core
 
 
-@pytest.fixture
-def compartment_types(core):
-    return register_compartment(core)
-
-
-def test_generate_default(cube_types):
-    int_default = cube_types.default(
+def test_generate_default(core):
+    int_default = core.default(
         {'_type': 'integer'}
     )
 
     assert int_default == 0
 
-    cube_default = cube_types.default(
+    cube_default = core.default(
         {'_type': 'cube'})
 
     assert 'width' in cube_default
     assert 'height' in cube_default
     assert 'depth' in cube_default
 
-    nested_default = cube_types.default(
+    nested_default = core.default(
         {'a': 'integer',
          'b': {
              'c': 'float',
@@ -3407,7 +3401,7 @@ def test_generate_default(cube_types):
     assert nested_default['b']['d']['width'] == 0
 
 
-def test_apply_update(cube_types):
+def test_apply_update(core):
     schema = {'_type': 'cube'}
     state = {
         'width': 11,
@@ -3419,7 +3413,7 @@ def test_apply_update(cube_types):
         'depth': -5
     }
 
-    new_state = cube_types.apply(
+    new_state = core.apply(
         schema,
         state,
         update
@@ -3505,11 +3499,11 @@ def test_fill_integer(core):
     assert full_state == direct_state == 0 == generated_state
 
 
-def test_fill_cube(cube_types):
+def test_fill_cube(core):
     test_schema = {'_type': 'cube'}
     partial_state = {'height': 5}
 
-    full_state = cube_types.fill(
+    full_state = core.fill(
         test_schema,
         state=partial_state)
 
@@ -3934,7 +3928,7 @@ def test_unit_conversion(core):
         'force': 3.333 * force_units}
 
 
-def test_serialize_deserialize(cube_types):
+def test_serialize_deserialize(core):
     schema = {
         'edge1': {
             # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
@@ -3964,16 +3958,16 @@ def test_serialize_deserialize(cube_types):
                 'branch3': 22},
             'branch4': 44}}
     
-    instance = cube_types.fill(schema, instance)
+    instance = core.fill(schema, instance)
 
-    encoded = cube_types.serialize(schema, instance)
-    decoded = cube_types.deserialize(schema, encoded)
+    encoded = core.serialize(schema, instance)
+    decoded = core.deserialize(schema, encoded)
 
     assert instance == decoded
 
 
 # is this a lens?
-def test_project(cube_types):
+def test_project(core):
     schema = {
         'edge1': {
             # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
@@ -4036,14 +4030,14 @@ def test_project(cube_types):
                 'branch3': 22},
             'branch4': 44}}
 
-    instance = cube_types.fill(schema, instance)
+    instance = core.fill(schema, instance)
 
-    states = cube_types.view_edge(
+    states = core.view_edge(
         schema,
         instance,
         ['edge1'])
 
-    update = cube_types.project_edge(
+    update = core.project_edge(
         schema,
         instance,
         ['edge1'],
@@ -4065,7 +4059,7 @@ def test_project(cube_types):
             'branch4': 44}}
 
     # TODO: make sure apply does not mutate instance
-    updated_instance = cube_types.apply(
+    updated_instance = core.apply(
         schema,
         instance,
         update)
@@ -4083,13 +4077,13 @@ def test_project(cube_types):
                 'branch5': 55},
             '_remove': ['branch4']}}
 
-    inverted_update = cube_types.project_edge(
+    inverted_update = core.project_edge(
         schema,
         updated_instance,
         ['edge1'],
         add_update)
 
-    modified_branch = cube_types.apply(
+    modified_branch = core.apply(
         schema,
         updated_instance,
         inverted_update)
@@ -4316,7 +4310,7 @@ def test_foursquare(core):
                       '11': True}}}
 
 
-def test_add_reaction(compartment_types):
+def test_add_reaction(core):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -4333,14 +4327,14 @@ def test_add_reaction(compartment_types):
                 'counts': {
                     'A': 8}}}}
 
-    schema, state = compartment_types.infer_schema(
+    schema, state = core.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' not in state['environment']['inner']
 
-    result = compartment_types.apply(
+    result = core.apply(
         schema,
         state, {
             '_react': {
@@ -4354,7 +4348,7 @@ def test_add_reaction(compartment_types):
     assert '1' in result['environment']['inner']
 
 
-def test_remove_reaction(compartment_types):
+def test_remove_reaction(core):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -4371,14 +4365,14 @@ def test_remove_reaction(compartment_types):
         'path': ['environment', 'inner'],
         'remove': ['0']}
 
-    schema, state = compartment_types.infer_schema(
+    schema, state = core.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' in state['environment']['inner']
 
-    result = compartment_types.apply(
+    result = core.apply(
         schema,
         state, {
             '_react': {
@@ -4388,7 +4382,7 @@ def test_remove_reaction(compartment_types):
     assert '1' in state['environment']['inner']
     
 
-def test_replace_reaction(compartment_types):
+def test_replace_reaction(core):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -4423,14 +4417,14 @@ def test_replace_reaction(compartment_types):
                 'counts': {
                     'A': 88}}}}
 
-    schema, state = compartment_types.infer_schema(
+    schema, state = core.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' in state['environment']['inner']
 
-    result = compartment_types.apply(
+    result = core.apply(
         schema,
         state, {
             '_react': {
@@ -4442,7 +4436,7 @@ def test_replace_reaction(compartment_types):
     assert '3' in result['environment']['inner']
 
 
-def test_reaction(compartment_types):
+def test_reaction(core):
     single_node = {
         'environment': {
             'counts': {},
@@ -5447,13 +5441,6 @@ def test_representation(core):
 
 
 def test_edge_cycle(core):
-    core.register('metaedge', {
-        '_inherit': 'edge',
-        '_inputs': {
-            'before': 'metaedge'},
-        '_outputs': {
-            'after': 'metaedge'}})
-
     schema = {
         'A': {
             '_type': 'metaedge',
@@ -5482,11 +5469,38 @@ def test_edge_cycle(core):
         schema, {})
 
 
+def test_state_generator(core):
+    schema = {}
+    state = {
+        'A': {
+            '_type': 'metaedge',
+            '_inputs': {
+                'before': {
+                    '_type': 'metaedge',
+                    'inputs': default('wires', {'before': ['B']}),
+                    'outputs': default('wires', {'after': ['A']})}},
+            '_outputs': {
+                'after': {
+                    '_type': 'metaedge',
+                    'inputs': default('wires', {'before': ['A']}),
+                    'outputs': default('wires', {'after': ['C']})}},
+            'inputs': {'before': ['C']},
+            'outputs': {'after': ['B']}}}
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    filled_state = core.fill(
+        schema, {})
+
+    completed_schema, completed_state = core.complete(
+        schema, {})
+
+
 if __name__ == '__main__':
     core = TypeSystem()
-
-    register_compartment(core)
-    register_cube(core)
+    core = register_test_types(core)
 
     test_generate_default(core)
     test_apply_update(core)
@@ -5530,3 +5544,4 @@ if __name__ == '__main__':
     test_map_schema(core)
     test_representation(core)
     test_edge_cycle(core)
+    test_state_generator(core)
