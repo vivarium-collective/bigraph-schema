@@ -1407,6 +1407,35 @@ class TypeRegistry(Registry):
             for type_parameter in type_parameters}
 
 
+    def merge_schemas(self, current, update):
+        if not isinstance(current, dict):
+            if current == update:
+                return current
+            else:
+                current = self.access(current)
+        if not isinstance(update, dict):
+            update = self.access(update)
+        if not isinstance(current, dict):
+            return update
+        if not isinstance(update, dict):
+            return current
+    
+        merged = {}
+
+        for key in set(current.keys()).union(update.keys()):
+            if key in current:
+                if key in update:
+                    merged[key] = self.merge_schemas(
+                        current[key],
+                        update[key])
+                else:
+                    merged[key] = current[key]
+            else:
+                merged[key] = update[key]
+
+        return merged
+
+
     def find(self, schema):
         """
         expand the schema to its full type information from the type registry
@@ -1434,11 +1463,18 @@ class TypeRegistry(Registry):
                     union_schema)
 
             elif '_type' in schema:
-                registry_type = self.retrieve(schema['_type'])
-                found = schema.copy()
-                for key, value in registry_type.items():
-                    if  key == '_type' or key not in found:
-                        found[key] = value
+                registry_type = self.retrieve(
+                    schema['_type'])
+
+                found = self.merge_schemas(
+                    registry_type,
+                    schema)
+
+                # found = schema.copy()
+
+                # for key, value in registry_type.items():
+                #     if  key == '_type' or key not in found:
+                #         found[key] = value
 
             else:
                 found = {

@@ -62,6 +62,45 @@ class TypeSystem:
 
     def __init__(self):
         self.type_registry = TypeRegistry()
+
+        # self.inherits = {}
+
+        # self.default_registry = Registry(function_keys=[
+        #     'schema',
+        #     'core'])
+
+        # self.check_registry = Registry(function_keys=[
+        #     'state',
+        #     'schema',
+        #     'core'])
+
+        # self.apply_registry = Registry(function_keys=[
+        #     'current',
+        #     'update',
+        #     'schema',
+        #     'core'])
+
+        # self.serialize_registry = Registry(function_keys=[
+        #     'value',
+        #     'schema',
+        #     'core'])
+
+        # self.deserialize_registry = Registry(function_keys=[
+        #     'encoded',
+        #     'schema',
+        #     'core'])
+
+        # self.fold_registry = Registry(function_keys=[
+        #      'method',
+        #      'state',
+        #      'schema',
+        #      'core'])
+
+        # for type_key, type_data in registry_types.items():
+        #     self.register(
+        #         type_key,
+        #         type_data)
+
         self.react_registry = Registry()
         self.method_registry = Registry()
 
@@ -5441,61 +5480,56 @@ def test_representation(core):
 
 
 def test_edge_cycle(core):
-    schema = {
+    empty_schema = {}
+    empty_state = {}
+
+    A_schema = {
         'A': {
             '_type': 'metaedge',
             '_inputs': {
                 'before': {
-                    '_type': 'metaedge',
-                    'inputs': default('wires', {'before': ['B']}),
-                    'outputs': default('wires', {'after': ['A']})}},
+                    'inputs': {'before': {'_default': ['B']}},
+                    'outputs': {'after': {'_default': ['A']}}}},
             '_outputs': {
                 'after': {
-                    '_type': 'metaedge',
-                    'inputs': default('wires', {'before': ['A']}),
-                    'outputs': default('wires', {'after': ['C']})}},
-            'inputs': default('wires', {'before': ['C']}),
-            'outputs': default('wires', {'after': ['B']})}}
+                    'inputs': {'before': {'_default': ['A']}},
+                    'outputs': {'after': {'_default': ['C']}}}},
+            'inputs': {'before': {'_default': ['C']}},
+            'outputs': {'after': {'_default': ['B']}}}}
 
-    state = {}
-    generated_schema, generated_state = core.generate(
-        schema,
-        state)
-
-    filled_state = core.fill(
-        schema, {})
-
-    completed_schema, completed_state = core.complete(
-        schema, {})
-
-
-def test_state_generator(core):
-    schema = {}
-    state = {
+    A_state = {
         'A': {
             '_type': 'metaedge',
             '_inputs': {
                 'before': {
-                    '_type': 'metaedge',
-                    'inputs': default('wires', {'before': ['B']}),
-                    'outputs': default('wires', {'after': ['A']})}},
+                    'inputs': {'before': {'_default': ['B']}},
+                    'outputs': {'after': {'_default': ['A']}}}},
             '_outputs': {
                 'after': {
-                    '_type': 'metaedge',
-                    'inputs': default('wires', {'before': ['A']}),
-                    'outputs': default('wires', {'after': ['C']})}},
+                    'inputs': {'before': {'_default': ['A']}},
+                    'outputs': {'after': {'_default': ['C']}}}},
             'inputs': {'before': ['C']},
             'outputs': {'after': ['B']}}}
 
-    generated_schema, generated_state = core.generate(
-        schema,
-        state)
+    import ipdb; ipdb.set_trace()
+
+    schema_from_schema, state_from_schema = core.generate(
+        A_schema,
+        empty_state)
+
+    import ipdb; ipdb.set_trace()
+
+    schema_from_state, state_from_state = core.generate(
+        empty_schema,
+        A_state)
+
+    import ipdb; ipdb.set_trace()
 
     filled_state = core.fill(
-        schema, {})
+        A_schema, {})
 
     completed_schema, completed_state = core.complete(
-        schema, {})
+        A_schema, {})
 
 
 if __name__ == '__main__':
@@ -5544,4 +5578,3 @@ if __name__ == '__main__':
     test_map_schema(core)
     test_representation(core)
     test_edge_cycle(core)
-    test_state_generator(core)
