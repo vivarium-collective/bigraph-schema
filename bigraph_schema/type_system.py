@@ -891,6 +891,8 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
     generate_schema = {}
     generate_state = {}
 
+    import ipdb; ipdb.set_trace() # any
+
     if isinstance(state, dict):
         visited = set([])
         for key in schema:
@@ -1099,13 +1101,13 @@ class TypeSystem(Registry):
                 inherit_type = self.access(inherit)
                 new_schema = copy.deepcopy(inherit_type)
 
-                schema = self.resolve(
-                    new_schema,
-                    schema)
-
-                # schema = self.merge_schemas(
+                # schema = self.resolve(
                 #     new_schema,
                 #     schema)
+
+                schema = self.merge_schemas(
+                    new_schema,
+                    schema)
 
                 # schema = type_merge(
                 #     new_schema,
@@ -1114,8 +1116,8 @@ class TypeSystem(Registry):
                 self.inherits[key].append(
                     inherit_type)
 
+            parameters = schema.get('_type_parameters', [])
             for subkey, subschema in schema.items():
-                parameters = schema.get('_type_parameters', [])
                 if subkey == '_default' or subkey in TYPE_FUNCTION_KEYS or is_method_key(subkey, parameters):
                     if callable(subschema):
                         registry = self.find_registry(subkey)
@@ -1142,7 +1144,11 @@ class TypeSystem(Registry):
                 f'all type definitions must be dicts '
                 f'with the following keys: {type_schema_keys}\nnot: {schema}')
 
-        super().register(key, schema, alternate_keys, force)
+        super().register(
+            key,
+            schema,
+            alternate_keys,
+            force)
 
 
     def resolve_parameters(self, type_parameters, schema):
@@ -1169,13 +1175,14 @@ class TypeSystem(Registry):
 
 
     def merge_schemas(self, current, update):
-        if not isinstance(current, dict):
-            if current == update:
-                return current
-            else:
-                current = self.access(current)
-        if not isinstance(update, dict):
-            update = self.access(update)
+        # if not isinstance(current, dict):
+        #     if current == update:
+        #         return current
+        #     else:
+        #         current = self.access(current)
+        # if not isinstance(update, dict):
+        #     update = self.access(update)
+
         if not isinstance(current, dict):
             return update
         if not isinstance(update, dict):
@@ -1186,14 +1193,9 @@ class TypeSystem(Registry):
         for key in set(current.keys()).union(update.keys()):
             if key in current:
                 if key in update:
-                    import ipdb; ipdb.set_trace()
-
-                    merged[key] = self.resolve(
+                    merged[key] = self.merge_schemas(
                         current[key],
                         update[key])
-                    # merged[key] = self.merge_schemas(
-                    #     current[key],
-                    #     update[key])
                 else:
                     merged[key] = current[key]
             else:
@@ -1206,7 +1208,7 @@ class TypeSystem(Registry):
         return type_key in self.registry
 
 
-    def find(self, schema):
+    def find(self, schema, strict=False):
         """
         expand the schema to its full type information from the type registry
         """
@@ -1214,7 +1216,7 @@ class TypeSystem(Registry):
         found = None
 
         if schema is None:
-            return self.access('any')
+            return self.access('any', strict=strict)
 
         elif isinstance(schema, dict):
             if '_description' in schema:
@@ -1230,19 +1232,20 @@ class TypeSystem(Registry):
                     union_schema[f'_{index}'] = element
 
                 return self.access(
-                    union_schema)
+                    union_schema,
+                    strict=strict)
 
             elif '_type' in schema:
                 registry_type = self.retrieve(
                     schema['_type'])
 
-                found = self.resolve(
-                    registry_type,
-                    schema)
-
-                # found = self.merge_schemas(
+                # found = self.resolve(
                 #     registry_type,
                 #     schema)
+
+                found = self.merge_schemas(
+                    registry_type,
+                    schema)
 
                 # found = schema.copy()
 
@@ -1252,7 +1255,9 @@ class TypeSystem(Registry):
 
             else:
                 found = {
-                   key: self.access(branch)
+                   key: self.access(
+                       branch,
+                       strict=strict)
                    for key, branch in schema.items()}
 
         elif isinstance(schema, int):
@@ -1268,7 +1273,8 @@ class TypeSystem(Registry):
                 tuple_schema[f'_{index}'] = element
 
             return self.access(
-                tuple_schema)
+                tuple_schema,
+                strict=strict)
 
         elif isinstance(schema, list):
             if isinstance(schema[0], int):
@@ -1279,7 +1285,9 @@ class TypeSystem(Registry):
                 schema, bindings = schema
             else:
                 schema = schema[0]
-            found = self.access(schema)
+            found = self.access(
+                schema,
+                strict=strict)
 
             if len(bindings) > 0:
                 found = found.copy()
@@ -1291,17 +1299,25 @@ class TypeSystem(Registry):
                         found[f'_{index}'] = binding
                 else:
                     for parameter, binding in zip(found['_type_parameters'], bindings):
-                        binding_type = self.access(binding) or binding
+                        binding_type = self.access(
+                            binding,
+                            strict=strict) or binding
+
                         found[f'_{parameter}'] = binding_type
 
         elif isinstance(schema, str):
             found = self.registry.get(schema)
 
-            if found is None and schema is not None and schema not in ('', '{}'):
+            if found is None and schema not in ('', '{}'):
                 try:
                     parse = parse_expression(schema)
                     if parse != schema:
-                        found = self.access(parse)
+                        found = self.access(
+                            parse,
+                            strict=strict)
+                    elif not strict:
+                        found = {'_type': schema}
+
                 except Exception:
                     print(f'type did not parse: {schema}')
                     traceback.print_exc()
@@ -1309,16 +1325,18 @@ class TypeSystem(Registry):
         return found
 
 
-    def access(self, schema):
+    def access(self, schema, strict=False):
         if isinstance(schema, str):
-            return self.access_str(schema)
+            return self.access_str(schema, strict=strict)
         else:
-            return self.find(schema)
+            return self.find(schema, strict=strict)
 
 
     @functools.lru_cache(maxsize=None)
-    def access_str(self, schema):
-        return self.find(schema)
+    def access_str(self, schema, strict=False):
+        return self.find(
+            schema,
+            strict)
 
 
     def retrieve(self, schema):
@@ -1326,7 +1344,10 @@ class TypeSystem(Registry):
         like access(schema) but raises an exception if nothing is found
         """
 
-        found = self.find(schema)
+        found = self.find(
+            schema,
+            strict=True)
+
         if found is None:
             raise Exception(f'schema not found for type: {schema}')
         return found
@@ -1390,7 +1411,10 @@ class TypeSystem(Registry):
             report = 'schema cannot be None'
 
         elif isinstance(schema, str):
-            typ = self.access(schema)
+            typ = self.access(
+                schema,
+                strict=True)
+
             if typ is None:
                 report = f'type: {schema} is not in the registry'
 
@@ -1402,7 +1426,9 @@ class TypeSystem(Registry):
 
             for key, value in schema.items():
                 if key == '_type':
-                    typ = self.access(value)
+                    typ = self.access(
+                        value,
+                        strict=True)
                     if typ is None:
                         report[key] = f'type: {value} is not in the registry'
 
@@ -1413,7 +1439,10 @@ class TypeSystem(Registry):
                         # deserialize and serialize back and check it is equal
                         pass
                     elif isinstance(value, str):
-                        element = registry.access(value)
+                        element = registry.access(
+                            value,
+                            strict=True)
+
                         if element is None:
                             report[key] = f'no entry in the {key} registry for: {value}'
                     elif not inspect.isfunction(value):
@@ -3675,12 +3704,77 @@ def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=No
     return top_schema, top_state
 
 
+def generate_tree(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+
+    import ipdb; ipdb.set_trace() # tree
+
+    if core.check(state, leaf_type):
+        generate_schema, generate_state = core.generate(
+            leaf_type,
+            state,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
+    else:
+        generate_schema = {}
+        generate_state = {}
+
+        for key in set(schema.keys()).union(state.keys()):
+            if not is_schema_key(key):
+                subschema = schema.get(key)
+                substate = state.get(key)
+
+                if substate is None or core.check(substate, leaf_type):
+                    subschema = core.merge_schemas(
+                        leaf_type,
+                        schema.get(key))
+
+                    subschema, generate_state[key] = core.generate(
+                        subschema,
+                        substate,
+                        top_schema=top_schema,
+                        top_state=top_state,
+                        path=path+[key])
+                    
+                else:
+                    subschema = core.merge_schemas(
+                        schema,
+                        schema.get(key))
+
+                    subschema, generate_state[key] = core.generate(
+                        subschema,
+                        substate,
+                        top_schema=top_schema,
+                        top_state=top_state,
+                        path=path+[key])
+
+            elif key in state:
+                generate_schema[key] = state[key]
+            elif key in schema:
+                generate_schema[key] = schema[key]
+            else:
+                raise Exception(' the impossible has occurred you may all go ')
+
+    return generate_schema, generate_state
+
+
 def generate_edge(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
     state = state or {}
     top_schema = top_schema or schema
     top_state = top_state or state
     path = path or []
+
+    import ipdb; ipdb.set_trace() # edge
 
     generate_schema, generate_state = generate_any(
         core,
@@ -4343,6 +4437,7 @@ base_type_library = {
     'tree': {
         '_type': 'tree',
         '_default': {},
+        '_generate': generate_tree,
         '_check': check_tree,
         '_slice': slice_tree,
         '_apply': apply_tree,
@@ -4561,8 +4656,6 @@ def register_test_types(core):
     core.register('compartment', {
         'counts': 'tree[float]',
         'inner': 'tree[compartment]'})
-
-    import ipdb; ipdb.set_trace()
 
     core.register('metaedge', {
         '_inherit': 'edge',
