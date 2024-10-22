@@ -891,44 +891,61 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
     generate_schema = {}
     generate_state = {}
 
-    import ipdb; ipdb.set_trace() # any
-
     if isinstance(state, dict):
         visited = set([])
-        for key in schema:
-            generate_schema[key] = schema[key]
-            if not is_schema_key(key):
-                visited.add(key)
+        all_keys = set(schema.keys()).union(state.keys())
+        non_schema_keys = [
+            key
+            for key in all_keys
+            if not is_schema_key(key)]
+
+        if non_schema_keys:
+            base_schema = {
+                key: subschema
+                for key, subschema in schema.items()
+                if is_schema_key(key)}
+        else:
+            base_schema = schema
+
+        for key in all_keys:
+            if is_schema_key(key):
+                if key in state:
+                    schema[key] = state
+            else:
                 subschema, substate = core.generate(
-                    schema[key],
+                    schema.get(key),
                     state.get(key),
                     top_schema=top_schema,
                     top_state=top_state,
                     path=path+[key])
 
-                generate_schema[key] = subschema
-                generate_state[key] = substate
+                schema[key] = core.merge_schemas(
+                    schema.get(key, {}),
+                    subschema)
 
-        state_keys = list(state.keys())
-        for key in state_keys:
-            if is_schema_key(key):
-                generate_schema[key] = state[key]
-            elif key not in visited:
-                visited.add(key)
-                subschema, substate = core.generate(
-                    schema.get(key),
-                    state[key],
-                    top_schema=top_schema,
-                    top_state=top_state,
-                    path=path+[key])
+                state[key] = substate
 
-                generate_schema[key] = subschema
-                generate_state[key] = substate
-    else:
-        generate_schema = schema
-        generate_state = state
+    #     state_keys = list(state.keys())
+    #     for key in state_keys:
+    #         if is_schema_key(key):
+    #             generate_schema[key] = state[key]
+    #         elif key not in visited:
+    #             visited.add(key)
+    #             subschema, substate = core.generate(
+    #                 schema.get(key),
+    #                 state[key],
+    #                 top_schema=top_schema,
+    #                 top_state=top_state,
+    #                 path=path+[key])
 
-    return generate_schema, generate_state
+    #             generate_schema[key] = subschema
+    #             generate_state[key] = substate
+    # else:
+    #     generate_schema = schema
+    #     generate_state = state
+
+    # return generate_schema, generate_state
+    return schema, state
 
 
 def is_method_key(key, parameters):
@@ -3659,6 +3676,71 @@ def apply_path(schema, current, update, core):
     return update
 
 
+def generate_tree(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+
+    if core.check(state, leaf_type):
+        generate_schema, generate_state = core.generate(
+            leaf_type,
+            state,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
+    else:
+        generate_schema = {}
+        generate_state = {}
+
+        all_keys = set(schema.keys()).union(state.keys())
+        non_schema_keys = [
+            key
+            for key in all_keys
+            if not is_schema_key(key)]
+
+        if non_schema_keys:
+            base_schema = {
+                key: subschema
+                for key, subschema in schema.items()
+                if is_schema_key(key)}
+        else:
+            base_schema = schema
+
+        for key in all_keys:
+            if not is_schema_key(key):
+                subschema = schema.get(key)
+                substate = state.get(key)
+
+                if substate is None or core.check(leaf_type, substate):
+                    base_schema = leaf_type
+
+                subschema = core.merge_schemas(
+                    base_schema,
+                    subschema)
+
+                subschema, generate_state[key] = core.generate(
+                    subschema,
+                    substate,
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path+[key])
+
+            elif key in state:
+                generate_schema[key] = state[key]
+            elif key in schema:
+                generate_schema[key] = schema[key]
+            else:
+                raise Exception(' the impossible has occurred you may all go ')
+
+    return generate_schema, generate_state
+
+
 def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=None):
     schema = schema or {}
     wires = wires or {}
@@ -3668,6 +3750,8 @@ def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=No
 
     if isinstance(schema, str):
         schema = {'_type': schema}
+
+    import ipdb; ipdb.set_trace()
 
     for port_key, subwires in wires.items():
         if port_key in schema:
@@ -3681,7 +3765,7 @@ def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=No
         if isinstance(subwires, dict):
             top_schema, top_state = self.generate_ports(
                 port_schema,
-                wires=subwires,
+                subwires,
                 top_schema=top_schema,
                 top_state=top_state,
                 path=path)
@@ -3704,69 +3788,6 @@ def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=No
     return top_schema, top_state
 
 
-def generate_tree(core, schema, state, top_schema=None, top_state=None, path=None):
-    schema = schema or {}
-    state = state or core.default(schema)
-    top_schema = top_schema or schema
-    top_state = top_state or state
-    path = path or []
-
-    leaf_type = core.find_parameter(
-        schema,
-        'leaf')
-
-    import ipdb; ipdb.set_trace() # tree
-
-    if core.check(state, leaf_type):
-        generate_schema, generate_state = core.generate(
-            leaf_type,
-            state,
-            top_schema=top_schema,
-            top_state=top_state,
-            path=path)
-    else:
-        generate_schema = {}
-        generate_state = {}
-
-        for key in set(schema.keys()).union(state.keys()):
-            if not is_schema_key(key):
-                subschema = schema.get(key)
-                substate = state.get(key)
-
-                if substate is None or core.check(substate, leaf_type):
-                    subschema = core.merge_schemas(
-                        leaf_type,
-                        schema.get(key))
-
-                    subschema, generate_state[key] = core.generate(
-                        subschema,
-                        substate,
-                        top_schema=top_schema,
-                        top_state=top_state,
-                        path=path+[key])
-                    
-                else:
-                    subschema = core.merge_schemas(
-                        schema,
-                        schema.get(key))
-
-                    subschema, generate_state[key] = core.generate(
-                        subschema,
-                        substate,
-                        top_schema=top_schema,
-                        top_state=top_state,
-                        path=path+[key])
-
-            elif key in state:
-                generate_schema[key] = state[key]
-            elif key in schema:
-                generate_schema[key] = schema[key]
-            else:
-                raise Exception(' the impossible has occurred you may all go ')
-
-    return generate_schema, generate_state
-
-
 def generate_edge(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
     state = state or {}
@@ -3774,7 +3795,8 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
     top_state = top_state or state
     path = path or []
 
-    import ipdb; ipdb.set_trace() # edge
+    import ipdb; ipdb.set_trace()
+    # generate_edge
 
     generate_schema, generate_state = generate_any(
         core,
@@ -3783,6 +3805,13 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
         top_schema=top_schema,
         top_state=top_state,
         path=path)
+
+    top_schema, top_state = core.set_slice(
+        top_schema,
+        top_state,
+        path,
+        generate_schema,
+        generate_state)
 
     for port_key in ['inputs', 'outputs']:
         port_schema = generate_schema.get(
@@ -3990,6 +4019,38 @@ def deserialize_array(schema, encoded, core):
                 return np.zeros(
                     tuple(shape),
                     dtype=dtype)
+
+
+def default_tree(schema, core):
+    leaf_schema = core.find_parameter(
+        schema,
+        'leaf')
+
+    default = {}
+
+    non_schema_keys = [
+        key
+        for key in schema
+        if not is_schema_key(key)]
+
+    if non_schema_keys:
+        base_schema = {
+            key: subschema
+            for key, subschema in schema.items()
+            if is_schema_key(key)}
+
+        for key in non_schema_keys:
+            subschema = core.merge_schemas(
+                base_schema,
+                schema[key])
+
+            subdefault = core.default(
+                subschema)
+
+            if subdefault:
+                default[key] = subdefault
+
+    return default
 
 
 def default_array(schema, core):
@@ -4436,7 +4497,7 @@ base_type_library = {
 
     'tree': {
         '_type': 'tree',
-        '_default': {},
+        '_default': default_tree,
         '_generate': generate_tree,
         '_check': check_tree,
         '_slice': slice_tree,
