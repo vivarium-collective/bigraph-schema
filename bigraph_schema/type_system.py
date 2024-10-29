@@ -858,7 +858,7 @@ def default_any(schema, core):
 
     for key, subschema in schema.items():
         if not is_schema_key(key):
-            default[key] = self.default(
+            default[key] = core.default(
                 subschema)
 
     return default
@@ -893,6 +893,8 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
 
     if isinstance(state, dict):
         visited = set([])
+        # we want to visit all of the keys from the schema and the state
+        # at the same time
         all_keys = set(schema.keys()).union(state.keys())
         non_schema_keys = [
             key
@@ -900,6 +902,8 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
             if not is_schema_key(key)]
 
         if non_schema_keys:
+            # we need a representation of only the schema
+            # components without the subkeys
             base_schema = {
                 key: subschema
                 for key, subschema in schema.items()
@@ -912,18 +916,21 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
                 if key in state:
                     schema[key] = state
             else:
-                subschema, substate = core.generate(
+                subschema, substate, top_schema, top_state = core.generate_recur(
                     schema.get(key),
                     state.get(key),
                     top_schema=top_schema,
                     top_state=top_state,
                     path=path+[key])
 
-                schema[key] = core.merge_schemas(
+                # this needs to be resolve?
+                schema[key] = core.resolve_schemas(
                     schema.get(key, {}),
                     subschema)
 
                 state[key] = substate
+
+    return schema, state, top_schema, top_state
 
     #     state_keys = list(state.keys())
     #     for key in state_keys:
@@ -945,7 +952,6 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
     #     generate_state = state
 
     # return generate_schema, generate_state
-    return schema, state
 
 
 def is_method_key(key, parameters):
@@ -2868,7 +2874,7 @@ class TypeSystem(Registry):
         return self.access(schema), final_state
         
 
-    def generate(self, schema, state, top_schema=None, top_state=None, path=None):
+    def generate_recur(self, schema, state, top_schema=None, top_state=None, path=None):
         found = self.retrieve(schema)
 
         generate_function = self.choose_method(
@@ -2883,6 +2889,12 @@ class TypeSystem(Registry):
             top_schema=top_schema,
             top_state=top_state,
             path=path)
+
+
+    def generate(self, schema, state):
+        _, _, top_schema, top_state = self.generate_recur(schema, state)
+
+        return top_schema, top_state
 
 
     def find_method(self, schema, method_key):
@@ -3688,7 +3700,7 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
         'leaf')
 
     if core.check(state, leaf_type):
-        generate_schema, generate_state = core.generate(
+        generate_schema, generate_state, top_schema, top_state = core.generate_recur(
             leaf_type,
             state,
             top_schema=top_schema,
@@ -3724,7 +3736,7 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
                     base_schema,
                     subschema)
 
-                subschema, generate_state[key] = core.generate(
+                subschema, generate_state[key], top_schema, top_state = core.generate_recur(
                     subschema,
                     substate,
                     top_schema=top_schema,
@@ -3738,7 +3750,7 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
             else:
                 raise Exception(' the impossible has occurred you may all go ')
 
-    return generate_schema, generate_state
+    return generate_schema, generate_state, top_schema, top_state
 
 
 def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=None):
@@ -3751,8 +3763,6 @@ def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=No
     if isinstance(schema, str):
         schema = {'_type': schema}
 
-    import ipdb; ipdb.set_trace()
-
     for port_key, subwires in wires.items():
         if port_key in schema:
             port_schema = schema[port_key]
@@ -3763,7 +3773,7 @@ def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=No
                 port_key)
 
         if isinstance(subwires, dict):
-            top_schema, top_state = self.generate_ports(
+            top_schema, top_state = core.generate_ports(
                 port_schema,
                 subwires,
                 top_schema=top_schema,
@@ -3795,10 +3805,7 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
     top_state = top_state or state
     path = path or []
 
-    import ipdb; ipdb.set_trace()
-    # generate_edge
-
-    generate_schema, generate_state = generate_any(
+    generate_schema, generate_state, top_schema, top_state = generate_any(
         core,
         schema,
         state,
@@ -3827,7 +3834,7 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
             top_state=top_state,
             path=path)
 
-    return generate_schema, generate_state
+    return generate_schema, generate_state, top_schema, top_state
 
 
 def apply_edge(schema, current, update, core):
