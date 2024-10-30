@@ -881,6 +881,10 @@ def default_union(schema, core):
     return core.default(subschema)
 
 
+def union_keys(schema, state):
+    return set(schema.keys()).union(state.keys())
+
+
 def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
     state = state or core.default(schema)
@@ -893,17 +897,17 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
 
     if isinstance(state, dict):
         visited = set([])
-        # we want to visit all of the keys from the schema and the state
-        # at the same time
-        all_keys = set(schema.keys()).union(state.keys())
+
+        all_keys = union_keys(
+            schema,
+            state)
+
         non_schema_keys = [
             key
             for key in all_keys
             if not is_schema_key(key)]
 
         if non_schema_keys:
-            # we need a representation of only the schema
-            # components without the subkeys
             base_schema = {
                 key: subschema
                 for key, subschema in schema.items()
@@ -923,7 +927,6 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
                     top_state=top_state,
                     path=path+[key])
 
-                # this needs to be resolve?
                 schema[key] = core.resolve_schemas(
                     schema.get(key, {}),
                     subschema)
@@ -1198,14 +1201,6 @@ class TypeSystem(Registry):
 
 
     def merge_schemas(self, current, update):
-        # if not isinstance(current, dict):
-        #     if current == update:
-        #         return current
-        #     else:
-        #         current = self.access(current)
-        # if not isinstance(update, dict):
-        #     update = self.access(update)
-
         if not isinstance(current, dict):
             return update
         if not isinstance(update, dict):
@@ -1213,7 +1208,7 @@ class TypeSystem(Registry):
     
         merged = {}
 
-        for key in set(current.keys()).union(update.keys()):
+        for key in union_keys(current, update):
             if key in current:
                 if key in update:
                     merged[key] = self.merge_schemas(
@@ -1225,6 +1220,31 @@ class TypeSystem(Registry):
                 merged[key] = update[key]
 
         return merged
+
+
+    def merge_schema_keys(self, schema, state):
+        if not isinstance(schema, dict):
+            schema = self.find(schema)
+        if not isinstance(state, dict):
+            return schema, state
+    
+        merged_schema = {}
+        merged_state = {}
+
+        for key in union_keys(schema, state):
+            if is_schema_key(key):
+                if key in state:
+                    merged_schema[key] = self.merge_schemas(
+                        schema.get(key, {}),
+                        state[key])
+                else:
+                    merged_schema[key] = schema[key]
+            else:
+                merged_schema[key], merged_state[key] = self.merge_schema_keys(
+                    schema.get(key, {}),
+                    state.get(key, None))
+
+        return merged_schema, merged_state
 
 
     def exists(self, type_key):
@@ -2875,24 +2895,31 @@ class TypeSystem(Registry):
         
 
     def generate_recur(self, schema, state, top_schema=None, top_state=None, path=None):
-        found = self.retrieve(schema)
+        merged_schema, merged_state = self.merge_schema_keys(
+            schema,
+            state)
+
+        found = self.retrieve(
+            merged_schema)
 
         generate_function = self.choose_method(
             found,
-            state,
+            merged_state,
             'generate')
 
         return generate_function(
             self,
             found,
-            state,
+            merged_state,
             top_schema=top_schema,
             top_state=top_state,
             path=path)
 
 
     def generate(self, schema, state):
-        _, _, top_schema, top_state = self.generate_recur(schema, state)
+        _, _, top_schema, top_state = self.generate_recur(
+            schema,
+            state)
 
         return top_schema, top_state
 
