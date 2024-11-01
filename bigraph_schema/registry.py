@@ -235,6 +235,36 @@ def remove_omitted(before, after, tree):
     return tree
 
 
+def is_schema_key(key):
+    return isinstance(key, str) and key.startswith('_')
+
+
+def non_schema_keys(schema):
+    """
+    Filters out schema keys with the underscore prefix
+    """
+    return [
+        element
+        for element in schema.keys()
+        if not is_schema_key(element)]
+
+
+def strip_schema_keys(state):
+    """remove schema keys from a state dictionary, including nested dictionaries"""
+    if isinstance(state, dict):
+        output = {}
+        for key, value in state.items():
+            if not is_schema_key(key):
+                output[key] = strip_schema_keys(value)
+    else:
+        output = state
+    return output
+
+
+def type_parameter_key(schema, key):
+    return key.strip('_') not in schema.get('_type_parameters', []) and key.startswith('_')
+
+
 def default(type, default):
     return {
         '_type': type,
