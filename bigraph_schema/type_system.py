@@ -10,30 +10,165 @@ import pytest
 import random
 import inspect
 import numbers
+import functools
 import numpy as np
 
 from pint import Quantity
 from pprint import pformat as pf
 
 import typing
-from typing import Optional, Mapping, Callable, NewType, Union
-from dataclasses import asdict
+from typing import Any, Tuple, Mapping, Optional, Callable, NewType, Union
+from dataclasses import field, make_dataclass, asdict
 
 from bigraph_schema.units import units, render_units_type
+from bigraph_schema.parse import parse_expression
 from bigraph_schema.registry import (
-    NONE_SYMBOL,
-    Registry, TypeRegistry,
-    type_schema_keys, non_schema_keys, is_schema_key, type_parameter_key,
-    apply_tree, visit_method,
+    NONE_SYMBOL, Registry, default,
+    type_schema_keys, 
+    is_schema_key, non_schema_keys, strip_schema_keys, type_parameter_key,
     deep_merge, hierarchy_depth,
-    get_path, establish_path, set_path, transform_path, remove_omitted
-)
+    establish_path, set_path, transform_path, remove_omitted)
 
 import bigraph_schema.data as data
+import bigraph_schema.data
+
+
+TYPE_FUNCTION_KEYS = [
+    '_apply',
+    '_check',
+    '_fold',
+    '_divide',
+    '_react',
+    '_serialize',
+    '_deserialize',
+    '_slice',
+    '_bind',
+    '_merge']
+
+
+overridable_schema_keys = set([
+    '_type',
+    '_default',
+    '_check',
+    '_apply',
+    '_serialize',
+    '_deserialize',
+    '_fold',
+    '_divide',
+    '_slice',
+    '_bind',
+    '_merge',
+    '_type_parameters',
+    '_value',
+    '_description',
+    '_inherit',
+])
+
+
+SYMBOL_TYPES = ['enum']
+
+nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
+
+
+merge_schema_keys = (
+    '_ports',
+    '_type_parameters',
+)
 
 
 TYPE_SCHEMAS = {
     'float': 'float'}
+
+
+def diff(a, b):
+    if isinstance(a, dict) and isinstance(b, dict):
+        result = {}
+        for key in union_keys(a, b):
+            if key in a:
+                if key in b:
+                    inner = diff(a[key], b[key])
+                    if inner:
+                        result[key] = inner
+                else:
+                    result[key] = f'A: {a[key]}\nB: (missing)'
+            else:
+                result[key] = f'A: (missing)\nB: {b[key]}'
+        if result:
+            return result
+    else:
+        if a != b:
+            return f'A: {a}\nB: {b}'
+
+
+def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
+    """
+    Recursively merge type definitions, never overwrite.
+
+    Args:
+    - dct: The dictionary to merge into. This dictionary is mutated and ends up being the merged dictionary.  If you 
+        want to keep dct you could call it like ``deep_merge_check(copy.deepcopy(dct), merge_dct)``.
+    - merge_dct: The dictionary to merge into ``dct``.
+    - path: If the ``dct`` is nested within a larger dictionary, the path to ``dct``. This is normally an empty tuple 
+        (the default) for the end user but is used for recursive calls.
+    Returns:
+    - dct
+    """
+    for k in merge_dct:
+        if not k in dct or k in overridable_schema_keys:
+            dct[k] = merge_dct[k]
+        elif k in merge_schema_keys or isinstance(
+            dct[k], dict
+        ) and isinstance(
+            merge_dct[k], collections.abc.Mapping
+        ):
+            type_merge(
+                dct[k],
+                merge_dct[k],
+                path + (k,),
+                merge_supers)
+
+        else:
+            raise ValueError(
+                f'cannot merge types at path {path + (k,)}:\n'
+                f'{dct}\noverwrites \'{k}\' from\n{merge_dct}')
+            
+    return dct
+
+
+def get_path(tree, path):
+    """
+    Given a tree and a path, find the subtree at that path
+    
+    Args:
+    - tree: the tree we are looking in (a nested dict)
+    - path: a list/tuple of keys we follow down the tree to find the subtree we are looking for
+    
+    Returns:
+    - subtree: the subtree found by following the list of keys down the tree
+    """
+
+    if len(path) == 0:
+        return tree
+    else:
+        head = path[0]
+        if not tree or head not in tree:
+            return None
+        else:
+            return get_path(tree[head], path[1:])
+
+
+def remove_path(tree, path):
+    """
+    Removes whatever subtree lives at the given path
+    """
+
+    if path is None or len(path) == 0:
+        return None
+
+    upon = get_path(tree, path[:-1])
+    if upon is not None:
+        del upon[path[-1]]
+    return tree
 
 
 def resolve_path(path):
@@ -56,35 +191,977 @@ def apply_schema(schema, current, update, core):
     return outcome
 
 
-class TypeSystem:
+def visit_method(schema, state, method, values, core):
+    schema = core.access(schema)
+    method_key = f'_{method}'
+
+    # TODO: we should probably cache all this
+    if isinstance(state, dict) and method_key in state:
+        visit = core.find_method(
+            {method_key: state[method_key]},
+            method_key)
+
+    elif method_key in schema:
+        visit = core.find_method(
+            schema,
+            method_key)
+
+    else:
+        visit = core.find_method(
+            'any',
+            method_key)
+
+    result = visit(
+        schema,
+        state,
+        values,
+        core)
+
+    return result
+
+
+def fold_any(schema, state, method, values, core):
+    if isinstance(state, dict):
+        result = {}
+        for key, value in state.items():
+            if key.startswith('_'):
+                result[key] = value
+            else:
+                if key in schema:
+                    fold = core.fold_state(
+                        schema[key],
+                        value,
+                        method,
+                        values)
+                    result[key] = fold
+
+    else:
+        result = state
+
+    visit = visit_method(
+        schema,
+        result,
+        method,
+        values,
+        core)
+
+    return visit
+
+
+def fold_tuple(schema, state, method, values, core):
+    if not isinstance(state, (tuple, list)):
+        return visit_method(
+            schema,
+            state,
+            method,
+            values,
+            core)
+    else:
+        parameters = core.parameters_for(schema)
+        result = []
+        for parameter, element in zip(parameters, state):
+            fold = core.fold(
+                parameter,
+                element,
+                method,
+                values)
+            result.append(fold)
+
+        result = tuple(result)
+
+        return visit_method(
+            schema,
+            result,
+            method,
+            values,
+            core)
+
+
+def fold_union(schema, state, method, values, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        state)
+
+    result = core.fold(
+        union_type,
+        state,
+        method,
+        values)
+
+    return result
+
+
+def type_parameters_for(schema):
+    parameters = []
+    for key in schema['_type_parameters']:
+        subschema = schema.get(f'_{key}', 'any')
+        parameters.append(subschema)
+
+    return parameters
+
+
+def dataclass_union(schema, path, core):
+    parameters = type_parameters_for(schema)
+    subtypes = []
+    for parameter in parameters:
+        dataclass = core.dataclass(
+            parameter,
+            path)
+
+        if isinstance(dataclass, str):
+            subtypes.append(dataclass)
+        elif isinstance(dataclass, type):
+            subtypes.append(dataclass.__name__)
+        else:
+            subtypes.append(str(dataclass))
+
+    parameter_block = ', '.join(subtypes)
+    return eval(f'Union[{parameter_block}]')
+
+
+def divide_any(schema, state, values, core):
+    divisions = values.get('divisions', 2)
+
+    if isinstance(state, dict):
+        result = [
+            {}
+            for _ in range(divisions)]
+
+        for key, value in state.items():
+            for index in range(divisions):
+                result[index][key] = value[index]
+
+        return result
+
+    else:
+        # TODO: division operates on and returns dictionaries
+#         return {
+#             id: copy.deepcopy(state),
+#             for generate_new_id(existing_id, division) in range(divisions)}
+# ?????
+
+        return [
+            copy.deepcopy(state)
+            for _ in range(divisions)]
+
+
+def resolve_any(schema, update, core):
+    schema = schema or {}
+    outcome = schema.copy()
+
+    for key, subschema in update.items():
+        if key == '_type' and key in outcome:
+            if outcome[key] != subschema:
+                if core.inherits_from(outcome[key], subschema):
+                    continue
+                elif core.inherits_from(subschema, outcome[key]):
+                    outcome[key] = subschema
+                else:
+                    raise Exception(f'cannot resolve types when updating\ncurrent type: {schema}\nupdate type: {update}')
+
+        elif not key in outcome or type_parameter_key(update, key):
+            if subschema:
+                outcome[key] = subschema
+        else:
+            outcome[key] = core.resolve_schemas(
+                outcome.get(key),
+                subschema)
+
+    return outcome
+
+
+def dataclass_any(schema, path, core):
+    parts = path
+    if not parts:
+        parts = ['top']
+    dataclass_name = '_'.join(parts)
+
+    if isinstance(schema, dict):
+        type_name = schema.get('_type', 'any')
+
+        branches = {}
+        for key, subschema in schema.items():
+            if not key.startswith('_'):
+                branch = core.dataclass(
+                    subschema,
+                    path + [key])
+
+                def default(subschema=subschema):
+                    return core.default(subschema)
+
+                branches[key] = (
+                    key,
+                    branch,
+                    field(default_factory=default))
+
+        dataclass = make_dataclass(
+            dataclass_name,
+            branches.values(),
+            namespace={
+                '__module__': 'bigraph_schema.data'})
+
+        setattr(
+            bigraph_schema.data,
+            dataclass_name,
+            dataclass)
+
+    else:
+        schema = core.access(schema)
+        dataclass = core.dataclass(schema, path)
+
+    return dataclass
+
+
+def dataclass_tuple(schema, path, core):
+    parameters = type_parameters_for(schema)
+    subtypes = []
+
+    for index, key in enumerate(schema['type_parameters']):
+        subschema = schema.get(key, 'any')
+        subtype = core.dataclass(
+            subschema,
+            path + [index])
+
+        subtypes.append(subtype)
+
+    parameter_block = ', '.join(subtypes)
+    return eval(f'tuple[{parameter_block}]')
+
+
+def divide_tuple(schema, state, values, core):
+    divisions = values.get('divisions', 2)
+
+    return [
+        tuple([item[index] for item in state])
+        for index in range(divisions)]
+
+
+def apply_tree(schema, current, update, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+
+    if current is None:
+        current = core.default(leaf_type)
+
+    if isinstance(current, dict) and isinstance(update, dict):
+        for key, branch in update.items():
+            if key == '_add':
+                current.update(branch)
+            elif key == '_remove':
+                for removed_path in branch:
+                    if isinstance(removed_path, str):
+                        removed_path = [removed_path]
+                    current = remove_path(current, removed_path)
+            elif isinstance(branch, dict):
+                subschema = schema
+                if key in schema:
+                    subschema = schema[key]
+
+                current[key] = core.apply(
+                    subschema,
+                    current.get(key),
+                    branch)
+
+            elif core.check(leaf_type, branch):
+                current[key] = core.apply(
+                    leaf_type,
+                    current.get(key),
+                    branch)
+
+            else:
+                raise Exception(f'state does not seem to be of leaf type:\n  state: {state}\n  leaf type: {leaf_type}')
+
+        return current
+
+    elif core.check(leaf_type, current):
+        return core.apply(
+            leaf_type,
+            current,
+            update)
+
+    else:
+        raise Exception(f'trying to apply an update to a tree but the values are not trees or leaves of that tree\ncurrent:\n  {pf(current)}\nupdate:\n  {pf(update)}\nschema:\n  {pf(schema)}')
+
+
+def apply_any(schema, current, update, core):
+    if isinstance(current, dict):
+        return apply_tree(
+            current,
+            update,
+            'tree[any]',
+            core)
+    else:
+        return update
+
+
+def slice_any(schema, state, path, core):
+    if not isinstance(path, (list, tuple)):
+        if path is None:
+            path = ()
+        else:
+            path = [path]
+
+    if len(path) == 0:
+        return schema, state
+
+    elif len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+        step = None
+
+        if isinstance(state, dict):
+            if head not in state:
+                state[head] = core.default(
+                    schema.get(head))
+            step = state[head]
+
+        elif hasattr(state, head):
+            step = getattr(state, head)
+
+        if head in schema:
+            return core.slice(
+                schema[head],
+                step,
+                tail)
+        else:
+            return slice_any(
+                {},
+                step,
+                tail,
+                core)
+
+
+def check_any(schema, state, core):
+    if isinstance(schema, dict):
+        for key, subschema in schema.items():
+            if not key.startswith('_'):
+                if isinstance(state, dict):
+                    if key in state:
+                        check = core.check_state(
+                            subschema,
+                            state[key])
+
+                        if not check:
+                            return False
+                    else:
+                        return False
+                else:
+                    return False
+
+        return True
+    else:
+        return True
+
+
+def serialize_any(schema, state, core):
+    if isinstance(state, dict):
+        tree = {}
+
+        for key in non_schema_keys(schema):
+            encoded = core.serialize(
+                schema.get(key, schema),
+                state.get(key))
+            tree[key] = encoded
+
+        return tree
+
+    else:
+        return str(state)
+
+
+def deserialize_any(schema, state, core):
+    if isinstance(state, dict):
+        tree = {}
+
+        for key, value in state.items():
+            if is_schema_key(key):
+                decoded = value
+            else:
+                decoded = core.deserialize(
+                    schema.get(key, 'any'),
+                    value)
+
+            tree[key] = decoded
+
+        for key in non_schema_keys(schema):
+            if key not in tree:
+                # if key not in state:
+                #     decoded = core.default(
+                #         schema[key])
+                # else:
+                if key in state:
+                    decoded = core.deserialize(
+                        schema[key],
+                        state[key])
+
+                    tree[key] = decoded
+
+        return tree
+
+    else:
+        return state
+
+
+def is_empty(value):
+    if isinstance(value, np.ndarray):
+        return False
+    elif value is None or value == {}:
+        return True
+    else:
+        return False
+
+
+def merge_any(schema, current_state, new_state, core):
+    # overwrites in place!
+    # TODO: this operation could update the schema (by merging a key not
+    #   already in the schema) but that is not represented currently....
+    merge_state = None
+
+    if is_empty(current_state):
+        merge_state = new_state
+
+    elif is_empty(new_state):
+        merge_state = current_state
+    
+    elif isinstance(new_state, dict):
+        if isinstance(current_state, dict):
+            for key, value in new_state.items():
+                if is_schema_key(key):
+                    current_state[key] = value
+                else:
+                    current_state[key] = core.merge(
+                        schema.get(key),
+                        current_state.get(key),
+                        value)
+            merge_state = current_state
+        else:
+            merge_state = new_state
+    else:
+        merge_state = new_state
+
+    return merge_state
+
+    # return core.deserialize(
+    #     schema,
+    #     merge_state)
+
+
+def bind_any(schema, state, key, subschema, substate, core):
+    result_schema = core.resolve_schemas(
+          schema,
+          {key: subschema})
+
+    state[key] = substate
+
+    return result_schema, state
+
+
+def apply_tuple(schema, current, update, core):
+    parameters = core.parameters_for(schema)
+    result = []
+
+    for parameter, current_value, update_value in zip(parameters, current, update):
+        element = core.apply(
+            parameter,
+            current_value,
+            update_value)
+
+        result.append(element)
+
+    return tuple(result)
+
+
+def check_tuple(schema, state, core):
+    if not isinstance(state, (tuple, list)):
+        return False
+
+    parameters = core.parameters_for(schema)
+    for parameter, element in zip(parameters, state):
+        if not core.check(parameter, element):
+            return False
+
+    return True
+
+
+def slice_tuple(schema, state, path, core):
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if str(head) in schema['_type_parameters']:
+            try:
+                index = schema['_type_parameters'].index(str(head))
+            except:
+                raise Exception(f'step {head} in path {path} is not a type parameter of\n  schema: {pf(schema)}\n  state: {pf(state)}')
+            index_key = f'_{index}'
+            subschema = core.access(schema[index_key])
+
+            return core.slice(subschema, state[head], tail)
+        else:
+            raise Exception(f'trying to index a tuple with a key that is not an index: {state} {head}')
+    else:
+        return schema, state
+
+
+def serialize_tuple(schema, value, core):
+    parameters = core.parameters_for(schema)
+    result = []
+
+    for parameter, element in zip(parameters, value):
+        encoded = core.serialize(
+            parameter,
+            element)
+
+        result.append(encoded)
+
+    return tuple(result)
+
+
+def deserialize_tuple(schema, state, core):
+    parameters = core.parameters_for(schema)
+    result = []
+
+    if isinstance(state, str):
+        if (state[0] == '(' and state[-1] == ')') or (state[0] == '[' and state[-1] == ']'):
+            state = state[1:-1].split(',')
+        else:
+            return None
+
+    for parameter, code in zip(parameters, state):
+        element = core.deserialize(
+            parameter,
+            code)
+
+        result.append(element)
+
+    return tuple(result)
+
+
+def bind_tuple(schema, state, key, subschema, substate, core):
+    new_schema = schema.copy()
+    new_schema[f'_{key}'] = subschema
+    open = list(state)
+    open[key] = substate
+
+    return new_schema, tuple(open)
+
+
+def find_union_type(core, schema, state):
+    parameters = core.parameters_for(schema)
+
+    for possible in parameters:
+        if core.check(possible, state):
+            return core.access(possible)
+
+    return None
+
+
+def apply_union(schema, current, update, core):
+    current_type = find_union_type(
+        core,
+        schema,
+        current)
+
+    update_type = find_union_type(
+        core,
+        schema,
+        update)
+
+    if current_type is None:
+        raise Exception(f'trying to apply update to union value but cannot find type of value in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
+    elif update_type is None:
+        raise Exception(f'trying to apply update to union value but cannot find type of update in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
+
+    # TODO: throw an exception if current_type is incompatible with update_type
+
+    return core.apply(
+        update_type,
+        current,
+        update)
+
+
+def check_union(schema, state, core):
+    found = find_union_type(
+        core,
+        schema,
+        state)
+
+    return found is not None and len(found) > 0
+
+
+def slice_union(schema, state, path, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        state)
+
+    return core.slice(
+        union_type,
+        state,
+        path)
+
+
+def bind_union(schema, state, key, subschema, substate, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        state)
+
+    return core.bind(
+        union_type,
+        state,
+        key,
+        subschema,
+        substate)
+
+
+def serialize_union(schema, value, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        value)
+
+    return core.serialize(
+        union_type,
+        value)
+
+
+def deserialize_union(schema, encoded, core):
+    if encoded == NONE_SYMBOL:
+        return None
+    else:
+        parameters = core.parameters_for(schema)
+
+        for parameter in parameters:
+            value = core.deserialize(
+                parameter,
+                encoded)
+
+            if value is not None:
+                return value
+
+
+def default_any(schema, core):
+    default = {}
+
+    for key, subschema in schema.items():
+        if not is_schema_key(key):
+            default[key] = core.default(
+                subschema)
+
+    return default
+
+
+def default_tuple(schema, core):
+    parts = []
+    for parameter in schema['_type_parameters']:
+        subschema = schema[f'_{parameter}']
+        part = core.default(subschema, core)
+        parts.append(part)
+
+    return tuple(parts)
+
+
+def default_union(schema, core):
+    final_parameter = schema['_type_parameters'][-1]
+    subschema = schema[f'_{final_parameter}']
+
+    return core.default(subschema)
+
+
+def union_keys(schema, state):
+    return set(schema.keys()).union(state.keys())
+
+
+def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    generated_schema = {}
+    generated_state = {}
+
+    if isinstance(state, dict):
+        visited = set([])
+
+        all_keys = union_keys(
+            schema,
+            state)
+
+        non_schema_keys = [
+            key
+            for key in all_keys
+            if not is_schema_key(key)]
+
+        for key in all_keys:
+            if is_schema_key(key):
+                generated_schema[key] = state.get(
+                    key,
+                    schema.get(key))
+
+            else:
+                subschema, substate, top_schema, top_state = core.generate_recur(
+                    schema.get(key),
+                    state.get(key),
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path+[key])
+
+                generated_schema[key] = core.resolve_schemas(
+                    schema.get(key, {}),
+                    subschema)
+
+                generated_state[key] = substate
+
+        if path:
+            top_schema, top_state = core.set_slice(
+                top_schema,
+                top_state,
+                path,
+                generated_schema,
+                generated_state)
+        else:
+            top_schema, top_state = generated_schema, generated_state
+
+    else:
+        generated_schema, generated_state = schema, state
+
+    return generated_schema, generated_state, top_schema, top_state
+
+
+def is_method_key(key, parameters):
+    return key.startswith('_') and key not in type_schema_keys and key not in [
+        f'_{parameter}' for parameter in parameters]
+
+
+registry_types = {
+    'any': {
+        '_type': 'any',
+        '_default': default_any,
+        '_slice': slice_any,
+        '_apply': apply_any,
+        '_check': check_any,
+        '_generate': generate_any,
+        '_serialize': serialize_any,
+        '_deserialize': deserialize_any,
+        '_dataclass': dataclass_any,
+        '_resolve': resolve_any,
+        '_fold': fold_any,
+        '_merge': merge_any,
+        '_bind': bind_any,
+        '_divide': divide_any},
+
+    'tuple': {
+        '_type': 'tuple',
+        '_default': default_tuple,
+        '_apply': apply_tuple,
+        '_check': check_tuple,
+        '_slice': slice_tuple,
+        '_serialize': serialize_tuple,
+        '_deserialize': deserialize_tuple,
+        '_dataclass': dataclass_tuple,
+        '_fold': fold_tuple,
+        '_divide': divide_tuple,
+        '_bind': bind_tuple,
+        '_description': 'tuple of an ordered set of typed values'},
+
+    'union': {
+        '_type': 'union',
+        '_default': default_union,
+        '_apply': apply_union,
+        '_check': check_union,
+        '_slice': slice_union,
+        '_serialize': serialize_union,
+        '_deserialize': deserialize_union,
+        '_dataclass': dataclass_union,
+        '_fold': fold_union,
+        '_description': 'union of a set of possible types'}}
+
+
+class TypeSystem(Registry):
     """Handles type schemas and their operation"""
 
     def __init__(self):
-        self.type_registry = TypeRegistry()
+        super().__init__()
+
+        self.inherits = {}
+
+        self.default_registry = Registry(function_keys=[
+            'schema',
+            'core'])
+
+        self.check_registry = Registry(function_keys=[
+            'state',
+            'schema',
+            'core'])
+
+        self.apply_registry = Registry(function_keys=[
+            'current',
+            'update',
+            'schema',
+            'core'])
+
+        self.serialize_registry = Registry(function_keys=[
+            'value',
+            'schema',
+            'core'])
+
+        self.deserialize_registry = Registry(function_keys=[
+            'encoded',
+            'schema',
+            'core'])
+
+        self.fold_registry = Registry(function_keys=[
+             'method',
+             'state',
+             'schema',
+             'core'])
+
         self.react_registry = Registry()
         self.method_registry = Registry()
 
-        register_types(self, base_type_library)
-        register_units(self, units)
+        # register all the base methods and types
+        self.apply_registry.register(
+            'set',
+            set_apply)
 
+        self.register_types(registry_types)
+        self.register_types(base_type_library)
+
+        register_units(self, units)
         register_base_reactions(self)
 
 
+    def register_types(core, type_library):
+        for type_key, type_data in type_library.items():
+            if not core.exists(type_key):
+                core.register(
+                    type_key,
+                    type_data)
+
+        return core
+        
+
+    def lookup(self, type_key, attribute):
+        return self.access(type_key).get(attribute)
+
+
     def lookup_registry(self, underscore_key):
-        """Find the registry for a given underscore key"""
-
-        return self.type_registry.lookup_registry(underscore_key)
-
-
-    def register(self, type_key, type_data, force=False):
         """
-        register the provided type_data under the given type_key, looking up
-        the module of any functions provided
+        access the registry for the given key
         """
-        self.type_registry.register(
-            type_key,
-            type_data,
-            force=force)
+
+        if underscore_key == '_type':
+            return self
+        root = underscore_key.strip('_')
+        registry_key = f'{root}_registry'
+        if hasattr(self, registry_key):
+            return getattr(self, registry_key)
+
+
+    def find_registry(self, underscore_key):
+        """
+        access the registry for the given key
+        and create if it doesn't exist
+        """
+
+        registry = self.lookup_registry(underscore_key)
+        if registry is None:
+            registry = Registry()
+            setattr(
+                self,
+                f'{underscore_key[1:]}_registry',
+                registry)
+
+        return registry
+
+
+    def register(self, key, schema, alternate_keys=tuple(), force=False):
+        """
+        register the schema under the given key in the registry
+        """
+
+        if isinstance(schema, str):
+            schema = self.find(schema)
+        schema = copy.deepcopy(schema)
+
+        if '_type' not in schema:
+            schema['_type'] = key
+
+        if isinstance(schema, dict):
+            inherits = schema.get('_inherit', [])  # list of immediate inherits
+            if isinstance(inherits, str):
+                inherits = [inherits]
+                schema['_inherit'] = inherits
+
+            self.inherits[key] = []
+            for inherit in inherits:
+                inherit_type = self.access(inherit)
+                new_schema = copy.deepcopy(inherit_type)
+
+                # schema = self.resolve(
+                #     new_schema,
+                #     schema)
+
+                schema = self.merge_schemas(
+                    new_schema,
+                    schema)
+
+                # schema = type_merge(
+                #     new_schema,
+                #     schema)
+
+                self.inherits[key].append(
+                    inherit_type)
+
+            parameters = schema.get('_type_parameters', [])
+            for subkey, subschema in schema.items():
+                if subkey == '_default' or subkey in TYPE_FUNCTION_KEYS or is_method_key(subkey, parameters):
+                    if callable(subschema):
+                        registry = self.find_registry(subkey)
+                        function_name, module_key = registry.register_function(subschema)
+
+                        schema[subkey] = function_name
+                    else:
+                        schema[subkey] = subschema
+
+                elif subkey not in type_schema_keys:
+                    if schema['_type'] in SYMBOL_TYPES:
+                        schema[subkey] = subschema
+                    else:
+                        lookup = self.find(subschema)
+                        if lookup is None:
+                            import ipdb; ipdb.set_trace()
+                            raise Exception(
+                                f'trying to register a new type ({key}), '
+                                f'but it depends on a type ({subkey}) which is not in the registry')
+                        else:
+                            schema[subkey] = lookup
+        else:
+            raise Exception(
+                f'all type definitions must be dicts '
+                f'with the following keys: {type_schema_keys}\nnot: {schema}')
+
+        super().register(
+            key,
+            schema,
+            alternate_keys,
+            force)
+
+
+    def resolve_parameters(self, type_parameters, schema):
+        """
+        find the types associated with any type parameters in the schema
+        """
+
+        return {
+            type_parameter: self.access(
+                schema.get(f'_{type_parameter}'))
+            for type_parameter in type_parameters}
 
 
     def register_reaction(self, reaction_key, reaction):
@@ -96,21 +1173,192 @@ class TypeSystem:
     def types(self):
         return {
             type_key: type_data
-            for type_key, type_data in self.type_registry.registry.items()}
+            for type_key, type_data in self.registry.items()}
+
+
+    def merge_schemas(self, current, update):
+        if not isinstance(current, dict):
+            return update
+        if not isinstance(update, dict):
+            return update
+    
+        merged = {}
+
+        for key in union_keys(current, update):
+            if key in current:
+                if key in update:
+                    merged[key] = self.merge_schemas(
+                        current[key],
+                        update[key])
+                else:
+                    merged[key] = current[key]
+            else:
+                merged[key] = update[key]
+
+        return merged
+
+
+    def merge_schema_keys(self, schema, state):
+        if not isinstance(schema, dict):
+            schema = self.find(schema)
+        if not isinstance(state, dict):
+            return schema, state
+    
+        merged_schema = {}
+        merged_state = {}
+
+        for key in union_keys(schema, state):
+            if is_schema_key(key):
+                if key in state:
+                    merged_schema[key] = self.merge_schemas(
+                        schema.get(key, {}),
+                        state[key])
+                else:
+                    merged_schema[key] = schema[key]
+            else:
+                subschema, merged_state[key] = self.merge_schema_keys(
+                    schema.get(key, {}),
+                    state.get(key, None))
+
+                if subschema:
+                    merged_schema[key] = subschema
+
+        return merged_schema, merged_state
 
 
     def exists(self, type_key):
-        return type_key in self.type_registry.registry
+        return type_key in self.registry
 
 
-    def find(self, schema):
-        return self.type_registry.find(
-            schema)
+    def find(self, schema, strict=False):
+        """
+        expand the schema to its full type information from the type registry
+        """
 
-    def access(self, schema):
-        found = self.type_registry.access(
-            schema)
+        found = None
+
+        if schema is None:
+            return self.access('any', strict=strict)
+
+        elif isinstance(schema, dict):
+            if '_description' in schema:
+                return schema
+
+            elif '_union' in schema:
+                union_schema = {
+                    '_type': 'union',
+                    '_type_parameters': []}
+
+                for index, element in enumerate(schema['_union']):
+                    union_schema['_type_parameters'].append(str(index))
+                    union_schema[f'_{index}'] = element
+
+                return self.access(
+                    union_schema,
+                    strict=strict)
+
+            elif '_type' in schema:
+                registry_type = self.retrieve(
+                    schema['_type'])
+
+                # found = self.resolve(
+                #     registry_type,
+                #     schema)
+
+                found = self.merge_schemas(
+                    registry_type,
+                    schema)
+
+                # found = schema.copy()
+
+                # for key, value in registry_type.items():
+                #     if  key == '_type' or key not in found:
+                #         found[key] = value
+
+            else:
+                found = {
+                   key: self.access(
+                       branch,
+                       strict=strict)
+                   for key, branch in schema.items()}
+
+        elif isinstance(schema, int):
+            return schema
+
+        elif isinstance(schema, tuple):
+            tuple_schema = {
+                '_type': 'tuple',
+                '_type_parameters': []}
+
+            for index, element in enumerate(schema):
+                tuple_schema['_type_parameters'].append(str(index))
+                tuple_schema[f'_{index}'] = element
+
+            return self.access(
+                tuple_schema,
+                strict=strict)
+
+        elif isinstance(schema, list):
+            if isinstance(schema[0], int):
+                return schema
+
+            bindings = []
+            if len(schema) > 1:
+                schema, bindings = schema
+            else:
+                schema = schema[0]
+            found = self.access(
+                schema,
+                strict=strict)
+
+            if len(bindings) > 0:
+                found = found.copy()
+
+                if '_type_parameters' not in found:
+                    found['_type_parameters'] = []
+                    for index, binding in enumerate(bindings):
+                        found['_type_parameters'].append(str(index))
+                        found[f'_{index}'] = binding
+                else:
+                    for parameter, binding in zip(found['_type_parameters'], bindings):
+                        binding_type = self.access(
+                            binding,
+                            strict=strict) or binding
+
+                        found[f'_{parameter}'] = binding_type
+
+        elif isinstance(schema, str):
+            found = self.registry.get(schema)
+
+            if found is None and schema not in ('', '{}'):
+                try:
+                    parse = parse_expression(schema)
+                    if parse != schema:
+                        found = self.access(
+                            parse,
+                            strict=strict)
+                    elif not strict:
+                        found = {'_type': schema}
+
+                except Exception:
+                    print(f'type did not parse: {schema}')
+                    traceback.print_exc()
+                    
         return found
+
+
+    def access(self, schema, strict=False):
+        if isinstance(schema, str):
+            return self.access_str(schema, strict=strict)
+        else:
+            return self.find(schema, strict=strict)
+
+
+    @functools.lru_cache(maxsize=None)
+    def access_str(self, schema, strict=False):
+        return self.find(
+            schema,
+            strict)
 
 
     def retrieve(self, schema):
@@ -118,7 +1366,10 @@ class TypeSystem:
         like access(schema) but raises an exception if nothing is found
         """
 
-        found = self.find(schema)
+        found = self.find(
+            schema,
+            strict=True)
+
         if found is None:
             raise Exception(f'schema not found for type: {schema}')
         return found
@@ -139,6 +1390,10 @@ class TypeSystem:
 
 
     def parameters_for(self, initial_schema):
+        '''
+        find any type parameters for this schema if they are present
+        '''
+
         if '_type_parameters' in initial_schema:
             schema = initial_schema
         else:
@@ -178,7 +1433,10 @@ class TypeSystem:
             report = 'schema cannot be None'
 
         elif isinstance(schema, str):
-            typ = self.access(schema)
+            typ = self.access(
+                schema,
+                strict=True)
+
             if typ is None:
                 report = f'type: {schema} is not in the registry'
 
@@ -190,18 +1448,23 @@ class TypeSystem:
 
             for key, value in schema.items():
                 if key == '_type':
-                    typ = self.access(value)
+                    typ = self.access(
+                        value,
+                        strict=True)
                     if typ is None:
                         report[key] = f'type: {value} is not in the registry'
 
                 elif key in type_schema_keys:
                     schema_keys.add(key)
-                    registry = self.type_registry.lookup_registry(key)
-                    if registry is None:
+                    registry = self.lookup_registry(key)
+                    if registry is None or key == '_default':
                         # deserialize and serialize back and check it is equal
                         pass
                     elif isinstance(value, str):
-                        element = registry.access(value)
+                        element = registry.access(
+                            value,
+                            strict=True)
+
                         if element is None:
                             report[key] = f'no entry in the {key} registry for: {value}'
                     elif not inspect.isfunction(value):
@@ -228,9 +1491,9 @@ class TypeSystem:
                     '_deserialize': f'serialize found in type without deserialize: {schema}'
                 }
             else:
-                serialize = self.type_registry.serialize_registry.access(
+                serialize = self.serialize_registry.access(
                     schema['_serialize'])
-                deserialize = self.type_registry.deserialize_registry.access(
+                deserialize = self.deserialize_registry.access(
                     schema['_deserialize'])
                 serial = serialize(state)
                 pass_through = deserialize(serial)
@@ -252,18 +1515,94 @@ class TypeSystem:
         return validation
 
 
-    # TODO: should default be a method?
+    def representation(self, schema, level=None):
+        '''
+        produce a string representation of the schema
+        * intended to be the inverse of parse_expression()
+        '''
+
+
+        if isinstance(schema, str):
+            return schema
+
+        elif isinstance(schema, tuple):
+            inner = [
+                self.representation(element)
+                for element in schema]
+
+            pipes = '|'.join(inner)
+            return f'({pipes})'
+            
+        elif isinstance(schema, dict):
+            if '_type' in schema:
+                type = schema['_type']
+
+                inner = []
+                block = ''
+                if '_type_parameters' in schema:
+                    for parameter_key in schema['_type_parameters']:
+                        schema_key = f'_{parameter_key}'
+                        if schema_key in schema:
+                            parameter = self.representation(
+                                schema[schema_key])
+                            inner.append(parameter)
+                        else:
+                            inner.append('()')
+
+                    commas = ','.join(inner)
+                    block = f'[{commas}]'
+
+                if type == 'tuple':
+                    pipes = '|'.join(inner)
+                    return f'({pipes})'
+                else:
+                    return f"{type}{block}"
+
+            else:
+                inner = {}
+                for key in non_schema_keys(schema):
+                    subschema = self.representation(
+                        schema[key])
+
+                    inner[key] = subschema
+
+                colons = [
+                    f'{key}:{value}'
+                    for key, value in inner.items()]
+
+                pipes = '|'.join(colons)
+                return f'({pipes})'
+        else:
+            print(f'no representation for {schema}')
+            return str(schema)
+
+
     def default(self, schema):
+        '''
+        produce the default value for the provided schema
+        '''
+
         default = None
         found = self.retrieve(schema)
 
-        if found and '_type' in found and found['_type'] == 'enum':
-            return found['_0']
-        elif '_default' in found:
-            if not '_deserialize' in found:
+        if '_default' in found:
+            default_value = found['_default']
+            if isinstance(default_value, str):
+                default_method = self.default_registry.access(default_value)
+                if default_method and callable(default_method):
+                    default = default_method(found, self)
+                else:
+                    default = self.deserialize(
+                        found,
+                        default_value)
+
+            elif not '_deserialize' in found:
                 raise Exception(
                     f'asking for default but no deserialize in {found}')
-            default = self.deserialize(found, found['_default'])
+
+            else:
+                default = self.deserialize(found, found['_default'])
+
         else:
             default = {}
             for key, subschema in found.items():
@@ -274,28 +1613,30 @@ class TypeSystem:
 
 
     def choose_method(self, schema, state, method_name):
+        '''
+        find in the provided state, or schema if not there,
+        a method for the given method_name
+        '''
+
         method_key = f'_{method_name}'
+        found = None
 
         if isinstance(state, dict) and method_key in state:
             found = state[method_key]
 
         elif isinstance(state, dict) and '_type' in state:
-            method_type = self.find(state['_type'])
+            method_type = self.find(
+                state['_type'])
 
-            if method_type is None:
-                raise Exception(f'the type {state["_type"]} was not found in the registry')
+            if method_type:
+                found = method_type.get(method_key)
 
-            found = method_type.get(method_key)
-            if found is None:
-                any_type = self.access('any')
-                found = any_type[method_key]
+        if not found and isinstance(schema, dict) and method_key in schema:
+            found = schema[method_key]
 
-        elif schema is None or method_key not in schema:
+        if found is None:
             any_type = self.access('any')
             found = any_type[method_key]
-
-        else:
-            found = schema[method_key]
 
         registry = self.lookup_registry(method_key)
         method_function = registry.access(
@@ -305,6 +1646,11 @@ class TypeSystem:
 
 
     def slice(self, schema, state, path):
+        '''
+        find the subschema and substate at a node in the place graph
+        given by the provided path
+        '''
+
         if not isinstance(path, (list, tuple)):
             path = [path]
 
@@ -510,7 +1856,7 @@ class TypeSystem:
         else:
             resolve_function = self.choose_method(
                 schema,
-                {},
+                update,
                 'resolve')
 
             return resolve_function(
@@ -668,7 +2014,7 @@ class TypeSystem:
                 values)
 
         elif '_apply' in schema and schema['_apply'] != 'any':
-            apply_function = self.type_registry.apply_registry.access(schema['_apply'])
+            apply_function = self.apply_registry.access(schema['_apply'])
             
             state = apply_function(
                 schema,
@@ -748,7 +2094,7 @@ class TypeSystem:
 
     def set_update(self, schema, state, update):
         if '_apply' in schema:
-            apply_function = self.type_registry.apply_registry.access('set')
+            apply_function = self.apply_registry.access('set')
             
             state = apply_function(
                 schema,
@@ -1016,6 +2362,21 @@ class TypeSystem:
                     top_state=top_state,
                     path=subpath)
 
+            state_keys = non_schema_keys(state)
+            for key in set(state_keys) - set(branches):
+                subschema, substate = self.slice(
+                    schema,
+                    state,
+                    key)
+
+                subpath = path + [key]
+                state[key] = self.fill_state(
+                    subschema,
+                    substate,
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=subpath)
+
         return state
 
 
@@ -1238,7 +2599,10 @@ class TypeSystem:
             return ancestor == {}
 
         if descendant is None:
-            return ancestor is None
+            return True
+
+        if ancestor is None:
+            return False
 
         if isinstance(ancestor, int):
             if isinstance(descendant, int):
@@ -1290,8 +2654,10 @@ class TypeSystem:
         return True
 
 
-    def infer_wires(self, ports, state, wires, top_schema=None, path=None, internal_path=None):
+    # def infer_wires(self, ports, state, wires, top_schema=None, top_state=None, path=None, internal_path=None):
+    def infer_wires(self, ports, wires, top_schema=None, top_state=None, path=None, internal_path=None):
         top_schema = top_schema or {}
+        top_state = top_state or state
         path = path or ()
         internal_path = internal_path or ()
 
@@ -1300,23 +2666,23 @@ class TypeSystem:
 
         if isinstance(wires, (list, tuple)):
             if len(wires) == 0:
-                destination = top_schema
+                destination_schema, destination_state = top_schema, top_state
+
             else:
-                peer = get_path(
+                destination_schema, destination_state = self.slice(
                     top_schema,
-                    path[:-1])
+                    top_state,
+                    path[:-1] + wires)
 
-                destination = establish_path(
-                    peer,
-                    wires,
-                    top=top_schema,
-                    cursor=path[:-1])
-
-            merged = apply_schema(
-                destination,
-                ports,
+            merged_schema = apply_schema(
                 'schema',
+                destination_schema,
+                ports,
                 self)
+
+            merged_state = self.complete(
+                merged_schema,
+                destination_state)
 
         else:
             for port_key, port_wires in wires.items():
@@ -1326,11 +2692,12 @@ class TypeSystem:
                     port_key)
 
                 if isinstance(port_wires, dict):
-                    top_schema = self.infer_wires(
+                    top_schema, top_state = self.infer_wires(
                         subschema,
-                        substate,
+                        # substate,
                         port_wires,
                         top_schema=top_schema,
+                        top_state=top_state,
                         path=path,
                         internal_path=internal_path+(port_key,))
 
@@ -1342,7 +2709,7 @@ class TypeSystem:
                     compound_path = resolve_path(
                         path[:-1] + tuple(port_wires))
 
-                    compound_schema, _ = self.set_slice(
+                    compound_schema, compound_state = self.set_slice(
                         {}, {},
                         compound_path,
                         subschema or 'any',
@@ -1352,49 +2719,56 @@ class TypeSystem:
                         top_schema,
                         compound_schema)
 
-        return top_schema
+                    top_state = self.merge(
+                        top_schema,
+                        compound_state,
+                        top_state)
+
+        return top_schema, top_state
 
 
-    def infer_edge(self, schema, state, top_state=None, path=None):
+    def infer_edge(self, schema, state, top_schema=None, top_state=None, path=None):
+        '''
+        given the schema and state for this edge, and its path relative to
+        the top_schema and top_state, make all the necessary completions to
+        both the schema and the state according to the input and output schemas
+        of this edge in '_inputs' and '_outputs', along the wires in its state
+        under 'inputs' and 'outputs'.
+
+        returns the top_schema and top_state, even if the edge is deeply embedded,
+        as the particular wires could have implications anywhere in the tree.
+        '''
+
         schema = schema or {}
+        top_schema = top_schema or schema
         top_state = top_state or state
         path = path or ()
 
-        state_schema = get_path(schema, path)
-
         if self.check('edge', state):
-            inputs = state.get('inputs')
-            if '_inputs' not in state_schema:
-                state_schema['_inputs'] = state.get(
-                    '_inputs',
-                    'any')
+            for port_key in ['inputs', 'outputs']:
+                ports = state.get(port_key)
+                schema_key = f'_{port_key}'
+                port_schema = schema.get(schema_key, {})
+                state_schema = state.get(schema_key, {})
 
-            if inputs:
-                schema = self.infer_wires(
-                    state_schema['_inputs'],
-                    state,
-                    inputs,
-                    top_schema=schema,
-                    path=path)
+                schema[schema_key] = self.resolve(
+                    port_schema,
+                    self.access(
+                        state_schema))
 
-            outputs = state.get('outputs')
-            if '_outputs' not in state_schema:
-                state_schema['_outputs'] = state.get(
-                    '_outputs',
-                    'any')
+                if ports:
+                    top_schema, top_state = self.infer_wires(
+                        schema[schema_key],
+                        # state,
+                        ports,
+                        top_schema=top_schema,
+                        top_state=top_state,
+                        path=path)
 
-            if outputs:
-                schema = self.infer_wires(
-                    state_schema['_outputs'],
-                    state,
-                    outputs,
-                    top_schema=schema,
-                    path=path)
-
-        return schema
+        return top_schema, top_state
 
 
-    def infer_schema(self, schema, state, top_state=None, path=None):
+    def infer_schema(self, schema, state, top_schema=None, top_state=None, path=None):
         """
         Given a schema fragment and an existing state with _type keys,
         return the full schema required to describe that state,
@@ -1406,59 +2780,53 @@ class TypeSystem:
         # path is used to access it (!)
 
         schema = schema or {}
+        top_schema = top_schema or schema
         top_state = top_state or state
         path = path or ()
 
         if isinstance(state, dict):
-            inner_schema = establish_path(schema, path)
-
+            state_schema = None
             if '_type' in state:
                 state_type = {
                     key: value
                     for key, value in state.items()
-                    if key.startswith('_')}
-                state_schema = self.access(
+                    if is_schema_key(key)}
+
+                schema = self.resolve(
+                    schema,
                     state_type)
 
-                hydrated_state = self.deserialize(state_schema, state)
-                top_state = set_path(
+            if '_type' in schema:
+                hydrated_state = self.deserialize(
+                    schema,
+                    state)
+
+                top_schema, top_state = self.set_slice(
+                    top_schema,
                     top_state,
                     path,
+                    schema,
                     hydrated_state)
 
-                path_schema = set_path(
-                    schema,
-                    path,
-                    state_type)
-
-                schema = self.infer_edge(
+                top_schema, top_state = self.infer_edge(
                     schema,
                     hydrated_state,
+                    top_schema,
                     top_state,
                     path)
-
-            elif '_type' in inner_schema:
-                hydrated_state = self.deserialize(
-                    inner_schema,
-                    state)
-
-                schema = self.infer_edge(
-                    schema,
-                    hydrated_state,
-                    top_state,
-                    path)
-
-                top_state = set_path(
-                    top_state,
-                    path,
-                    state)
 
             else:
-                for key, value in state.items():
+                for key in state:
                     inner_path = path + (key,)
-                    schema, top_state = self.infer_schema(
+                    inner_schema, inner_state = self.slice(
                         schema,
-                        value,
+                        state,
+                        key)
+
+                    top_schema, top_state = self.infer_schema(
+                        inner_schema,
+                        inner_state,
+                        top_schema=top_schema,
                         top_state=top_state,
                         path=inner_path)
 
@@ -1470,14 +2838,14 @@ class TypeSystem:
                 type(state).__name__,
                 'any')
 
-            schema, top_state = self.set_slice(
-                schema,
+            top_schema, top_state = self.set_slice(
+                top_schema,
                 top_state,
                 path,
                 type_schema,
                 state)
 
-        return schema, top_state
+        return top_schema, top_state
         
 
     def hydrate(self, schema, state):
@@ -1505,12 +2873,42 @@ class TypeSystem:
         return self.access(schema), final_state
         
 
+    def generate_recur(self, schema, state, top_schema=None, top_state=None, path=None):
+        merged_schema, merged_state = self.merge_schema_keys(
+            schema,
+            state)
+
+        found = self.retrieve(
+            merged_schema)
+
+        generate_function = self.choose_method(
+            found,
+            merged_state,
+            'generate')
+
+        return generate_function(
+            self,
+            found,
+            merged_state,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
+
+
+    def generate(self, schema, state):
+        _, _, top_schema, top_state = self.generate_recur(
+            schema,
+            state)
+
+        return top_schema, top_state
+
+
     def find_method(self, schema, method_key):
         if not isinstance(schema, dict) or method_key not in schema:
             schema = self.access(schema)
 
         if method_key in schema:
-            registry = self.type_registry.lookup_registry(
+            registry = self.lookup_registry(
                 method_key)
 
             if registry is not None:
@@ -1531,7 +2929,7 @@ class TypeSystem:
     def define(self, method_name, methods):
         method_key = f'_{method_name}'
         for type_key, method in methods.items():
-            self.type_registry.register(
+            self.register(
                 type_key,
                 {method_key: method})
 
@@ -1966,14 +3364,27 @@ def apply_map(schema, current, update, core=None):
 
     for key, update_value in update.items():
         if key == '_add':
-            result.update(update_value)
+            import ipdb; ipdb.set_trace()
+
+            for addition_key, addition in update_value.items():
+                filled = core.hydrate(
+                    value_type,
+                    addition)
+
+                result[addition_key] = filled
+
         elif key == '_remove':
             for remove_key in update_value:
                 if remove_key in result:
                     del result[remove_key]
+
         elif key not in current:
             # This supports adding without the '_add' key, if the key is not in the state
-            result[key] = update_value
+            filled = core.hydrate(
+                value_type,
+                update_value)
+            result[key] = filled
+
             # raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
         else:
             result[key] = core.apply(
@@ -1986,11 +3397,19 @@ def apply_map(schema, current, update, core=None):
 
 def resolve_map(schema, update, core):
     if isinstance(update, dict):
-        value_schema = schema.get('_value', {})
+        value_schema = update.get(
+            '_value',
+            schema.get('_value', {}))
+
         for key, subschema in update.items():
-            value_schema = core.resolve_schemas(
-                value_schema,
-                subschema)
+            if not is_schema_key(key):
+                value_schema = core.resolve_schemas(
+                    value_schema,
+                    subschema)
+
+        schema['_type'] = update.get(
+            '_type',
+            schema.get('_type', 'map'))
         schema['_value'] = value_schema
 
     return schema
@@ -2275,6 +3694,199 @@ def apply_path(schema, current, update, core):
     return update
 
 
+def generate_map(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    # generated_schema = {}
+    # generated_state = {}
+
+    generated_schema, generated_state = core.merge_schema_keys(
+        schema,
+        state)
+
+    all_keys = set(schema.keys()).union(state.keys())
+
+    for key in all_keys:
+        if is_schema_key(key):
+            generated_schema[key] = state.get(
+                key,
+                schema.get(key))
+
+        else:
+            subschema = schema.get(key)
+            substate = state.get(key)
+
+            subschema = core.merge_schemas(
+                value_type,
+                subschema)
+
+            subschema, generated_state[key], top_schema, top_state = core.generate_recur(
+                subschema,
+                substate,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path+[key])
+
+    return generated_schema, generated_state, top_schema, top_state
+
+
+def generate_tree(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+
+    if core.check(state, leaf_type):
+        generate_schema, generate_state, top_schema, top_state = core.generate_recur(
+            leaf_type,
+            state,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
+    else:
+        generate_schema = {}
+        generate_state = {}
+
+        all_keys = set(schema.keys()).union(state.keys())
+        non_schema_keys = [
+            key
+            for key in all_keys
+            if not is_schema_key(key)]
+
+        if non_schema_keys:
+            base_schema = {
+                key: subschema
+                for key, subschema in schema.items()
+                if is_schema_key(key)}
+        else:
+            base_schema = schema
+
+        for key in all_keys:
+            if not is_schema_key(key):
+                subschema = schema.get(key)
+                substate = state.get(key)
+
+                if not substate or core.check(leaf_type, substate):
+                    base_schema = leaf_type
+
+                subschema = core.merge_schemas(
+                    base_schema,
+                    subschema)
+
+                subschema, generate_state[key], top_schema, top_state = core.generate_recur(
+                    subschema,
+                    substate,
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path+[key])
+
+            elif key in state:
+                generate_schema[key] = state[key]
+            elif key in schema:
+                generate_schema[key] = schema[key]
+            else:
+                raise Exception(' the impossible has occurred now is the time for celebration')
+
+    return generate_schema, generate_state, top_schema, top_state
+
+
+def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    wires = wires or {}
+    top_schema = top_schema or schema
+    top_state = top_state or {}
+    path = path or []
+
+    if isinstance(schema, str):
+        schema = {'_type': schema}
+
+    for port_key, subwires in wires.items():
+        if port_key in schema:
+            port_schema = schema[port_key]
+        else:
+            port_schema, subwires = core.slice(
+                schema,
+                wires,
+                port_key)
+
+        if isinstance(subwires, dict):
+            top_schema, top_state = core.generate_ports(
+                port_schema,
+                subwires,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path)
+
+        else:
+            if isinstance(subwires, str):
+                subwires = [subwires]
+
+            default_state = core.default(
+                port_schema)
+
+            top_schema, top_state = core.set_slice(
+                top_schema,
+                top_state,
+                path[:-1] + subwires,
+                port_schema,
+                default_state,
+                defer=True)
+            
+    return top_schema, top_state
+
+
+def generate_edge(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or {}
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    generate_schema, generate_state, top_schema, top_state = generate_any(
+        core,
+        schema,
+        state,
+        top_schema=top_schema,
+        top_state=top_state,
+        path=path)
+
+    top_schema, top_state = core.set_slice(
+        top_schema,
+        top_state,
+        path,
+        generate_schema,
+        generate_state)
+
+    for port_key in ['inputs', 'outputs']:
+        port_schema = generate_schema.get(
+            f'_{port_key}', {})
+        ports = generate_state.get(
+            port_key, {})
+
+        top_schema, top_state = generate_ports(
+            core,
+            port_schema,
+            ports,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
+
+    return generate_schema, generate_state, top_schema, top_state
+
+
 def apply_edge(schema, current, update, core):
     result = current.copy()
     result['inputs'] = core.apply(
@@ -2421,13 +4033,19 @@ def lookup_dtype(data_name):
     if dtype_name is None:
         raise Exception(f'unknown data type for array: {data_name}')
 
-    dtype = np.dtype(dtype_name)
+    return np.dtype(dtype_name)
+
+
+def read_datatype(data_schema):
+    return lookup_dtype(
+        data_schema['_type'])
 
 
 def read_shape(shape):
     return tuple([
         int(x)
-        for x in shape])
+        for x in tuple_from_type(
+            shape)])
 
 
 def deserialize_array(schema, encoded, core):
@@ -2438,13 +4056,16 @@ def deserialize_array(schema, encoded, core):
         if 'value' in encoded:
             return encoded['value']
         else:
-            dtype = lookup_dtype(
-                encoded.get('data'))
+            found = core.retrieve(
+                encoded.get(
+                    'data',
+                    schema['_data']))
 
-            shape = [
-                int(x)
-                for x in tuple_from_type(
-                    schema['_shape'])]
+            dtype = read_datatype(
+                found)
+
+            shape = read_shape(
+                schema['_shape'])
 
             if 'list' in encoded:
                 return np.array(
@@ -2455,6 +4076,54 @@ def deserialize_array(schema, encoded, core):
                 return np.zeros(
                     tuple(shape),
                     dtype=dtype)
+
+
+def default_tree(schema, core):
+    leaf_schema = core.find_parameter(
+        schema,
+        'leaf')
+
+    default = {}
+
+    non_schema_keys = [
+        key
+        for key in schema
+        if not is_schema_key(key)]
+
+    if non_schema_keys:
+        base_schema = {
+            key: subschema
+            for key, subschema in schema.items()
+            if is_schema_key(key)}
+
+        for key in non_schema_keys:
+            subschema = core.merge_schemas(
+                base_schema,
+                schema[key])
+
+            subdefault = core.default(
+                subschema)
+
+            if subdefault:
+                default[key] = subdefault
+
+    return default
+
+
+def default_array(schema, core):
+    data_schema = core.find_parameter(
+        schema,
+        'data')
+
+    dtype = read_datatype(
+        data_schema)
+
+    shape = read_shape(
+        schema['_shape'])
+
+    return np.zeros(
+        shape,
+        dtype=dtype)
 
 
 def fold_list(schema, state, method, values, core):
@@ -2643,18 +4312,6 @@ def divide_map(schema, state, values, core):
         raise Exception(f'trying to divide a map but state is not a dict.\n  state: {pf(state)}\n  schema: {pf(schema)}')        
 
 
-def register_types(core, type_library):
-    for type_key, type_data in type_library.items():
-        if not core.exists(type_key):
-            core.register(
-                type_key,
-                type_data)
-
-    core.type_registry.apply_registry.register('set', set_apply)
-
-    return core
-        
-
 def register_units(core, units):
     for unit_name in units._units:
         try:
@@ -2776,8 +4433,14 @@ def divide_enum(schema, state, values, core):
         for index in range(divisions)]
 
 
-def merge_edge(schema, current_state, new_state, core):
-    return core.deserialize(schema, new_state)
+# def merge_edge(schema, current_state, new_state, core):
+#     merge = deep_merge(
+#         current_state,
+#         new_state)
+
+#     return core.deserialize(
+#         schema,
+#         merge)
 
 
 def serialize_schema(schema, state, core):
@@ -2786,6 +4449,20 @@ def serialize_schema(schema, state, core):
 
 def deserialize_schema(schema, state, core):
     return state
+
+
+def default_enum(schema, core):
+    parameter = schema['_type_parameters'][0]
+    return schema[f'_{parameter}']
+
+
+def default_edge(schema, core):
+    return {
+        # '_type': schema['_type'],
+        'inputs': core.default(
+            schema['inputs']),
+        'outputs': core.default(
+            schema['outputs'])}
 
 
 base_type_library = {
@@ -2808,7 +4485,7 @@ base_type_library = {
 
     'integer': {
         '_type': 'integer',
-        '_default': '0',
+        '_default': 0,
         # inherit _apply and _serialize from number type
         '_check': check_integer,
         '_deserialize': deserialize_integer,
@@ -2818,7 +4495,7 @@ base_type_library = {
 
     'float': {
         '_type': 'float',
-        '_default': '0.0',
+        '_default': 0.0,
         '_check': check_float,
         '_deserialize': deserialize_float,
         '_divide': divide_float,
@@ -2838,7 +4515,7 @@ base_type_library = {
 
     'enum': {
         '_type': 'enum',
-        '_default': None,
+        '_default': default_enum,
         '_apply': apply_enum,
         '_check': check_enum,
         '_serialize': serialize_string,
@@ -2863,6 +4540,7 @@ base_type_library = {
     'map': {
         '_type': 'map',
         '_default': {},
+        '_generate': generate_map,
         '_apply': apply_map,
         '_serialize': serialize_map,
         '_deserialize': deserialize_map,
@@ -2892,7 +4570,8 @@ base_type_library = {
 
     'tree': {
         '_type': 'tree',
-        '_default': {},
+        '_default': default_tree,
+        '_generate': generate_tree,
         '_check': check_tree,
         '_slice': slice_tree,
         '_apply': apply_tree,
@@ -2907,8 +4586,7 @@ base_type_library = {
 
     'array': {
         '_type': 'array',
-        '_default': {
-            '_data': 'float'},
+        '_default': default_array,
         '_check': check_array,
         '_slice': slice_array,
         '_apply': apply_array,
@@ -2952,12 +4630,14 @@ base_type_library = {
 
     'edge': {
         '_type': 'edge',
+        '_default': default_edge,
+        '_generate': generate_edge,
         '_apply': apply_edge,
         '_serialize': serialize_edge,
         '_deserialize': deserialize_edge,
         '_dataclass': dataclass_edge,
         '_check': check_edge,
-        '_merge': merge_edge,
+        # '_merge': merge_edge,
         '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
         'inputs': 'wires',
@@ -3100,48 +4780,54 @@ def register_cube(core):
 
 @pytest.fixture
 def core():
-    return TypeSystem()
+    core = TypeSystem()
+    return register_test_types(core)
 
 
-@pytest.fixture
-def base_types():
-    return TypeSystem()
+def register_test_types(core):
+    register_cube(core)
 
+    core.register('compartment', {
+        'counts': 'tree[float]',
+        'inner': 'tree[compartment]'})
 
-@pytest.fixture
-def cube_types(core):
-    return register_cube(core)
-
-
-def register_compartment(core):
-    core.register(
-        'compartment', {
-            'counts': 'tree[float]',
-            'inner': 'tree[compartment]'})
+    core.register('metaedge', {
+        '_inherit': 'edge',
+        '_inputs': {
+            'before': 'metaedge'},
+        '_outputs': {
+            'after': 'metaedge'}})
 
     return core
 
 
-@pytest.fixture
-def compartment_types(core):
-    return register_compartment(core)
+def test_reregister_type(core):
+    core.register('A', {'_default': 'a'})
+    with pytest.raises(Exception) as e:
+        core.register(
+            'A', {'_default': 'b'},
+            strict=True)
+
+    core.register('A', {'_default': 'b'})
+
+    assert core.access('A')['_default'] == 'b'
 
 
-def test_generate_default(cube_types):
-    int_default = cube_types.default(
+def test_generate_default(core):
+    int_default = core.default(
         {'_type': 'integer'}
     )
 
     assert int_default == 0
 
-    cube_default = cube_types.default(
+    cube_default = core.default(
         {'_type': 'cube'})
 
     assert 'width' in cube_default
     assert 'height' in cube_default
     assert 'depth' in cube_default
 
-    nested_default = cube_types.default(
+    nested_default = core.default(
         {'a': 'integer',
          'b': {
              'c': 'float',
@@ -3151,7 +4837,7 @@ def test_generate_default(cube_types):
     assert nested_default['b']['d']['width'] == 0
 
 
-def test_apply_update(cube_types):
+def test_apply_update(core):
     schema = {'_type': 'cube'}
     state = {
         'width': 11,
@@ -3163,7 +4849,7 @@ def test_apply_update(cube_types):
         'depth': -5
     }
 
-    new_state = cube_types.apply(
+    new_state = core.apply(
         schema,
         state,
         update
@@ -3242,15 +4928,18 @@ def test_fill_integer(core):
 
     full_state = core.fill(test_schema)
     direct_state = core.fill('integer')
+    generated_schema, generated_state = core.generate(
+        test_schema, None)
 
-    assert full_state == direct_state == 0
+    assert generated_schema['_type'] == 'integer'
+    assert full_state == direct_state == 0 == generated_state
 
 
-def test_fill_cube(cube_types):
+def test_fill_cube(core):
     test_schema = {'_type': 'cube'}
     partial_state = {'height': 5}
 
-    full_state = cube_types.fill(
+    full_state = core.fill(
         test_schema,
         state=partial_state)
 
@@ -3283,6 +4972,36 @@ def test_fill_in_missing_nodes(core):
 
     assert filled == {
         'a': 0.0,
+        'edge 1': {
+            'inputs': {
+                'I': ['a']},
+            'outputs': {
+                'O': ['a']}}}
+
+
+def test_overwrite_existing(core):
+    test_schema = {
+        'edge 1': {
+            '_type': 'edge',
+            '_inputs': {
+                'I': 'float'},
+            '_outputs': {
+                'O': 'float'}}}
+
+    test_state = {
+        'a': 11.111,
+        'edge 1': {
+            'inputs': {
+                'I': ['a']},
+            'outputs': {
+                'O': ['a']}}}
+
+    filled = core.fill(
+        test_schema,
+        test_state)
+
+    assert filled == {
+        'a': 11.111,
         'edge 1': {
             'inputs': {
                 'I': ['a']},
@@ -3645,7 +5364,7 @@ def test_unit_conversion(core):
         'force': 3.333 * force_units}
 
 
-def test_serialize_deserialize(cube_types):
+def test_serialize_deserialize(core):
     schema = {
         'edge1': {
             # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
@@ -3675,16 +5394,16 @@ def test_serialize_deserialize(cube_types):
                 'branch3': 22},
             'branch4': 44}}
     
-    instance = cube_types.fill(schema, instance)
+    instance = core.fill(schema, instance)
 
-    encoded = cube_types.serialize(schema, instance)
-    decoded = cube_types.deserialize(schema, encoded)
+    encoded = core.serialize(schema, instance)
+    decoded = core.deserialize(schema, encoded)
 
     assert instance == decoded
 
 
 # is this a lens?
-def test_project(cube_types):
+def test_project(core):
     schema = {
         'edge1': {
             # '_type': 'edge[1:int|2:float|3:string|4:tree[int]]',
@@ -3747,14 +5466,14 @@ def test_project(cube_types):
                 'branch3': 22},
             'branch4': 44}}
 
-    instance = cube_types.fill(schema, instance)
+    instance = core.fill(schema, instance)
 
-    states = cube_types.view_edge(
+    states = core.view_edge(
         schema,
         instance,
         ['edge1'])
 
-    update = cube_types.project_edge(
+    update = core.project_edge(
         schema,
         instance,
         ['edge1'],
@@ -3776,7 +5495,7 @@ def test_project(cube_types):
             'branch4': 44}}
 
     # TODO: make sure apply does not mutate instance
-    updated_instance = cube_types.apply(
+    updated_instance = core.apply(
         schema,
         instance,
         update)
@@ -3794,13 +5513,13 @@ def test_project(cube_types):
                 'branch5': 55},
             '_remove': ['branch4']}}
 
-    inverted_update = cube_types.project_edge(
+    inverted_update = core.project_edge(
         schema,
         updated_instance,
         ['edge1'],
         add_update)
 
-    modified_branch = cube_types.apply(
+    modified_branch = core.apply(
         schema,
         updated_instance,
         inverted_update)
@@ -4027,7 +5746,7 @@ def test_foursquare(core):
                       '11': True}}}
 
 
-def test_add_reaction(compartment_types):
+def test_add_reaction(core):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -4044,14 +5763,14 @@ def test_add_reaction(compartment_types):
                 'counts': {
                     'A': 8}}}}
 
-    schema, state = compartment_types.infer_schema(
+    schema, state = core.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' not in state['environment']['inner']
 
-    result = compartment_types.apply(
+    result = core.apply(
         schema,
         state, {
             '_react': {
@@ -4065,7 +5784,7 @@ def test_add_reaction(compartment_types):
     assert '1' in result['environment']['inner']
 
 
-def test_remove_reaction(compartment_types):
+def test_remove_reaction(core):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -4082,14 +5801,14 @@ def test_remove_reaction(compartment_types):
         'path': ['environment', 'inner'],
         'remove': ['0']}
 
-    schema, state = compartment_types.infer_schema(
+    schema, state = core.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' in state['environment']['inner']
 
-    result = compartment_types.apply(
+    result = core.apply(
         schema,
         state, {
             '_react': {
@@ -4099,7 +5818,7 @@ def test_remove_reaction(compartment_types):
     assert '1' in state['environment']['inner']
     
 
-def test_replace_reaction(compartment_types):
+def test_replace_reaction(core):
     single_node = {
         'environment': {
             '_type': 'compartment',
@@ -4134,14 +5853,14 @@ def test_replace_reaction(compartment_types):
                 'counts': {
                     'A': 88}}}}
 
-    schema, state = compartment_types.infer_schema(
+    schema, state = core.infer_schema(
         {},
         single_node)
 
     assert '0' in state['environment']['inner']
     assert '1' in state['environment']['inner']
 
-    result = compartment_types.apply(
+    result = core.apply(
         schema,
         state, {
             '_react': {
@@ -4153,7 +5872,7 @@ def test_replace_reaction(compartment_types):
     assert '3' in result['environment']['inner']
 
 
-def test_reaction(compartment_types):
+def test_reaction(core):
     single_node = {
         'environment': {
             'counts': {},
@@ -4491,23 +6210,30 @@ def test_union_values(core):
 
 
 def test_array_type(core):
+    shape = (3, 4, 10)
+    shape_representation = core.representation(shape)
+    shape_commas = ','.join([
+        str(x)
+        for x in shape])
+
     schema = {
         '_type': 'map',
         '_value': {
             '_type': 'array',
-            '_shape': '(3|4|10)',
+            # '_shape': '(3|4|10)',
+            '_shape': shape_representation,
             '_data': 'float'}}
 
-    schema = 'map[array[tuple[3,4,10],float]]'
-    schema = 'map[array[(3|4|10),float]]'
+    schema = f'map[array[tuple[{shape_commas}],float]]'
+    schema = f'map[array[{shape_representation},float]]'
 
     state = {
-        'a': np.zeros((3, 4, 10)),
-        'b': np.ones((3, 4, 10))}
+        'a': np.zeros(shape),
+        'b': np.ones(shape)}
 
     update = {
-        'a': np.full((3, 4, 10), 5.555),
-        'b': np.full((3, 4, 10), 9.999)}
+        'a': np.full(shape, 5.555),
+        'b': np.full(shape, 9.999)}
 
     assert core.check(schema, state)
     assert core.check(schema, update)
@@ -4522,7 +6248,7 @@ def test_array_type(core):
     assert result['b'][0, 0, 0] == 10.999
 
     encode = core.serialize(schema, state)
-    assert encode['b']['shape'] == [3, 4, 10]
+    assert encode['b']['shape'] == list(shape)
     assert encode['a']['data'] == 'float'
 
     decode = core.deserialize(schema, encode)
@@ -4531,6 +6257,14 @@ def test_array_type(core):
         assert np.equal(
             decode[key],
             state[key]).all()
+
+    found = core.find(
+        schema)
+
+    default = core.default(
+        found['_value'])
+
+    assert default.shape == shape
 
 
 def test_infer_edge(core):
@@ -5024,20 +6758,20 @@ def test_dataclass(core):
 
 
 def test_enum_type(core):
-    # core.register(
-    #     'planet',
-    #     'enum[mercury,venus,earth,mars,jupiter,saturn,neptune]')
+    core.register(
+        'planet',
+        'enum[mercury,venus,earth,mars,jupiter,saturn,neptune]')
 
-    core.register('planet', {
-        '_type': 'enum',
-        '_type_parameters': ['0', '1', '2', '3', '4', '5', '6'],
-        '_0': 'mercury',
-        '_1': 'venus',
-        '_2': 'earth',
-        '_3': 'mars',
-        '_4': 'jupiter',
-        '_5': 'saturn',
-        '_6': 'neptune'})
+    # core.register('planet', {
+    #     '_type': 'enum',
+    #     '_type_parameters': ['0', '1', '2', '3', '4', '5', '6'],
+    #     '_0': 'mercury',
+    #     '_1': 'venus',
+    #     '_2': 'earth',
+    #     '_3': 'mars',
+    #     '_4': 'jupiter',
+    #     '_5': 'saturn',
+    #     '_6': 'neptune'})
 
     assert core.default('planet') == 'mercury'
 
@@ -5086,18 +6820,146 @@ def test_enum_type(core):
         assert True
 
 
+def test_map_schema(core):
+    schema = {
+        'greetings': 'map[hello:string]',
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'various': {
+                    '_type': 'map',
+                    '_value': {
+                        'world': 'string'}}},
+            '_outputs': {
+                'referent': 'float'}}}
+
+    state = {
+        'edge': {
+            'inputs': {
+                'various': ['greetings']},
+            'outputs': {
+                'referent': ['where']}},
+
+        'greetings': {
+            'a': {
+                'hello': 'yes'},
+            'b': {
+                'hello': 'again',
+                'world': 'present'},
+            'c': {
+                'other': 'other'}}}
+
+    complete_schema, complete_state = core.complete(
+        schema,
+        state)
+
+    assert complete_schema['greetings']['_value']['hello']['_type'] == 'string'
+    assert complete_schema['greetings']['_value']['world']['_type'] == 'string'
+
+    assert 'world' in complete_state['greetings']['a']
+    assert complete_schema['greetings']['_value']['world']['_type'] == 'string'
+
+
+def test_representation(core):
+    schema_examples = [
+        'map[float]',
+        '(string|float)',
+        'tree[(a:float|b:map[string])]',
+        'array[(5|11),maybe[integer]]',
+        'edge[(x:float|y:tree[(z:float)]),(w:(float|float|float))]']
+
+    for example in schema_examples:
+        full_type = core.access(example)
+        representation = core.representation(full_type)
+
+        if example != representation:
+            raise Exception(f'did not receive the same type after parsing and finding the representation:\n  {example}\n  {representation}')
+
+
+def test_generate(core):
+    schema = {
+        'A': 'float',
+        'B': 'enum[one,two,three]',
+        'units': 'map[float]'}
+
+    state = {
+        'C': {
+            '_type': 'enum[x,y,z]',
+            '_default': 'y'},
+        'units': {
+            'x': 11.1111,
+            'y': 22.833333}}
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    assert generated_state['A'] == 0.0
+    assert generated_state['B'] == 'one'
+    assert generated_state['C'] == 'y'
+    assert generated_state['units']['y'] == 22.833333
+    assert 'x' not in generated_schema['units']
+
+
+def test_edge_cycle(core):
+    empty_schema = {}
+    empty_state = {}
+
+    A_schema = {
+        'A': {
+            '_type': 'metaedge',
+            '_inputs': {
+                'before': {
+                    'inputs': {'before': {'_default': ['B']}},
+                    'outputs': {'after': {'_default': ['A']}}}},
+            '_outputs': {
+                'after': {
+                    'inputs': {'before': {'_default': ['A']}},
+                    'outputs': {'after': {'_default': ['C']}}}},
+            'inputs': {'before': {'_default': ['C']}},
+            'outputs': {'after': {'_default': ['B']}}}}
+
+    A_state = {
+        'A': {
+            '_type': 'metaedge',
+            '_inputs': {
+                'before': {
+                    'inputs': {'before': {'_default': ['B']}},
+                    'outputs': {'after': {'_default': ['A']}}}},
+            '_outputs': {
+                'after': {
+                    'inputs': {'before': {'_default': ['A']}},
+                    'outputs': {'after': {'_default': ['C']}}}},
+            'inputs': {'before': {'_default': ['C']}},
+            'outputs': {'after': {'_default': ['B']}}}}
+
+    schema_from_schema, state_from_schema = core.generate(
+        A_schema,
+        empty_state)
+
+    schema_from_state, state_from_state = core.generate(
+        empty_schema,
+        A_state)
+
+    # print(diff(schema_from_schema, schema_from_state))
+    # print(diff(state_from_schema, state_from_state))
+
+    assert schema_from_schema == schema_from_state
+    assert state_from_schema == state_from_state
+
+
 if __name__ == '__main__':
     core = TypeSystem()
+    core = register_test_types(core)
 
-    register_compartment(core)
-    register_cube(core)
-
+    test_reregister_type(core)
     test_generate_default(core)
     test_apply_update(core)
     test_validate_schema(core)
     test_fill_integer(core)
     test_fill_cube(core)
     test_establish_path(core)
+    test_overwrite_existing(core)
     test_fill_in_missing_nodes(core)
     test_fill_from_parse(core)
     test_fill_ports(core)
@@ -5130,3 +6992,7 @@ if __name__ == '__main__':
     test_set_slice(core)
     test_dataclass(core)
     test_enum_type(core)
+    test_map_schema(core)
+    test_representation(core)
+    test_generate(core)
+    test_edge_cycle(core)
