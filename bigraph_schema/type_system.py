@@ -80,6 +80,26 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
+def diff(a, b):
+    if isinstance(a, dict) and isinstance(b, dict):
+        result = {}
+        for key in union_keys(a, b):
+            if key in a:
+                if key in b:
+                    inner = diff(a[key], b[key])
+                    if inner:
+                        result[key] = inner
+                else:
+                    result[key] = f'A: {a[key]}\nB: (missing)'
+            else:
+                result[key] = f'A: (missing)\nB: {b[key]}'
+        if result:
+            return result
+    else:
+        if a != b:
+            return f'A: {a}\nB: {b}'
+
+
 def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
     """
     Recursively merge type definitions, never overwrite.
@@ -1174,7 +1194,7 @@ class TypeSystem(Registry):
         if not isinstance(current, dict):
             return update
         if not isinstance(update, dict):
-            return current
+            return update
     
         merged = {}
 
@@ -3726,7 +3746,7 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
                 subschema = schema.get(key)
                 substate = state.get(key)
 
-                if substate is None or core.check(leaf_type, substate):
+                if not substate or core.check(leaf_type, substate):
                     base_schema = leaf_type
 
                 subschema = core.merge_schemas(
@@ -3745,7 +3765,7 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
             elif key in schema:
                 generate_schema[key] = schema[key]
             else:
-                raise Exception(' the impossible has occurred you may all go ')
+                raise Exception(' the impossible has occurred now is the time for celebration')
 
     return generate_schema, generate_state, top_schema, top_state
 
@@ -6836,28 +6856,22 @@ def test_edge_cycle(core):
                 'after': {
                     'inputs': {'before': {'_default': ['A']}},
                     'outputs': {'after': {'_default': ['C']}}}},
-            'inputs': {'before': ['C']},
-            'outputs': {'after': ['B']}}}
-
-    import ipdb; ipdb.set_trace()
+            'inputs': {'before': {'_default': ['C']}},
+            'outputs': {'after': {'_default': ['B']}}}}
 
     schema_from_schema, state_from_schema = core.generate(
         A_schema,
         empty_state)
 
-    import ipdb; ipdb.set_trace()
-
     schema_from_state, state_from_state = core.generate(
         empty_schema,
         A_state)
 
-    import ipdb; ipdb.set_trace()
+    # print(diff(schema_from_schema, schema_from_state))
+    # print(diff(state_from_schema, state_from_state))
 
-    filled_state = core.fill(
-        A_schema, {})
-
-    completed_schema, completed_state = core.complete(
-        A_schema, {})
+    assert schema_from_schema == schema_from_state
+    assert state_from_schema == state_from_state
 
 
 if __name__ == '__main__':
