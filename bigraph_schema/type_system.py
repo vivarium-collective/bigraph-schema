@@ -882,8 +882,8 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
     top_state = top_state or state
     path = path or []
 
-    generate_schema = {}
-    generate_state = {}
+    generated_schema = {}
+    generated_state = {}
 
     if isinstance(state, dict):
         visited = set([])
@@ -905,10 +905,17 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
         else:
             base_schema = schema
 
+        found_value = None
         for key in all_keys:
             if is_schema_key(key):
-                if key in state:
-                    schema[key] = state
+                if key == '_value':
+                    found_value = state.get(
+                        key,
+                        schema.get(key))
+
+                elif key in state:
+                    schema[key] = state[key]
+
             else:
                 subschema, substate, top_schema, top_state = core.generate_recur(
                     schema.get(key),
@@ -923,28 +930,12 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
 
                 state[key] = substate
 
+        if found_value:
+            state = deep_merge(
+                state,
+                found_value)
+
     return schema, state, top_schema, top_state
-
-    #     state_keys = list(state.keys())
-    #     for key in state_keys:
-    #         if is_schema_key(key):
-    #             generate_schema[key] = state[key]
-    #         elif key not in visited:
-    #             visited.add(key)
-    #             subschema, substate = core.generate(
-    #                 schema.get(key),
-    #                 state[key],
-    #                 top_schema=top_schema,
-    #                 top_state=top_state,
-    #                 path=path+[key])
-
-    #             generate_schema[key] = subschema
-    #             generate_state[key] = substate
-    # else:
-    #     generate_schema = schema
-    #     generate_state = state
-
-    # return generate_schema, generate_state
 
 
 def is_method_key(key, parameters):
@@ -6827,6 +6818,29 @@ def test_representation(core):
             raise Exception(f'did not receive the same type after parsing and finding the representation:\n  {example}\n  {representation}')
 
 
+def test_generate(core):
+    schema = {
+        'A': 'float',
+        'B': 'enum[one,two,three]',
+        'units': 'map[float]'}
+
+    state = {
+        'C': {
+            '_type': 'enum[x,y,z]',
+            '_value': 'y'},
+        'units': {
+            'x': 11.1111,
+            'y': 22.833333}}
+
+    import ipdb; ipdb.set_trace()
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    import ipdb; ipdb.set_trace()
+
+
 def test_edge_cycle(core):
     empty_schema = {}
     empty_state = {}
@@ -6920,4 +6934,5 @@ if __name__ == '__main__':
     test_enum_type(core)
     test_map_schema(core)
     test_representation(core)
+    test_generate(core)
     test_edge_cycle(core)
