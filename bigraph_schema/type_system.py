@@ -3364,8 +3364,6 @@ def apply_map(schema, current, update, core=None):
 
     for key, update_value in update.items():
         if key == '_add':
-            import ipdb; ipdb.set_trace()
-
             for addition_key, addition in update_value.items():
                 filled = core.hydrate(
                     value_type,
