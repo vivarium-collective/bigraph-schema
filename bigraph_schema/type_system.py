@@ -3358,11 +3358,11 @@ def apply_map(schema, current, update, core=None):
             import ipdb; ipdb.set_trace()
 
             for addition_key, addition in update_value.items():
-                filled = core.hydrate(
+                generated_schema, generated_state = core.generate(
                     value_type,
                     addition)
 
-                result[addition_key] = filled
+                result[addition_key] = generated_state
 
         elif key == '_remove':
             for remove_key in update_value:
@@ -3371,10 +3371,11 @@ def apply_map(schema, current, update, core=None):
 
         elif key not in current:
             # This supports adding without the '_add' key, if the key is not in the state
-            filled = core.hydrate(
+            generated_schema, generated_state = core.generate(
                 value_type,
                 update_value)
-            result[key] = filled
+
+            result[key] = generated_state
 
             # raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
         else:
@@ -3810,17 +3811,21 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
         top_state=top_state,
         path=path)
 
+    deserialized_state = core.deserialize(
+        generate_schema,
+        generate_state)
+
     top_schema, top_state = core.set_slice(
         top_schema,
         top_state,
         path,
         generate_schema,
-        generate_state)
+        deserialized_state)
 
     for port_key in ['inputs', 'outputs']:
         port_schema = generate_schema.get(
             f'_{port_key}', {})
-        ports = generate_state.get(
+        ports = deserialized_state.get(
             port_key, {})
 
         top_schema, top_state = generate_ports(
@@ -3831,7 +3836,7 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
             top_state=top_state,
             path=path)
 
-    return generate_schema, generate_state, top_schema, top_state
+    return generate_schema, deserialized_state, top_schema, top_state
 
 
 def apply_edge(schema, current, update, core):
