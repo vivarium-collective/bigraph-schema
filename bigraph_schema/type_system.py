@@ -897,24 +897,11 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
             for key in all_keys
             if not is_schema_key(key)]
 
-        if non_schema_keys:
-            base_schema = {
-                key: subschema
-                for key, subschema in schema.items()
-                if is_schema_key(key)}
-        else:
-            base_schema = schema
-
-        found_value = None
         for key in all_keys:
             if is_schema_key(key):
-                if key == '_value':
-                    found_value = state.get(
-                        key,
-                        schema.get(key))
-
-                elif key in state:
-                    schema[key] = state[key]
+                generated_schema[key] = state.get(
+                    key,
+                    schema.get(key))
 
             else:
                 subschema, substate, top_schema, top_state = core.generate_recur(
@@ -924,18 +911,26 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
                     top_state=top_state,
                     path=path+[key])
 
-                schema[key] = core.resolve_schemas(
+                generated_schema[key] = core.resolve_schemas(
                     schema.get(key, {}),
                     subschema)
 
-                state[key] = substate
+                generated_state[key] = substate
 
-        if found_value:
-            state = deep_merge(
-                state,
-                found_value)
+        if path:
+            top_schema, top_state = core.set_slice(
+                top_schema,
+                top_state,
+                path,
+                generated_schema,
+                generated_state)
+        else:
+            top_schema, top_state = generated_schema, generated_state
 
-    return schema, state, top_schema, top_state
+    else:
+        generated_schema, generated_state = schema, state
+
+    return generated_schema, generated_state, top_schema, top_state
 
 
 def is_method_key(key, parameters):
@@ -1221,9 +1216,12 @@ class TypeSystem(Registry):
                 else:
                     merged_schema[key] = schema[key]
             else:
-                merged_schema[key], merged_state[key] = self.merge_schema_keys(
+                subschema, merged_state[key] = self.merge_schema_keys(
                     schema.get(key, {}),
                     state.get(key, None))
+
+                if subschema:
+                    merged_schema[key] = subschema
 
         return merged_schema, merged_state
 
@@ -3696,6 +3694,50 @@ def apply_path(schema, current, update, core):
     return update
 
 
+def generate_map(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    # generated_schema = {}
+    # generated_state = {}
+
+    generated_schema, generated_state = core.merge_schema_keys(
+        schema,
+        state)
+
+    all_keys = set(schema.keys()).union(state.keys())
+
+    for key in all_keys:
+        if is_schema_key(key):
+            generated_schema[key] = state.get(
+                key,
+                schema.get(key))
+
+        else:
+            subschema = schema.get(key)
+            substate = state.get(key)
+
+            subschema = core.merge_schemas(
+                value_type,
+                subschema)
+
+            subschema, generated_state[key], top_schema, top_state = core.generate_recur(
+                subschema,
+                substate,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path+[key])
+
+    return generated_schema, generated_state, top_schema, top_state
+
+
 def generate_tree(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
     state = state or core.default(schema)
@@ -4498,6 +4540,7 @@ base_type_library = {
     'map': {
         '_type': 'map',
         '_default': {},
+        '_generate': generate_map,
         '_apply': apply_map,
         '_serialize': serialize_map,
         '_deserialize': deserialize_map,
@@ -6827,18 +6870,20 @@ def test_generate(core):
     state = {
         'C': {
             '_type': 'enum[x,y,z]',
-            '_value': 'y'},
+            '_default': 'y'},
         'units': {
             'x': 11.1111,
             'y': 22.833333}}
-
-    import ipdb; ipdb.set_trace()
 
     generated_schema, generated_state = core.generate(
         schema,
         state)
 
-    import ipdb; ipdb.set_trace()
+    assert generated_state['A'] == 0.0
+    assert generated_state['B'] == 'one'
+    assert generated_state['C'] == 'y'
+    assert generated_state['units']['y'] == 22.833333
+    assert 'x' not in generated_schema['units']
 
 
 def test_edge_cycle(core):
