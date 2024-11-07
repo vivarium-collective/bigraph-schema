@@ -2565,6 +2565,9 @@ class TypeSystem(Registry):
                             for parameter in current['_type_parameters']:
                                 parameter_key = f'_{parameter}'
                                 if parameter_key in question:
+                                    if parameter_key not in current:
+                                        return False
+
                                     if not self.equivalent(current[parameter_key], question[parameter_key]):
                                         return False
                         else:
@@ -3747,7 +3750,7 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
         schema,
         'leaf')
 
-    if core.check(state, leaf_type):
+    if core.check(leaf_type, state):
         generate_schema, generate_state, top_schema, top_state = core.generate_recur(
             leaf_type,
             state,
@@ -3821,7 +3824,8 @@ def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=No
                 port_key)
 
         if isinstance(subwires, dict):
-            top_schema, top_state = core.generate_ports(
+            top_schema, top_state = generate_ports(
+                core,
                 port_schema,
                 subwires,
                 top_schema=top_schema,
@@ -3853,29 +3857,25 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
     top_state = top_state or state
     path = path or []
 
-    generate_schema, generate_state, top_schema, top_state = generate_any(
-        core,
-        schema,
-        state,
-        top_schema=top_schema,
-        top_state=top_state,
-        path=path)
-
     deserialized_state = core.deserialize(
-        generate_schema,
-        generate_state)
+        schema,
+        state)
+
+    generated_schema, generated_state = core.merge_schema_keys(
+        schema,
+        deserialized_state)
 
     top_schema, top_state = core.set_slice(
         top_schema,
         top_state,
         path,
-        generate_schema,
-        deserialized_state)
+        generated_schema,
+        generated_state)
 
     for port_key in ['inputs', 'outputs']:
-        port_schema = generate_schema.get(
+        port_schema = generated_schema.get(
             f'_{port_key}', {})
-        ports = deserialized_state.get(
+        ports = generated_state.get(
             port_key, {})
 
         top_schema, top_state = generate_ports(
@@ -3886,7 +3886,7 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
             top_state=top_state,
             path=path)
 
-    return generate_schema, deserialized_state, top_schema, top_state
+    return generated_schema, generated_state, top_schema, top_state
 
 
 def apply_edge(schema, current, update, core):
