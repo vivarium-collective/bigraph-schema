@@ -1573,7 +1573,6 @@ class TypeSystem(Registry):
                 pipes = '|'.join(colons)
                 return f'({pipes})'
         else:
-            print(f'no representation for {schema}')
             return str(schema)
 
 
