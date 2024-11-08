@@ -613,45 +613,13 @@ def is_empty(value):
         return False
 
 
-def merge_any(schema, current_state, new_state, core):
-    # overwrites in place!
-    # TODO: this operation could update the schema (by merging a key not
-    #   already in the schema) but that is not represented currently....
-    merge_state = None
-
-    if is_empty(current_state):
-        merge_state = new_state
-
-    elif is_empty(new_state):
-        merge_state = current_state
-    
-    elif isinstance(new_state, dict):
-        if isinstance(current_state, dict):
-            for key, value in new_state.items():
-                if is_schema_key(key):
-                    current_state[key] = value
-                else:
-                    current_state[key] = core.merge(
-                        schema.get(key),
-                        current_state.get(key),
-                        value)
-            merge_state = current_state
-        else:
-            merge_state = new_state
-    else:
-        merge_state = new_state
-
-    return merge_state
-
-    # return core.deserialize(
-    #     schema,
-    #     merge_state)
-
-
 def bind_any(schema, state, key, subschema, substate, core):
     result_schema = core.resolve_schemas(
           schema,
           {key: subschema})
+
+    if state is None:
+        state = {}
 
     state[key] = substate
 
@@ -925,7 +893,10 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
                 generated_schema,
                 generated_state)
         else:
-            top_schema, top_state = generated_schema, generated_state
+            top_state = core.merge_recur(
+                top_schema,
+                top_state,
+                generated_state)
 
     else:
         generated_schema, generated_state = schema, state
@@ -951,7 +922,6 @@ registry_types = {
         '_dataclass': dataclass_any,
         '_resolve': resolve_any,
         '_fold': fold_any,
-        '_merge': merge_any,
         '_bind': bind_any,
         '_divide': divide_any},
 
@@ -2133,19 +2103,54 @@ class TypeSystem(Registry):
         return self.set_update(schema, state, update)
 
 
-    def merge(self, schema, current_state, new_state):
-        schema = self.access(schema)
+    def merge_recur(self, schema, state, update):
+        if is_empty(schema):
+            merge_state = update
 
-        merge_function = self.choose_method(
-            schema,
-            new_state,
-            'merge')
+        elif is_empty(update):
+            merge_state = state
 
-        return merge_function(
+        elif isinstance(update, dict):
+            if isinstance(state, dict):
+                for key, value in update.items():
+                    if is_schema_key(key):
+                        state[key] = value
+                    else:
+                        if isinstance(schema, str):
+                            schema = self.access(schema)
+
+                        state[key] = self.merge_recur(
+                            schema.get(key),
+                            state.get(key),
+                            value)
+                merge_state = state
+            else:
+                merge_state = update
+        else:
+            merge_state = update
+
+        return merge_state
+
+
+    def merge(self, schema, state, update_schema, update_state):
+        sorted_schema, sorted_state = self.merge_schema_keys(
+            update_schema,
+            update_state)
+
+        merged_schema = self.resolve_schemas(
             schema,
-            current_state,
-            new_state,
-            self)
+            sorted_schema)
+
+        generated_schema, generated_state = self.generate(
+            merged_schema,
+            update_state)
+
+        merged_state = self.merge_recur(
+            generated_schema,
+            state,
+            generated_state)
+
+        return merged_schema, merged_state
 
 
     def bind(self, schema, state, key, target_schema, target_state):
@@ -2167,9 +2172,10 @@ class TypeSystem(Registry):
 
     def set_slice(self, schema, state, path, target_schema, target_state, defer=False):
         if len(path) == 0:
-            return schema, self.merge(
+            return self.merge(
                 schema,
                 state,
+                target_schema,
                 target_state)
 
         elif len(path) == 1:
@@ -2184,13 +2190,13 @@ class TypeSystem(Registry):
                 target_schema)
 
             if not defer:
-                result_state = self.merge(
+                result_state = self.merge_recur(
                     final_schema,
                     destination_state,
                     target_state)
 
             else:
-                result_state = self.merge(
+                result_state = self.merge_recur(
                     final_schema,
                     target_state,
                     destination_state)
@@ -2721,7 +2727,7 @@ class TypeSystem(Registry):
                         top_schema,
                         compound_schema)
 
-                    top_state = self.merge(
+                    top_state = self.merge_recur(
                         top_schema,
                         compound_state,
                         top_state)
@@ -6501,7 +6507,7 @@ def test_merge(core):
                 'x': {
                     'o': 99999.11}}}}
 
-    result = core.merge(
+    result = core.merge_recur(
         current_schema,
         current_state,
         merge_state)
@@ -6956,6 +6962,10 @@ def test_edge_cycle(core):
 
     assert schema_from_schema == schema_from_state
     assert state_from_schema == state_from_state
+
+    for key in ['A', 'B', 'C']:
+        for result in [schema_from_schema, state_from_schema, schema_from_state, state_from_state]:
+            assert key in result
 
 
 if __name__ == '__main__':
