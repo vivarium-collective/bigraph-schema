@@ -3857,20 +3857,28 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
     top_state = top_state or state
     path = path or []
 
-    deserialized_state = core.deserialize(
+    generated_schema, generated_state, top_schema, top_state = generate_any(
+        core,
         schema,
-        state)
+        state,
+        top_schema=top_schema,
+        top_state=top_state,
+        path=path)
 
-    generated_schema, generated_state = core.merge_schema_keys(
-        schema,
-        deserialized_state)
+    deserialized_state = core.deserialize(
+        generated_schema,
+        generated_state)
+
+    # generated_schema, generated_state = core.merge_schema_keys(
+    #     schema,
+    #     deserialized_state)
 
     top_schema, top_state = core.set_slice(
         top_schema,
         top_state,
         path,
         generated_schema,
-        generated_state)
+        deserialized_state)
 
     for port_key in ['inputs', 'outputs']:
         port_schema = generated_schema.get(
