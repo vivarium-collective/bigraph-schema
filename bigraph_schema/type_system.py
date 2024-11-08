@@ -1855,9 +1855,12 @@ class TypeSystem(Registry):
                     for parameter in update['_type_parameters']:
                         parameter_key = f'_{parameter}'
                         if parameter in current['_type_parameters']:
-                            outcome[parameter_key] = self.resolve_schemas(
-                                current[parameter_key],
-                                update[parameter_key])
+                            if parameter_key in current:
+                                outcome[parameter_key] = self.resolve_schemas(
+                                    current[parameter_key],
+                                    update[parameter_key])
+                            else:
+                                outcome[parameter_key] = update[parameter_key]
                         else:
                             outcome[parameter_key] = update[parameter_key]
                 elif key not in outcome or type_parameter_key(current, key):
@@ -3875,21 +3878,21 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
         generated_schema,
         generated_state)
 
-    # generated_schema, generated_state = core.merge_schema_keys(
-    #     schema,
-    #     deserialized_state)
+    merged_schema, merged_state = core.merge_schema_keys(
+        generated_schema,
+        deserialized_state)
 
     top_schema, top_state = core.set_slice(
         top_schema,
         top_state,
         path,
-        generated_schema,
-        deserialized_state)
+        merged_schema,
+        merged_state)
 
     for port_key in ['inputs', 'outputs']:
-        port_schema = generated_schema.get(
+        port_schema = merged_schema.get(
             f'_{port_key}', {})
-        ports = generated_state.get(
+        ports = merged_state.get(
             port_key, {})
 
         top_schema, top_state = generate_ports(
@@ -3900,7 +3903,7 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
             top_state=top_state,
             path=path)
 
-    return generated_schema, generated_state, top_schema, top_state
+    return merged_schema, merged_state, top_schema, top_state
 
 
 def apply_edge(schema, current, update, core):
