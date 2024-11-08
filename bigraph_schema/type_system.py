@@ -2135,25 +2135,15 @@ class TypeSystem(Registry):
         return merge_state
 
 
-    def merge(self, schema, state, update_schema, update_state):
-        sorted_schema, sorted_state = self.merge_schema_keys(
+    def merge(self, schema, state, path, update_schema, update_state):
+        top_schema, top_state = self.set_slice(
+            schema,
+            state,
+            path,
             update_schema,
             update_state)
 
-        merged_schema = self.resolve_schemas(
-            schema,
-            sorted_schema)
-
-        generated_schema, generated_state = self.generate(
-            merged_schema,
-            update_state)
-
-        merged_state = self.merge_recur(
-            generated_schema,
-            state,
-            generated_state)
-
-        return merged_schema, merged_state
+        return self.generate(top_schema, top_state)
 
 
     def bind(self, schema, state, key, target_schema, target_state):
@@ -2174,12 +2164,24 @@ class TypeSystem(Registry):
 
 
     def set_slice(self, schema, state, path, target_schema, target_state, defer=False):
+
+        '''
+        Makes a local modification to the schema/state at the path, and
+        returns the top_schema and top_state
+        '''
+
         if len(path) == 0:
-            return self.merge(
+            # deal with paths of length 0
+            # this should never happen?
+            merged_schema = self.resolve_schemas(
                 schema,
+                target_schema)
+
+            merged_state = deep_merge(
                 state,
-                target_schema,
                 target_state)
+
+            return merged_schema, merged_state
 
         elif len(path) == 1:
             key = path[0]
@@ -6971,6 +6973,45 @@ def test_edge_cycle(core):
             assert key in result
 
 
+def test_merge(core):
+    schema = {
+        'A': 'float',
+        'B': 'enum[one,two,three]',
+        'units': 'map[float]'}
+
+    state = {
+        'C': {
+            '_type': 'enum[x,y,z]',
+            '_default': 'y'},
+        'units': {
+            'x': 11.1111,
+            'y': 22.833333}}
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    edge_state = {
+        '_type': 'edge',
+        '_inputs': {
+            'input': 'float'},
+        '_outputs': {
+            'output': 'float'},
+        'inputs': {
+            'input': ['A']},
+        'outputs': {
+            'output': ['D']}}
+
+    top_schema, top_state = core.merge(
+        generated_schema,
+        generated_state,
+        ['edge'],
+        {},
+        edge_state)
+
+    import ipdb; ipdb.set_trace()
+
+
 if __name__ == '__main__':
     core = TypeSystem()
     core = register_test_types(core)
@@ -7019,3 +7060,4 @@ if __name__ == '__main__':
     test_representation(core)
     test_generate(core)
     test_edge_cycle(core)
+    test_merge(core)
