@@ -2135,13 +2135,14 @@ class TypeSystem(Registry):
         return merge_state
 
 
-    def merge(self, schema, state, path, update_schema, update_state):
+    def merge(self, schema, state, path, update_schema, update_state, defer=False):
         top_schema, top_state = self.set_slice(
             schema,
             state,
             path,
             update_schema,
-            update_state)
+            update_state,
+            defer)
 
         return self.generate(top_schema, top_state)
 
@@ -7009,7 +7010,8 @@ def test_merge(core):
         {},
         edge_state)
 
-    import ipdb; ipdb.set_trace()
+    assert 'D' in top_state
+    assert top_schema['D']['_type'] == 'float'
 
 
 if __name__ == '__main__':
