@@ -347,9 +347,9 @@ class Registry(object):
         return function_name, module_key
 
 
-    def register_multiple(self, schemas, force=False):
+    def register_multiple(self, schemas, strict=False):
         for key, schema in schemas.items():
-            self.register(key, schema, force=force)
+            self.register(key, schema, strict=strict)
 
     def find(self, key):
         return self.registry.get(key)
