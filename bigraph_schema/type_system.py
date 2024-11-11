@@ -1183,6 +1183,7 @@ class TypeSystem(Registry):
                     merged_schema[key] = self.merge_schemas(
                         schema.get(key, {}),
                         state[key])
+                    # merged_state[key] = merged_schema[key]
                 else:
                     merged_schema[key] = schema[key]
             else:
@@ -1859,8 +1860,10 @@ class TypeSystem(Registry):
                                 outcome[parameter_key] = self.resolve_schemas(
                                     current[parameter_key],
                                     update[parameter_key])
-                            else:
+                            elif parameter_key in update:
                                 outcome[parameter_key] = update[parameter_key]
+                            # else:
+                            #     outcome[parameter_key] = {}
                         else:
                             outcome[parameter_key] = update[parameter_key]
                 elif key not in outcome or type_parameter_key(current, key):
@@ -2888,31 +2891,31 @@ class TypeSystem(Registry):
         
 
     def generate_recur(self, schema, state, top_schema=None, top_state=None, path=None):
-        merged_schema, merged_state = self.merge_schema_keys(
-            schema,
-            state)
-
         found = self.retrieve(
-            merged_schema)
+            schema)
 
         generate_function = self.choose_method(
             found,
-            merged_state,
+            state,
             'generate')
 
         return generate_function(
             self,
             found,
-            merged_state,
+            state,
             top_schema=top_schema,
             top_state=top_state,
             path=path)
 
 
     def generate(self, schema, state):
-        _, _, top_schema, top_state = self.generate_recur(
+        merged_schema, merged_state = self.merge_schema_keys(
             schema,
             state)
+
+        _, _, top_schema, top_state = self.generate_recur(
+            merged_schema,
+            merged_state)
 
         return top_schema, top_state
 
