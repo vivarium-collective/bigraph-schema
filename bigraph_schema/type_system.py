@@ -880,7 +880,8 @@ def union_keys(schema, state):
 
 def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
-    state = state or core.default(schema)
+    if is_empty(state):
+        state = core.default(schema)
     top_schema = top_schema or schema
     top_state = top_state or state
     path = path or []
