@@ -220,6 +220,41 @@ def visit_method(schema, state, method, values, core):
     return result
 
 
+def generate_quote(core, schema, state, top_schema=None, top_state=None, path=None):
+    return schema, state, top_schema, top_state
+
+
+def sort_quote(core, schema, state):
+    return schema, state
+
+
+def sort_any(core, schema, state):
+    if not isinstance(schema, dict):
+        schema = core.find(schema)
+    if not isinstance(state, dict):
+        return schema, state
+
+    merged_schema = {}
+    merged_state = {}
+
+    for key in union_keys(schema, state):
+        if is_schema_key(key):
+            if key in state:
+                merged_schema[key] = core.merge_schemas(
+                    schema.get(key, {}),
+                    state[key])
+            else:
+                merged_schema[key] = schema[key]
+        else:
+            subschema, merged_state[key] = core.sort(
+                schema.get(key, {}),
+                state.get(key, None))
+            if subschema:
+                merged_schema[key] = subschema
+
+    return merged_schema, merged_state
+
+
 def fold_any(schema, state, method, values, core):
     if isinstance(state, dict):
         result = {}
@@ -916,6 +951,7 @@ registry_types = {
         '_slice': slice_any,
         '_apply': apply_any,
         '_check': check_any,
+        '_sort': sort_any,
         '_generate': generate_any,
         '_serialize': serialize_any,
         '_deserialize': deserialize_any,
@@ -924,6 +960,11 @@ registry_types = {
         '_fold': fold_any,
         '_bind': bind_any,
         '_divide': divide_any},
+
+    'quote': {
+        '_type': 'quote',
+        '_generate': generate_quote,
+        '_sort': sort_quote},
 
     'tuple': {
         '_type': 'tuple',
@@ -1168,33 +1209,18 @@ class TypeSystem(Registry):
         return merged
 
 
-    def merge_schema_keys(self, schema, state):
-        if not isinstance(schema, dict):
-            schema = self.find(schema)
-        if not isinstance(state, dict):
-            return schema, state
-    
-        merged_schema = {}
-        merged_state = {}
+    def sort(self, schema, state):
+        schema = self.access(schema)
 
-        for key in union_keys(schema, state):
-            if is_schema_key(key):
-                if key in state:
-                    merged_schema[key] = self.merge_schemas(
-                        schema.get(key, {}),
-                        state[key])
-                    # merged_state[key] = merged_schema[key]
-                else:
-                    merged_schema[key] = schema[key]
-            else:
-                subschema, merged_state[key] = self.merge_schema_keys(
-                    schema.get(key, {}),
-                    state.get(key, None))
+        sort_function = self.choose_method(
+            schema,
+            state,
+            'sort')
 
-                if subschema:
-                    merged_schema[key] = subschema
-
-        return merged_schema, merged_state
+        return sort_function(
+            self,
+            schema,
+            state)
 
 
     def exists(self, type_key):
@@ -1250,7 +1276,7 @@ class TypeSystem(Registry):
                 found = {
                    key: self.access(
                        branch,
-                       strict=strict)
+                       strict=strict) if key != '_default' else branch
                    for key, branch in schema.items()}
 
         elif isinstance(schema, int):
@@ -2909,7 +2935,7 @@ class TypeSystem(Registry):
 
 
     def generate(self, schema, state):
-        merged_schema, merged_state = self.merge_schema_keys(
+        merged_schema, merged_state = self.sort(
             schema,
             state)
 
@@ -3724,7 +3750,7 @@ def generate_map(core, schema, state, top_schema=None, top_state=None, path=None
     # generated_schema = {}
     # generated_state = {}
 
-    generated_schema, generated_state = core.merge_schema_keys(
+    generated_schema, generated_state = core.sort(
         schema,
         state)
 
@@ -3765,14 +3791,17 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
         schema,
         'leaf')
 
-    if core.check(leaf_type, state):
+    leaf_is_any = leaf_type == 'any' or (isinstance(leaf_type, dict) and leaf_type.get('_type') == 'any')
+
+    if not leaf_is_any and core.check(leaf_type, state):
         generate_schema, generate_state, top_schema, top_state = core.generate_recur(
             leaf_type,
             state,
             top_schema=top_schema,
             top_state=top_state,
             path=path)
-    else:
+
+    elif isinstance(state, dict):
         generate_schema = {}
         generate_state = {}
 
@@ -3815,6 +3844,9 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
                 generate_schema[key] = schema[key]
             else:
                 raise Exception(' the impossible has occurred now is the time for celebration')
+    else:
+        generate_schema = schema
+        generate_state = state
 
     return generate_schema, generate_state, top_schema, top_state
 
@@ -3872,6 +3904,8 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
     top_state = top_state or state
     path = path or []
 
+    # import ipdb; ipdb.set_trace()
+
     generated_schema, generated_state, top_schema, top_state = generate_any(
         core,
         schema,
@@ -3884,7 +3918,7 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
         generated_schema,
         generated_state)
 
-    merged_schema, merged_state = core.merge_schema_keys(
+    merged_schema, merged_state = core.sort(
         generated_schema,
         deserialized_state)
 
@@ -6968,6 +7002,12 @@ def test_edge_cycle(core):
 
     # print(diff(schema_from_schema, schema_from_state))
     # print(diff(state_from_schema, state_from_state))
+
+    if schema_from_schema != schema_from_state:
+        print(diff(schema_from_schema, schema_from_state))
+
+    if state_from_schema != state_from_state:
+        print(diff(state_from_schema, state_from_state))
 
     assert schema_from_schema == schema_from_state
     assert state_from_schema == state_from_state
