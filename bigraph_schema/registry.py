@@ -130,6 +130,10 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
     return dct
 
 
+def deep_merge_copy(dct, merge_dct):
+    return deep_merge(copy.deepcopy(dct), merge_dct)
+
+
 def deep_merge(dct, merge_dct):
     """Recursive dict merge
     
