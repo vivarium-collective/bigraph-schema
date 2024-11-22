@@ -22,12 +22,13 @@ parameter_examples = {
     'tuple': 'what[is,happening|(with:yellow|this:green)|this:now]',
     'single': 'hello[(3),over]',
     'double': 'hello[(3|4),over]',
-    'units_type': 'length^2*mass/time^1_5'}
+    'units_type': 'length^2*mass/time^1_5',
+    'nothing': '()'}
 
 
 parameter_grammar = Grammar(
     """
-    expression = merge / union / tree
+    expression = merge / union / tree / nothing
     merge = tree (bar tree)+
     union = tree (tilde tree)+
     tree = bigraph / type_name
@@ -49,6 +50,7 @@ parameter_grammar = Grammar(
     not_newline = ~r"[^\\n\\r]"*
     newline = ~"[\\n\\r]+"
     ws = ~"\s*"
+    nothing = ""
     """)
 
 
@@ -131,6 +133,9 @@ class ParameterVisitor(NodeVisitor):
 
     def visit_symbol(self, node, visit):
         return node.text
+
+    def visit_nothing(self, node, visit):
+        return {}
 
     def generic_visit(self, node, visit):
         return {
