@@ -3751,6 +3751,8 @@ def generate_map(core, schema, state, top_schema=None, top_state=None, path=None
     # generated_schema = {}
     # generated_state = {}
 
+    # TODO: can we assume this was already sorted at the top level?
+
     generated_schema, generated_state = core.sort(
         schema,
         state)
@@ -3764,7 +3766,7 @@ def generate_map(core, schema, state, top_schema=None, top_state=None, path=None
                 schema.get(key))
 
         else:
-            subschema = schema.get(key)
+            subschema = schema.get(key, value_type)
             substate = state.get(key)
 
             subschema = core.merge_schemas(
@@ -3904,8 +3906,6 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
     top_schema = top_schema or schema
     top_state = top_state or state
     path = path or []
-
-    # import ipdb; ipdb.set_trace()
 
     generated_schema, generated_state, top_schema, top_state = generate_any(
         core,
@@ -4517,12 +4517,13 @@ def default_enum(schema, core):
 
 
 def default_edge(schema, core):
-    return {
-        # '_type': schema['_type'],
-        'inputs': core.default(
-            schema['inputs']),
-        'outputs': core.default(
-            schema['outputs'])}
+    edge = {}
+    for key in schema:
+        if not is_schema_key(key):
+            edge[key] = core.default(
+                schema[key])
+
+    return edge
 
 
 base_type_library = {
