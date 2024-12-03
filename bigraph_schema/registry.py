@@ -43,6 +43,10 @@ optional_schema_keys = set([
 type_schema_keys = required_schema_keys | optional_schema_keys
 
 
+def deep_merge_copy(dct, merge_dct):
+    return deep_merge(copy.deepcopy(dct), merge_dct)
+
+
 def deep_merge(dct, merge_dct):
     """Recursive dict merge
     
