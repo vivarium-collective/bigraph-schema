@@ -861,7 +861,7 @@ def default_tuple(schema, core):
     parts = []
     for parameter in schema['_type_parameters']:
         subschema = schema[f'_{parameter}']
-        part = core.default(subschema, core)
+        part = core.default(subschema)
         parts.append(part)
 
     return tuple(parts)
