@@ -875,7 +875,15 @@ def default_union(schema, core):
 
 
 def union_keys(schema, state):
-    return set(schema.keys()).union(state.keys())
+    keys = {}
+    for key in schema:
+        keys[key] = True
+    for key in state:
+        keys[key] = True
+
+    return keys
+
+    # return set(schema.keys()).union(state.keys())
 
 
 def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
@@ -1189,6 +1197,8 @@ class TypeSystem(Registry):
 
 
     def merge_schemas(self, current, update):
+        if current == update:
+            return update
         if not isinstance(current, dict):
             return update
         if not isinstance(update, dict):
@@ -1199,9 +1209,14 @@ class TypeSystem(Registry):
         for key in union_keys(current, update):
             if key in current:
                 if key in update:
+                    subcurrent = current[key]
+                    subupdate = update[key]
+                    if subcurrent == current or subupdate == update:
+                        continue
+
                     merged[key] = self.merge_schemas(
-                        current[key],
-                        update[key])
+                        subcurrent,
+                        subupdate)
                 else:
                     merged[key] = current[key]
             else:
@@ -3757,7 +3772,7 @@ def generate_map(core, schema, state, top_schema=None, top_state=None, path=None
         schema,
         state)
 
-    all_keys = set(schema.keys()).union(state.keys())
+    all_keys = union_keys(schema, state) # set(schema.keys()).union(state.keys())
 
     for key in all_keys:
         if is_schema_key(key):
@@ -3808,7 +3823,7 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
         generate_schema = {}
         generate_state = {}
 
-        all_keys = set(schema.keys()).union(state.keys())
+        all_keys = union_keys(schema, state) # set(schema.keys()).union(state.keys())
         non_schema_keys = [
             key
             for key in all_keys
