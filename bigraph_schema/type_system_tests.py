@@ -8,12 +8,11 @@ import numpy as np
 from dataclasses import  asdict
 
 from bigraph_schema.type_functions import (
-    divide_longest, base_type_library, accumulate, to_string, deserialize_integer, apply_schema, diff
+    divide_longest, base_type_library, accumulate, to_string, deserialize_integer, apply_schema, diff, data_module
 )
 from bigraph_schema import TypeSystem
 from bigraph_schema.units import units
 from bigraph_schema.registry import establish_path, remove_omitted, NONE_SYMBOL
-import bigraph_schema.data as data
 
 
 @pytest.fixture
@@ -1965,9 +1964,9 @@ def test_dataclass(core):
                 'b': 888.88},
             'x': 111.11111}}
 
-    nested_new = data.nested(
-        data.nested_a(
-            data.nested_a_a(
+    nested_new = data_module.nested(
+        data_module.nested_a(
+            data_module.nested_a_a(
                 a=222.22,
                 b=3.3333),
             5555.55))

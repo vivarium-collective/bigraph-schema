@@ -63,6 +63,8 @@ This module includes various type functions that are essential for handling and 
 
 """
 
+import sys
+import types
 import copy
 import numbers
 import numpy as np
@@ -81,9 +83,14 @@ from bigraph_schema.registry import (
     deep_merge, hierarchy_depth,
     establish_path)
 
-import bigraph_schema.data as data
-import bigraph_schema.data
 
+# Create a new module dynamically for the dataclasses
+module_name = 'bigraph_schema.data'
+if module_name not in sys.modules:
+    data_module = types.ModuleType(module_name)
+    sys.modules[module_name] = data_module
+else:
+    data_module = sys.modules[module_name]
 
 overridable_schema_keys = set([
     '_type',
@@ -1760,7 +1767,7 @@ def dataclass_any(schema, path, core):
                 '__module__': 'bigraph_schema.data'})
 
         setattr(
-            bigraph_schema.data,
+            data_module,
             dataclass_name,
             dataclass)
 
@@ -1837,7 +1844,7 @@ def dataclass_tree(schema, path, core):
         'Optional': Optional,
         'str': str
     })
-    setattr(data, dataclass_name, dataclass)
+    setattr(data_module, dataclass_name, dataclass)
 
     return dataclass
 
