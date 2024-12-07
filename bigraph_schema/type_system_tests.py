@@ -5,11 +5,10 @@ Tests for the type system and schema manipulation functions
 import pytest
 import pprint
 import numpy as np
-from dataclasses import  asdict
+from dataclasses import asdict
 
 from bigraph_schema.type_functions import (
-    divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, data_module
-)
+    divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, data_module)
 from bigraph_schema.utilities import compare_dicts, NONE_SYMBOL
 from bigraph_schema import TypeSystem
 from bigraph_schema.units import units

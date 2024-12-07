@@ -13,12 +13,12 @@ from pprint import pformat as pf
 
 from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge, type_parameter_key
 from bigraph_schema.parse import parse_expression
-from bigraph_schema.utilities import union_keys, type_schema_keys
+from bigraph_schema.utilities import union_keys
 from bigraph_schema.registry import remove_omitted, set_path, transform_path
+
 from bigraph_schema.type_functions import (
-    registry_types, base_types, unit_types,
-    register_base_reactions, is_empty,
-    apply_schema, set_apply)
+    registry_types, base_types, unit_types, register_base_reactions, is_empty, apply_schema, set_apply)
+
 
 TYPE_FUNCTION_KEYS = [
     '_apply',
@@ -36,6 +36,12 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 SYMBOL_TYPES = ['enum']
+
+required_schema_keys = {'_default', '_apply', '_check', '_serialize', '_deserialize', '_fold'}
+
+optional_schema_keys = {'_type', '_value', '_description', '_type_parameters', '_inherit', '_divide'}
+
+type_schema_keys = required_schema_keys | optional_schema_keys
 
 
 def is_method_key(key, parameters):

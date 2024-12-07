@@ -77,11 +77,12 @@ from dataclasses import field, make_dataclass
 
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.registry import (
-    is_schema_key, non_schema_keys, type_parameter_key,
-    deep_merge, hierarchy_depth,
-    establish_path)
-from bigraph_schema.utilities import is_empty, union_keys, tuple_from_type, array_shape, read_datatype, read_shape, \
-    remove_path, type_parameters_for, visit_method, NONE_SYMBOL
+    is_schema_key, non_schema_keys, type_parameter_key, deep_merge, hierarchy_depth, establish_path
+)
+from bigraph_schema.utilities import (
+    is_empty, union_keys, tuple_from_type, array_shape, read_datatype, read_shape, remove_path,
+    type_parameters_for, visit_method, NONE_SYMBOL
+)
 
 
 # Create a new module dynamically for the dataclasses

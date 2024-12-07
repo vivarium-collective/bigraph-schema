@@ -1,55 +1,22 @@
+"""
+Utility functions for working with bigraph schemas
+"""
+
+import collections
 import numpy as np
 
 
 NONE_SYMBOL = '!nil'
-
-required_schema_keys = set([
-    '_default',
-    '_apply',
-    '_check',
-    '_serialize',
-    '_deserialize',
-    '_fold',
-])
-
-
-optional_schema_keys = set([
-    '_type',
-    '_value',
-    '_description',
-    '_type_parameters',
-    '_inherit',
-    '_divide',
-])
-
-
-type_schema_keys = required_schema_keys | optional_schema_keys
-
 
 DTYPE_MAP = {
     'float': 'float64',
     'integer': 'int64',
     'string': 'str'}
 
-overridable_schema_keys = set([
-    '_type',
-    '_default',
-    '_check',
-    '_apply',
-    '_serialize',
-    '_deserialize',
-    '_fold',
-    '_divide',
-    '_slice',
-    '_bind',
-    '_merge',
-    '_type_parameters',
-    '_value',
-    '_description',
-    '_inherit',
-])
+overridable_schema_keys = {'_type', '_default', '_check', '_apply', '_serialize', '_deserialize', '_fold', '_divide',
+                           '_slice', '_bind', '_merge', '_type_parameters', '_value', '_description', '_inherit'}
 
-nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
+# nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
 
 merge_schema_keys = (
     '_ports',
