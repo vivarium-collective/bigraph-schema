@@ -156,7 +156,6 @@ def get_path(tree, path):
         else:
             return get_path(tree[head], path[1:])
 
-
 def remove_path(tree, path):
     """
     Removes whatever subtree lives at the given path
@@ -212,6 +211,14 @@ def type_parameters_for(schema):
 
 # Apply functions
 # ---------------
+
+def accumulate(schema, current, update, core):
+    if current is None:
+        return update
+    if update is None:
+        return current
+    else:
+        return current + update
 
 def apply_schema(schema, current, update, core):
     """
@@ -4366,15 +4373,6 @@ class Edge:
         return {
             'inputs': self.inputs(),
             'outputs': self.outputs()}
-
-
-def accumulate(schema, current, update, core):
-    if current is None:
-        return update
-    if update is None:
-        return current
-    else:
-        return current + update
 
 
 def set_apply(schema, current, update, core):
