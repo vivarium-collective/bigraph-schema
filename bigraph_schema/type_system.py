@@ -212,8 +212,11 @@ def type_parameters_for(schema):
     return parameters
 
 
-# Apply functions
-# ---------------
+# =========================
+# Apply Functions Overview
+# =========================
+# These functions are responsible for applying updates to various types of schemas.
+# Each function handles a specific type of schema and ensures that updates are applied correctly.
 
 def accumulate(schema, current, update, core):
     if current is None:
@@ -457,9 +460,11 @@ def apply_array(schema, current, update, core):
         return current + update
 
 
-
-# Check functions
-# ---------------
+# =========================
+# Check Functions Overview
+# =========================
+# These functions are responsible for validating the state against various types of schemas.
+# Each function ensures that the state conforms to the expected schema type.
 
 def check_any(schema, state, core):
     if isinstance(schema, dict):
@@ -605,8 +610,14 @@ def check_units(schema, state, core):
     # TODO: expand this to check the actual units for compatibility
     return isinstance(state, Quantity)
 
-# Fold functions
-# --------------
+
+# =========================
+# Fold Functions Overview
+# =========================
+# These functions are responsible for folding the state based on the schema and a given method.
+# Each function handles a specific type of schema and ensures that the folding is done correctly.
+# In functional programming, a fold is a higher-order function that processes a data structure
+# in some order and builds a return value.
 
 def fold_any(schema, state, method, values, core):
     if isinstance(state, dict):
@@ -825,8 +836,11 @@ def fold_enum(schema, state, method, values, core):
             core)
 
 
-# Divide functions
-# ----------------
+# ==========================
+# Divide Functions Overview
+# ==========================
+# These functions are responsible for dividing the state into a number of parts based on the schema.
+# Each function handles a specific type of schema and divides the state accordingly.
 
 def divide_any(schema, state, values, core):
     divisions = values.get('divisions', 2)
@@ -996,8 +1010,11 @@ def divide_enum(schema, state, values, core):
         for index in range(divisions)]
 
 
-# Serialize functions
-# -------------------
+# =============================
+# Serialize Functions Overview
+# =============================
+# These functions are responsible for converting the state into a serializable format based on the schema.
+# Each function handles a specific type of schema and ensures that the state is serialized correctly.
 
 def serialize_any(schema, state, core):
     if isinstance(state, dict):
@@ -1134,8 +1151,11 @@ def serialize_array(schema, value, core):
             'shape': list(value.shape)}
 
 
-# Deserialize functions
-# ---------------------
+# ===============================
+# Deserialize Functions Overview
+# ===============================
+# These functions are responsible for converting serialized data back into the state based on the schema.
+# Each function handles a specific type of schema and ensures that the data is deserialized correctly.
 
 def deserialize_any(schema, state, core):
     if isinstance(state, dict):
@@ -1334,8 +1354,11 @@ def deserialize_schema(schema, state, core):
     return state
 
 
-# Slice functions
-# ---------------
+# =========================
+# Slice Functions Overview
+# =========================
+# These functions are responsible for extracting a part of the state based on the schema and path.
+# Each function handles a specific type of schema and ensures that the correct part of the state is sliced.
 
 def slice_any(schema, state, path, core):
     if not isinstance(path, (list, tuple)):
@@ -1505,8 +1528,11 @@ def slice_string(schema, state, path, core):
     raise Exception(f'cannot slice into an string: {path}\n{state}\n{schema}')
 
 
-# Bind functions
-# --------------
+# ========================
+# Bind Functions Overview
+# ========================
+# These functions are responsible for binding a key and its corresponding schema and state to the main schema and state.
+# Each function handles a specific type of schema and ensures that the binding is done correctly.
 
 def bind_any(schema, state, key, subschema, substate, core):
     result_schema = core.resolve_schemas(
@@ -1550,8 +1576,11 @@ def bind_enum(schema, state, key, subschema, substate, core):
     return new_schema, tuple(open)
 
 
-# Resolve functions
-# ----------------
+# ==========================
+# Resolve Functions Overview
+# ==========================
+# These functions are responsible for resolving updates to the schema.
+# Each function handles a specific type of schema and ensures that updates are resolved correctly.
 
 def resolve_map(schema, update, core):
     if isinstance(update, dict):
@@ -1626,8 +1655,11 @@ def resolve_array(schema, update, core):
 
 
 
-# Dataclass functions
-# -------------------
+# ============================
+# Dataclass Functions Overview
+# ============================
+# These functions are responsible for generating dataclass representations of various types of schemas.
+# Each function handles a specific type of schema and ensures that the dataclass is generated correctly.
 
 def dataclass_union(schema, path, core):
     parameters = type_parameters_for(schema)
@@ -1800,8 +1832,12 @@ def dataclass_array(schema, path, core):
     return np.ndarray
 
 
-# Default functions
-# -----------------
+# ===========================
+# Default Functions Overview
+# ===========================
+# These functions are responsible for providing default values for various types of schemas.
+# Each function handles a specific type of schema and ensures that the default value is generated correctly.
+# Absent a default function, the type could provide a default value directly.
 
 def default_any(schema, core):
     default = {}
@@ -1888,8 +1924,12 @@ def default_edge(schema, core):
 
     return edge
 
-# Generate functions
-# ------------------
+
+# ============================
+# Generate Functions Overview
+# ============================
+# These functions are responsible for generating schemas and states based on the provided schema and state.
+# Each function handles a specific type of schema and ensures that the generation is done correctly.
 
 def generate_quote(core, schema, state, top_schema=None, top_state=None, path=None):
     return schema, state, top_schema, top_state
@@ -2162,8 +2202,11 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
     return generated_schema, generated_state, top_schema, top_state
 
 
-# Sort functions
-# --------------
+# =========================
+# Sort Functions Overview
+# =========================
+# These functions are responsible for sorting schemas and states.
+# Each function handles a specific type of schema and ensures that the sorting is done correctly.
 
 def sort_quote(core, schema, state):
     return schema, state
