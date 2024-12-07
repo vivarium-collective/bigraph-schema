@@ -16,9 +16,9 @@ from bigraph_schema.parse import parse_expression
 from bigraph_schema.registry import type_schema_keys, remove_omitted, set_path, transform_path
 from bigraph_schema.type_functions import (
     registry_types, base_types, unit_types,
-    register_base_reactions, union_keys, is_empty,
+    register_base_reactions, is_empty,
     apply_schema, set_apply)
-
+from bigraph_schema.utilities import union_keys
 
 TYPE_FUNCTION_KEYS = [
     '_apply',
