@@ -3,15 +3,70 @@
 Type Functions
 ==============
 
-Includes Type Functions: apply, check, fold, divide, serialize, deserialize, slice, bind, merge
-TODO: describe these functions
+This module includes various type functions that are essential for handling and manipulating different types of schemas and states. These functions are categorized based on their functionality and the type of schema they operate on. Below is an overview of the type functions included in this module:
+
+1. **Apply Functions**:
+   - Responsible for applying updates to various types of schemas.
+   - Each function handles a specific type of schema and ensures that updates are applied correctly.
+
+2. **Check Functions**:
+   - Responsible for validating the state against various types of schemas.
+   - Each function ensures that the state conforms to the expected schema type.
+
+3. **Fold Functions**:
+   - Responsible for folding the state based on the schema and a given method.
+   - Each function handles a specific type of schema and ensures that the folding is done correctly.
+
+4. **Divide Functions**:
+   - Responsible for dividing the state into a number of parts based on the schema.
+   - Each function handles a specific type of schema and divides the state accordingly.
+
+5. **Serialize Functions**:
+   - Responsible for converting the state into a serializable format based on the schema.
+   - Each function handles a specific type of schema and ensures that the state is serialized correctly.
+
+6. **Deserialize Functions**:
+   - Responsible for converting serialized data back into the state based on the schema.
+   - Each function handles a specific type of schema and ensures that the data is deserialized correctly.
+
+7. **Slice Functions**:
+   - Responsible for extracting a part of the state based on the schema and path.
+   - Each function handles a specific type of schema and ensures that the correct part of the state is sliced.
+
+8. **Bind Functions**:
+   - Responsible for binding a key and its corresponding schema and state to the main schema and state.
+   - Each function handles a specific type of schema and ensures that the binding is done correctly.
+
+9. **Resolve Functions**:
+   - Responsible for resolving updates to the schema.
+   - Each function handles a specific type of schema and ensures that updates are resolved correctly.
+
+10. **Dataclass Functions**:
+    - Responsible for generating dataclass representations of various types of schemas.
+    - Each function handles a specific type of schema and ensures that the dataclass is generated correctly.
+
+11. **Default Functions**:
+    - Responsible for providing default values for various types of schemas.
+    - Each function handles a specific type of schema and ensures that the default value is generated correctly.
+
+12. **Generate Functions**:
+    - Responsible for generating schemas and states based on the provided schema and state.
+    - Each function handles a specific type of schema and ensures that the generation is done correctly.
+
+13. **Sort Functions**:
+    - Responsible for sorting schemas and states.
+    - Each function handles a specific type of schema and ensures that the sorting is done correctly.
+
+14. **Reaction Functions**:
+    - Responsible for handling reactions within the schema and state.
+    - Each function processes a specific type of reaction and ensures that the state is updated accordingly.
+
 """
 
 import copy
 import numbers
 import numpy as np
 import collections
-
 from pint import Quantity
 from pprint import pformat as pf
 
@@ -19,7 +74,7 @@ import typing
 from typing import NewType, Union, Mapping, List, Dict, Optional, Callable
 from dataclasses import field, make_dataclass
 
-from bigraph_schema.units import units, render_units_type
+from bigraph_schema.units import units
 from bigraph_schema.registry import (
     NONE_SYMBOL, type_schema_keys,
     is_schema_key, non_schema_keys, type_parameter_key,
@@ -29,18 +84,6 @@ from bigraph_schema.registry import (
 import bigraph_schema.data as data
 import bigraph_schema.data
 
-
-TYPE_FUNCTION_KEYS = [
-    '_apply',
-    '_check',
-    '_fold',
-    '_divide',
-    '_react',
-    '_serialize',
-    '_deserialize',
-    '_slice',
-    '_bind',
-    '_merge']
 
 overridable_schema_keys = set([
     '_type',
@@ -60,17 +103,12 @@ overridable_schema_keys = set([
     '_inherit',
 ])
 
-SYMBOL_TYPES = ['enum']
-
 nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
 
 merge_schema_keys = (
     '_ports',
     '_type_parameters',
 )
-
-TYPE_SCHEMAS = {
-    'float': 'float'}
 
 DTYPE_MAP = {
     'float': 'float64',
@@ -1172,6 +1210,12 @@ def serialize_array(schema, value, core):
 # These functions are responsible for converting serialized data back into the state based on the schema.
 # Each function handles a specific type of schema and ensures that the data is deserialized correctly.
 
+def to_string(schema, value, core=None):
+    return str(value)
+
+# def evaluate(schema, encoded, core=None):
+#     return eval(encoded)
+
 def deserialize_any(schema, state, core):
     if isinstance(state, dict):
         tree = {}
@@ -2250,6 +2294,14 @@ def sort_any(core, schema, state):
 def sort_quote(core, schema, state):
     return schema, state
 
+def find_union_type(core, schema, state):
+    parameters = core.parameters_for(schema)
+
+    for possible in parameters:
+        if core.check(possible, state):
+            return core.access(possible)
+    return None
+
 
 # ==========================
 # Resolve Functions Overview
@@ -2337,7 +2389,6 @@ def add_reaction(schema, state, reaction, core):
         'redex': redex,
         'reactum': reactum}
 
-
 def remove_reaction(schema, state, reaction, core):
     path = reaction.get('path', ())
     redex = {}
@@ -2356,7 +2407,6 @@ def remove_reaction(schema, state, reaction, core):
     return {
         'redex': redex,
         'reactum': reactum}
-
 
 def replace_reaction(schema, state, reaction, core):
     path = reaction.get('path', ())
@@ -2381,13 +2431,11 @@ def replace_reaction(schema, state, reaction, core):
         'redex': redex,
         'reactum': reactum}
 
-
 def register_base_reactions(core):
     core.register_reaction('add', add_reaction)
     core.register_reaction('remove', remove_reaction)
     core.register_reaction('replace', replace_reaction)
     core.register_reaction('divide', divide_reaction)
-
 
 
 # Other functions
@@ -2400,17 +2448,6 @@ def is_empty(value):
     else:
         return False
 
-
-def find_union_type(core, schema, state):
-    parameters = core.parameters_for(schema)
-
-    for possible in parameters:
-        if core.check(possible, state):
-            return core.access(possible)
-
-    return None
-
-
 def union_keys(schema, state):
     keys = {}
     for key in schema:
@@ -2419,14 +2456,7 @@ def union_keys(schema, state):
         keys[key] = True
 
     return keys
-
     # return set(schema.keys()).union(state.keys())
-
-def to_string(schema, value, core=None):
-    return str(value)
-
-def evaluate(schema, encoded, core=None):
-    return eval(encoded)
 
 def tuple_from_type(tuple_type):
     if isinstance(tuple_type, tuple):
@@ -2441,10 +2471,8 @@ def tuple_from_type(tuple_type):
             for parameter in tuple_type['_type_parameters']]
 
         return tuple(tuple_list)
-
     else:
         raise Exception(f'do not recognize this type as a tuple: {tuple_type}')
-
 
 def array_shape(core, schema):
     if '_type_parameters' not in schema:
@@ -2455,7 +2483,6 @@ def array_shape(core, schema):
         int(schema[f'_{parameter}'])
         for parameter in schema['_type_parameters']])
 
-
 def lookup_dtype(data_name):
     data_name = data_name or 'string'
     dtype_name = DTYPE_MAP.get(data_name)
@@ -2464,11 +2491,9 @@ def lookup_dtype(data_name):
 
     return np.dtype(dtype_name)
 
-
 def read_datatype(data_schema):
     return lookup_dtype(
         data_schema['_type'])
-
 
 def read_shape(shape):
     return tuple([
@@ -2477,26 +2502,10 @@ def read_shape(shape):
             shape)])
 
 
-def register_units(core, units):
-    for unit_name in units._units:
-        try:
-            unit = getattr(units, unit_name)
-        except:
-            # print(f'no unit named {unit_name}')
-            continue
-
-        dimensionality = unit.dimensionality
-        type_key = render_units_type(dimensionality)
-        if not core.exists(type_key):
-            core.register(type_key, {
-                '_default': '',
-                '_apply': apply_units,
-                '_check': check_units,
-                '_serialize': serialize_units,
-                '_deserialize': deserialize_units,
-                '_description': 'type to represent values with scientific units'})
-
-    return core
+# ===============================
+# Types with their type functions
+# ===============================
+# These dictionaries define the types and their corresponding type functions.
 
 registry_types = {
     'any': {

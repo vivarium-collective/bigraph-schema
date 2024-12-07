@@ -13,10 +13,28 @@ from pprint import pformat as pf
 from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge, type_parameter_key
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.registry import type_schema_keys, remove_omitted, set_path, transform_path
-from bigraph_schema.type_functions import set_apply, registry_types, base_type_library, register_units, \
-    register_base_reactions, TYPE_FUNCTION_KEYS, SYMBOL_TYPES, union_keys, is_empty, \
-    apply_schema, TYPE_SCHEMAS
-from bigraph_schema.units import units
+from bigraph_schema.type_functions import set_apply, registry_types, base_type_library, register_base_reactions, \
+    union_keys, is_empty, \
+    apply_schema, apply_units, check_units, serialize_units, deserialize_units
+from bigraph_schema.units import units, render_units_type
+
+
+TYPE_FUNCTION_KEYS = [
+    '_apply',
+    '_check',
+    '_fold',
+    '_divide',
+    '_react',
+    '_serialize',
+    '_deserialize',
+    '_slice',
+    '_bind',
+    '_merge']
+
+TYPE_SCHEMAS = {
+    'float': 'float'}
+
+SYMBOL_TYPES = ['enum']
 
 
 def is_method_key(key, parameters):
@@ -2042,3 +2060,25 @@ class TypeSystem(Registry):
     def query(self, schema, instance, redex):
         subschema = {}
         return subschema
+
+
+def register_units(core, units):
+    for unit_name in units._units:
+        try:
+            unit = getattr(units, unit_name)
+        except:
+            # print(f'no unit named {unit_name}')
+            continue
+
+        dimensionality = unit.dimensionality
+        type_key = render_units_type(dimensionality)
+        if not core.exists(type_key):
+            core.register(type_key, {
+                '_default': '',
+                '_apply': apply_units,
+                '_check': check_units,
+                '_serialize': serialize_units,
+                '_deserialize': deserialize_units,
+                '_description': 'type to represent values with scientific units'})
+
+    return core
