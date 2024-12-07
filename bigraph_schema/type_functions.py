@@ -10,6 +10,7 @@ TODO: describe these functions
 import copy
 import numbers
 import numpy as np
+import collections
 
 from pint import Quantity
 from pprint import pformat as pf
@@ -131,7 +132,6 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
             
     return dct
 
-
 def get_path(tree, path):
     """
     Given a tree and a path, find the subtree at that path
@@ -178,12 +178,10 @@ def visit_method(schema, state, method, values, core):
         visit = core.find_method(
             {method_key: state[method_key]},
             method_key)
-
     elif method_key in schema:
         visit = core.find_method(
             schema,
             method_key)
-
     else:
         visit = core.find_method(
             'any',
@@ -280,7 +278,6 @@ def set_apply(schema, current, update, core):
                 core)
 
         return current
-
     else:
         return update
 
@@ -480,7 +477,6 @@ def apply_array(schema, current, update, core):
                 current[index] += inner_update
 
         return current
-
     else:
         return current + update
 
@@ -747,7 +743,6 @@ def fold_list(schema, state, method, values, core):
 
     return result
 
-
 def fold_tree(schema, state, method, values, core):
     leaf_type = core.find_parameter(
         schema,
@@ -786,7 +781,6 @@ def fold_tree(schema, state, method, values, core):
 
     return result
 
-
 def fold_map(schema, state, method, values, core):
     value_type = core.find_parameter(
         schema,
@@ -809,7 +803,6 @@ def fold_map(schema, state, method, values, core):
         core)
 
     return result
-
 
 def fold_maybe(schema, state, method, values, core):
     value_type = core.find_parameter(
@@ -899,7 +892,6 @@ def divide_tuple(schema, state, values, core):
         tuple([item[index] for item in state])
         for index in range(divisions)]
 
-
 def divide_float(schema, state, values, core):
     divisions = values.get('divisions', 2)
     portion = float(state) / divisions
@@ -907,7 +899,7 @@ def divide_float(schema, state, values, core):
         portion
         for _ in range(divisions)]
 
-# support function core for registrys?
+# support function core for registries?
 def divide_integer(schema, value, values, core):
     half = value // 2
     other_half = half
@@ -959,7 +951,6 @@ def divide_reaction(schema, state, reaction, core):
         state,
         replace,
         core)
-
 
 def divide_list(schema, state, values, core):
     element_type = core.find_parameter(
@@ -1144,7 +1135,6 @@ def serialize_map(schema, value, core=None):
             value_type,
             subvalue) if not is_schema_key(key) else subvalue
         for key, subvalue in value.items()}
-
 
 def serialize_edge(schema, value, core):
     return value
@@ -1341,7 +1331,7 @@ def deserialize_map(schema, encoded, core=None):
             for key, subvalue in encoded.items()}
 
 def deserialize_enum(schema, state, core):
-    return value
+    return state  # TODO check this
 
 def deserialize_array(schema, encoded, core):
     if isinstance(encoded, np.ndarray):
@@ -1679,7 +1669,6 @@ def resolve_array(schema, update, core):
     return schema
 
 
-
 # ============================
 # Dataclass Functions Overview
 # ============================
@@ -1940,7 +1929,6 @@ def default_enum(schema, core):
     parameter = schema['_type_parameters'][0]
     return schema[f'_{parameter}']
 
-
 def default_edge(schema, core):
     edge = {}
     for key in schema:
@@ -2034,7 +2022,6 @@ def generate_map(core, schema, state, top_schema=None, top_state=None, path=None
 
     # generated_schema = {}
     # generated_state = {}
-
     # TODO: can we assume this was already sorted at the top level?
 
     generated_schema, generated_state = core.sort(
@@ -2294,7 +2281,6 @@ def resolve_any(schema, update, core):
 
     return outcome
 
-
 # def resolve_tree(schema, update, core):
 #     if isinstance(update, dict):
 #         leaf_schema = schema.get('_leaf', {})
@@ -2323,6 +2309,88 @@ def resolve_any(schema, update, core):
 
 #     return schema
 
+
+# ==========================
+# Reaction Functions Overview
+# ==========================
+# These functions are responsible for handling reactions within the schema and state.
+# Each function processes a specific type of reaction and ensures that the state is updated accordingly.
+
+def add_reaction(schema, state, reaction, core):
+    path = reaction.get('path')
+
+    redex = {}
+    establish_path(
+        redex,
+        path)
+
+    reactum = {}
+    node = establish_path(
+        reactum,
+        path)
+
+    deep_merge(
+        node,
+        reaction.get('add', {}))
+
+    return {
+        'redex': redex,
+        'reactum': reactum}
+
+
+def remove_reaction(schema, state, reaction, core):
+    path = reaction.get('path', ())
+    redex = {}
+    node = establish_path(
+        redex,
+        path)
+
+    for remove in reaction.get('remove', []):
+        node[remove] = {}
+
+    reactum = {}
+    establish_path(
+        reactum,
+        path)
+
+    return {
+        'redex': redex,
+        'reactum': reactum}
+
+
+def replace_reaction(schema, state, reaction, core):
+    path = reaction.get('path', ())
+
+    redex = {}
+    node = establish_path(
+        redex,
+        path)
+
+    for before_key, before_state in reaction.get('before', {}).items():
+        node[before_key] = before_state
+
+    reactum = {}
+    node = establish_path(
+        reactum,
+        path)
+
+    for after_key, after_state in reaction.get('after', {}).items():
+        node[after_key] = after_state
+
+    return {
+        'redex': redex,
+        'reactum': reactum}
+
+
+def register_base_reactions(core):
+    core.register_reaction('add', add_reaction)
+    core.register_reaction('remove', remove_reaction)
+    core.register_reaction('replace', replace_reaction)
+    core.register_reaction('divide', divide_reaction)
+
+
+
+# Other functions
 
 def is_empty(value):
     if isinstance(value, np.ndarray):
@@ -2353,56 +2421,6 @@ def union_keys(schema, state):
     return keys
 
     # return set(schema.keys()).union(state.keys())
-
-
-registry_types = {
-    'any': {
-        '_type': 'any',
-        '_default': default_any,
-        '_slice': slice_any,
-        '_apply': apply_any,
-        '_check': check_any,
-        '_sort': sort_any,
-        '_generate': generate_any,
-        '_serialize': serialize_any,
-        '_deserialize': deserialize_any,
-        '_dataclass': dataclass_any,
-        '_resolve': resolve_any,
-        '_fold': fold_any,
-        '_bind': bind_any,
-        '_divide': divide_any},
-
-    'quote': {
-        '_type': 'quote',
-        '_generate': generate_quote,
-        '_sort': sort_quote},
-
-    'tuple': {
-        '_type': 'tuple',
-        '_default': default_tuple,
-        '_apply': apply_tuple,
-        '_check': check_tuple,
-        '_slice': slice_tuple,
-        '_serialize': serialize_tuple,
-        '_deserialize': deserialize_tuple,
-        '_dataclass': dataclass_tuple,
-        '_fold': fold_tuple,
-        '_divide': divide_tuple,
-        '_bind': bind_tuple,
-        '_description': 'tuple of an ordered set of typed values'},
-
-    'union': {
-        '_type': 'union',
-        '_default': default_union,
-        '_apply': apply_union,
-        '_check': check_union,
-        '_slice': slice_union,
-        '_serialize': serialize_union,
-        '_deserialize': deserialize_union,
-        '_dataclass': dataclass_union,
-        '_fold': fold_union,
-        '_description': 'union of a set of possible types'}}
-
 
 def to_string(schema, value, core=None):
     return str(value)
@@ -2480,7 +2498,53 @@ def register_units(core, units):
 
     return core
 
+registry_types = {
+    'any': {
+        '_type': 'any',
+        '_default': default_any,
+        '_slice': slice_any,
+        '_apply': apply_any,
+        '_check': check_any,
+        '_sort': sort_any,
+        '_generate': generate_any,
+        '_serialize': serialize_any,
+        '_deserialize': deserialize_any,
+        '_dataclass': dataclass_any,
+        '_resolve': resolve_any,
+        '_fold': fold_any,
+        '_bind': bind_any,
+        '_divide': divide_any},
 
+    'quote': {
+        '_type': 'quote',
+        '_generate': generate_quote,
+        '_sort': sort_quote},
+
+    'tuple': {
+        '_type': 'tuple',
+        '_default': default_tuple,
+        '_apply': apply_tuple,
+        '_check': check_tuple,
+        '_slice': slice_tuple,
+        '_serialize': serialize_tuple,
+        '_deserialize': deserialize_tuple,
+        '_dataclass': dataclass_tuple,
+        '_fold': fold_tuple,
+        '_divide': divide_tuple,
+        '_bind': bind_tuple,
+        '_description': 'tuple of an ordered set of typed values'},
+
+    'union': {
+        '_type': 'union',
+        '_default': default_union,
+        '_apply': apply_union,
+        '_check': check_union,
+        '_slice': slice_union,
+        '_serialize': serialize_union,
+        '_deserialize': deserialize_union,
+        '_dataclass': dataclass_union,
+        '_fold': fold_union,
+        '_description': 'union of a set of possible types'}}
 
 base_type_library = {
     'boolean': {
@@ -2570,21 +2634,6 @@ base_type_library = {
         '_type_parameters': ['value'],
         '_description': 'flat mapping from keys of strings to values of any type'},
 
-    # 'dictionary': {
-    #     '_type': 'dictionary',
-    #     '_default': {},
-    #     '_apply': apply_dictionary,
-    #     '_serialize': serialize_dictionary,
-    #     '_deserialize': deserialize_dictionary,
-    #     '_resolve': resolve_dictionary,
-    #     '_dataclass': dataclass_dictionary,
-    #     '_check': check_dictionary,
-    #     '_slice': slice_dictionary,
-    #     '_fold': fold_dictionary,
-    #     '_divide': divide_dictionary,
-    #     '_type_parameters': ['key', 'value'],
-    #     '_description': 'flat mapping from keys of strings to values of any type'},
-
     'tree': {
         '_type': 'tree',
         '_default': default_tree,
@@ -2659,76 +2708,3 @@ base_type_library = {
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
         'inputs': 'wires',
         'outputs': 'wires'}}
-
-
-def add_reaction(schema, state, reaction, core):
-    path = reaction.get('path')
-
-    redex = {}
-    establish_path(
-        redex,
-        path)
-
-    reactum = {}
-    node = establish_path(
-        reactum,
-        path)
-
-    deep_merge(
-        node,
-        reaction.get('add', {}))
-
-    return {
-        'redex': redex,
-        'reactum': reactum}
-
-
-def remove_reaction(schema, state, reaction, core):
-    path = reaction.get('path', ())
-    redex = {}
-    node = establish_path(
-        redex,
-        path)
-
-    for remove in reaction.get('remove', []):
-        node[remove] = {}
-
-    reactum = {}
-    establish_path(
-        reactum,
-        path)
-
-    return {
-        'redex': redex,
-        'reactum': reactum}
-
-
-def replace_reaction(schema, state, reaction, core):
-    path = reaction.get('path', ())
-
-    redex = {}
-    node = establish_path(
-        redex,
-        path)
-
-    for before_key, before_state in reaction.get('before', {}).items():
-        node[before_key] = before_state
-
-    reactum = {}
-    node = establish_path(
-        reactum,
-        path)
-
-    for after_key, after_state in reaction.get('after', {}).items():
-        node[after_key] = after_state
-
-    return {
-        'redex': redex,
-        'reactum': reactum}
-
-
-def register_base_reactions(core):
-    core.register_reaction('add', add_reaction)
-    core.register_reaction('remove', remove_reaction)
-    core.register_reaction('replace', replace_reaction)
-    core.register_reaction('divide', divide_reaction)
