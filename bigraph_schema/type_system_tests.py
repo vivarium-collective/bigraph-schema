@@ -10,10 +10,10 @@ from dataclasses import  asdict
 from bigraph_schema.type_functions import (
     divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, data_module
 )
-from bigraph_schema.utilities import compare_dicts
+from bigraph_schema.utilities import compare_dicts, NONE_SYMBOL
 from bigraph_schema import TypeSystem
 from bigraph_schema.units import units
-from bigraph_schema.registry import establish_path, remove_omitted, NONE_SYMBOL
+from bigraph_schema.registry import establish_path, remove_omitted
 
 
 @pytest.fixture

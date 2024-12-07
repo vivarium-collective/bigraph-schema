@@ -1,10 +1,125 @@
 import numpy as np
 
 
+NONE_SYMBOL = '!nil'
+
+required_schema_keys = set([
+    '_default',
+    '_apply',
+    '_check',
+    '_serialize',
+    '_deserialize',
+    '_fold',
+])
+
+
+optional_schema_keys = set([
+    '_type',
+    '_value',
+    '_description',
+    '_type_parameters',
+    '_inherit',
+    '_divide',
+])
+
+
+type_schema_keys = required_schema_keys | optional_schema_keys
+
+
 DTYPE_MAP = {
     'float': 'float64',
     'integer': 'int64',
     'string': 'str'}
+
+overridable_schema_keys = set([
+    '_type',
+    '_default',
+    '_check',
+    '_apply',
+    '_serialize',
+    '_deserialize',
+    '_fold',
+    '_divide',
+    '_slice',
+    '_bind',
+    '_merge',
+    '_type_parameters',
+    '_value',
+    '_description',
+    '_inherit',
+])
+
+nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
+
+merge_schema_keys = (
+    '_ports',
+    '_type_parameters',
+)
+
+
+def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
+    """
+    Recursively merge type definitions, never overwrite.
+
+    Args:
+    - dct: The dictionary to merge into. This dictionary is mutated and ends up being the merged dictionary.  If you
+        want to keep dct you could call it like ``deep_merge_check(copy.deepcopy(dct), merge_dct)``.
+    - merge_dct: The dictionary to merge into ``dct``.
+    - path: If the ``dct`` is nested within a larger dictionary, the path to ``dct``. This is normally an empty tuple
+        (the default) for the end user but is used for recursive calls.
+    Returns:
+    - dct
+    """
+    for k in merge_dct:
+        if not k in dct or k in overridable_schema_keys:
+            dct[k] = merge_dct[k]
+        elif k in merge_schema_keys or isinstance(
+                dct[k], dict
+        ) and isinstance(
+            merge_dct[k], collections.abc.Mapping
+        ):
+            type_merge(
+                dct[k],
+                merge_dct[k],
+                path + (k,),
+                merge_supers)
+
+        else:
+            raise ValueError(
+                f'cannot merge types at path {path + (k,)}:\n'
+                f'{dct}\noverwrites \'{k}\' from\n{merge_dct}')
+
+    return dct
+
+
+def visit_method(schema, state, method, values, core):
+    """
+    Visit a method for a schema and state and apply it, returning the result
+    """
+    schema = core.access(schema)
+    method_key = f'_{method}'
+
+    # TODO: we should probably cache all this
+    if isinstance(state, dict) and method_key in state:
+        visit = core.find_method(
+            {method_key: state[method_key]},
+            method_key)
+    elif method_key in schema:
+        visit = core.find_method(
+            schema,
+            method_key)
+    else:
+        visit = core.find_method(
+            'any',
+            method_key)
+
+    result = visit(
+        schema,
+        state,
+        values,
+        core)
+
+    return result
 
 
 def is_empty(value):

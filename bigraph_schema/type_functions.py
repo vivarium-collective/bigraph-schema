@@ -68,7 +68,6 @@ import types
 import copy
 import numbers
 import numpy as np
-import collections
 from pint import Quantity
 from pprint import pformat as pf
 
@@ -78,12 +77,12 @@ from dataclasses import field, make_dataclass
 
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.registry import (
-    NONE_SYMBOL, type_schema_keys,
     is_schema_key, non_schema_keys, type_parameter_key,
     deep_merge, hierarchy_depth,
     establish_path)
 from bigraph_schema.utilities import is_empty, union_keys, tuple_from_type, array_shape, read_datatype, read_shape, \
-    remove_path, type_parameters_for
+    remove_path, type_parameters_for, visit_method, NONE_SYMBOL
+
 
 # Create a new module dynamically for the dataclasses
 module_name = 'bigraph_schema.data'
@@ -92,96 +91,6 @@ if module_name not in sys.modules:
     sys.modules[module_name] = data_module
 else:
     data_module = sys.modules[module_name]
-
-overridable_schema_keys = set([
-    '_type',
-    '_default',
-    '_check',
-    '_apply',
-    '_serialize',
-    '_deserialize',
-    '_fold',
-    '_divide',
-    '_slice',
-    '_bind',
-    '_merge',
-    '_type_parameters',
-    '_value',
-    '_description',
-    '_inherit',
-])
-
-nonoverridable_schema_keys = type_schema_keys - overridable_schema_keys
-
-merge_schema_keys = (
-    '_ports',
-    '_type_parameters',
-)
-
-
-def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
-    """
-    Recursively merge type definitions, never overwrite.
-
-    Args:
-    - dct: The dictionary to merge into. This dictionary is mutated and ends up being the merged dictionary.  If you 
-        want to keep dct you could call it like ``deep_merge_check(copy.deepcopy(dct), merge_dct)``.
-    - merge_dct: The dictionary to merge into ``dct``.
-    - path: If the ``dct`` is nested within a larger dictionary, the path to ``dct``. This is normally an empty tuple 
-        (the default) for the end user but is used for recursive calls.
-    Returns:
-    - dct
-    """
-    for k in merge_dct:
-        if not k in dct or k in overridable_schema_keys:
-            dct[k] = merge_dct[k]
-        elif k in merge_schema_keys or isinstance(
-            dct[k], dict
-        ) and isinstance(
-            merge_dct[k], collections.abc.Mapping
-        ):
-            type_merge(
-                dct[k],
-                merge_dct[k],
-                path + (k,),
-                merge_supers)
-
-        else:
-            raise ValueError(
-                f'cannot merge types at path {path + (k,)}:\n'
-                f'{dct}\noverwrites \'{k}\' from\n{merge_dct}')
-            
-    return dct
-
-
-def visit_method(schema, state, method, values, core):
-    """
-    Visit a method for a schema and state and apply it, returning the result
-    """
-    schema = core.access(schema)
-    method_key = f'_{method}'
-
-    # TODO: we should probably cache all this
-    if isinstance(state, dict) and method_key in state:
-        visit = core.find_method(
-            {method_key: state[method_key]},
-            method_key)
-    elif method_key in schema:
-        visit = core.find_method(
-            schema,
-            method_key)
-    else:
-        visit = core.find_method(
-            'any',
-            method_key)
-
-    result = visit(
-        schema,
-        state,
-        values,
-        core)
-
-    return result
 
 
 # =========================
