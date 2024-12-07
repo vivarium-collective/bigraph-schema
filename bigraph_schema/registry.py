@@ -371,19 +371,3 @@ class Registry(object):
 
     def validate(self, item):
         return True
-
-
-def test_remove_omitted():
-    result = remove_omitted(
-        {'a': {}, 'b': {'c': {}, 'd': {}}},
-        {'b': {'c': {}}},
-        {'a': {'X': 1111}, 'b': {'c': {'Y': 4444}, 'd': {'Z': 99999}}})
-
-    assert 'a' not in result
-    assert result['b']['c']['Y'] == 4444
-    assert 'd' not in result['b']
-
-
-if __name__ == '__main__':
-    test_reregister_type()
-    test_remove_omitted()
