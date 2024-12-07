@@ -2520,30 +2520,11 @@ def read_shape(shape):
             shape)])
 
 
-# handling unit registration
-# def register_units(core, units):
-#     for unit_name in units._units:
-#         try:
-#             unit = getattr(units, unit_name)
-#         except:
-#             # print(f'no unit named {unit_name}')
-#             continue
-#
-#         dimensionality = unit.dimensionality
-#         type_key = render_units_type(dimensionality)
-#         if not core.exists(type_key):
-#             core.register(type_key, {
-#                 '_default': '',
-#                 '_apply': apply_units,
-#                 '_check': check_units,
-#                 '_serialize': serialize_units,
-#                 '_deserialize': deserialize_units,
-#                 '_description': 'type to represent values with scientific units'})
-# 
-#     return core
+# ===============================
+# Types with their type functions
+# ===============================
+# These dictionaries define the types and their corresponding type functions.
 
-
-# function to add the unit types to the type library
 def add_units_to_library(units, type_library):
     for unit_name in units._units:
         try:
@@ -2565,63 +2546,10 @@ def add_units_to_library(units, type_library):
 
     return type_library
 
-# ===============================
-# Types with their type functions
-# ===============================
-# These dictionaries define the types and their corresponding type functions.
-
 unit_types = {}
 unit_types = add_units_to_library(units, unit_types)
 
-registry_types = {
-    'any': {
-        '_type': 'any',
-        '_default': default_any,
-        '_slice': slice_any,
-        '_apply': apply_any,
-        '_check': check_any,
-        '_sort': sort_any,
-        '_generate': generate_any,
-        '_serialize': serialize_any,
-        '_deserialize': deserialize_any,
-        '_dataclass': dataclass_any,
-        '_resolve': resolve_any,
-        '_fold': fold_any,
-        '_bind': bind_any,
-        '_divide': divide_any},
-
-    'quote': {
-        '_type': 'quote',
-        '_generate': generate_quote,
-        '_sort': sort_quote},
-
-    'tuple': {
-        '_type': 'tuple',
-        '_default': default_tuple,
-        '_apply': apply_tuple,
-        '_check': check_tuple,
-        '_slice': slice_tuple,
-        '_serialize': serialize_tuple,
-        '_deserialize': deserialize_tuple,
-        '_dataclass': dataclass_tuple,
-        '_fold': fold_tuple,
-        '_divide': divide_tuple,
-        '_bind': bind_tuple,
-        '_description': 'tuple of an ordered set of typed values'},
-
-    'union': {
-        '_type': 'union',
-        '_default': default_union,
-        '_apply': apply_union,
-        '_check': check_union,
-        '_slice': slice_union,
-        '_serialize': serialize_union,
-        '_deserialize': deserialize_union,
-        '_dataclass': dataclass_union,
-        '_fold': fold_union,
-        '_description': 'union of a set of possible types'}}
-
-base_type_library = {
+base_types = {
     'boolean': {
         '_type': 'boolean',
         '_default': False,
@@ -2784,3 +2712,50 @@ base_type_library = {
         'inputs': 'wires',
         'outputs': 'wires'}}
 
+registry_types = {
+    'any': {
+        '_type': 'any',
+        '_default': default_any,
+        '_slice': slice_any,
+        '_apply': apply_any,
+        '_check': check_any,
+        '_sort': sort_any,
+        '_generate': generate_any,
+        '_serialize': serialize_any,
+        '_deserialize': deserialize_any,
+        '_dataclass': dataclass_any,
+        '_resolve': resolve_any,
+        '_fold': fold_any,
+        '_bind': bind_any,
+        '_divide': divide_any},
+
+    'quote': {
+        '_type': 'quote',
+        '_generate': generate_quote,
+        '_sort': sort_quote},
+
+    'tuple': {
+        '_type': 'tuple',
+        '_default': default_tuple,
+        '_apply': apply_tuple,
+        '_check': check_tuple,
+        '_slice': slice_tuple,
+        '_serialize': serialize_tuple,
+        '_deserialize': deserialize_tuple,
+        '_dataclass': dataclass_tuple,
+        '_fold': fold_tuple,
+        '_divide': divide_tuple,
+        '_bind': bind_tuple,
+        '_description': 'tuple of an ordered set of typed values'},
+
+    'union': {
+        '_type': 'union',
+        '_default': default_union,
+        '_apply': apply_union,
+        '_check': check_union,
+        '_slice': slice_union,
+        '_serialize': serialize_union,
+        '_deserialize': deserialize_union,
+        '_dataclass': dataclass_union,
+        '_fold': fold_union,
+        '_description': 'union of a set of possible types'}}

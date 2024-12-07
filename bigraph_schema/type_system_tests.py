@@ -8,7 +8,7 @@ import numpy as np
 from dataclasses import  asdict
 
 from bigraph_schema.type_functions import (
-    divide_longest, base_type_library, accumulate, to_string, deserialize_integer, apply_schema, diff, data_module
+    divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, diff, data_module
 )
 from bigraph_schema import TypeSystem
 from bigraph_schema.units import units
@@ -146,7 +146,7 @@ def print_schema_validation(core, library, should_pass):
 
 def test_validate_schema(core):
     # good schemas
-    print_schema_validation(core, base_type_library, True)
+    print_schema_validation(core, base_types, True)
 
     good = {
         'not quite int': {
