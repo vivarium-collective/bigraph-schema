@@ -454,39 +454,153 @@ def apply_array(schema, current, update, core):
         return current + update
 
 
-# Sort functions
-# --------------
 
-def sort_quote(core, schema, state):
-    return schema, state
+# Check functions
+# ---------------
 
+def check_any(schema, state, core):
+    if isinstance(schema, dict):
+        for key, subschema in schema.items():
+            if not key.startswith('_'):
+                if isinstance(state, dict):
+                    if key in state:
+                        check = core.check_state(
+                            subschema,
+                            state[key])
 
-def sort_any(core, schema, state):
-    if not isinstance(schema, dict):
-        schema = core.find(schema)
+                        if not check:
+                            return False
+                    else:
+                        return False
+                else:
+                    return False
+
+        return True
+    else:
+        return True
+
+def check_tuple(schema, state, core):
+    if not isinstance(state, (tuple, list)):
+        return False
+
+    parameters = core.parameters_for(schema)
+    for parameter, element in zip(parameters, state):
+        if not core.check(parameter, element):
+            return False
+
+    return True
+
+def check_union(schema, state, core):
+    found = find_union_type(
+        core,
+        schema,
+        state)
+
+    return found is not None and len(found) > 0
+
+def check_number(schema, state, core=None):
+    return isinstance(state, numbers.Number)
+
+def check_boolean(schema, state, core=None):
+    return isinstance(state, bool)
+
+def check_integer(schema, state, core=None):
+    return isinstance(state, int) and not isinstance(state, bool)
+
+def check_float(schema, state, core=None):
+    return isinstance(state, float)
+
+def check_string(schema, state, core=None):
+    return isinstance(state, str)
+
+def check_list(schema, state, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+
+    if isinstance(state, list):
+        for element in state:
+            check = core.check(
+                element_type,
+                element)
+
+            if not check:
+                return False
+
+        return True
+    else:
+        return False
+
+def check_tree(schema, state, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+
+    if isinstance(state, dict):
+        for key, value in state.items():
+            check = core.check({
+                '_type': 'tree',
+                '_leaf': leaf_type},
+                value)
+
+            if not check:
+                return core.check(
+                    leaf_type,
+                    value)
+
+        return True
+    else:
+        return core.check(leaf_type, state)
+
+def check_map(schema, state, core=None):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
     if not isinstance(state, dict):
-        return schema, state
+        return False
 
-    merged_schema = {}
-    merged_state = {}
+    for key, substate in state.items():
+        if not core.check(value_type, substate):
+            return False
 
-    for key in union_keys(schema, state):
-        if is_schema_key(key):
-            if key in state:
-                merged_schema[key] = core.merge_schemas(
-                    schema.get(key, {}),
-                    state[key])
-            else:
-                merged_schema[key] = schema[key]
-        else:
-            subschema, merged_state[key] = core.sort(
-                schema.get(key, {}),
-                state.get(key, None))
-            if subschema:
-                merged_schema[key] = subschema
+    return True
 
-    return merged_schema, merged_state
+def check_ports(state, core, key):
+    return key in state and core.check(
+        'wires',
+        state[key])
 
+def check_edge(schema, state, core):
+    return isinstance(state, dict) and check_ports(state, core, 'inputs') and check_ports(state, core, 'outputs')
+
+def check_maybe(schema, state, core):
+    if state is None:
+        return True
+    else:
+        value_type = core.find_parameter(
+            schema,
+            'value')
+
+        return core.check(value_type, state)
+
+def check_array(schema, state, core):
+    shape_type = core.find_parameter(
+        schema,
+        'shape')
+
+    return isinstance(state, np.ndarray) and state.shape == array_shape(core, shape_type) # and state.dtype == bindings['data'] # TODO align numpy data types so we can validate the types of the arrays
+
+def check_enum(schema, state, core):
+    if not isinstance(state, str):
+        return False
+
+    parameters = core.parameters_for(schema)
+    return state in parameters
+
+def check_units(schema, state, core):
+    # TODO: expand this to check the actual units for compatibility
+    return isinstance(state, Quantity)
 
 # Fold functions
 # --------------
@@ -518,7 +632,6 @@ def fold_any(schema, state, method, values, core):
 
     return visit
 
-
 def fold_tuple(schema, state, method, values, core):
     if not isinstance(state, (tuple, list)):
         return visit_method(
@@ -547,7 +660,6 @@ def fold_tuple(schema, state, method, values, core):
             values,
             core)
 
-
 def fold_union(schema, state, method, values, core):
     union_type = find_union_type(
         core,
@@ -562,75 +674,153 @@ def fold_union(schema, state, method, values, core):
 
     return result
 
+def fold_list(schema, state, method, values, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
 
-def resolve_any(schema, update, core):
-    schema = schema or {}
-    outcome = schema.copy()
+    if core.check(element_type, state):
+        result = core.fold(
+            element_type,
+            state,
+            method,
+            values)
 
-    for key, subschema in update.items():
-        if key == '_type' and key in outcome:
-            if outcome[key] != subschema:
-                if core.inherits_from(outcome[key], subschema):
-                    continue
-                elif core.inherits_from(subschema, outcome[key]):
-                    outcome[key] = subschema
-                else:
-                    raise Exception(f'cannot resolve types when updating\ncurrent type: {schema}\nupdate type: {update}')
+    elif isinstance(state, list):
+        subresult = [
+            fold_list(
+                schema,
+                element,
+                method,
+                values,
+                core)
+            for element in state]
 
-        elif not key in outcome or type_parameter_key(update, key):
-            if subschema:
-                outcome[key] = subschema
-        else:
-            outcome[key] = core.resolve_schemas(
-                outcome.get(key),
-                subschema)
+        result = visit_method(
+            schema,
+            subresult,
+            method,
+            values,
+            core)
 
-    return outcome
+    else:
+        raise Exception(f'state does not seem to be a list or an eelement:\n  state: {state}\n  schema: {schema}')
 
-# def resolve_tree(schema, update, core):
-#     if isinstance(update, dict):
-#         leaf_schema = schema.get('_leaf', {})
+    return result
 
-#         if '_type' in update:
-#             if update['_type'] == 'map':
-#                 value_schema = update.get('_value', {})
-#                 leaf_schema = core.resolve_schemas(
-#                     leaf_schema,
-#                     value_schema)
 
-#             elif update['_type'] == 'tree':
-#                 for key, subschema in update.items():
-#                     if not key.startswith('_'):
-#                         leaf_schema = core.resolve_schemas(
-#                             leaf_schema,
-#                             subschema)
-#             else:
-#                 leaf_schema = core.resolve_schemas(
-#                     leaf_schema,
-#                     update)
+def fold_tree(schema, state, method, values, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
 
-#             schema['_leaf'] = leaf_schema
-#         else:
-#             for key, subupdate in
+    if core.check(leaf_type, state):
+        result = core.fold(
+            leaf_type,
+            state,
+            method,
+            values)
 
-#     return schema
+    elif isinstance(state, dict):
+        subresult = {}
 
-def resolve_path(path):
-    """
-    Given a path that includes '..' steps, resolve the path to a canonical form
-    """
-    resolve = []
-
-    for step in path:
-        if step == '..':
-            if len(resolve) == 0:
-                raise Exception(f'cannot go above the top in path: "{path}"')
+        for key, branch in state.items():
+            if key.startswith('_'):
+                subresult[key] = branch
             else:
-                resolve = resolve[:-1]
-        else:
-            resolve.append(step)
+                subresult[key] = fold_tree(
+                    schema[key] if key in schema else schema,
+                    branch,
+                    method,
+                    values,
+                    core)
 
-    return tuple(resolve)
+        result = visit_method(
+            schema,
+            subresult,
+            method,
+            values,
+            core)
+
+    else:
+        raise Exception(f'state does not seem to be a tree or a leaf:\n  state: {state}\n  schema: {schema}')
+
+    return result
+
+
+def fold_map(schema, state, method, values, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    subresult = {}
+
+    for key, value in state.items():
+        subresult[key] = core.fold(
+            value_type,
+            value,
+            method,
+            values)
+
+    result = visit_method(
+        schema,
+        subresult,
+        method,
+        values,
+        core)
+
+    return result
+
+
+def fold_maybe(schema, state, method, values, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    if state is None:
+        result = core.fold(
+            'any',
+            state,
+            method,
+            values)
+
+    else:
+        result = core.fold(
+            value_type,
+            state,
+            method,
+            values)
+
+    return result
+
+def fold_enum(schema, state, method, values, core):
+    if not isinstance(state, (tuple, list)):
+        return visit_method(
+            schema,
+            state,
+            method,
+            values,
+            core)
+    else:
+        parameters = core.parameters_for(schema)
+        result = []
+        for parameter, element in zip(parameters, state):
+            fold = core.fold(
+                parameter,
+                element,
+                method,
+                values)
+            result.append(fold)
+
+        result = tuple(result)
+
+        return visit_method(
+            schema,
+            result,
+            method,
+            values,
+            core)
+
 
 # Divide functions
 # ----------------
@@ -801,684 +991,6 @@ def divide_enum(schema, state, values, core):
     return [
         tuple([item[index] for item in state])
         for index in range(divisions)]
-
-# Default functions
-# -----------------
-
-def default_any(schema, core):
-    default = {}
-
-    for key, subschema in schema.items():
-        if not is_schema_key(key):
-            default[key] = core.default(
-                subschema)
-
-    return default
-
-def default_tuple(schema, core):
-    parts = []
-    for parameter in schema['_type_parameters']:
-        subschema = schema[f'_{parameter}']
-        part = core.default(subschema)
-        parts.append(part)
-
-    return tuple(parts)
-
-def default_union(schema, core):
-    final_parameter = schema['_type_parameters'][-1]
-    subschema = schema[f'_{final_parameter}']
-
-    return core.default(subschema)
-
-def default_tree(schema, core):
-    leaf_schema = core.find_parameter(
-        schema,
-        'leaf')
-
-    default = {}
-
-    non_schema_keys = [
-        key
-        for key in schema
-        if not is_schema_key(key)]
-
-    if non_schema_keys:
-        base_schema = {
-            key: subschema
-            for key, subschema in schema.items()
-            if is_schema_key(key)}
-
-        for key in non_schema_keys:
-            subschema = core.merge_schemas(
-                base_schema,
-                schema[key])
-
-            subdefault = core.default(
-                subschema)
-
-            if subdefault:
-                default[key] = subdefault
-
-    return default
-
-def default_array(schema, core):
-    data_schema = core.find_parameter(
-        schema,
-        'data')
-
-    dtype = read_datatype(
-        data_schema)
-
-    shape = read_shape(
-        schema['_shape'])
-
-    return np.zeros(
-        shape,
-        dtype=dtype)
-
-def default_enum(schema, core):
-    parameter = schema['_type_parameters'][0]
-    return schema[f'_{parameter}']
-
-
-def default_edge(schema, core):
-    edge = {}
-    for key in schema:
-        if not is_schema_key(key):
-            edge[key] = core.default(
-                schema[key])
-
-    return edge
-
-# Slice functions
-# ---------------
-
-def slice_any(schema, state, path, core):
-    if not isinstance(path, (list, tuple)):
-        if path is None:
-            path = ()
-        else:
-            path = [path]
-
-    if len(path) == 0:
-        return schema, state
-
-    elif len(path) > 0:
-        head = path[0]
-        tail = path[1:]
-        step = None
-
-        if isinstance(state, dict):
-            if head not in state:
-                state[head] = core.default(
-                    schema.get(head))
-            step = state[head]
-
-        elif hasattr(state, head):
-            step = getattr(state, head)
-
-        if head in schema:
-            return core.slice(
-                schema[head],
-                step,
-                tail)
-        else:
-            return slice_any(
-                {},
-                step,
-                tail,
-                core)
-
-def slice_tuple(schema, state, path, core):
-    if len(path) > 0:
-        head = path[0]
-        tail = path[1:]
-
-        if str(head) in schema['_type_parameters']:
-            try:
-                index = schema['_type_parameters'].index(str(head))
-            except:
-                raise Exception(f'step {head} in path {path} is not a type parameter of\n  schema: {pf(schema)}\n  state: {pf(state)}')
-            index_key = f'_{index}'
-            subschema = core.access(schema[index_key])
-
-            return core.slice(subschema, state[head], tail)
-        else:
-            raise Exception(f'trying to index a tuple with a key that is not an index: {state} {head}')
-    else:
-        return schema, state
-
-def slice_union(schema, state, path, core):
-    union_type = find_union_type(
-        core,
-        schema,
-        state)
-
-    return core.slice(
-        union_type,
-        state,
-        path)
-
-def slice_list(schema, state, path, core):
-    element_type = core.find_parameter(
-        schema,
-        'element')
-
-    if len(path) > 0:
-        head = path[0]
-        tail = path[1:]
-
-        if not isinstance(head, int) or head >= len(state):
-            raise Exception(f'bad index for list: {path} for {state}')
-
-        step = state[head]
-        return core.slice(element_type, step, tail)
-    else:
-        return schema, state
-
-def slice_tree(schema, state, path, core):
-    leaf_type = core.find_parameter(
-        schema,
-        'leaf')
-
-    if len(path) > 0:
-        head = path[0]
-        tail = path[1:]
-
-        if not head in state:
-            state[head] = {}
-
-        step = state[head]
-        if core.check(leaf_type, step):
-            return core.slice(leaf_type, step, tail)
-        else:
-            return core.slice(schema, step, tail)
-    else:
-        return schema, state
-
-def slice_map(schema, state, path, core):
-    value_type = core.find_parameter(
-        schema,
-        'value')
-
-    if len(path) > 0:
-        head = path[0]
-        tail = path[1:]
-
-        if not head in state:
-            state[head] = core.default(
-                value_type)
-
-        step = state[head]
-        return core.slice(
-            value_type,
-            step,
-            tail)
-    else:
-        return schema, state
-
-def slice_maybe(schema, state, path, core):
-    if state is None:
-        return schema, None
-
-    else:
-        value_type = core.find_parameter(
-            schema,
-            'value')
-
-        return core.slice(
-            value_type,
-            state,
-            path)
-
-def slice_array(schema, state, path, core):
-    if len(path) > 0:
-        head = path[0]
-        tail = path[1:]
-        step = state[head]
-
-        if isinstance(step, np.ndarray):
-            sliceschema = schema.copy()
-            sliceschema['_shape'] = step.shape
-            return core.slice(
-                sliceschema,
-                step,
-                tail)
-        else:
-            data_type = core.find_parameter(
-                schema,
-                'data')
-
-            return core.slice(
-                data_type,
-                step,
-                tail)
-
-    else:
-        return schema, state
-
-def slice_string(schema, state, path, core):
-    raise Exception(f'cannot slice into an string: {path}\n{state}\n{schema}')
-
-
-# Fold functions
-# --------------
-
-def fold_list(schema, state, method, values, core):
-    element_type = core.find_parameter(
-        schema,
-        'element')
-
-    if core.check(element_type, state):
-        result = core.fold(
-            element_type,
-            state,
-            method,
-            values)
-
-    elif isinstance(state, list):
-        subresult = [
-            fold_list(
-                schema,
-                element,
-                method,
-                values,
-                core)
-            for element in state]
-
-        result = visit_method(
-            schema,
-            subresult,
-            method,
-            values,
-            core)
-
-    else:
-        raise Exception(f'state does not seem to be a list or an eelement:\n  state: {state}\n  schema: {schema}')
-
-    return result
-
-
-def fold_tree(schema, state, method, values, core):
-    leaf_type = core.find_parameter(
-        schema,
-        'leaf')
-
-    if core.check(leaf_type, state):
-        result = core.fold(
-            leaf_type,
-            state,
-            method,
-            values)
-
-    elif isinstance(state, dict):
-        subresult = {}
-
-        for key, branch in state.items():
-            if key.startswith('_'):
-                subresult[key] = branch
-            else:
-                subresult[key] = fold_tree(
-                    schema[key] if key in schema else schema,
-                    branch,
-                    method,
-                    values,
-                    core)
-
-        result = visit_method(
-            schema,
-            subresult,
-            method,
-            values,
-            core)
-
-    else:
-        raise Exception(f'state does not seem to be a tree or a leaf:\n  state: {state}\n  schema: {schema}')
-
-    return result
-
-
-def fold_map(schema, state, method, values, core):
-    value_type = core.find_parameter(
-        schema,
-        'value')
-
-    subresult = {}
-
-    for key, value in state.items():
-        subresult[key] = core.fold(
-            value_type,
-            value,
-            method,
-            values)
-
-    result = visit_method(
-        schema,
-        subresult,
-        method,
-        values,
-        core)
-
-    return result
-
-
-def fold_maybe(schema, state, method, values, core):
-    value_type = core.find_parameter(
-        schema,
-        'value')
-
-    if state is None:
-        result = core.fold(
-            'any',
-            state,
-            method,
-            values)
-
-    else:
-        result = core.fold(
-            value_type,
-            state,
-            method,
-            values)
-
-    return result
-
-def fold_enum(schema, state, method, values, core):
-    if not isinstance(state, (tuple, list)):
-        return visit_method(
-            schema,
-            state,
-            method,
-            values,
-            core)
-    else:
-        parameters = core.parameters_for(schema)
-        result = []
-        for parameter, element in zip(parameters, state):
-            fold = core.fold(
-                parameter,
-                element,
-                method,
-                values)
-            result.append(fold)
-
-        result = tuple(result)
-
-        return visit_method(
-            schema,
-            result,
-            method,
-            values,
-            core)
-
-
-# Bind functions
-# --------------
-
-def bind_any(schema, state, key, subschema, substate, core):
-    result_schema = core.resolve_schemas(
-          schema,
-          {key: subschema})
-
-    if state is None:
-        state = {}
-
-    state[key] = substate
-
-    return result_schema, state
-
-def bind_tuple(schema, state, key, subschema, substate, core):
-    new_schema = schema.copy()
-    new_schema[f'_{key}'] = subschema
-    open = list(state)
-    open[key] = substate
-
-    return new_schema, tuple(open)
-
-def bind_union(schema, state, key, subschema, substate, core):
-    union_type = find_union_type(
-        core,
-        schema,
-        state)
-
-    return core.bind(
-        union_type,
-        state,
-        key,
-        subschema,
-        substate)
-
-def bind_enum(schema, state, key, subschema, substate, core):
-    new_schema = schema.copy()
-    new_schema[f'_{key}'] = subschema
-    open = list(state)
-    open[key] = substate
-
-    return new_schema, tuple(open)
-
-
-# Resolve functions
-# ----------------
-
-def resolve_map(schema, update, core):
-    if isinstance(update, dict):
-        value_schema = update.get(
-            '_value',
-            schema.get('_value', {}))
-
-        for key, subschema in update.items():
-            if not is_schema_key(key):
-                value_schema = core.resolve_schemas(
-                    value_schema,
-                    subschema)
-
-        schema['_type'] = update.get(
-            '_type',
-            schema.get('_type', 'map'))
-        schema['_value'] = value_schema
-
-    return schema
-
-
-def resolve_array(schema, update, core):
-    if not '_shape' in schema:
-        schema = core.access(schema)
-    if not '_shape' in schema:
-        raise Exception(f'array must have a "_shape" key, not {schema}')
-
-    data_schema = schema.get('_data', {})
-
-    if '_type' in update:
-        data_schema = core.resolve_schemas(
-            data_schema,
-            update.get('_data', {}))
-
-        if update['_type'] == 'array':
-            if '_shape' in update:
-                if update['_shape'] != schema['_shape']:
-                    raise Exception(f'arrays must be of the same shape, not \n  {schema}\nand\n  {update}')
-
-        elif core.inherits_from(update, schema):
-            schema.update(update)
-
-        elif not core.inherits_from(schema, update):
-            raise Exception(f'cannot resolve incompatible array schemas:\n  {schema}\n  {update}')
-
-    else:
-        for key, subschema in update.items():
-            if isinstance(key, int):
-                key = (key,)
-
-            if len(key) > len(schema['_shape']):
-                raise Exception(f'key is longer than array dimension: {key}\n{schema}\n{update}')
-            elif len(key) == len(schema['_shape']):
-                data_schema = core.resolve_schemas(
-                    data_schema,
-                    subschema)
-            else:
-                shape = tuple_from_type(
-                    schema['_shape'])
-
-                subshape = shape[len(key):]
-                inner_schema = schema.copy()
-                inner_schema['_shape'] = subshape
-                inner_schema = core.resolve_schemas(
-                    inner_schema,
-                    subschema)
-
-                data_schema = inner_schema['_data']
-
-    schema['_data'] = data_schema
-
-    return schema
-
-
-# Check functions
-# ---------------
-
-def check_any(schema, state, core):
-    if isinstance(schema, dict):
-        for key, subschema in schema.items():
-            if not key.startswith('_'):
-                if isinstance(state, dict):
-                    if key in state:
-                        check = core.check_state(
-                            subschema,
-                            state[key])
-
-                        if not check:
-                            return False
-                    else:
-                        return False
-                else:
-                    return False
-
-        return True
-    else:
-        return True
-
-def check_tuple(schema, state, core):
-    if not isinstance(state, (tuple, list)):
-        return False
-
-    parameters = core.parameters_for(schema)
-    for parameter, element in zip(parameters, state):
-        if not core.check(parameter, element):
-            return False
-
-    return True
-
-def check_union(schema, state, core):
-    found = find_union_type(
-        core,
-        schema,
-        state)
-
-    return found is not None and len(found) > 0
-
-def check_number(schema, state, core=None):
-    return isinstance(state, numbers.Number)
-
-def check_boolean(schema, state, core=None):
-    return isinstance(state, bool)
-
-def check_integer(schema, state, core=None):
-    return isinstance(state, int) and not isinstance(state, bool)
-
-def check_float(schema, state, core=None):
-    return isinstance(state, float)
-
-def check_string(schema, state, core=None):
-    return isinstance(state, str)
-
-def check_list(schema, state, core):
-    element_type = core.find_parameter(
-        schema,
-        'element')
-
-    if isinstance(state, list):
-        for element in state:
-            check = core.check(
-                element_type,
-                element)
-
-            if not check:
-                return False
-
-        return True
-    else:
-        return False
-
-def check_tree(schema, state, core):
-    leaf_type = core.find_parameter(
-        schema,
-        'leaf')
-
-    if isinstance(state, dict):
-        for key, value in state.items():
-            check = core.check({
-                '_type': 'tree',
-                '_leaf': leaf_type},
-                value)
-
-            if not check:
-                return core.check(
-                    leaf_type,
-                    value)
-
-        return True
-    else:
-        return core.check(leaf_type, state)
-
-def check_map(schema, state, core=None):
-    value_type = core.find_parameter(
-        schema,
-        'value')
-
-    if not isinstance(state, dict):
-        return False
-
-    for key, substate in state.items():
-        if not core.check(value_type, substate):
-            return False
-
-    return True
-
-def check_ports(state, core, key):
-    return key in state and core.check(
-        'wires',
-        state[key])
-
-def check_edge(schema, state, core):
-    return isinstance(state, dict) and check_ports(state, core, 'inputs') and check_ports(state, core, 'outputs')
-
-def check_maybe(schema, state, core):
-    if state is None:
-        return True
-    else:
-        value_type = core.find_parameter(
-            schema,
-            'value')
-
-        return core.check(value_type, state)
-
-def check_array(schema, state, core):
-    shape_type = core.find_parameter(
-        schema,
-        'shape')
-
-    return isinstance(state, np.ndarray) and state.shape == array_shape(core, shape_type) # and state.dtype == bindings['data'] # TODO align numpy data types so we can validate the types of the arrays
-
-def check_enum(schema, state, core):
-    if not isinstance(state, str):
-        return False
-
-    parameters = core.parameters_for(schema)
-    return state in parameters
-
-def check_units(schema, state, core):
-    # TODO: expand this to check the actual units for compatibility
-    return isinstance(state, Quantity)
 
 
 # Serialize functions
@@ -1817,6 +1329,301 @@ def deserialize_edge(schema, encoded, core):
 def deserialize_schema(schema, state, core):
     return state
 
+
+# Slice functions
+# ---------------
+
+def slice_any(schema, state, path, core):
+    if not isinstance(path, (list, tuple)):
+        if path is None:
+            path = ()
+        else:
+            path = [path]
+
+    if len(path) == 0:
+        return schema, state
+
+    elif len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+        step = None
+
+        if isinstance(state, dict):
+            if head not in state:
+                state[head] = core.default(
+                    schema.get(head))
+            step = state[head]
+
+        elif hasattr(state, head):
+            step = getattr(state, head)
+
+        if head in schema:
+            return core.slice(
+                schema[head],
+                step,
+                tail)
+        else:
+            return slice_any(
+                {},
+                step,
+                tail,
+                core)
+
+def slice_tuple(schema, state, path, core):
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if str(head) in schema['_type_parameters']:
+            try:
+                index = schema['_type_parameters'].index(str(head))
+            except:
+                raise Exception(f'step {head} in path {path} is not a type parameter of\n  schema: {pf(schema)}\n  state: {pf(state)}')
+            index_key = f'_{index}'
+            subschema = core.access(schema[index_key])
+
+            return core.slice(subschema, state[head], tail)
+        else:
+            raise Exception(f'trying to index a tuple with a key that is not an index: {state} {head}')
+    else:
+        return schema, state
+
+def slice_union(schema, state, path, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        state)
+
+    return core.slice(
+        union_type,
+        state,
+        path)
+
+def slice_list(schema, state, path, core):
+    element_type = core.find_parameter(
+        schema,
+        'element')
+
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if not isinstance(head, int) or head >= len(state):
+            raise Exception(f'bad index for list: {path} for {state}')
+
+        step = state[head]
+        return core.slice(element_type, step, tail)
+    else:
+        return schema, state
+
+def slice_tree(schema, state, path, core):
+    leaf_type = core.find_parameter(
+        schema,
+        'leaf')
+
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if not head in state:
+            state[head] = {}
+
+        step = state[head]
+        if core.check(leaf_type, step):
+            return core.slice(leaf_type, step, tail)
+        else:
+            return core.slice(schema, step, tail)
+    else:
+        return schema, state
+
+def slice_map(schema, state, path, core):
+    value_type = core.find_parameter(
+        schema,
+        'value')
+
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        if not head in state:
+            state[head] = core.default(
+                value_type)
+
+        step = state[head]
+        return core.slice(
+            value_type,
+            step,
+            tail)
+    else:
+        return schema, state
+
+def slice_maybe(schema, state, path, core):
+    if state is None:
+        return schema, None
+
+    else:
+        value_type = core.find_parameter(
+            schema,
+            'value')
+
+        return core.slice(
+            value_type,
+            state,
+            path)
+
+def slice_array(schema, state, path, core):
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+        step = state[head]
+
+        if isinstance(step, np.ndarray):
+            sliceschema = schema.copy()
+            sliceschema['_shape'] = step.shape
+            return core.slice(
+                sliceschema,
+                step,
+                tail)
+        else:
+            data_type = core.find_parameter(
+                schema,
+                'data')
+
+            return core.slice(
+                data_type,
+                step,
+                tail)
+
+    else:
+        return schema, state
+
+def slice_string(schema, state, path, core):
+    raise Exception(f'cannot slice into an string: {path}\n{state}\n{schema}')
+
+
+# Bind functions
+# --------------
+
+def bind_any(schema, state, key, subschema, substate, core):
+    result_schema = core.resolve_schemas(
+          schema,
+          {key: subschema})
+
+    if state is None:
+        state = {}
+
+    state[key] = substate
+
+    return result_schema, state
+
+def bind_tuple(schema, state, key, subschema, substate, core):
+    new_schema = schema.copy()
+    new_schema[f'_{key}'] = subschema
+    open = list(state)
+    open[key] = substate
+
+    return new_schema, tuple(open)
+
+def bind_union(schema, state, key, subschema, substate, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        state)
+
+    return core.bind(
+        union_type,
+        state,
+        key,
+        subschema,
+        substate)
+
+def bind_enum(schema, state, key, subschema, substate, core):
+    new_schema = schema.copy()
+    new_schema[f'_{key}'] = subschema
+    open = list(state)
+    open[key] = substate
+
+    return new_schema, tuple(open)
+
+
+
+# Resolve functions
+# ----------------
+
+def resolve_map(schema, update, core):
+    if isinstance(update, dict):
+        value_schema = update.get(
+            '_value',
+            schema.get('_value', {}))
+
+        for key, subschema in update.items():
+            if not is_schema_key(key):
+                value_schema = core.resolve_schemas(
+                    value_schema,
+                    subschema)
+
+        schema['_type'] = update.get(
+            '_type',
+            schema.get('_type', 'map'))
+        schema['_value'] = value_schema
+
+    return schema
+
+
+def resolve_array(schema, update, core):
+    if not '_shape' in schema:
+        schema = core.access(schema)
+    if not '_shape' in schema:
+        raise Exception(f'array must have a "_shape" key, not {schema}')
+
+    data_schema = schema.get('_data', {})
+
+    if '_type' in update:
+        data_schema = core.resolve_schemas(
+            data_schema,
+            update.get('_data', {}))
+
+        if update['_type'] == 'array':
+            if '_shape' in update:
+                if update['_shape'] != schema['_shape']:
+                    raise Exception(f'arrays must be of the same shape, not \n  {schema}\nand\n  {update}')
+
+        elif core.inherits_from(update, schema):
+            schema.update(update)
+
+        elif not core.inherits_from(schema, update):
+            raise Exception(f'cannot resolve incompatible array schemas:\n  {schema}\n  {update}')
+
+    else:
+        for key, subschema in update.items():
+            if isinstance(key, int):
+                key = (key,)
+
+            if len(key) > len(schema['_shape']):
+                raise Exception(f'key is longer than array dimension: {key}\n{schema}\n{update}')
+            elif len(key) == len(schema['_shape']):
+                data_schema = core.resolve_schemas(
+                    data_schema,
+                    subschema)
+            else:
+                shape = tuple_from_type(
+                    schema['_shape'])
+
+                subshape = shape[len(key):]
+                inner_schema = schema.copy()
+                inner_schema['_shape'] = subshape
+                inner_schema = core.resolve_schemas(
+                    inner_schema,
+                    subschema)
+
+                data_schema = inner_schema['_data']
+
+    schema['_data'] = data_schema
+
+    return schema
+
+
+
 # Dataclass functions
 # -------------------
 
@@ -1989,6 +1796,95 @@ def dataclass_enum(schema, path, core):
 
 def dataclass_array(schema, path, core):
     return np.ndarray
+
+
+# Default functions
+# -----------------
+
+def default_any(schema, core):
+    default = {}
+
+    for key, subschema in schema.items():
+        if not is_schema_key(key):
+            default[key] = core.default(
+                subschema)
+
+    return default
+
+def default_tuple(schema, core):
+    parts = []
+    for parameter in schema['_type_parameters']:
+        subschema = schema[f'_{parameter}']
+        part = core.default(subschema)
+        parts.append(part)
+
+    return tuple(parts)
+
+def default_union(schema, core):
+    final_parameter = schema['_type_parameters'][-1]
+    subschema = schema[f'_{final_parameter}']
+
+    return core.default(subschema)
+
+def default_tree(schema, core):
+    leaf_schema = core.find_parameter(
+        schema,
+        'leaf')
+
+    default = {}
+
+    non_schema_keys = [
+        key
+        for key in schema
+        if not is_schema_key(key)]
+
+    if non_schema_keys:
+        base_schema = {
+            key: subschema
+            for key, subschema in schema.items()
+            if is_schema_key(key)}
+
+        for key in non_schema_keys:
+            subschema = core.merge_schemas(
+                base_schema,
+                schema[key])
+
+            subdefault = core.default(
+                subschema)
+
+            if subdefault:
+                default[key] = subdefault
+
+    return default
+
+def default_array(schema, core):
+    data_schema = core.find_parameter(
+        schema,
+        'data')
+
+    dtype = read_datatype(
+        data_schema)
+
+    shape = read_shape(
+        schema['_shape'])
+
+    return np.zeros(
+        shape,
+        dtype=dtype)
+
+def default_enum(schema, core):
+    parameter = schema['_type_parameters'][0]
+    return schema[f'_{parameter}']
+
+
+def default_edge(schema, core):
+    edge = {}
+    for key in schema:
+        if not is_schema_key(key):
+            edge[key] = core.default(
+                schema[key])
+
+    return edge
 
 # Generate functions
 # ------------------
@@ -2262,6 +2158,113 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
         generated_schema, generated_state = schema, state
 
     return generated_schema, generated_state, top_schema, top_state
+
+
+# Sort functions
+# --------------
+
+def sort_quote(core, schema, state):
+    return schema, state
+
+
+def sort_any(core, schema, state):
+    if not isinstance(schema, dict):
+        schema = core.find(schema)
+    if not isinstance(state, dict):
+        return schema, state
+
+    merged_schema = {}
+    merged_state = {}
+
+    for key in union_keys(schema, state):
+        if is_schema_key(key):
+            if key in state:
+                merged_schema[key] = core.merge_schemas(
+                    schema.get(key, {}),
+                    state[key])
+            else:
+                merged_schema[key] = schema[key]
+        else:
+            subschema, merged_state[key] = core.sort(
+                schema.get(key, {}),
+                state.get(key, None))
+            if subschema:
+                merged_schema[key] = subschema
+
+    return merged_schema, merged_state
+
+
+# Resolve functions
+# ----------------
+
+def resolve_any(schema, update, core):
+    schema = schema or {}
+    outcome = schema.copy()
+
+    for key, subschema in update.items():
+        if key == '_type' and key in outcome:
+            if outcome[key] != subschema:
+                if core.inherits_from(outcome[key], subschema):
+                    continue
+                elif core.inherits_from(subschema, outcome[key]):
+                    outcome[key] = subschema
+                else:
+                    raise Exception(f'cannot resolve types when updating\ncurrent type: {schema}\nupdate type: {update}')
+
+        elif not key in outcome or type_parameter_key(update, key):
+            if subschema:
+                outcome[key] = subschema
+        else:
+            outcome[key] = core.resolve_schemas(
+                outcome.get(key),
+                subschema)
+
+    return outcome
+
+# def resolve_tree(schema, update, core):
+#     if isinstance(update, dict):
+#         leaf_schema = schema.get('_leaf', {})
+
+#         if '_type' in update:
+#             if update['_type'] == 'map':
+#                 value_schema = update.get('_value', {})
+#                 leaf_schema = core.resolve_schemas(
+#                     leaf_schema,
+#                     value_schema)
+
+#             elif update['_type'] == 'tree':
+#                 for key, subschema in update.items():
+#                     if not key.startswith('_'):
+#                         leaf_schema = core.resolve_schemas(
+#                             leaf_schema,
+#                             subschema)
+#             else:
+#                 leaf_schema = core.resolve_schemas(
+#                     leaf_schema,
+#                     update)
+
+#             schema['_leaf'] = leaf_schema
+#         else:
+#             for key, subupdate in
+
+#     return schema
+
+def resolve_path(path):
+    """
+    Given a path that includes '..' steps, resolve the path to a canonical form
+    """
+    resolve = []
+
+    for step in path:
+        if step == '..':
+            if len(resolve) == 0:
+                raise Exception(f'cannot go above the top in path: "{path}"')
+            else:
+                resolve = resolve[:-1]
+        else:
+            resolve.append(step)
+
+    return tuple(resolve)
 
 
 def is_empty(value):
