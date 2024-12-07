@@ -15,8 +15,7 @@ from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge,
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.registry import type_schema_keys, remove_omitted, set_path, transform_path
 from bigraph_schema.type_functions import set_apply, registry_types, base_type_library, unit_types, register_base_reactions, \
-    union_keys, is_empty, apply_schema, register_units
-from bigraph_schema.units import units
+    union_keys, is_empty, apply_schema
 
 
 TYPE_FUNCTION_KEYS = [
@@ -107,10 +106,9 @@ class TypeSystem(Registry):
 
         self.register_types(registry_types)
         self.register_types(base_type_library)
-        # self.register_types(unit_types)
+        self.register_types(unit_types)
 
         # # TODO -- add a proper registration into registry
-        register_units(self, units)
         register_base_reactions(self)
 
 

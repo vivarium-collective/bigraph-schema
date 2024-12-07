@@ -2521,8 +2521,30 @@ def read_shape(shape):
 
 
 # handling unit registration
-# TODO -- can this be done onto the dicts, rather than using the core?
-def register_units(core, units):
+# def register_units(core, units):
+#     for unit_name in units._units:
+#         try:
+#             unit = getattr(units, unit_name)
+#         except:
+#             # print(f'no unit named {unit_name}')
+#             continue
+#
+#         dimensionality = unit.dimensionality
+#         type_key = render_units_type(dimensionality)
+#         if not core.exists(type_key):
+#             core.register(type_key, {
+#                 '_default': '',
+#                 '_apply': apply_units,
+#                 '_check': check_units,
+#                 '_serialize': serialize_units,
+#                 '_deserialize': deserialize_units,
+#                 '_description': 'type to represent values with scientific units'})
+# 
+#     return core
+
+
+# function to add the unit types to the type library
+def add_units_to_library(units, type_library):
     for unit_name in units._units:
         try:
             unit = getattr(units, unit_name)
@@ -2532,34 +2554,14 @@ def register_units(core, units):
 
         dimensionality = unit.dimensionality
         type_key = render_units_type(dimensionality)
-        if not core.exists(type_key):
-            core.register(type_key, {
+        if not type_library.get(type_key):
+            type_library[type_key] = {
                 '_default': '',
                 '_apply': apply_units,
                 '_check': check_units,
                 '_serialize': serialize_units,
                 '_deserialize': deserialize_units,
-                '_description': 'type to represent values with scientific units'})
-
-    return core
-
-
-# function to add the unit types to the type library
-def add_units_to_library(units, type_library):
-    for unit_name in units._units:
-        try:
-            unit = getattr(units, unit_name)
-        except AttributeError:
-            continue
-
-        dimensionality = unit.dimensionality
-        type_key = render_units_type(dimensionality)
-        if type_key not in type_library:
-            type_library[type_key] = {
-                '_type': 'unit',
-                'name': unit_name,
-                'dimensionality': str(dimensionality)
-            }
+                '_description': 'type to represent values with scientific units'}
 
     return type_library
 
