@@ -4,7 +4,7 @@ import numpy as np
 from dataclasses import  asdict
 
 from bigraph_schema.type_system import (
-    TypeSystem, divide_longest, base_type_library, accumulate, to_string, deserialize_integer, apply_schema
+    TypeSystem, divide_longest, base_type_library, accumulate, to_string, deserialize_integer, apply_schema, diff
 )
 from bigraph_schema.units import units
 from bigraph_schema.registry import establish_path, remove_omitted, NONE_SYMBOL
