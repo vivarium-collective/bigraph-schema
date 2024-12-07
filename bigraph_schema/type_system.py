@@ -218,6 +218,53 @@ def type_parameters_for(schema):
 # These functions are responsible for applying updates to various types of schemas.
 # Each function handles a specific type of schema and ensures that updates are applied correctly.
 
+def apply_any(schema, current, update, core):
+    if isinstance(current, dict):
+        return apply_tree(
+            current,
+            update,
+            'tree[any]',
+            core)
+    else:
+        return update
+
+def apply_tuple(schema, current, update, core):
+    parameters = core.parameters_for(schema)
+    result = []
+
+    for parameter, current_value, update_value in zip(parameters, current, update):
+        element = core.apply(
+            parameter,
+            current_value,
+            update_value)
+
+        result.append(element)
+
+    return tuple(result)
+
+def apply_union(schema, current, update, core):
+    current_type = find_union_type(
+        core,
+        schema,
+        current)
+
+    update_type = find_union_type(
+        core,
+        schema,
+        update)
+
+    if current_type is None:
+        raise Exception(f'trying to apply update to union value but cannot find type of value in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
+    elif update_type is None:
+        raise Exception(f'trying to apply update to union value but cannot find type of update in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
+
+    # TODO: throw an exception if current_type is incompatible with update_type
+
+    return core.apply(
+        update_type,
+        current,
+        update)
+
 def accumulate(schema, current, update, core):
     if current is None:
         return update
@@ -279,53 +326,6 @@ def apply_tree(schema, current, update, core):
 
     else:
         raise Exception(f'trying to apply an update to a tree but the values are not trees or leaves of that tree\ncurrent:\n  {pf(current)}\nupdate:\n  {pf(update)}\nschema:\n  {pf(schema)}')
-
-def apply_any(schema, current, update, core):
-    if isinstance(current, dict):
-        return apply_tree(
-            current,
-            update,
-            'tree[any]',
-            core)
-    else:
-        return update
-
-def apply_tuple(schema, current, update, core):
-    parameters = core.parameters_for(schema)
-    result = []
-
-    for parameter, current_value, update_value in zip(parameters, current, update):
-        element = core.apply(
-            parameter,
-            current_value,
-            update_value)
-
-        result.append(element)
-
-    return tuple(result)
-
-def apply_union(schema, current, update, core):
-    current_type = find_union_type(
-        core,
-        schema,
-        current)
-
-    update_type = find_union_type(
-        core,
-        schema,
-        update)
-
-    if current_type is None:
-        raise Exception(f'trying to apply update to union value but cannot find type of value in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
-    elif update_type is None:
-        raise Exception(f'trying to apply update to union value but cannot find type of update in the union\n  value: {current}\n  update: {update}\n  union: {list(bindings.values())}')
-
-    # TODO: throw an exception if current_type is incompatible with update_type
-
-    return core.apply(
-        update_type,
-        current,
-        update)
 
 def apply_boolean(schema, current: bool, update: bool, core=None) -> bool:
     """Performs a bit flip if `current` does not match `update`, returning update. Returns current if they match."""
@@ -1031,16 +1031,6 @@ def serialize_any(schema, state, core):
     else:
         return str(state)
 
-def serialize_union(schema, value, core):
-    union_type = find_union_type(
-        core,
-        schema,
-        value)
-
-    return core.serialize(
-        union_type,
-        value)
-
 def serialize_tuple(schema, value, core):
     parameters = core.parameters_for(schema)
     result = []
@@ -1053,6 +1043,16 @@ def serialize_tuple(schema, value, core):
         result.append(encoded)
 
     return tuple(result)
+
+def serialize_union(schema, value, core):
+    union_type = find_union_type(
+        core,
+        schema,
+        value)
+
+    return core.serialize(
+        union_type,
+        value)
 
 def serialize_string(schema, value, core=None):
     return value
@@ -1661,25 +1661,6 @@ def resolve_array(schema, update, core):
 # These functions are responsible for generating dataclass representations of various types of schemas.
 # Each function handles a specific type of schema and ensures that the dataclass is generated correctly.
 
-def dataclass_union(schema, path, core):
-    parameters = type_parameters_for(schema)
-    subtypes = []
-    for parameter in parameters:
-        dataclass = core.dataclass(
-            parameter,
-            path)
-
-        if isinstance(dataclass, str):
-            subtypes.append(dataclass)
-        elif isinstance(dataclass, type):
-            subtypes.append(dataclass.__name__)
-        else:
-            subtypes.append(str(dataclass))
-
-    parameter_block = ', '.join(subtypes)
-    return eval(f'Union[{parameter_block}]')
-
-
 def dataclass_any(schema, path, core):
     parts = path
     if not parts:
@@ -1721,7 +1702,6 @@ def dataclass_any(schema, path, core):
 
     return dataclass
 
-
 def dataclass_tuple(schema, path, core):
     parameters = type_parameters_for(schema)
     subtypes = []
@@ -1736,6 +1716,24 @@ def dataclass_tuple(schema, path, core):
 
     parameter_block = ', '.join(subtypes)
     return eval(f'tuple[{parameter_block}]')
+
+def dataclass_union(schema, path, core):
+    parameters = type_parameters_for(schema)
+    subtypes = []
+    for parameter in parameters:
+        dataclass = core.dataclass(
+            parameter,
+            path)
+
+        if isinstance(dataclass, str):
+            subtypes.append(dataclass)
+        elif isinstance(dataclass, type):
+            subtypes.append(dataclass.__name__)
+        else:
+            subtypes.append(str(dataclass))
+
+    parameter_block = ', '.join(subtypes)
+    return eval(f'Union[{parameter_block}]')
 
 def dataclass_float(schema, path, core):
     return float
@@ -1930,6 +1928,68 @@ def default_edge(schema, core):
 # ============================
 # These functions are responsible for generating schemas and states based on the provided schema and state.
 # Each function handles a specific type of schema and ensures that the generation is done correctly.
+
+
+def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    if is_empty(state):
+        state = core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    generated_schema = {}
+    generated_state = {}
+
+    if isinstance(state, dict):
+        visited = set([])
+
+        all_keys = union_keys(
+            schema,
+            state)
+
+        non_schema_keys = [
+            key
+            for key in all_keys
+            if not is_schema_key(key)]
+
+        for key in all_keys:
+            if is_schema_key(key):
+                generated_schema[key] = state.get(
+                    key,
+                    schema.get(key))
+
+            else:
+                subschema, substate, top_schema, top_state = core.generate_recur(
+                    schema.get(key),
+                    state.get(key),
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path+[key])
+
+                generated_schema[key] = core.resolve_schemas(
+                    schema.get(key, {}),
+                    subschema)
+
+                generated_state[key] = substate
+
+        if path:
+            top_schema, top_state = core.set_slice(
+                top_schema,
+                top_state,
+                path,
+                generated_schema,
+                generated_state)
+        else:
+            top_state = core.merge_recur(
+                top_schema,
+                top_state,
+                generated_state)
+
+    else:
+        generated_schema, generated_state = schema, state
+
+    return generated_schema, generated_state, top_schema, top_state
 
 def generate_quote(core, schema, state, top_schema=None, top_state=None, path=None):
     return schema, state, top_schema, top_state
@@ -2140,77 +2200,12 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
 
     return merged_schema, merged_state, top_schema, top_state
 
-def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
-    schema = schema or {}
-    if is_empty(state):
-        state = core.default(schema)
-    top_schema = top_schema or schema
-    top_state = top_state or state
-    path = path or []
-
-    generated_schema = {}
-    generated_state = {}
-
-    if isinstance(state, dict):
-        visited = set([])
-
-        all_keys = union_keys(
-            schema,
-            state)
-
-        non_schema_keys = [
-            key
-            for key in all_keys
-            if not is_schema_key(key)]
-
-        for key in all_keys:
-            if is_schema_key(key):
-                generated_schema[key] = state.get(
-                    key,
-                    schema.get(key))
-
-            else:
-                subschema, substate, top_schema, top_state = core.generate_recur(
-                    schema.get(key),
-                    state.get(key),
-                    top_schema=top_schema,
-                    top_state=top_state,
-                    path=path+[key])
-
-                generated_schema[key] = core.resolve_schemas(
-                    schema.get(key, {}),
-                    subschema)
-
-                generated_state[key] = substate
-
-        if path:
-            top_schema, top_state = core.set_slice(
-                top_schema,
-                top_state,
-                path,
-                generated_schema,
-                generated_state)
-        else:
-            top_state = core.merge_recur(
-                top_schema,
-                top_state,
-                generated_state)
-
-    else:
-        generated_schema, generated_state = schema, state
-
-    return generated_schema, generated_state, top_schema, top_state
-
 
 # =========================
 # Sort Functions Overview
 # =========================
 # These functions are responsible for sorting schemas and states.
 # Each function handles a specific type of schema and ensures that the sorting is done correctly.
-
-def sort_quote(core, schema, state):
-    return schema, state
-
 
 def sort_any(core, schema, state):
     if not isinstance(schema, dict):
@@ -2238,9 +2233,15 @@ def sort_any(core, schema, state):
 
     return merged_schema, merged_state
 
+def sort_quote(core, schema, state):
+    return schema, state
 
-# Resolve functions
-# ----------------
+
+# ==========================
+# Resolve Functions Overview
+# ==========================
+# These functions are responsible for resolving updates to the schema.
+# Each function handles a specific type of schema and ensures that updates are resolved correctly.
 
 def resolve_any(schema, update, core):
     schema = schema or {}

@@ -1,3 +1,7 @@
+"""
+Tests for the type system and schema manipulation functions
+"""
+
 import pytest
 import pprint
 import numpy as np
