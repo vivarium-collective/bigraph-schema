@@ -8,8 +8,9 @@ import numpy as np
 from dataclasses import  asdict
 
 from bigraph_schema.type_functions import (
-    divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, diff, data_module
+    divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, data_module
 )
+from bigraph_schema.utilities import compare_dicts
 from bigraph_schema import TypeSystem
 from bigraph_schema.units import units
 from bigraph_schema.registry import establish_path, remove_omitted, NONE_SYMBOL
@@ -2206,14 +2207,14 @@ def test_edge_cycle(core):
         empty_schema,
         A_state)
 
-    # print(diff(schema_from_schema, schema_from_state))
-    # print(diff(state_from_schema, state_from_state))
+    # print(compare_dicts(schema_from_schema, schema_from_state))
+    # print(compare_dicts(state_from_schema, state_from_state))
 
     if schema_from_schema != schema_from_state:
-        print(diff(schema_from_schema, schema_from_state))
+        print(compare_dicts(schema_from_schema, schema_from_state))
 
     if state_from_schema != state_from_state:
-        print(diff(state_from_schema, state_from_state))
+        print(compare_dicts(state_from_schema, state_from_state))
 
     assert schema_from_schema == schema_from_state
     assert state_from_schema == state_from_state

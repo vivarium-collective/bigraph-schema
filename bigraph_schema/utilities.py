@@ -73,3 +73,68 @@ def read_shape(shape):
         int(x)
         for x in tuple_from_type(
             shape)])
+
+
+def compare_dicts(a, b):
+    if isinstance(a, dict) and isinstance(b, dict):
+        result = {}
+        for key in union_keys(a, b):
+            if key in a:
+                if key in b:
+                    inner = compare_dicts(a[key], b[key])
+                    if inner:
+                        result[key] = inner
+                else:
+                    result[key] = f'A: {a[key]}\nB: (missing)'
+            else:
+                result[key] = f'A: (missing)\nB: {b[key]}'
+        if result:
+            return result
+    else:
+        if a != b:
+            return f'A: {a}\nB: {b}'
+
+
+def get_path(tree, path):
+    """
+    Given a tree and a path, find the subtree at that path
+
+    Args:
+    - tree: the tree we are looking in (a nested dict)
+    - path: a list/tuple of keys we follow down the tree to find the subtree we are looking for
+
+    Returns:
+    - subtree: the subtree found by following the list of keys down the tree
+    """
+
+    if len(path) == 0:
+        return tree
+    else:
+        head = path[0]
+        if not tree or head not in tree:
+            return None
+        else:
+            return get_path(tree[head], path[1:])
+
+
+def remove_path(tree, path):
+    """
+    Removes whatever subtree lives at the given path
+    """
+
+    if path is None or len(path) == 0:
+        return None
+
+    upon = get_path(tree, path[:-1])
+    if upon is not None:
+        del upon[path[-1]]
+    return tree
+
+
+def type_parameters_for(schema):
+    parameters = []
+    for key in schema['_type_parameters']:
+        subschema = schema.get(f'_{key}', 'any')
+        parameters.append(subschema)
+
+    return parameters
