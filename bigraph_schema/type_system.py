@@ -170,25 +170,6 @@ def remove_path(tree, path):
         del upon[path[-1]]
     return tree
 
-
-def resolve_path(path):
-    """
-    Given a path that includes '..' steps, resolve the path to a canonical form
-    """
-    resolve = []
-
-    for step in path:
-        if step == '..':
-            if len(resolve) == 0:
-                raise Exception(f'cannot go above the top in path: "{path}"')
-            else:
-                resolve = resolve[:-1]
-        else:
-            resolve.append(step)
-
-    return tuple(resolve)
-
-
 def visit_method(schema, state, method, values, core):
     """
     Visit a method for a schema and state and apply it, returning the result
@@ -220,12 +201,6 @@ def visit_method(schema, state, method, values, core):
 
     return result
 
-
-def generate_quote(core, schema, state, top_schema=None, top_state=None, path=None):
-    return schema, state, top_schema, top_state
-
-
-
 def type_parameters_for(schema):
     parameters = []
     for key in schema['_type_parameters']:
@@ -233,6 +208,7 @@ def type_parameters_for(schema):
         parameters.append(subschema)
 
     return parameters
+
 
 # Apply functions
 # ---------------
@@ -364,7 +340,6 @@ def apply_list(schema, current, update, core):
         #         element_type,
         #         current_element,
         #         update_element)
-
         #     result.append(applied)
 
         return result
@@ -448,6 +423,28 @@ def apply_edge(schema, current, update, core):
 # TODO: deal with all the different unit core
 def apply_units(schema, current, update, core):
     return current + update
+
+def apply_enum(schema, current, update, core):
+    parameters = core.parameters_for(schema)
+    if update in parameters:
+        return update
+    else:
+        raise Exception(f'{update} is not in the enum, options are: {parameters}')
+
+def apply_array(schema, current, update, core):
+    if isinstance(update, dict):
+        paths = hierarchy_depth(update)
+        for path, inner_update in paths.items():
+            if len(path) > len(schema['_shape']):
+                raise Exception(f'index is too large for array update: {path}\n  {schema}')
+            else:
+                index = tuple(path)
+                current[index] += inner_update
+
+        return current
+
+    else:
+        return current + update
 
 
 # Sort functions
@@ -583,6 +580,50 @@ def resolve_any(schema, update, core):
 
     return outcome
 
+# def resolve_tree(schema, update, core):
+#     if isinstance(update, dict):
+#         leaf_schema = schema.get('_leaf', {})
+
+#         if '_type' in update:
+#             if update['_type'] == 'map':
+#                 value_schema = update.get('_value', {})
+#                 leaf_schema = core.resolve_schemas(
+#                     leaf_schema,
+#                     value_schema)
+
+#             elif update['_type'] == 'tree':
+#                 for key, subschema in update.items():
+#                     if not key.startswith('_'):
+#                         leaf_schema = core.resolve_schemas(
+#                             leaf_schema,
+#                             subschema)
+#             else:
+#                 leaf_schema = core.resolve_schemas(
+#                     leaf_schema,
+#                     update)
+
+#             schema['_leaf'] = leaf_schema
+#         else:
+#             for key, subupdate in
+
+#     return schema
+
+def resolve_path(path):
+    """
+    Given a path that includes '..' steps, resolve the path to a canonical form
+    """
+    resolve = []
+
+    for step in path:
+        if step == '..':
+            if len(resolve) == 0:
+                raise Exception(f'cannot go above the top in path: "{path}"')
+            else:
+                resolve = resolve[:-1]
+        else:
+            resolve.append(step)
+
+    return tuple(resolve)
 
 # Divide functions
 # ----------------
@@ -748,6 +789,13 @@ def divide_map(schema, state, values, core):
         raise Exception(
             f'trying to divide a map but state is not a dict.\n  state: {pf(state)}\n  schema: {pf(schema)}')
 
+def divide_enum(schema, state, values, core):
+    divisions = values.get('divisions', 2)
+
+    return [
+        tuple([item[index] for item in state])
+        for index in range(divisions)]
+
 # Default functions
 # -----------------
 
@@ -822,6 +870,19 @@ def default_array(schema, core):
         shape,
         dtype=dtype)
 
+def default_enum(schema, core):
+    parameter = schema['_type_parameters'][0]
+    return schema[f'_{parameter}']
+
+
+def default_edge(schema, core):
+    edge = {}
+    for key in schema:
+        if not is_schema_key(key):
+            edge[key] = core.default(
+                schema[key])
+
+    return edge
 
 # Slice functions
 # ---------------
@@ -1190,6 +1251,82 @@ def bind_enum(schema, state, key, subschema, substate, core):
     return new_schema, tuple(open)
 
 
+# Resolve functions
+# ----------------
+
+def resolve_map(schema, update, core):
+    if isinstance(update, dict):
+        value_schema = update.get(
+            '_value',
+            schema.get('_value', {}))
+
+        for key, subschema in update.items():
+            if not is_schema_key(key):
+                value_schema = core.resolve_schemas(
+                    value_schema,
+                    subschema)
+
+        schema['_type'] = update.get(
+            '_type',
+            schema.get('_type', 'map'))
+        schema['_value'] = value_schema
+
+    return schema
+
+
+def resolve_array(schema, update, core):
+    if not '_shape' in schema:
+        schema = core.access(schema)
+    if not '_shape' in schema:
+        raise Exception(f'array must have a "_shape" key, not {schema}')
+
+    data_schema = schema.get('_data', {})
+
+    if '_type' in update:
+        data_schema = core.resolve_schemas(
+            data_schema,
+            update.get('_data', {}))
+
+        if update['_type'] == 'array':
+            if '_shape' in update:
+                if update['_shape'] != schema['_shape']:
+                    raise Exception(f'arrays must be of the same shape, not \n  {schema}\nand\n  {update}')
+
+        elif core.inherits_from(update, schema):
+            schema.update(update)
+
+        elif not core.inherits_from(schema, update):
+            raise Exception(f'cannot resolve incompatible array schemas:\n  {schema}\n  {update}')
+
+    else:
+        for key, subschema in update.items():
+            if isinstance(key, int):
+                key = (key,)
+
+            if len(key) > len(schema['_shape']):
+                raise Exception(f'key is longer than array dimension: {key}\n{schema}\n{update}')
+            elif len(key) == len(schema['_shape']):
+                data_schema = core.resolve_schemas(
+                    data_schema,
+                    subschema)
+            else:
+                shape = tuple_from_type(
+                    schema['_shape'])
+
+                subshape = shape[len(key):]
+                inner_schema = schema.copy()
+                inner_schema['_shape'] = subshape
+                inner_schema = core.resolve_schemas(
+                    inner_schema,
+                    subschema)
+
+                data_schema = inner_schema['_data']
+
+    schema['_data'] = data_schema
+
+    return schema
+
+
 # Check functions
 # ---------------
 
@@ -1326,8 +1463,16 @@ def check_array(schema, state, core):
 
     return isinstance(state, np.ndarray) and state.shape == array_shape(core, shape_type) # and state.dtype == bindings['data'] # TODO align numpy data types so we can validate the types of the arrays
 
-def dataclass_array(schema, path, core):
-    return np.ndarray
+def check_enum(schema, state, core):
+    if not isinstance(state, str):
+        return False
+
+    parameters = core.parameters_for(schema)
+    return state in parameters
+
+def check_units(schema, state, core):
+    # TODO: expand this to check the actual units for compatibility
+    return isinstance(state, Quantity)
 
 
 # Serialize functions
@@ -1444,6 +1589,28 @@ def serialize_edge(schema, value, core):
 def serialize_enum(schema, value, core):
     return value
 
+def serialize_schema(schema, state, core):
+    return state
+
+def serialize_array(schema, value, core):
+    """ Serialize numpy array to list """
+
+    if isinstance(value, dict):
+        return value
+    elif isinstance(value, str):
+        import ipdb; ipdb.set_trace()
+    else:
+        array_data = 'string'
+        dtype = value.dtype.name
+        if dtype.startswith('int'):
+            array_data = 'integer'
+        elif dtype.startswith('float'):
+            array_data = 'float'
+
+        return {
+            'list': value.tolist(),
+            'data': array_data,
+            'shape': list(value.shape)}
 
 # Deserialize functions
 # ---------------------
@@ -1638,6 +1805,12 @@ def deserialize_array(schema, encoded, core):
                     tuple(shape),
                     dtype=dtype)
 
+def deserialize_edge(schema, encoded, core):
+    return encoded
+
+def deserialize_schema(schema, state, core):
+    return state
+
 # Dataclass functions
 # -------------------
 
@@ -1793,9 +1966,29 @@ def dataclass_boolean(schema, path, core):
 def dataclass_string(schema, path, core):
     return str
 
+def dataclass_enum(schema, path, core):
+    parameters = type_parameters_for(schema)
+    subtypes = []
+
+    for index, key in enumerate(schema['type_parameters']):
+        subschema = schema.get(key, 'any')
+        subtype = core.dataclass(
+            subschema,
+            path + [index])
+
+        subtypes.append(subtype)
+
+    parameter_block = ', '.join(subtypes)
+    return eval(f'tuple[{parameter_block}]')
+
+def dataclass_array(schema, path, core):
+    return np.ndarray
 
 # Generate functions
 # ------------------
+
+def generate_quote(core, schema, state, top_schema=None, top_state=None, path=None):
+    return schema, state, top_schema, top_state
 
 def generate_map(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
@@ -1841,7 +2034,6 @@ def generate_map(core, schema, state, top_schema=None, top_state=None, path=None
                 path=path + [key])
 
     return generated_schema, generated_state, top_schema, top_state
-
 
 def generate_tree(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
@@ -1913,7 +2105,6 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
 
     return generate_schema, generate_state, top_schema, top_state
 
-
 def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=None):
     schema = schema or {}
     wires = wires or {}
@@ -1958,7 +2149,6 @@ def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=No
                 defer=True)
 
     return top_schema, top_state
-
 
 def generate_edge(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
@@ -2005,42 +2195,6 @@ def generate_edge(core, schema, state, top_schema=None, top_state=None, path=Non
             path=path)
 
     return merged_schema, merged_state, top_schema, top_state
-
-
-
-
-def is_empty(value):
-    if isinstance(value, np.ndarray):
-        return False
-    elif value is None or value == {}:
-        return True
-    else:
-        return False
-
-
-
-
-def find_union_type(core, schema, state):
-    parameters = core.parameters_for(schema)
-
-    for possible in parameters:
-        if core.check(possible, state):
-            return core.access(possible)
-
-    return None
-
-
-def union_keys(schema, state):
-    keys = {}
-    for key in schema:
-        keys[key] = True
-    for key in state:
-        keys[key] = True
-
-    return keys
-
-    # return set(schema.keys()).union(state.keys())
-
 
 def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
@@ -2102,6 +2256,39 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
         generated_schema, generated_state = schema, state
 
     return generated_schema, generated_state, top_schema, top_state
+
+
+def is_empty(value):
+    if isinstance(value, np.ndarray):
+        return False
+    elif value is None or value == {}:
+        return True
+    else:
+        return False
+
+
+
+
+def find_union_type(core, schema, state):
+    parameters = core.parameters_for(schema)
+
+    for possible in parameters:
+        if core.check(possible, state):
+            return core.access(possible)
+
+    return None
+
+
+def union_keys(schema, state):
+    keys = {}
+    for key in schema:
+        keys[key] = True
+    for key in state:
+        keys[key] = True
+
+    return keys
+
+    # return set(schema.keys()).union(state.keys())
 
 
 def is_method_key(key, parameters):
@@ -4226,84 +4413,8 @@ def replace(schema, current, update, core=None):
 def to_string(schema, value, core=None):
     return str(value)
 
-
-
 def evaluate(schema, encoded, core=None):
     return eval(encoded)
-
-
-def resolve_map(schema, update, core):
-    if isinstance(update, dict):
-        value_schema = update.get(
-            '_value',
-            schema.get('_value', {}))
-
-        for key, subschema in update.items():
-            if not is_schema_key(key):
-                value_schema = core.resolve_schemas(
-                    value_schema,
-                    subschema)
-
-        schema['_type'] = update.get(
-            '_type',
-            schema.get('_type', 'map'))
-        schema['_value'] = value_schema
-
-    return schema
-
-
-def resolve_array(schema, update, core):
-    if not '_shape' in schema:
-        schema = core.access(schema)
-    if not '_shape' in schema:
-        raise Exception(f'array must have a "_shape" key, not {schema}')
-
-    data_schema = schema.get('_data', {})
-
-    if '_type' in update:
-        data_schema = core.resolve_schemas(
-            data_schema,
-            update.get('_data', {}))
-
-        if update['_type'] == 'array':
-            if '_shape' in update:
-                if update['_shape'] != schema['_shape']:
-                    raise Exception(f'arrays must be of the same shape, not \n  {schema}\nand\n  {update}')
-
-        elif core.inherits_from(update, schema):
-            schema.update(update)
-
-        elif not core.inherits_from(schema, update):
-            raise Exception(f'cannot resolve incompatible array schemas:\n  {schema}\n  {update}')
-
-    else:
-        for key, subschema in update.items():
-            if isinstance(key, int):
-                key = (key,)
-
-            if len(key) > len(schema['_shape']):
-                raise Exception(f'key is longer than array dimension: {key}\n{schema}\n{update}')
-            elif len(key) == len(schema['_shape']):
-                data_schema = core.resolve_schemas(
-                    data_schema,
-                    subschema)
-            else:
-                shape = tuple_from_type(
-                    schema['_shape'])
-
-                subshape = shape[len(key):]
-                inner_schema = schema.copy()
-                inner_schema['_shape'] = subshape
-                inner_schema = core.resolve_schemas(
-                    inner_schema,
-                    subschema)
-
-                data_schema = inner_schema['_data']
-
-    schema['_data'] = data_schema
-
-    return schema
-
 
 def tuple_from_type(tuple_type):
     if isinstance(tuple_type, tuple):
@@ -4323,54 +4434,6 @@ def tuple_from_type(tuple_type):
         raise Exception(f'do not recognize this type as a tuple: {tuple_type}')
 
 
-# def resolve_tree(schema, update, core):
-#     import ipdb; ipdb.set_trace()
-
-#     if isinstance(update, dict):
-#         leaf_schema = schema.get('_leaf', {})
-
-#         if '_type' in update:
-#             if update['_type'] == 'map':
-#                 value_schema = update.get('_value', {})
-#                 leaf_schema = core.resolve_schemas(
-#                     leaf_schema,
-#                     value_schema)
-
-#             elif update['_type'] == 'tree':
-#                 for key, subschema in update.items():
-#                     if not key.startswith('_'):
-#                         leaf_schema = core.resolve_schemas(
-#                             leaf_schema,
-#                             subschema)
-#             else:
-#                 leaf_schema = core.resolve_schemas(
-#                     leaf_schema,
-#                     update)
-
-#             schema['_leaf'] = leaf_schema
-#         else:
-#             for key, subupdate in 
-
-#     return schema
-
-
-
-
-
-
-def check_units(schema, state, core):
-    # TODO: expand this to check the actual units for compatibility
-    return isinstance(state, Quantity)
-
-
-
-
-
-
-def deserialize_edge(schema, encoded, core):
-    return encoded
-
-
 def array_shape(core, schema):
     if '_type_parameters' not in schema:
         schema = core.access(schema)
@@ -4380,42 +4443,6 @@ def array_shape(core, schema):
         int(schema[f'_{parameter}'])
         for parameter in schema['_type_parameters']])
 
-
-def apply_array(schema, current, update, core):
-    if isinstance(update, dict):
-        paths = hierarchy_depth(update)
-        for path, inner_update in paths.items():
-            if len(path) > len(schema['_shape']):
-                raise Exception(f'index is too large for array update: {path}\n  {schema}')
-            else:
-                index = tuple(path)
-                current[index] += inner_update
-
-        return current
-
-    else:
-        return current + update
-
-
-def serialize_array(schema, value, core):
-    """ Serialize numpy array to list """
-
-    if isinstance(value, dict):
-        return value
-    elif isinstance(value, str):
-        import ipdb; ipdb.set_trace()
-    else:
-        array_data = 'string'
-        dtype = value.dtype.name
-        if dtype.startswith('int'):
-            array_data = 'integer'
-        elif dtype.startswith('float'):
-            array_data = 'float'
-
-        return {
-            'list': value.tolist(),
-            'data': array_data,
-            'shape': list(value.shape)}
 
 
 DTYPE_MAP = {
@@ -4467,82 +4494,6 @@ def register_units(core, units):
 
     return core
 
-def apply_enum(schema, current, update, core):
-    parameters = core.parameters_for(schema)
-    if update in parameters:
-        return update
-    else:
-        raise Exception(f'{update} is not in the enum, options are: {parameters}')
-
-
-def check_enum(schema, state, core):
-    if not isinstance(state, str):
-        return False
-
-    parameters = core.parameters_for(schema)
-    return state in parameters
-
-
-
-
-
-
-
-def dataclass_enum(schema, path, core):
-    parameters = type_parameters_for(schema)
-    subtypes = []
-
-    for index, key in enumerate(schema['type_parameters']):
-        subschema = schema.get(key, 'any')
-        subtype = core.dataclass(
-            subschema,
-            path + [index])
-
-        subtypes.append(subtype)
-
-    parameter_block = ', '.join(subtypes)
-    return eval(f'tuple[{parameter_block}]')
-
-
-def divide_enum(schema, state, values, core):
-    divisions = values.get('divisions', 2)
-
-    return [
-        tuple([item[index] for item in state])
-        for index in range(divisions)]
-
-
-# def merge_edge(schema, current_state, new_state, core):
-#     merge = deep_merge(
-#         current_state,
-#         new_state)
-
-#     return core.deserialize(
-#         schema,
-#         merge)
-
-
-def serialize_schema(schema, state, core):
-    return state
-
-
-def deserialize_schema(schema, state, core):
-    return state
-
-
-def default_enum(schema, core):
-    parameter = schema['_type_parameters'][0]
-    return schema[f'_{parameter}']
-
-
-def default_edge(schema, core):
-    edge = {}
-    for key in schema:
-        if not is_schema_key(key):
-            edge[key] = core.default(
-                schema[key])
-
-    return edge
 
 
 base_type_library = {
