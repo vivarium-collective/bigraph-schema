@@ -247,6 +247,7 @@ def type_parameters_for(schema):
 # =========================
 # These functions are responsible for applying updates to various types of schemas.
 # Each function handles a specific type of schema and ensures that updates are applied correctly.
+# Function signature: (schema, current, update, core)
 
 def apply_any(schema, current, update, core):
     if isinstance(current, dict):
@@ -524,6 +525,7 @@ def apply_array(schema, current, update, core):
 # =========================
 # These functions are responsible for validating the state against various types of schemas.
 # Each function ensures that the state conforms to the expected schema type.
+# Function signature: (schema, state, core)
 
 def check_any(schema, state, core):
     if isinstance(schema, dict):
@@ -677,6 +679,7 @@ def check_units(schema, state, core):
 # Each function handles a specific type of schema and ensures that the folding is done correctly.
 # In functional programming, a fold is a higher-order function that processes a data structure
 # in some order and builds a return value.
+# Function signature: (schema, state, method, values, core)
 
 def fold_any(schema, state, method, values, core):
     if isinstance(state, dict):
@@ -897,6 +900,7 @@ def fold_enum(schema, state, method, values, core):
 # ==========================
 # These functions are responsible for dividing the state into a number of parts based on the schema.
 # Each function handles a specific type of schema and divides the state accordingly.
+# Function signature: (schema, state, values, core)
 
 def divide_any(schema, state, values, core):
     divisions = values.get('divisions', 2)
@@ -1069,6 +1073,7 @@ def divide_enum(schema, state, values, core):
 # =============================
 # These functions are responsible for converting the state into a serializable format based on the schema.
 # Each function handles a specific type of schema and ensures that the state is serialized correctly.
+# Function signature: (schema, state, core)
 
 def serialize_any(schema, state, core):
     if isinstance(state, dict):
@@ -1209,6 +1214,7 @@ def serialize_array(schema, value, core):
 # ===============================
 # These functions are responsible for converting serialized data back into the state based on the schema.
 # Each function handles a specific type of schema and ensures that the data is deserialized correctly.
+# Function signature: (schema, state, core)
 
 def to_string(schema, value, core=None):
     return str(value)
@@ -1418,6 +1424,7 @@ def deserialize_schema(schema, state, core):
 # =========================
 # These functions are responsible for extracting a part of the state based on the schema and path.
 # Each function handles a specific type of schema and ensures that the correct part of the state is sliced.
+# Function signature: (schema, state, path, core)
 
 def slice_any(schema, state, path, core):
     if not isinstance(path, (list, tuple)):
@@ -1592,6 +1599,7 @@ def slice_string(schema, state, path, core):
 # ========================
 # These functions are responsible for binding a key and its corresponding schema and state to the main schema and state.
 # Each function handles a specific type of schema and ensures that the binding is done correctly.
+# Function signature: (schema, state, key, subschema, substate, core)
 
 def bind_any(schema, state, key, subschema, substate, core):
     result_schema = core.resolve_schemas(
@@ -1640,6 +1648,7 @@ def bind_enum(schema, state, key, subschema, substate, core):
 # ==========================
 # These functions are responsible for resolving updates to the schema.
 # Each function handles a specific type of schema and ensures that updates are resolved correctly.
+# Function signature: (schema, update, core)
 
 def resolve_map(schema, update, core):
     if isinstance(update, dict):
@@ -1718,6 +1727,7 @@ def resolve_array(schema, update, core):
 # ============================
 # These functions are responsible for generating dataclass representations of various types of schemas.
 # Each function handles a specific type of schema and ensures that the dataclass is generated correctly.
+# Function signature: (schema, path, core)
 
 def dataclass_any(schema, path, core):
     parts = path
@@ -2367,6 +2377,7 @@ def resolve_any(schema, update, core):
 # ==========================
 # These functions are responsible for handling reactions within the schema and state.
 # Each function processes a specific type of reaction and ensures that the state is updated accordingly.
+# Function signature: (schema, state, reaction, core)
 
 def add_reaction(schema, state, reaction, core):
     path = reaction.get('path')
