@@ -1,7 +1,7 @@
 """
-===========
-Type System
-===========
+==============
+Type Functions
+==============
 
 Includes Type Functions: apply, check, fold, divide, serialize, deserialize, slice, bind, merge
 TODO: describe these functions
@@ -1957,7 +1957,6 @@ def default_edge(schema, core):
 # These functions are responsible for generating schemas and states based on the provided schema and state.
 # Each function handles a specific type of schema and ensures that the generation is done correctly.
 
-
 def generate_any(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
     if is_empty(state):
@@ -2325,24 +2324,6 @@ def resolve_any(schema, update, core):
 #     return schema
 
 
-def resolve_path(path):
-    """
-    Given a path that includes '..' steps, resolve the path to a canonical form
-    """
-    resolve = []
-
-    for step in path:
-        if step == '..':
-            if len(resolve) == 0:
-                raise Exception(f'cannot go above the top in path: "{path}"')
-            else:
-                resolve = resolve[:-1]
-        else:
-            resolve.append(step)
-
-    return tuple(resolve)
-
-
 def is_empty(value):
     if isinstance(value, np.ndarray):
         return False
@@ -2372,11 +2353,6 @@ def union_keys(schema, state):
     return keys
 
     # return set(schema.keys()).union(state.keys())
-
-
-def is_method_key(key, parameters):
-    return key.startswith('_') and key not in type_schema_keys and key not in [
-        f'_{parameter}' for parameter in parameters]
 
 
 registry_types = {
@@ -2426,26 +2402,6 @@ registry_types = {
         '_dataclass': dataclass_union,
         '_fold': fold_union,
         '_description': 'union of a set of possible types'}}
-
-
-class Edge:
-    def __init__(self):
-        pass
-
-
-    def inputs(self):
-        return {}
-
-
-    def outputs(self):
-        return {}
-
-
-    def interface(self):
-        """Returns the schema for this type"""
-        return {
-            'inputs': self.inputs(),
-            'outputs': self.outputs()}
 
 
 def to_string(schema, value, core=None):

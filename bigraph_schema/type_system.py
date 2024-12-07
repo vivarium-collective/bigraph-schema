@@ -1,3 +1,9 @@
+"""
+===========
+Type System
+===========
+"""
+
 import copy
 import functools
 import inspect
@@ -8,10 +14,31 @@ from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge,
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.registry import type_schema_keys, remove_omitted, set_path, transform_path
 from bigraph_schema.type_functions import set_apply, registry_types, base_type_library, register_units, \
-    register_base_reactions, TYPE_FUNCTION_KEYS, is_method_key, SYMBOL_TYPES, union_keys, resolve_path, is_empty, \
+    register_base_reactions, TYPE_FUNCTION_KEYS, SYMBOL_TYPES, union_keys, is_empty, \
     apply_schema, TYPE_SCHEMAS
 from bigraph_schema.units import units
 
+
+def is_method_key(key, parameters):
+    return key.startswith('_') and key not in type_schema_keys and key not in [
+        f'_{parameter}' for parameter in parameters]
+
+def resolve_path(path):
+    """
+    Given a path that includes '..' steps, resolve the path to a canonical form
+    """
+    resolve = []
+
+    for step in path:
+        if step == '..':
+            if len(resolve) == 0:
+                raise Exception(f'cannot go above the top in path: "{path}"')
+            else:
+                resolve = resolve[:-1]
+        else:
+            resolve.append(step)
+
+    return tuple(resolve)
 
 class TypeSystem(Registry):
     """Handles type schemas and their operation"""
