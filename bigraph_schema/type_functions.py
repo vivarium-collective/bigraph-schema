@@ -76,7 +76,7 @@ import typing
 from typing import NewType, Union, Mapping, List, Dict, Optional, Callable
 from dataclasses import field, make_dataclass
 
-from bigraph_schema.units import units
+from bigraph_schema.units import units, render_units_type
 from bigraph_schema.registry import (
     NONE_SYMBOL, type_schema_keys,
     is_schema_key, non_schema_keys, type_parameter_key,
@@ -2520,10 +2520,56 @@ def read_shape(shape):
             shape)])
 
 
+# handling unit registration
+# TODO -- can this be done onto the dicts, rather than using the core?
+def register_units(core, units):
+    for unit_name in units._units:
+        try:
+            unit = getattr(units, unit_name)
+        except:
+            # print(f'no unit named {unit_name}')
+            continue
+
+        dimensionality = unit.dimensionality
+        type_key = render_units_type(dimensionality)
+        if not core.exists(type_key):
+            core.register(type_key, {
+                '_default': '',
+                '_apply': apply_units,
+                '_check': check_units,
+                '_serialize': serialize_units,
+                '_deserialize': deserialize_units,
+                '_description': 'type to represent values with scientific units'})
+
+    return core
+
+
+# function to add the unit types to the type library
+def add_units_to_library(units, type_library):
+    for unit_name in units._units:
+        try:
+            unit = getattr(units, unit_name)
+        except AttributeError:
+            continue
+
+        dimensionality = unit.dimensionality
+        type_key = render_units_type(dimensionality)
+        if type_key not in type_library:
+            type_library[type_key] = {
+                '_type': 'unit',
+                'name': unit_name,
+                'dimensionality': str(dimensionality)
+            }
+
+    return type_library
+
 # ===============================
 # Types with their type functions
 # ===============================
 # These dictionaries define the types and their corresponding type functions.
+
+unit_types = {}
+unit_types = add_units_to_library(units, unit_types)
 
 registry_types = {
     'any': {
@@ -2735,3 +2781,4 @@ base_type_library = {
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',
         'inputs': 'wires',
         'outputs': 'wires'}}
+

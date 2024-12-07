@@ -8,15 +8,15 @@ import copy
 import functools
 import inspect
 import random
+import traceback
 from pprint import pformat as pf
 
 from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge, type_parameter_key
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.registry import type_schema_keys, remove_omitted, set_path, transform_path
-from bigraph_schema.type_functions import set_apply, registry_types, base_type_library, register_base_reactions, \
-    union_keys, is_empty, \
-    apply_schema, apply_units, check_units, serialize_units, deserialize_units
-from bigraph_schema.units import units, render_units_type
+from bigraph_schema.type_functions import set_apply, registry_types, base_type_library, unit_types, register_base_reactions, \
+    union_keys, is_empty, apply_schema, register_units
+from bigraph_schema.units import units
 
 
 TYPE_FUNCTION_KEYS = [
@@ -107,7 +107,9 @@ class TypeSystem(Registry):
 
         self.register_types(registry_types)
         self.register_types(base_type_library)
+        # self.register_types(unit_types)
 
+        # # TODO -- add a proper registration into registry
         register_units(self, units)
         register_base_reactions(self)
 
@@ -211,7 +213,6 @@ class TypeSystem(Registry):
                     else:
                         lookup = self.find(subschema)
                         if lookup is None:
-                            import ipdb; ipdb.set_trace()
                             raise Exception(
                                 f'trying to register a new type ({key}), '
                                 f'but it depends on a type ({subkey}) which is not in the registry')
@@ -2060,25 +2061,3 @@ class TypeSystem(Registry):
     def query(self, schema, instance, redex):
         subschema = {}
         return subschema
-
-
-def register_units(core, units):
-    for unit_name in units._units:
-        try:
-            unit = getattr(units, unit_name)
-        except:
-            # print(f'no unit named {unit_name}')
-            continue
-
-        dimensionality = unit.dimensionality
-        type_key = render_units_type(dimensionality)
-        if not core.exists(type_key):
-            core.register(type_key, {
-                '_default': '',
-                '_apply': apply_units,
-                '_check': check_units,
-                '_serialize': serialize_units,
-                '_deserialize': deserialize_units,
-                '_description': 'type to represent values with scientific units'})
-
-    return core
