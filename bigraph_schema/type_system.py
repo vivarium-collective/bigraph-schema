@@ -2,6 +2,9 @@
 ===========
 Type System
 ===========
+
+Includes Type Functions: apply, check, fold, divide, serialize, deserialize, slice, bind, merge
+TODO: describe these functions
 """
 
 import copy
@@ -1130,6 +1133,7 @@ def serialize_array(schema, value, core):
             'data': array_data,
             'shape': list(value.shape)}
 
+
 # Deserialize functions
 # ---------------------
 
@@ -1546,7 +1550,6 @@ def bind_enum(schema, state, key, subschema, substate, core):
     return new_schema, tuple(open)
 
 
-
 # Resolve functions
 # ----------------
 
@@ -1568,7 +1571,6 @@ def resolve_map(schema, update, core):
         schema['_value'] = value_schema
 
     return schema
-
 
 def resolve_array(schema, update, core):
     if not '_shape' in schema:
@@ -2221,6 +2223,7 @@ def resolve_any(schema, update, core):
 
     return outcome
 
+
 # def resolve_tree(schema, update, core):
 #     if isinstance(update, dict):
 #         leaf_schema = schema.get('_leaf', {})
@@ -2249,6 +2252,7 @@ def resolve_any(schema, update, core):
 
 #     return schema
 
+
 def resolve_path(path):
     """
     Given a path that includes '..' steps, resolve the path to a canonical form
@@ -2274,8 +2278,6 @@ def is_empty(value):
         return True
     else:
         return False
-
-
 
 
 def find_union_type(core, schema, state):
