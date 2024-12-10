@@ -1,14 +1,18 @@
+"""
+Tests for the type system and schema manipulation functions
+"""
+
 import pytest
 import pprint
 import numpy as np
-from dataclasses import  asdict
+from dataclasses import asdict
 
-from bigraph_schema.type_system import (
-    TypeSystem, divide_longest, base_type_library, accumulate, to_string, deserialize_integer, apply_schema, diff
-)
+from bigraph_schema.type_functions import (
+    divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, data_module)
+from bigraph_schema.utilities import compare_dicts, NONE_SYMBOL
+from bigraph_schema import TypeSystem
 from bigraph_schema.units import units
-from bigraph_schema.registry import establish_path, remove_omitted, NONE_SYMBOL
-import bigraph_schema.data as data
+from bigraph_schema.registry import establish_path, remove_omitted
 
 
 @pytest.fixture
@@ -142,7 +146,7 @@ def print_schema_validation(core, library, should_pass):
 
 def test_validate_schema(core):
     # good schemas
-    print_schema_validation(core, base_type_library, True)
+    print_schema_validation(core, base_types, True)
 
     good = {
         'not quite int': {
@@ -1960,9 +1964,9 @@ def test_dataclass(core):
                 'b': 888.88},
             'x': 111.11111}}
 
-    nested_new = data.nested(
-        data.nested_a(
-            data.nested_a_a(
+    nested_new = data_module.nested(
+        data_module.nested_a(
+            data_module.nested_a_a(
                 a=222.22,
                 b=3.3333),
             5555.55))
@@ -2202,14 +2206,14 @@ def test_edge_cycle(core):
         empty_schema,
         A_state)
 
-    # print(diff(schema_from_schema, schema_from_state))
-    # print(diff(state_from_schema, state_from_state))
+    # print(compare_dicts(schema_from_schema, schema_from_state))
+    # print(compare_dicts(state_from_schema, state_from_state))
 
     if schema_from_schema != schema_from_state:
-        print(diff(schema_from_schema, schema_from_state))
+        print(compare_dicts(schema_from_schema, schema_from_state))
 
     if state_from_schema != state_from_state:
-        print(diff(state_from_schema, state_from_state))
+        print(compare_dicts(state_from_schema, state_from_state))
 
     assert schema_from_schema == schema_from_state
     assert state_from_schema == state_from_state
