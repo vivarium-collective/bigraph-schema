@@ -116,7 +116,7 @@ def apply_tuple(schema, current, update, core):
     result = []
 
     for parameter, current_value, update_value in zip(parameters, current, update):
-        element = core.apply(
+        element = core.apply_update(
             parameter,
             current_value,
             update_value)
@@ -143,7 +143,7 @@ def apply_union(schema, current, update, core):
 
     # TODO: throw an exception if current_type is incompatible with update_type
 
-    return core.apply(
+    return core.apply_update(
         update_type,
         current,
         update)
@@ -215,13 +215,13 @@ def apply_tree(schema, current, update, core):
                 if key in schema:
                     subschema = schema[key]
 
-                current[key] = core.apply(
+                current[key] = core.apply_update(
                     subschema,
                     current.get(key),
                     branch)
 
             elif core.check(leaf_type, branch):
-                current[key] = core.apply(
+                current[key] = core.apply_update(
                     leaf_type,
                     current.get(key),
                     branch)
@@ -232,7 +232,7 @@ def apply_tree(schema, current, update, core):
         return current
 
     elif core.check(leaf_type, current):
-        return core.apply(
+        return core.apply_update(
             leaf_type,
             current,
             update)
@@ -308,7 +308,7 @@ def apply_map(schema, current, update, core=None):
 
             # raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
         else:
-            result[key] = core.apply(
+            result[key] = core.apply_update(
                 value_type,
                 result[key],
                 update_value)
@@ -323,7 +323,7 @@ def apply_maybe(schema, current, update, core):
             schema,
             'value')
 
-        return core.apply(
+        return core.apply_update(
             value_type,
             current,
             update)
@@ -334,12 +334,12 @@ def apply_path(schema, current, update, core):
 
 def apply_edge(schema, current, update, core):
     result = current.copy()
-    result['inputs'] = core.apply(
+    result['inputs'] = core.apply_update(
         'wires',
         current.get('inputs'),
         update.get('inputs'))
 
-    result['outputs'] = core.apply(
+    result['outputs'] = core.apply_update(
         'wires',
         current.get('outputs'),
         update.get('outputs'))

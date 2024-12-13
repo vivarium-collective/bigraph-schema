@@ -3,4 +3,4 @@ from bigraph_schema.registry import (
     strip_schema_keys, type_parameter_key, non_schema_keys, set_path, transform_path)
 from bigraph_schema.utilities import get_path, visit_method
 from bigraph_schema.edge import Edge
-from bigraph_schema.type_system import TypeSystem
+from bigraph_schema.type_system import TypeSystem, type_schema_keys
