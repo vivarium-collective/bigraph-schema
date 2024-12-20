@@ -7,8 +7,31 @@ Base class for all edges in the bigraph schema.
 """
 
 class Edge:
-    def __init__(self):
+    config_schema = {}
+
+
+    def __init__(self, config=None, core=None):
+        if core is None:
+            raise Exception('must provide a core')
+
+        self.core = core
+
+        if config is None:
+            config = {}
+
+        self.config = self.core.fill(
+            self.config_schema,
+            config)
+
+        self.initialize(self.config)
+
+
+    def initialize(self):
         pass
+
+
+    def initial_state(self):
+        return {}
 
 
     def inputs(self):

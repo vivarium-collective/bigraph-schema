@@ -120,14 +120,14 @@ class TypeSystem(Registry):
         register_base_reactions(self)
 
 
-    def register_types(core, type_library):
+    def register_types(self, type_library):
         for type_key, type_data in type_library.items():
-            if not core.exists(type_key):
-                core.register(
+            if not self.exists(type_key):
+                self.register(
                     type_key,
                     type_data)
 
-        return core
+        return self
 
 
     def lookup(self, type_key, attribute):
