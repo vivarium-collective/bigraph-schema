@@ -26,7 +26,7 @@ class Edge:
         self.initialize(self.config)
 
 
-    def initialize(self):
+    def initialize(self, config):
         pass
 
 
