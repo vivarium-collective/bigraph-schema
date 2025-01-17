@@ -1926,15 +1926,19 @@ def generate_map(core, schema, state, top_schema=None, top_state=None, path=None
         schema,
         'value')
 
-    # generated_schema = {}
-    # generated_state = {}
     # TODO: can we assume this was already sorted at the top level?
-
     generated_schema, generated_state = core.sort(
         schema,
         state)
 
-    all_keys = union_keys(schema, state)  # set(schema.keys()).union(state.keys())
+    try:
+        all_keys = union_keys(schema, state)  # set(schema.keys()).union(state.keys())
+    except Exception as e:
+        # provide the path at which the error occurred
+        raise Exception(
+            f"Error at path {path}:\n"
+            f"Expected schema: {core.representation(schema)}\n"
+            f"Provided state: {state}") from e
 
     for key in all_keys:
         if is_schema_key(key):

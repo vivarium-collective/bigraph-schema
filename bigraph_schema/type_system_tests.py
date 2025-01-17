@@ -2262,7 +2262,7 @@ def test_merge(core):
     assert 'D' in top_state
     assert top_schema['D']['_type'] == 'float'
 
-def test_remove_omitted():
+def test_remove_omitted(core=None):
     result = remove_omitted(
         {'a': {}, 'b': {'c': {}, 'd': {}}},
         {'b': {'c': {}}},
@@ -2271,6 +2271,22 @@ def test_remove_omitted():
     assert 'a' not in result
     assert result['b']['c']['Y'] == 4444
     assert 'd' not in result['b']
+
+
+def test_union_key_error(core):
+    schema = core.access('map[map[float]]')
+    state = {
+        'a': {'b': 1.1},
+        'c': {'d': 2.2},
+        'e': 3.3  # this should be an error
+    }
+    generate_method = core.choose_method(schema, state, 'generate')
+
+    # assert that the Exception is raised
+    with pytest.raises(Exception):
+        result = generate_method(core, schema, state)
+
+
 
 
 if __name__ == '__main__':
@@ -2322,4 +2338,5 @@ if __name__ == '__main__':
     test_generate(core)
     test_edge_cycle(core)
     test_merge(core)
-    test_remove_omitted()
+    test_remove_omitted(core)
+    test_union_key_error(core)
