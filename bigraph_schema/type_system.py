@@ -130,6 +130,17 @@ class TypeSystem(Registry):
         return self
 
 
+    def update_types(self, type_updates):
+        for type_key, type_data in type_updates.items():
+            is_update = self.exists(type_key)
+            self.register(
+                type_key,
+                type_data,
+                update=is_update)
+
+        return self
+
+
     def lookup(self, type_key, attribute):
         return self.access(type_key).get(attribute)
 
@@ -164,7 +175,8 @@ class TypeSystem(Registry):
         return registry
 
 
-    def register(self, key, schema, alternate_keys=tuple(), force=False):
+    # TODO: explain this method
+    def register(self, key, schema, alternate_keys=tuple(), force=False, update=False):
         """
         register the schema under the given key in the registry
         """
@@ -172,6 +184,13 @@ class TypeSystem(Registry):
         if isinstance(schema, str):
             schema = self.find(schema)
         schema = copy.deepcopy(schema)
+        if self.exists(key) and update:
+            if update:
+                found = self.find(key)
+                schema = deep_merge(
+                    found,
+                    schema)
+                force = True
 
         if '_type' not in schema:
             schema['_type'] = key
@@ -187,17 +206,9 @@ class TypeSystem(Registry):
                 inherit_type = self.access(inherit)
                 new_schema = copy.deepcopy(inherit_type)
 
-                # schema = self.resolve(
-                #     new_schema,
-                #     schema)
-
                 schema = self.merge_schemas(
                     new_schema,
                     schema)
-
-                # schema = type_merge(
-                #     new_schema,
-                #     schema)
 
                 self.inherits[key].append(
                     inherit_type)
