@@ -139,9 +139,6 @@ class TypeSystem(Registry):
                 update=is_update)
 
         return self
-        # TODO: implement this
-
-        return self
 
 
     def lookup(self, type_key, attribute):
