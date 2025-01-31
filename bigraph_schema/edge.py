@@ -19,7 +19,7 @@ class Edge:
         if config is None:
             config = {}
 
-        self.config = self.core.fill(
+        _, self.config = self.core.generate(
             self.config_schema,
             config)
 

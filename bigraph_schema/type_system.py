@@ -133,6 +133,7 @@ class TypeSystem(Registry):
     def update_types(self, type_updates):
         for type_key, type_data in type_updates.items():
             is_update = self.exists(type_key)
+
             self.register(
                 type_key,
                 type_data,
@@ -176,7 +177,7 @@ class TypeSystem(Registry):
 
 
     # TODO: explain this method
-    def register(self, key, schema, alternate_keys=tuple(), force=False, update=False):
+    def register(self, key, schema, alternate_keys=tuple(), strict=True, update=False):
         """
         register the schema under the given key in the registry
         """
@@ -190,7 +191,7 @@ class TypeSystem(Registry):
                 schema = deep_merge(
                     found,
                     schema)
-                force = True
+                strict = False
 
         if '_type' not in schema:
             schema['_type'] = key
@@ -244,7 +245,7 @@ class TypeSystem(Registry):
             key,
             schema,
             alternate_keys,
-            force)
+            strict=strict)
 
 
     def resolve_parameters(self, type_parameters, schema):
@@ -727,6 +728,9 @@ class TypeSystem(Registry):
         registry = self.lookup_registry(method_key)
         method_function = registry.access(
             found)
+
+        if method_function is None:
+            raise Exception(f'no method "{method_name}" found for state {state} and schema {schema}')
 
         return method_function
 

@@ -74,7 +74,7 @@ def test_reregister_type(core):
             'A', {'_default': 'b'},
             strict=True)
 
-    core.register('A', {'_default': 'b'})
+    core.register('A', {'_default': 'b'}, strict=False)
 
     assert core.access('A')['_default'] == 'b'
 
