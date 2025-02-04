@@ -1386,10 +1386,14 @@ class TypeSystem(Registry):
             state,
             'deserialize')
 
-        return deserialize_function(
-            schema,
-            state,
-            self)
+        try:
+            return deserialize_function(
+                schema,
+                state,
+                self)
+        except Exception:
+            print(f'error deserializing {state} with schema {schema} using {deserialize_function.__name__}')
+            raise
 
 
     def fill_ports(self, interface, wires=None, state=None, top_schema=None, top_state=None, path=None):
@@ -2011,13 +2015,8 @@ class TypeSystem(Registry):
 
 
     def generate_recur(self, schema, state, top_schema=None, top_state=None, path=None):
-        found = self.retrieve(
-            schema)
-
-        generate_function = self.choose_method(
-            found,
-            state,
-            'generate')
+        found = self.retrieve(schema)
+        generate_function = self.choose_method(found, state,'generate')
 
         return generate_function(
             self,

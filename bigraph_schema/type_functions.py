@@ -2312,6 +2312,8 @@ def register_base_reactions(core):
 
 def add_units_to_library(units, type_library):
     for unit_name in units._units:
+        if unit_name not in units:  # Ensure unit exists before accessing it
+            continue
         try:
             unit = getattr(units, unit_name)
         except:
