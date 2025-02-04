@@ -1386,10 +1386,12 @@ class TypeSystem(Registry):
             state,
             'deserialize')
 
-        return deserialize_function(
+        deserialized = deserialize_function(
             schema,
             state,
             self)
+
+        return deserialized
 
 
     def fill_ports(self, interface, wires=None, state=None, top_schema=None, top_state=None, path=None):
