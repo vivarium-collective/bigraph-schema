@@ -1987,6 +1987,23 @@ class TypeSystem(Registry):
         return top_schema, top_state
 
 
+    def wire_schema(self, schema, wires, path=None):
+        outcome = {}
+        path = path or []
+
+        if isinstance(wires, dict):
+            for key, subwires in wires.items():
+                outcome[key] = self.wire_schema(
+                    schema,
+                    wires[key],
+                    path + [key])
+
+        else:
+            _, outcome = self.slice('schema', schema, wires)
+
+        return outcome
+
+
     def hydrate(self, schema, state):
         hydrated = self.deserialize(schema, state)
         return self.fill(schema, hydrated)
