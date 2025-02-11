@@ -603,20 +603,34 @@ class TypeSystem(Registry):
         return validation
 
 
-    def representation(self, schema, level=None):
+    def representation(self, schema, path=None, parents=None):
         '''
         produce a string representation of the schema
         * intended to be the inverse of parse_expression()
         '''
 
 
+        path = path or []
+        parents = parents or []
+        schema_id = id(schema)
+
+        if schema_id in parents:
+            index = parents.index(schema_id)
+            reference = path[:index]
+            output = '/'.join(reference)
+
+            return f'/{output}'
+
         if isinstance(schema, str):
             return schema
 
         elif isinstance(schema, tuple):
             inner = [
-                self.representation(element)
-                for element in schema]
+                self.representation(
+                    element,
+                    path + [index],
+                    parents + [schema_id])
+                for index, element in enumerate(schema)]
 
             pipes = '|'.join(inner)
             return f'({pipes})'
@@ -632,7 +646,9 @@ class TypeSystem(Registry):
                         schema_key = f'_{parameter_key}'
                         if schema_key in schema:
                             parameter = self.representation(
-                                schema[schema_key])
+                                schema[schema_key],
+                                path + [schema_key],
+                                parents + [schema_id])
                             inner.append(parameter)
                         else:
                             inner.append('()')
@@ -650,7 +666,9 @@ class TypeSystem(Registry):
                 inner = {}
                 for key in non_schema_keys(schema):
                     subschema = self.representation(
-                        schema[key])
+                        schema[key],
+                        path + [key],
+                        parents + [schema_id])
 
                     inner[key] = subschema
 

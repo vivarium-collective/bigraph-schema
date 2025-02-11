@@ -2517,7 +2517,8 @@ registry_types = {
     'quote': {
         '_type': 'quote',
         '_generate': generate_quote,
-        '_sort': sort_quote},
+        '_sort': sort_quote,
+        '_description': 'protect a schema from generation, ie in the config for a nested composite which has type information we only want to evaluate inside of the composite'},
 
     'tuple': {
         '_type': 'tuple',
