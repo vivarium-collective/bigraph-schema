@@ -609,7 +609,6 @@ class TypeSystem(Registry):
         * intended to be the inverse of parse_expression()
         '''
 
-
         path = path or []
         parents = parents or []
         schema_id = id(schema)
@@ -1095,6 +1094,8 @@ class TypeSystem(Registry):
 
 
     def apply_update(self, schema, state, update):
+        schema = self.access(schema)
+
         if isinstance(update, dict) and '_react' in update:
             new_state = self.react(
                 schema,
@@ -1143,7 +1144,7 @@ class TypeSystem(Registry):
             for key, branch in update.items():
                 if key not in schema:
                     raise Exception(
-                        f'trying to update a key that is not in the schema'
+                        f'trying to update a key that is not in the schema '
                         f'for state: {key}\n{state}\nwith schema:\n{schema}')
                 else:
                     subupdate = self.apply_update(
