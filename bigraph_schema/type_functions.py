@@ -1915,6 +1915,18 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
 def generate_quote(core, schema, state, top_schema=None, top_state=None, path=None):
     return schema, state, top_schema, top_state
 
+
+def default_quote(schema, core):
+    if '_default' in schema:
+        return copy.deepcopy(schema['_default'])
+    else:
+        return None
+
+
+def deserialize_quote(schema, state, core):
+    return state
+
+
 def generate_map(core, schema, state, top_schema=None, top_state=None, path=None):
     schema = schema or {}
     state = state or core.default(schema)
@@ -2516,6 +2528,8 @@ registry_types = {
 
     'quote': {
         '_type': 'quote',
+        '_deserialize': deserialize_quote,
+        '_default': default_quote,
         '_generate': generate_quote,
         '_sort': sort_quote,
         '_description': 'protect a schema from generation, ie in the config for a nested composite which has type information we only want to evaluate inside of the composite'},
