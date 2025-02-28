@@ -1313,6 +1313,8 @@ class TypeSystem(Registry):
         returns the top_schema and top_state
         '''
 
+        path = resolve_path(path)
+
         if len(path) == 0:
             # deal with paths of length 0
             # this should never happen?
@@ -1357,8 +1359,6 @@ class TypeSystem(Registry):
                 result_state)
 
         else:
-            path = resolve_path(path)
-
             head = path[0]
             tail = path[1:]
 

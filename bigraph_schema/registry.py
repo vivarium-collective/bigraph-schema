@@ -32,6 +32,9 @@ def deep_merge(dct, merge_dct):
         dct = {}
     if merge_dct is None:
         merge_dct = {}
+    if not isinstance(merge_dct, dict):
+        return merge_dct
+
     for k, v in merge_dct.items():
         if (k in dct and isinstance(dct[k], dict)
                 and isinstance(merge_dct[k], collections.abc.Mapping)):
