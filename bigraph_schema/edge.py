@@ -23,11 +23,6 @@ class Edge:
             self.config_schema,
             config)
 
-        # TODO: make generate work here
-        # _, self.config = self.core.generate(
-        #     self.config_schema,
-        #     config)
-
         self.initialize(self.config)
 
 
