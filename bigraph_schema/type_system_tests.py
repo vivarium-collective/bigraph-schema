@@ -1846,6 +1846,22 @@ def test_slice(core):
         state,
         ['top', 'AAAA', 'BBBB', 'CCCC', 3])[1] is None
 
+    schema, state = core.slice(
+        'map[map[green:float|yellow:integer|blue:string]]', {
+            'aaa': {
+                'bbb': {
+                    'green': 1.1,
+                    'yellow': 55,
+                    'blue': 'what'},
+                'ccc': {
+                    'green': 9999.4,
+                    'yellow': 11,
+                    'blue': 'umbrella'}}},
+        ['aaa', '*', 'green'])
+
+    assert schema['_value']['_type'] == 'float'
+    assert state['ccc'] == 9999.4
+
 
 def test_set_slice(core):
     float_schema, float_state = core.set_slice(

@@ -1294,9 +1294,30 @@ def slice_any(schema, state, path, core):
         step = None
 
         if isinstance(state, dict):
-            if head not in state:
+            if head == '*':
+                step_schema = {}
+                step_state = {}
+
+                for key, value in state.items():
+                    if key in schema:
+                        step_schema[key], step_state[key] = core.slice(
+                            schema[key],
+                            value,
+                            tail)
+
+                    else:
+                        step_schema[key], step_state[key] = slice_any(
+                            {},
+                            value,
+                            tail,
+                            core)
+
+                return step_schema, step_state
+
+            elif head not in state:
                 state[head] = core.default(
                     schema.get(head))
+
             step = state[head]
 
         elif hasattr(state, head):
@@ -1319,7 +1340,16 @@ def slice_tuple(schema, state, path, core):
         head = path[0]
         tail = path[1:]
 
-        if str(head) in schema['_type_parameters']:
+        if head == '*':
+            result_schema = {}
+            result_state = {}
+            for index, position in enumerate(schema['_type_parameters']):
+                result_schema[position], result_state[position] = core.slice(
+                    schema[position],
+                    state[index],
+                    tail)
+            return result_schema, result_state
+        elif str(head) in schema['_type_parameters']:
             try:
                 index = schema['_type_parameters'].index(str(head))
             except:
@@ -1370,6 +1400,23 @@ def slice_tree(schema, state, path, core):
         head = path[0]
         tail = path[1:]
 
+        if head == '*':
+            slice_schema = {}
+            slice_state = {}
+            for key, value in state.items():
+                if core.check(leaf_type, value):
+                    slice_schema[key], slice_state[key] = core.slice(
+                        leaf_type,
+                        value,
+                        tail)
+                else:
+                    slice_schema[key], slice_state[key] = core.slice(
+                        schema,
+                        value,
+                        tail)
+
+            return slice_schema, slice_state
+
         if not head in state:
             state[head] = {}
 
@@ -1389,6 +1436,25 @@ def slice_map(schema, state, path, core):
     if len(path) > 0:
         head = path[0]
         tail = path[1:]
+
+        if head == '*':
+            slice_schema = {'_type': 'map'}
+            slice_state = {}
+
+            for key, value in state.items():
+                tail_schema, slice_state[key] = core.slice(
+                    value_type,
+                    value,
+                    tail)
+
+                if not '_value' in slice_schema:
+                    slice_schema['_value'] = tail_schema
+                else:
+                    slice_schema['_value'] = core.resolve_schemas(
+                        slice_schema['_value'],
+                        tail_schema)
+
+            return slice_schema, slice_state
 
         if not head in state:
             state[head] = core.default(
