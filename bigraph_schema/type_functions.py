@@ -1428,6 +1428,22 @@ def slice_tree(schema, state, path, core):
     else:
         return schema, state
 
+
+def slice_edge(schema, state, path, core):
+    if len(path) > 0:
+        head = path[0]
+        tail = path[1:]
+
+        import ipdb; ipdb.set_trace()
+
+        if head == '_inputs' or head == '_outputs':
+            pass
+
+        return slice_any(schema, state, path, core)
+    else:
+        return schema, state
+    
+
 def slice_map(schema, state, path, core):
     value_type = core.find_parameter(
         schema,
@@ -1468,6 +1484,7 @@ def slice_map(schema, state, path, core):
     else:
         return schema, state
 
+
 def slice_maybe(schema, state, path, core):
     if state is None:
         return schema, None
@@ -1481,6 +1498,7 @@ def slice_maybe(schema, state, path, core):
             value_type,
             state,
             path)
+
 
 def slice_array(schema, state, path, core):
     if len(path) > 0:
@@ -1508,8 +1526,10 @@ def slice_array(schema, state, path, core):
     else:
         return schema, state
 
+
 def slice_string(schema, state, path, core):
     raise Exception(f'cannot slice into an string: {path}\n{state}\n{schema}')
+
 
 
 # ========================
@@ -2569,6 +2589,7 @@ base_types = {
         '_deserialize': deserialize_edge,
         '_dataclass': dataclass_edge,
         '_check': check_edge,
+        '_slice': slice_edge,
         # '_merge': merge_edge,
         '_type_parameters': ['inputs', 'outputs'],
         '_description': 'hyperedges in the bigraph, with inputs and outputs as type parameters',

@@ -1863,6 +1863,46 @@ def test_slice(core):
     assert state['ccc'] == 9999.4
 
 
+def test_slice_edge(core):
+    initial_schema = {
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'a': 'float',
+                'b': {'c': 'float', 'd': 'string'},
+                'e': {'f': 'array[(3|3),float]'}},
+            '_outputs': {
+                'g': 'float',
+                'h': {'i': {'j': 'map[integer]'}},
+                'k': {'l': 'array[(3|3),float]'}}}}
+
+    initial_state = {
+        'JJJJ': {'MMMM': 55555},
+        'edge': {
+            'inputs': {
+                'a': ['AAAA'],
+                'b': {
+                    'c': ['CCCC'],
+                    'd': ['DDDD']},
+                'e': ['EEEE']},
+            'outputs': {
+                'g': ['GGGG'],
+                'h': {'i': {'j': ['JJJJ']}},
+                'k': {'l': ['LLLL', 'LLLLL', 'LLLLLL']}}}}
+
+    schema, state = core.generate(initial_schema, initial_state)
+
+    import ipdb; ipdb.set_trace()
+
+    inner_schema, inner_state = core.slice(
+        schema,
+        state,
+        ['edge', 'outputs', 'h', 'i', 'j', 'MMMM'])
+
+    assert inner_schema['_type'] == 'integer'
+    assert inner_state == 55555
+
+
 def test_set_slice(core):
     float_schema, float_state = core.set_slice(
         'map[float]',
@@ -2346,6 +2386,7 @@ if __name__ == '__main__':
     test_merge(core)
     test_bind(core)
     test_slice(core)
+    test_slice_edge(core)
     test_set_slice(core)
     test_dataclass(core)
     test_enum_type(core)
