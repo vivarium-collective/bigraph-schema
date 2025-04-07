@@ -101,17 +101,20 @@ else:
 # Each function handles a specific type of schema and ensures that updates are applied correctly.
 # Function signature: (schema, current, update, core)
 
-def apply_any(schema, current, update, core):
+def apply_any(schema, current, update, top_schema, top_state, path, core):
     if isinstance(current, dict):
         return apply_tree(
             current,
             update,
             'tree[any]',
-            core)
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path,
+            core=core)
     else:
         return update
 
-def apply_tuple(schema, current, update, core):
+def apply_tuple(schema, current, update, top_schema, top_state, path, core):
     parameters = core.parameters_for(schema)
     result = []
 
@@ -119,13 +122,16 @@ def apply_tuple(schema, current, update, core):
         element = core.apply_update(
             parameter,
             current_value,
-            update_value)
+            update_value,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
 
         result.append(element)
 
     return tuple(result)
 
-def apply_union(schema, current, update, core):
+def apply_union(schema, current, update, top_schema, top_state, path, core):
     current_type = find_union_type(
         core,
         schema,
@@ -146,9 +152,12 @@ def apply_union(schema, current, update, core):
     return core.apply_update(
         update_type,
         current,
-        update)
+        update,
+        top_schema=top_schema,
+        top_state=top_state,
+        path=path)
 
-def set_apply(schema, current, update, core):
+def set_apply(schema, current, update, top_schema, top_state, path, core):
     if isinstance(current, dict) and isinstance(update, dict):
         for key, value in update.items():
             # TODO: replace this with type specific functions (??)
@@ -172,7 +181,7 @@ def set_apply(schema, current, update, core):
     else:
         return update
 
-def accumulate(schema, current, update, core):
+def accumulate(schema, current, update, top_schema, top_state, path, core):
     if current is None:
         return update
     if update is None:
@@ -180,20 +189,20 @@ def accumulate(schema, current, update, core):
     else:
         return current + update
 
-def concatenate(schema, current, update, core=None):
+def concatenate(schema, current, update, top_schema, top_state, path, core=None):
     return current + update
 
-def replace(schema, current, update, core=None):
+def replace(schema, current, update, top_schema, top_state, path, core=None):
     return update
 
-def apply_schema(schema, current, update, core):
+def apply_schema(schema, current, update, top_schema, top_state, path, core):
     """
     Apply an update to a schema, returning the new schema
     """
     outcome = core.resolve_schemas(current, update)
     return outcome
 
-def apply_tree(schema, current, update, core):
+def apply_tree(schema, current, update, top_schema, top_state, path, core):
     leaf_type = core.find_parameter(
         schema,
         'leaf')
@@ -218,13 +227,19 @@ def apply_tree(schema, current, update, core):
                 current[key] = core.apply_update(
                     subschema,
                     current.get(key),
-                    branch)
+                    branch,
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path + [key])
 
             elif core.check(leaf_type, branch):
                 current[key] = core.apply_update(
                     leaf_type,
                     current.get(key),
-                    branch)
+                    branch,
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path + [key])
 
             else:
                 raise Exception(f'state does not seem to be of leaf type:\n  state: {state}\n  leaf type: {leaf_type}')
@@ -235,19 +250,22 @@ def apply_tree(schema, current, update, core):
         return core.apply_update(
             leaf_type,
             current,
-            update)
+            update,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
 
     else:
         raise Exception(f'trying to apply an update to a tree but the values are not trees or leaves of that tree\ncurrent:\n  {pf(current)}\nupdate:\n  {pf(update)}\nschema:\n  {pf(schema)}')
 
-def apply_boolean(schema, current: bool, update: bool, core=None) -> bool:
+def apply_boolean(schema, current: bool, update: bool, top_schema, top_state, path, core=None) -> bool:
     """Performs a bit flip if `current` does not match `update`, returning update. Returns current if they match."""
     if current != update:
         return update
     else:
         return current
 
-def apply_list(schema, current, update, core):
+def apply_list(schema, current, update, top_schema, top_state, path, core):
     element_type = core.find_parameter(
         schema,
         'element')
@@ -272,7 +290,7 @@ def apply_list(schema, current, update, core):
     else:
         raise Exception(f'trying to apply an update to an existing list, but the update is not a list or of element type:\n  update: {update}\n  element type: {pf(element_type)}')
 
-def apply_map(schema, current, update, core=None):
+def apply_map(schema, current, update, top_schema, top_state, path, core=None):
     if not isinstance(current, dict):
         raise Exception(f'trying to apply an update to a value that is not a map:\n  value: {current}\n  update: {update}')
     if not isinstance(update, dict):
@@ -287,9 +305,13 @@ def apply_map(schema, current, update, core=None):
     for key, update_value in update.items():
         if key == '_add':
             for addition_key, addition in update_value.items():
-                generated_schema, generated_state = core.generate(
+
+                _, generated_state, top_schema, top_state = core.generate_recur(
                     value_type,
-                    addition)
+                    addition,
+                    top_schema=top_schema,
+                    top_state=top_state,
+                    path=path + [addition_key])
 
                 result[addition_key] = generated_state
 
@@ -300,22 +322,35 @@ def apply_map(schema, current, update, core=None):
 
         elif key not in current:
             # This supports adding without the '_add' key, if the key is not in the state
-            generated_schema, generated_state = core.generate(
+            _, generated_state, top_schema, top_state = core.generate_recur(
                 value_type,
-                update_value)
+                update_value,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path + [key])
 
             result[key] = generated_state
+
+            # generated_schema, generated_state = core.generate(
+            #     value_type,
+            #     update_value)
+
+            # result[key] = generated_state
 
             # raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
         else:
             result[key] = core.apply_update(
                 value_type,
                 result[key],
-                update_value)
+                update_value,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path + [key])
 
     return result
 
-def apply_maybe(schema, current, update, core):
+
+def apply_maybe(schema, current, update, top_schema, top_state, path, core):
     if current is None or update is None:
         return update
     else:
@@ -326,38 +361,49 @@ def apply_maybe(schema, current, update, core):
         return core.apply_update(
             value_type,
             current,
-            update)
+            update,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
 
-def apply_path(schema, current, update, core):
+
+def apply_path(schema, current, update, top_schema, top_state, path, core):
     # paths replace previous paths
     return update
 
-def apply_edge(schema, current, update, core):
+
+def apply_edge(schema, current, update, top_schema, top_state, path, core):
     result = current.copy()
     result['inputs'] = core.apply_update(
         'wires',
         current.get('inputs'),
-        update.get('inputs'))
+        update.get('inputs'),
+        top_schema=top_schema,
+        top_state=top_state,
+        path=path)
 
     result['outputs'] = core.apply_update(
         'wires',
         current.get('outputs'),
-        update.get('outputs'))
+        update.get('outputs'),
+        top_schema=top_schema,
+        top_state=top_state,
+        path=path)
 
     return result
 
 # TODO: deal with all the different unit core
-def apply_units(schema, current, update, core):
+def apply_units(schema, current, update, top_schema, top_state, path, core):
     return current + update
 
-def apply_enum(schema, current, update, core):
+def apply_enum(schema, current, update, top_schema, top_state, path, core):
     parameters = core.parameters_for(schema)
     if update in parameters:
         return update
     else:
         raise Exception(f'{update} is not in the enum, options are: {parameters}')
 
-def apply_array(schema, current, update, core):
+def apply_array(schema, current, update, top_schema, top_state, path, core):
     if isinstance(update, dict):
         paths = hierarchy_depth(update)
         for path, inner_update in paths.items():
@@ -1433,8 +1479,6 @@ def slice_edge(schema, state, path, core):
     if len(path) > 0:
         head = path[0]
         tail = path[1:]
-
-        import ipdb; ipdb.set_trace()
 
         if head == '_inputs' or head == '_outputs':
             pass

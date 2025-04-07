@@ -1093,8 +1093,12 @@ class TypeSystem(Registry):
         return {}
 
 
-    def apply_update(self, schema, state, update):
+    def apply_update(self, schema, state, update, top_schema=None, top_state=None, path=None):
         schema = self.access(schema)
+
+        top_schema = top_schema or schema
+        top_state = top_state or state
+        path = path or []
 
         if isinstance(update, dict) and '_react' in update:
             new_state = self.react(
@@ -1134,11 +1138,20 @@ class TypeSystem(Registry):
                 schema,
                 state,
                 update,
+                top_schema,
+                top_state,
+                path,
                 self)
 
         elif isinstance(schema, str) or isinstance(schema, list):
             schema = self.access(schema)
-            state = self.apply_update(schema, state, update)
+            state = self.apply_update(
+                schema,
+                state,
+                update,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path)
 
         elif isinstance(update, dict):
             for key, branch in update.items():
@@ -1150,7 +1163,10 @@ class TypeSystem(Registry):
                     subupdate = self.apply_update(
                         self.access(schema[key]),
                         state[key],
-                        branch)
+                        branch,
+                        top_schema=top_schema,
+                        top_state=top_state,
+                        path=path + [key])
 
                     state[key] = subupdate
         else:
@@ -1164,7 +1180,10 @@ class TypeSystem(Registry):
     def apply(self, original_schema, initial, update):
         schema = self.access(original_schema)
         state = copy.deepcopy(initial)
-        return self.apply_update(schema, state, update)
+        return self.apply_update(
+            schema,
+            state,
+            update)
 
 
     def apply_slice(self, schema, state, path, update):
