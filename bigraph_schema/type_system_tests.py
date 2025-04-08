@@ -905,11 +905,10 @@ def test_apply_schema(core):
         'c': 'string',
         'd': ('number', 'float', 'path')}
 
-    applied = apply_schema(
+    applied = core.apply(
         'schema',
         current,
-        update,
-        core)
+        update)
 
     assert applied['a']['_type'] == 'float'
     assert applied['b']['_value']['_type'] == 'path'
@@ -919,7 +918,7 @@ def test_apply_schema(core):
     assert applied['d']['_2']['_type'] == 'path'
 
 
-def apply_foursquare(schema, current, update, core):
+def apply_foursquare(schema, current, update, top_schema, top_state, path, core):
     if isinstance(current, bool) or isinstance(update, bool):
         return update
     else:
@@ -928,7 +927,10 @@ def apply_foursquare(schema, current, update, core):
                 schema,
                 current[key],
                 value,
-                core)
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path,
+                core=core)
 
         return current
 
@@ -1847,6 +1849,30 @@ def test_slice(core):
         ['top', 'AAAA', 'BBBB', 'CCCC', 3])[1] is None
 
 
+def test_star_path(core):
+    nested_schema = 'map[map[green:float|yellow:integer|blue:string]]'
+    nested_state = {
+        'aaa': {
+            'bbb': {
+                'green': 1.1,
+                'yellow': 55,
+                'blue': 'what'},
+            'ccc': {
+                'green': 9999.4,
+                'yellow': 11,
+                'blue': 'umbrella'}}}
+    # TODO: can you do everything the * is doing here with _path instead?
+    nested_path = ['aaa', '*', 'green']
+
+    schema, state = core.slice(
+        nested_schema,
+        nested_state,
+        nested_path)
+
+    assert schema['_value']['_type'] == 'float'
+    assert state['ccc'] == 9999.4
+
+
 def test_set_slice(core):
     float_schema, float_state = core.set_slice(
         'map[float]',
@@ -2287,6 +2313,72 @@ def test_union_key_error(core):
         result = generate_method(core, schema, state)
 
 
+def fix_test_slice_edge(core):
+    initial_schema = {
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'a': 'float',
+                'b': {'c': 'float', 'd': 'string'},
+                'e': {'f': 'array[(3|3),float]'}},
+            '_outputs': {
+                'g': 'float',
+                'h': {'i': {'j': 'map[integer]'}},
+                'k': {'l': 'array[(3|3),float]'}}}}
+
+    initial_state = {
+        'JJJJ': {'MMMM': 55555},
+        'edge': {
+            'inputs': {
+                'a': ['AAAA'],
+                'b': {
+                    'c': ['CCCC'],
+                    'd': ['DDDD']},
+                'e': ['EEEE']},
+            'outputs': {
+                'g': ['GGGG'],
+                'h': {'i': {'j': ['JJJJ']}},
+                'k': {'l': ['LLLL', 'LLLLL', 'LLLLLL']}}}}
+
+    schema, state = core.generate(initial_schema, initial_state)
+
+    import ipdb; ipdb.set_trace()
+
+    inner_schema, inner_state = core.slice(
+        schema,
+        state,
+        ['edge', 'outputs', 'h', 'i', 'j', 'MMMM'])
+
+    assert inner_schema['_type'] == 'integer'
+    assert inner_state == 55555
+
+
+def fix_test_complex_wiring(core):
+    initial_schema = {
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'a': {
+                    'b': 'float',
+                    'c': 'float',
+                    'd': 'float'}},
+            '_outputs': {}}}
+
+    initial_state = {
+        'edge': {
+            'inputs': {
+                'a': {
+                    '_path': ['AAAA', 'AAAAA'],
+                    'b': ['BBBB'],
+                    'c': ['CCCC', 'CCCCC']}}}}
+
+    schema, state = core.generate(
+        initial_schema,
+        initial_state)
+
+    assert state['AAAA']['AAAAA']['BBBB'] == 0.0
+    assert state['AAAA']['AAAAA']['CCCC']['CCCCC'] == 0.0
+    assert state['AAAA']['AAAAA']['d'] == 0.0
 
 
 if __name__ == '__main__':
@@ -2340,3 +2432,5 @@ if __name__ == '__main__':
     test_merge(core)
     test_remove_omitted(core)
     test_union_key_error(core)
+    # test_slice_edge(core)
+    # test_complex_wiring(core)
