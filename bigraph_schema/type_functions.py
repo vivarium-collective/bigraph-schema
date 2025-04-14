@@ -1632,6 +1632,18 @@ def bind_enum(schema, state, key, subschema, substate, core):
 # Each function handles a specific type of schema and ensures that updates are resolved correctly.
 # Function signature: (schema, update, core)
 
+def resolve_maybe(schema, update, core):
+    value_schema = core.find_parameter(
+        schema,
+        'value')
+
+    inner_value = core.resolve_schemas(
+        value_schema,
+        update)
+
+    schema['_value'] = inner_value
+
+
 def resolve_map(schema, update, core):
     if isinstance(update, dict):
         value_schema = update.get(
@@ -2597,13 +2609,14 @@ base_types = {
 
     'maybe': {
         '_type': 'maybe',
-        '_default': NONE_SYMBOL,
+        '_default': None,
         '_apply': apply_maybe,
         '_check': check_maybe,
         '_slice': slice_maybe,
         '_serialize': serialize_maybe,
         '_deserialize': deserialize_maybe,
         '_dataclass': dataclass_maybe,
+        '_resolve': resolve_maybe,
         '_fold': fold_maybe,
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
