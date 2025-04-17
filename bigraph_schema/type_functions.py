@@ -1366,7 +1366,7 @@ def slice_any(schema, state, path, core):
 
             step = state[head]
 
-        elif hasattr(state, head):
+        elif isinstance(head, str) and hasattr(state, head):
             step = getattr(state, head)
 
         if head in schema:
