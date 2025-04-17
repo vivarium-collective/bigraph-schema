@@ -1386,13 +1386,16 @@ class TypeSystem(Registry):
                 state,
                 head)
 
-            result_schema, result_state = self.set_slice(
-                down_schema,
-                down_state,
-                tail,
-                target_schema,
-                target_state,
-                defer=defer)
+            try:
+                result_schema, result_state = self.set_slice(
+                    down_schema,
+                    down_state,
+                    tail,
+                    target_schema,
+                    target_state,
+                    defer=defer)
+            except Exception as e:
+                raise Exception(f'failed to set_slice at path {path}\n{str(e)}')
 
             return self.bind(
                 schema,
