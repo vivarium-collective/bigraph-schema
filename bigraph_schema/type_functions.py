@@ -1548,6 +1548,8 @@ def slice_array(schema, state, path, core):
     if len(path) > 0:
         head = path[0]
         tail = path[1:]
+        if isinstance(head, str):
+            head = int(head)
         step = state[head]
 
         if isinstance(step, np.ndarray):
