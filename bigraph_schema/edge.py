@@ -30,9 +30,17 @@ class Edge:
         pass
 
 
-    def initial_state(self):
-        return {}
+    def initial_state(self, config=None):  # TODO -- config could have a schema
+        """The initial state of the edge, which is passed to the core."""
+        return self.generate_state(config)
 
+    @staticmethod
+    def generate_state(config=None):  # TODO -- config could have a schema
+        """
+        Generate an initial state statically, without any instance-specific config.
+        This could be used to create user-configured initial states based on the Edge's requirements.
+        """
+        return {}
 
     def inputs(self):
         return {}
