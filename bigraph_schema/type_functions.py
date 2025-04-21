@@ -1626,6 +1626,15 @@ def bind_enum(schema, state, key, subschema, substate, core):
 
     return new_schema, tuple(open)
 
+def bind_array(schema, state, key, subschema, substate, core):
+    if state is None:
+        state = core.default(schema)
+    if isinstance(key, str):
+        key = int(key)
+    state[key] = substate
+
+    return schema, state
+
 
 # ==========================
 # Resolve Functions Overview
@@ -2604,6 +2613,7 @@ base_types = {
         '_deserialize': deserialize_array,
         '_dataclass': dataclass_array,
         '_resolve': resolve_array,
+        '_bind': bind_array,
         '_type_parameters': [
             'shape',
             'data'],
