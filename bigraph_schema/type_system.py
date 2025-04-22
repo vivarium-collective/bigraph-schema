@@ -349,19 +349,9 @@ class TypeSystem(Registry):
                 registry_type = self.retrieve(
                     schema['_type'])
 
-                # found = self.resolve(
-                #     registry_type,
-                #     schema)
-
                 found = self.merge_schemas(
                     registry_type,
                     schema)
-
-                # found = schema.copy()
-
-                # for key, value in registry_type.items():
-                #     if  key == '_type' or key not in found:
-                #         found[key] = value
 
             else:
                 found = {
@@ -1610,7 +1600,7 @@ class TypeSystem(Registry):
                 if inner_view is not None:
                     result[port_key] = inner_view
         else:
-            raise Exception(f'trying to project state with these ports:\n{schema}\nbut not sure what these wires are:\n{wires}')
+            raise Exception(f'trying to view state with these ports:\n{schema}\nbut not sure what these wires are:\n{wires}')
 
         return result
 
