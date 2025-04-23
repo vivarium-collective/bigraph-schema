@@ -75,6 +75,7 @@ import typing
 from typing import NewType, Union, Mapping, List, Dict, Optional, Callable
 from dataclasses import field, make_dataclass
 
+from bigraph_schema import get_path, set_path
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.registry import (
     is_schema_key, non_schema_keys, type_parameter_key, deep_merge, hierarchy_depth, establish_path
@@ -1083,8 +1084,47 @@ def serialize_edge(schema, value, core):
 def serialize_enum(schema, value, core):
     return value
 
+def recur_serialize_schema(schema, core, path=None, parents=None):
+    """ Serialize schema to a string """
+    path = path or []
+    parents = parents or []
+    schema_id = id(schema)
+
+    if schema_id in parents:
+        index = parents.index(schema_id)
+        reference = path[:index]
+        output = '/'.join(reference)
+        return f'/{output}'
+
+    if isinstance(schema, str):
+        return schema
+
+    elif isinstance(schema, tuple):
+        inner = [
+            recur_serialize_schema(schema=element,
+                                   core=core,
+                                   path=path+[index],
+                                   parents=parents+[schema_id]
+                                   ) for index, element in enumerate(schema)]
+        return inner
+
+    elif isinstance(schema, dict):
+        inner = {}
+        for key in schema:
+            subschema = recur_serialize_schema(
+                schema=schema[key],
+                core=core,
+                path=path+[key],
+                parents=parents+[schema_id])
+            inner[key] = subschema
+        return inner
+
+    else:
+        return schema
+
 def serialize_schema(schema, state, core):
-    return state
+    """ Serialize schema to a string """
+    return recur_serialize_schema(schema=state, core=core)
 
 def serialize_array(schema, value, core):
     """ Serialize numpy array to list """
@@ -1229,6 +1269,9 @@ def deserialize_maybe(schema, encoded, core):
 
         return core.deserialize(value_type, encoded)
 
+def deserialize_quote(schema, state, core):
+    return state
+
 def deserialize_boolean(schema, encoded, core) -> bool:
     if encoded == 'true':
         return True
@@ -1313,8 +1356,37 @@ def deserialize_array(schema, encoded, core):
 def deserialize_edge(schema, encoded, core):
     return encoded
 
+def recur_deserialize_schema(schema, core, top_state=None, path=None):
+    top_state = top_state or schema
+    path = path or []
+
+    if isinstance(schema, dict):
+        subschema = {}
+        for key, value in schema.items():
+            subschema[key] = recur_deserialize_schema(value, core, top_state=top_state, path=path+[key])
+        return subschema
+    elif isinstance(schema, list):
+        subschema = []
+        for index, value in enumerate(schema):
+            subschema.append(recur_deserialize_schema(value, core, top_state=top_state, path=path+[index]))
+        return tuple(subschema)
+    elif isinstance(schema, str):
+        if schema.startswith('/'):  # this is a reference to another schema
+            local_path = schema.split('/')[1:]
+            relative_path = path[len(local_path):]
+            reference = get_path(top_state, local_path)
+            reference = set_path(tree=reference,
+                                 path=relative_path,
+                                 value=reference)
+            return reference
+        else:
+            return schema
+    else:
+        return schema
+
+
 def deserialize_schema(schema, state, core):
-    return state
+    return recur_deserialize_schema(schema=state, core=core)
 
 
 # =========================
@@ -2076,10 +2148,6 @@ def default_quote(schema, core):
         return copy.deepcopy(schema['_default'])
     else:
         return None
-
-
-def deserialize_quote(schema, state, core):
-    return state
 
 
 def generate_map(core, schema, state, top_schema=None, top_state=None, path=None):
