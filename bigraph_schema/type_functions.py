@@ -1101,11 +1101,13 @@ def recur_serialize_schema(schema, core, path=None, parents=None):
 
     elif isinstance(schema, tuple):
         inner = [
-            recur_serialize_schema(schema=element,
-                                   core=core,
-                                   path=path+[index],
-                                   parents=parents+[schema_id]
-                                   ) for index, element in enumerate(schema)]
+            recur_serialize_schema(
+                schema=element,
+                core=core,
+                path=path+[index],
+                parents=parents+[schema_id])
+            for index, element in enumerate(schema)]
+
         return inner
 
     elif isinstance(schema, dict):
@@ -1117,6 +1119,7 @@ def recur_serialize_schema(schema, core, path=None, parents=None):
                 path=path+[key],
                 parents=parents+[schema_id])
             inner[key] = subschema
+
         return inner
 
     else:
@@ -1363,21 +1366,36 @@ def recur_deserialize_schema(schema, core, top_state=None, path=None):
     if isinstance(schema, dict):
         subschema = {}
         for key, value in schema.items():
-            subschema[key] = recur_deserialize_schema(value, core, top_state=top_state, path=path+[key])
+            subschema[key] = recur_deserialize_schema(
+                value,
+                core,
+                top_state=top_state,
+                path=path+[key])
+
         return subschema
+
     elif isinstance(schema, list):
         subschema = []
         for index, value in enumerate(schema):
-            subschema.append(recur_deserialize_schema(value, core, top_state=top_state, path=path+[index]))
+            subschema.append(
+                recur_deserialize_schema(
+                    value,
+                    core,
+                    top_state=top_state,
+                    path=path+[index]))
+
         return tuple(subschema)
+
     elif isinstance(schema, str):
         if schema.startswith('/'):  # this is a reference to another schema
             local_path = schema.split('/')[1:]
-            relative_path = path[len(local_path):]
             reference = get_path(top_state, local_path)
-            reference = set_path(tree=reference,
-                                 path=relative_path,
-                                 value=reference)
+
+            set_path(
+                tree=top_state,
+                path=path,
+                value=reference)
+
             return reference
         else:
             return schema
