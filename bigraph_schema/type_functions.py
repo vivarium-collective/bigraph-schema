@@ -2061,6 +2061,8 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
                 generated_state)
 
     else:
+        if not core.check(schema, state):
+            state = core.deserialize(schema, state)
         generated_schema, generated_state = schema, state
 
     return generated_schema, generated_state, top_schema, top_state
