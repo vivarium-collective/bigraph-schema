@@ -2410,8 +2410,44 @@ def sort_any(core, schema, state):
 
     return merged_schema, merged_state
 
+
 def sort_quote(core, schema, state):
     return schema, state
+
+
+def sort_map(core, schema, state):
+    if not isinstance(schema, dict):
+        schema = core.find(schema)
+    if not isinstance(state, dict):
+        return schema, state
+
+    merged_schema = {}
+    merged_state = {}
+
+    value_schema = core.find_parameter(
+        schema,
+        'value')
+
+    for key in union_keys(schema, state):
+        if is_schema_key(key):
+            if key in state:
+                merged_schema[key] = core.merge_schemas(
+                    schema.get(key, {}),
+                    state[key])
+            else:
+                merged_schema[key] = schema[key]
+        else:
+            subschema, merged_state[key] = core.sort(
+                schema.get(key, {}),
+                state.get(key, None))
+            if subschema:
+                value_schema = core.merge_schemas(
+                    value_schema,
+                    subschema)
+                # merged_schema[key] = subschema
+
+    return merged_schema, merged_state
+
 
 def find_union_type(core, schema, state):
     parameters = core.parameters_for(schema)
@@ -2672,6 +2708,7 @@ base_types = {
         '_slice': slice_map,
         '_fold': fold_map,
         '_divide': divide_map,
+        '_sort': sort_map,
         '_type_parameters': ['value'],
         '_description': 'flat mapping from keys of strings to values of any type'},
 
