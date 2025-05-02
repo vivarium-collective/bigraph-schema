@@ -2381,6 +2381,37 @@ def fix_test_complex_wiring(core):
     assert state['AAAA']['AAAAA']['d'] == 0.0
 
 
+def test_tree_equivalence(core):
+    state = {
+        'store1': {
+            'store1.1': '1.0'}}
+
+    store11 = {
+        'store1.1': {
+            '_type': 'float',
+            '_default': '1.0'}}
+
+    core.register('store1.1', store11)
+
+    tree = {
+        '_type': 'tree',
+        '_leaf': 'store1.1'}
+
+    store_schema, store_state = core.generate(
+        'tree[float]',
+        state)
+
+    tree_schema, tree_state = core.generate(
+        tree,
+        {'store1': None})
+
+    fill_schema, fill_state = core.generate(
+        tree,
+        {'store1': {}})
+
+    assert store_state == tree_state == fill_state
+
+
 if __name__ == '__main__':
     core = TypeSystem()
     core = register_test_types(core)
@@ -2432,5 +2463,6 @@ if __name__ == '__main__':
     test_merge(core)
     test_remove_omitted(core)
     test_union_key_error(core)
+    test_tree_equivalence(core)
     # test_slice_edge(core)
     # test_complex_wiring(core)

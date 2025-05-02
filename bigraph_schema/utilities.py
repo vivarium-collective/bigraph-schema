@@ -146,7 +146,6 @@ def lookup_dtype(data_name):
 
 
 def read_datatype(data_schema):
-    print(f'reading datatype from {data_schema}')
     return lookup_dtype(
         data_schema['_type'])
 

@@ -2279,12 +2279,17 @@ def generate_tree(core, schema, state, top_schema=None, top_state=None, path=Non
             elif key in schema:
                 generate_schema[key] = schema[key]
             else:
-                raise Exception(' the impossible has occurred now is the time for celebration')
+                raise Exception('the impossible has occurred now is the time for celebration')
     else:
-        generate_schema = schema
-        generate_state = state
+        generate_schema, generate_state, top_schema, top_state = core.generate_recur(
+            leaf_type,
+            state,
+            top_schema=top_schema,
+            top_state=top_state,
+            path=path)
 
     return generate_schema, generate_state, top_schema, top_state
+
 
 def generate_ports(core, schema, wires, top_schema=None, top_state=None, path=None):
     schema = schema or {}
@@ -2488,33 +2493,36 @@ def resolve_any(schema, update, core):
 
     return outcome
 
-# def resolve_tree(schema, update, core):
-#     if isinstance(update, dict):
-#         leaf_schema = schema.get('_leaf', {})
+def resolve_tree(schema, update, core):
+    schema = schema or {}
+    outcome = schema.copy()
 
-#         if '_type' in update:
-#             if update['_type'] == 'map':
-#                 value_schema = update.get('_value', {})
-#                 leaf_schema = core.resolve_schemas(
-#                     leaf_schema,
-#                     value_schema)
+    for key, subschema in update.items():
+        if key == '_type' and key in outcome:
+            if outcome[key] != subschema:
+                if core.inherits_from(outcome[key], subschema):
+                    continue
+                elif core.inherits_from(subschema, outcome[key]):
+                    outcome[key] = subschema
+                else:
+                    leaf_type = core.find_parameter(
+                        schema,
+                        'leaf')
+                    return core.resolve(
+                        leaf_type,
+                        update)
 
-#             elif update['_type'] == 'tree':
-#                 for key, subschema in update.items():
-#                     if not key.startswith('_'):
-#                         leaf_schema = core.resolve_schemas(
-#                             leaf_schema,
-#                             subschema)
-#             else:
-#                 leaf_schema = core.resolve_schemas(
-#                     leaf_schema,
-#                     update)
+                    # raise Exception(f'cannot resolve types when updating\ncurrent type: {schema}\nupdate type: {update}')
 
-#             schema['_leaf'] = leaf_schema
-#         else:
-#             for key, subupdate in
+        elif not key in outcome or type_parameter_key(update, key):
+            if subschema:
+                outcome[key] = subschema
+        else:
+            outcome[key] = core.resolve_schemas(
+                outcome.get(key),
+                subschema)
 
-#     return schema
+    return outcome
 
 
 # ==========================
@@ -2724,7 +2732,7 @@ base_types = {
         '_dataclass': dataclass_tree,
         '_fold': fold_tree,
         '_divide': divide_tree,
-        # '_resolve': resolve_tree,
+        '_resolve': resolve_tree,
         '_type_parameters': ['leaf'],
         '_description': 'mapping from str to some type in a potentially nested form'},
 

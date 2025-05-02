@@ -274,6 +274,10 @@ class TypeSystem(Registry):
     def merge_schemas(self, current, update):
         if current == update:
             return update
+        if current is None:
+            return update
+        if update is None:
+            return current
         if not isinstance(current, dict):
             return update
         if not isinstance(update, dict):
@@ -1316,7 +1320,6 @@ class TypeSystem(Registry):
 
 
     def set_slice(self, schema, state, path, target_schema, target_state, defer=False):
-
         '''
         Makes a local modification to the schema/state at the path, and
         returns the top_schema and top_state
@@ -2083,9 +2086,14 @@ class TypeSystem(Registry):
             schema,
             state)
 
-        _, _, top_schema, top_state = self.generate_recur(
+        deserialized_state = self.deserialize(
             merged_schema,
             merged_state)
+
+        _, _, top_schema, top_state = self.generate_recur(
+            merged_schema,
+            deserialized_state)
+            # merged_state)
 
         return top_schema, top_state
 
