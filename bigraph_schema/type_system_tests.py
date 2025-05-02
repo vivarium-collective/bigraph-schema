@@ -2382,10 +2382,11 @@ def fix_test_complex_wiring(core):
 
 
 def test_tree_equivalence(core):
-    state = {
+    initial_state = {
         'store1': {
             'store1.1': '1.0'}}
 
+    # create a nested store type and register it
     store11 = {
         'store1.1': {
             '_type': 'float',
@@ -2393,23 +2394,43 @@ def test_tree_equivalence(core):
 
     core.register('store1.1', store11)
 
-    tree = {
+    # create a tree schema that uses this type
+    store_tree = {
         '_type': 'tree',
         '_leaf': 'store1.1'}
 
+    # interpret the state as a simple tree of float
     store_schema, store_state = core.generate(
         'tree[float]',
-        state)
+        initial_state)
 
+    # use the nested type to fill in the state
     tree_schema, tree_state = core.generate(
-        tree,
+        store_tree,
         {'store1': None})
 
+    # use the nested type but with an empty dict instead
     fill_schema, fill_state = core.generate(
-        tree,
+        store_tree,
         {'store1': {}})
 
-    assert store_state == tree_state == fill_state
+    # supply the whole schema at once instead of registering
+    inline_schema, inline_state = core.generate({
+        '_type': 'tree',
+        '_leaf': {
+            'store1.1': {
+                '_type': 'float',
+                '_default': '1.0'}}},
+        {'store1': {}})
+
+    # here is the state we expect from each of these calls
+    # to generate
+    target_state = {
+        'store1': {
+            'store1.1': 1.0}}
+
+    # all of the resulting generated states are the same
+    assert store_state == tree_state == fill_state == inline_state == target_state
 
 
 if __name__ == '__main__':
