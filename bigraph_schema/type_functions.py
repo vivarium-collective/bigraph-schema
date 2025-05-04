@@ -2499,28 +2499,63 @@ def find_union_type(core, schema, state):
 # Each function handles a specific type of schema and ensures that updates are resolved correctly.
 
 def resolve_any(schema, update, core):
-    schema = schema or {}
+    if not schema or schema == 'any':
+        return update
+    if not update or update == 'any':
+        return schema
+
+    if isinstance(schema, str):
+        schema = core.access(schema)
+
     outcome = schema.copy()
 
     for key, subschema in update.items():
         if key == '_type' and key in outcome:
-            if outcome[key] != subschema:
-                if core.inherits_from(outcome[key], subschema):
+            if schema[key] != subschema:
+                if core.inherits_from(schema[key], subschema):
                     continue
-                elif core.inherits_from(subschema, outcome[key]):
+                elif core.inherits_from(subschema, schema[key]):
                     outcome[key] = subschema
                 else:
                     raise Exception(f'cannot resolve types when updating\ncurrent type: {schema}\nupdate type: {update}')
 
-        elif not key in outcome or type_parameter_key(update, key):
+        elif not key in schema or type_parameter_key(schema, key):
             if subschema:
                 outcome[key] = subschema
         else:
             outcome[key] = core.resolve_schemas(
-                outcome.get(key),
+                schema.get(key),
                 subschema)
 
     return outcome
+
+
+def resolve_union(schema, update, core):
+    if '_type' in schema and schema['_type'] == 'union':
+        union_type, resolve_type = schema, update
+    elif '_type' in update and update['_type'] == 'union':
+        union_type, resolve_type = update, schema
+    else:
+        raise Exception(f'empty union?\n{schema}\n{update}')
+
+    if '_type_parameters' in union_type:
+        parameters = union_type['_type_parameters']
+    else:
+        raise Exception(f'no type parameters in union?\n{union_type}')
+
+    for parameter in parameters:
+        parameter_key = f'_{parameter}'
+        parameter_type = union_type[parameter_key]
+        try:
+            resolved = core.resolve(
+                parameter_type,
+                resolve_type)
+            return union_type
+        except Exception as e:
+            pass
+
+    raise Exception(f'could not resolve type with union:\n{update}\nunion:\n{schema}')
+
 
 def resolve_tree(schema, update, core):
     if not schema or schema == 'any':
@@ -2802,7 +2837,7 @@ base_types = {
 
     'path': {
         '_type': 'path',
-        '_inherit': 'list[string]',
+        '_inherit': 'list[string~integer]',
         '_apply': apply_path},
 
     'wires': {
@@ -2881,4 +2916,5 @@ registry_types = {
         '_deserialize': deserialize_union,
         '_dataclass': dataclass_union,
         '_fold': fold_union,
+        '_resolve': resolve_union,
         '_description': 'union of a set of possible types'}}

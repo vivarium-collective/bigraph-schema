@@ -838,7 +838,7 @@ def test_inherits_from(core):
 
     assert core.inherits_from(
         'tree[path]',
-        'tree[list[string]]')
+        'tree[list[string~integer]]')
 
     assert not core.inherits_from(
         'tree[path]',
@@ -2341,8 +2341,6 @@ def fix_test_slice_edge(core):
                 'k': {'l': ['LLLL', 'LLLLL', 'LLLLLL']}}}}
 
     schema, state = core.generate(initial_schema, initial_state)
-
-    import ipdb; ipdb.set_trace()
 
     inner_schema, inner_state = core.slice(
         schema,
