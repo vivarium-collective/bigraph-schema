@@ -1324,8 +1324,20 @@ def deserialize_map(schema, encoded, core=None):
                 subvalue) if not is_schema_key(key) else subvalue
             for key, subvalue in encoded.items()}
 
+
+def enum_list(enum_schema):
+    return [
+        enum_schema[f'_{parameter}']
+        for parameter in enum_schema['_type_parameters']]
+
+
 def deserialize_enum(schema, state, core):
-    return state  # TODO check this
+    enum = enum_list(schema)
+    if state in enum:
+        return state
+    else:
+        raise Exception(f'{state} not in enum: {enum}')
+
 
 def deserialize_array(schema, encoded, core):
     if isinstance(encoded, np.ndarray):
@@ -1553,6 +1565,19 @@ def slice_tree(schema, state, path, core):
 
             return slice_schema, slice_state
 
+        if not state:
+            default = core.default(
+                leaf_type)
+            try:
+                down_schema, down_state = core.slice(
+                    leaf_type,
+                    default,
+                    path)
+
+                if down_state:
+                    return down_schema, down_state
+            except:
+                state = {}
         if not head in state:
             state[head] = {}
 
@@ -2137,23 +2162,27 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
 
                 generated_state[key] = substate
 
-        if path:
-            top_schema, top_state = core.set_slice(
-                top_schema,
-                top_state,
-                path,
-                generated_schema,
-                generated_state)
-        else:
-            top_state = core.merge_recur(
-                top_schema,
-                top_state,
-                generated_state)
-
     else:
         if not core.check(schema, state):
-            state = core.deserialize(schema, state)
+            deserialized_state = core.deserialize(schema, state)
+            if core.check(schema, deserialized_state):
+                state = deserialized_state
+            else:
+                raise Exception(f'cannot generate {state} as {schema}')
         generated_schema, generated_state = schema, state
+
+    if path:
+        top_schema, top_state = core.set_slice(
+            top_schema,
+            top_state,
+            path,
+            generated_schema,
+            generated_state)
+    else:
+        top_state = core.merge_recur(
+            top_schema,
+            top_state,
+            generated_state)
 
     return generated_schema, generated_state, top_schema, top_state
 
@@ -2494,7 +2523,11 @@ def resolve_any(schema, update, core):
     return outcome
 
 def resolve_tree(schema, update, core):
-    schema = schema or {}
+    if not schema or schema == 'any':
+        return update
+    if not update or update == 'any':
+        return schema
+
     outcome = schema.copy()
 
     for key, subschema in update.items():
@@ -2508,6 +2541,7 @@ def resolve_tree(schema, update, core):
                     leaf_type = core.find_parameter(
                         schema,
                         'leaf')
+
                     return core.resolve(
                         leaf_type,
                         update)

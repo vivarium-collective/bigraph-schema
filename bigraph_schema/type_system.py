@@ -988,9 +988,12 @@ class TypeSystem(Registry):
                         parameter_key = f'_{parameter}'
                         if parameter in current['_type_parameters']:
                             if parameter_key in current:
-                                outcome[parameter_key] = self.resolve_schemas(
-                                    current[parameter_key],
-                                    update[parameter_key])
+                                if parameter_key in update:
+                                    outcome[parameter_key] = self.resolve_schemas(
+                                        current[parameter_key],
+                                        update[parameter_key])
+                                else:
+                                    outcome[parameter_key] = current[parameter_key]
                             elif parameter_key in update:
                                 outcome[parameter_key] = update[parameter_key]
                             # else:
@@ -2086,14 +2089,9 @@ class TypeSystem(Registry):
             schema,
             state)
 
-        deserialized_state = self.deserialize(
-            merged_schema,
-            merged_state)
-
         _, _, top_schema, top_state = self.generate_recur(
             merged_schema,
-            deserialized_state)
-            # merged_state)
+            merged_state)
 
         return top_schema, top_state
 
