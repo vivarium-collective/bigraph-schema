@@ -967,6 +967,9 @@ class TypeSystem(Registry):
 
 
     def resolve_schemas(self, initial_current, initial_update):
+        if initial_current == initial_update:
+            return initial_current
+
         current = self.access(initial_current)
         update = self.access(initial_update)
 
@@ -980,7 +983,7 @@ class TypeSystem(Registry):
             outcome = update
 
         elif '_type' in current and '_type' in update and current['_type'] == update['_type']:
-            outcome = current.copy()
+            outcome = {}
 
             for key in update:
                 if key == '_type_parameters' and '_type_parameters' in current:
@@ -996,44 +999,25 @@ class TypeSystem(Registry):
                                     outcome[parameter_key] = current[parameter_key]
                             elif parameter_key in update:
                                 outcome[parameter_key] = update[parameter_key]
-                            # else:
-                            #     outcome[parameter_key] = {}
                         else:
                             outcome[parameter_key] = update[parameter_key]
-                elif key not in outcome or type_parameter_key(current, key):
-                    key_update = update[key]
-                    if key_update:
-                        outcome[key] = key_update
-                else:
+                elif key not in current or type_parameter_key(current, key):
+                    if update[key]:
+                        outcome[key] = update[key]
+                    else:
+                        outcome[key] = current.get(key)
+                elif key in current and current[key]:
                     outcome[key] = self.resolve_schemas(
-                        outcome.get(key),
+                        current[key],
                         update[key])
+                else:
+                    outcome[key] = update[key]
 
         elif '_type' in update and '_type' not in current:
             outcome = self.resolve(update, current)
 
         else:
             outcome = self.resolve(current, update)
-
-        # elif '_type' in current:
-        #     outcome = self.resolve(current, update)
-
-        # elif '_type' in update:
-        #     outcome = self.resolve(update, current)
-
-        # else:
-        #     outcome = self.resolve(current, update)
-        #     outcome = current.copy()
-
-        #     for key in update:
-        #         if not key in outcome or is_schema_key(update, key):
-        #             key_update = update[key]
-        #             if key_update:
-        #                 outcome[key] = key_update
-        #         else:
-        #             outcome[key] = self.resolve_schemas(
-        #                 outcome.get(key),
-        #                 update[key])
 
         return outcome
 
