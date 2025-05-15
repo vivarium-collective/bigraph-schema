@@ -1361,31 +1361,60 @@ class TypeSystem(Registry):
             head = path[0]
             tail = path[1:]
 
-            if head == '*':
-                import ipdb; ipdb.set_trace()
-
             down_schema, down_state = self.slice(
                 schema,
                 state,
                 head)
 
-            try:
-                result_schema, result_state = self.set_slice(
-                    down_schema,
-                    down_state,
-                    tail,
-                    target_schema,
-                    target_state,
-                    defer=defer)
-            except Exception as e:
-                raise Exception(f'failed to set_slice at path {path}\n{str(e)}')
+            if head == '*':
+                result_schema, result_state = down_schema, down_state
+                for key in down_state:
+                    if key in target_state:
+                        subtarget_schema, subtarget_state = self.slice(
+                            target_schema,
+                            target_state,
+                            key)
 
-            return self.bind(
-                schema,
-                state,
-                head,
-                result_schema,
-                result_state)
+                        try:
+                            result_schema, result_state = self.set_slice(
+                                result_schema,
+                                result_state,
+                                tail,
+                                subtarget_schema,
+                                subtarget_state,
+                                defer=defer)
+
+                        except Exception as e:
+                            raise Exception(
+                                f'failed to set_slice at path {path}\n{str(e)}')
+
+                        schema, state = self.bind(
+                            schema,
+                            state,
+                            key,
+                            result_schema,
+                            result_state)
+
+                return schema, state
+
+            else:
+                try:
+                    result_schema, result_state = self.set_slice(
+                        down_schema,
+                        down_state,
+                        tail,
+                        target_schema,
+                        target_state,
+                        defer=defer)
+                except Exception as e:
+                    raise Exception(f'failed to set_slice at path {path}\n{str(e)}')
+
+                return self.bind(
+                    schema,
+                    state,
+                    head,
+                    result_schema,
+                    result_state)
 
 
     def serialize(self, schema, state):
