@@ -14,7 +14,7 @@ from pprint import pformat as pf
 from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge, type_parameter_key
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.utilities import union_keys
-from bigraph_schema.registry import remove_omitted, set_path, transform_path
+from bigraph_schema.registry import remove_omitted, set_path, transform_path, set_star_path
 
 from bigraph_schema.type_functions import (
     registry_types, base_types, unit_types, register_base_reactions, is_empty, apply_schema, set_apply)
@@ -1361,6 +1361,9 @@ class TypeSystem(Registry):
             head = path[0]
             tail = path[1:]
 
+            if head == '*':
+                import ipdb; ipdb.set_trace()
+
             down_schema, down_state = self.slice(
                 schema,
                 state,
@@ -1634,7 +1637,7 @@ class TypeSystem(Registry):
 
         if isinstance(wires, (list, tuple)):
             destination = resolve_path(list(path) + list(wires))
-            result = set_path(
+            result = set_star_path(
                 result,
                 destination,
                 states)

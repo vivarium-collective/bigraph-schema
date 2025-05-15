@@ -1861,6 +1861,7 @@ def test_star_path(core):
                 'green': 9999.4,
                 'yellow': 11,
                 'blue': 'umbrella'}}}
+
     # TODO: can you do everything the * is doing here with _path instead?
     nested_path = ['aaa', '*', 'green']
 
@@ -1871,6 +1872,51 @@ def test_star_path(core):
 
     assert schema['_value']['_type'] == 'float'
     assert state['ccc'] == 9999.4
+
+
+def test_star_view_project(core):
+    schema = {
+        'edges': 'map[edge[view:map[float],project:map[string]]]',
+        'stores': 'map[map[green:float|yellow:integer|blue:string]]'}
+
+    state = {
+        'edges': {
+            'edge': {
+                'inputs': {
+                    'view': ['..', 'stores', 'aaa', '*', 'green']},
+                'outputs': {
+                    'project': ['..', 'stores', 'aaa', '*', 'blue']}}},
+        'stores': {
+            'aaa': {
+                'bbb': {
+                    'green': 1.1,
+                    'yellow': 55,
+                    'blue': 'what'},
+                'ccc': {
+                    'green': 9999.4,
+                    'yellow': 11,
+                    'blue': 'umbrella'}}}}
+
+    edge_path = ['edges', 'edge']
+
+    view = core.view_edge(
+        schema,
+        state,
+        edge_path)
+
+    internal = {
+        'project': {
+            'bbb': 'everything',
+            'ccc': 'inside out'}}
+
+    project = core.project_edge(
+        schema,
+        state,
+        edge_path,
+        internal)
+
+    assert view['view']['bbb'] == state['stores']['aaa']['bbb']['green']
+    assert project['stores']['aaa']['ccc']['blue'] == internal['project']['ccc']
 
 
 def test_set_slice(core):
@@ -2483,5 +2529,7 @@ if __name__ == '__main__':
     test_remove_omitted(core)
     test_union_key_error(core)
     test_tree_equivalence(core)
+    test_star_view_project(core)
+
     # test_slice_edge(core)
     # test_complex_wiring(core)
