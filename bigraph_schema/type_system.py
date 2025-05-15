@@ -14,7 +14,7 @@ from pprint import pformat as pf
 from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge, type_parameter_key
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.utilities import union_keys
-from bigraph_schema.registry import remove_omitted, set_path, transform_path
+from bigraph_schema.registry import remove_omitted, set_path, transform_path, set_star_path
 
 from bigraph_schema.type_functions import (
     registry_types, base_types, unit_types, register_base_reactions, is_empty, apply_schema, set_apply)
@@ -1366,23 +1366,55 @@ class TypeSystem(Registry):
                 state,
                 head)
 
-            try:
-                result_schema, result_state = self.set_slice(
-                    down_schema,
-                    down_state,
-                    tail,
-                    target_schema,
-                    target_state,
-                    defer=defer)
-            except Exception as e:
-                raise Exception(f'failed to set_slice at path {path}\n{str(e)}')
+            if head == '*':
+                result_schema, result_state = down_schema, down_state
+                for key in down_state:
+                    if key in target_state:
+                        subtarget_schema, subtarget_state = self.slice(
+                            target_schema,
+                            target_state,
+                            key)
 
-            return self.bind(
-                schema,
-                state,
-                head,
-                result_schema,
-                result_state)
+                        try:
+                            result_schema, result_state = self.set_slice(
+                                result_schema,
+                                result_state,
+                                tail,
+                                subtarget_schema,
+                                subtarget_state,
+                                defer=defer)
+
+                        except Exception as e:
+                            raise Exception(
+                                f'failed to set_slice at path {path}\n{str(e)}')
+
+                        schema, state = self.bind(
+                            schema,
+                            state,
+                            key,
+                            result_schema,
+                            result_state)
+
+                return schema, state
+
+            else:
+                try:
+                    result_schema, result_state = self.set_slice(
+                        down_schema,
+                        down_state,
+                        tail,
+                        target_schema,
+                        target_state,
+                        defer=defer)
+                except Exception as e:
+                    raise Exception(f'failed to set_slice at path {path}\n{str(e)}')
+
+                return self.bind(
+                    schema,
+                    state,
+                    head,
+                    result_schema,
+                    result_state)
 
 
     def serialize(self, schema, state):
@@ -1634,7 +1666,7 @@ class TypeSystem(Registry):
 
         if isinstance(wires, (list, tuple)):
             destination = resolve_path(list(path) + list(wires))
-            result = set_path(
+            result = set_star_path(
                 result,
                 destination,
                 states)

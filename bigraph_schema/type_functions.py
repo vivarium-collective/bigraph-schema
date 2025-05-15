@@ -292,6 +292,9 @@ def apply_list(schema, current, update, top_schema, top_state, path, core):
         raise Exception(f'trying to apply an update to an existing list, but the update is not a list or of element type:\n  update: {update}\n  element type: {pf(element_type)}')
 
 def apply_map(schema, current, update, top_schema, top_state, path, core=None):
+    if update is None:
+        return current
+
     if not isinstance(current, dict):
         raise Exception(f'trying to apply an update to a value that is not a map:\n  value: {current}\n  update: {update}')
     if not isinstance(update, dict):

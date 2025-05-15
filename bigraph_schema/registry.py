@@ -151,6 +151,52 @@ def set_path(tree, path, value, top=None, cursor=None):
     return tree
 
 
+def set_star_path(tree, path, value, top=None, cursor=()):
+    if tree is None:
+        tree = {}
+    if top is None:
+        top = tree
+    if path is None or len(path) == 0:
+        return tree
+    else:
+        if isinstance(path, str):
+            path = (path,)
+
+        head = path[0]
+        tail = path[1:]
+
+        if head == '..':
+            if len(cursor) == 0:
+                raise Exception(
+                    f'trying to travel above the top of the tree: {path}')
+            else:
+                return set_star_path(
+                    top,
+                    cursor[:-1],
+                    value)
+        elif head == '*':
+            for key in value:
+                tree[key] = set_star_path(
+                    {},
+                    tail,
+                    value[key],
+                    cursor=(key,))
+            return top
+        else:
+            if len(tail) == 0:
+                tree[head] = value
+                return top
+            else:
+                if head not in tree:
+                    tree[head] = {}
+                return set_star_path(
+                    tree[head],
+                    tail,
+                    value,
+                    top=top,
+                    cursor=tuple(cursor) + (head,))
+
+
 def transform_path(tree, path, transform):
     """
     Given a tree, a path, and a transform (function), mutate the tree by replacing the subtree at the path by whatever 
