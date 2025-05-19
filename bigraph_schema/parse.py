@@ -37,7 +37,7 @@ parameter_grammar = Grammar(
     nest = symbol colon tree
     type_name = symbol parameter_list?
     parameter_list = square_left expression (comma expression)* square_right
-    symbol = ~r"[\w\d-_/*&^%$#@!`+ ]+"
+    symbol = ~r"[\\w\\d-_/*&^%$#@!`+ ]+"
     dot = "."
     colon = ":"
     bar = "|"
@@ -49,7 +49,7 @@ parameter_grammar = Grammar(
     tilde = "~"
     not_newline = ~r"[^\\n\\r]"*
     newline = ~"[\\n\\r]+"
-    ws = ~"\s*"
+    ws = ~r"\\s*"
     nothing = ""
     """)
 
