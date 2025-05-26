@@ -1604,7 +1604,7 @@ def slice_edge(schema, state, path, core):
         return slice_any(schema, state, path, core)
     else:
         return schema, state
-    
+
 
 def slice_map(schema, state, path, core):
     value_type = core.find_parameter(
