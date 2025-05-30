@@ -68,6 +68,7 @@ import types
 import copy
 import numbers
 import numpy as np
+from abc import ABCMeta
 from pint import Quantity
 from pprint import pformat as pf
 
@@ -430,6 +431,8 @@ def apply_function(schema, current, update, top_schema, top_state, path, core):
 
     return compose
 
+def apply_meta(schema, current, update, top_schema, top_state, path, core):
+    return update
 
 # =========================
 # Check Functions Overview
@@ -493,10 +496,21 @@ def check_float(schema, state, core=None):
 def check_string(schema, state, core=None):
     return isinstance(state, str)
 
+class Empty():
+    def method(self):
+        pass
+
 FUNCTION_TYPE = type(check_string)
+METHOD_TYPE = type(Empty().method)
 
 def check_function(schema, state, core=None):
     return isinstance(state, FUNCTION_TYPE)
+
+def check_method(schema, state, core=None):
+    return isinstance(state, METHOD_TYPE)
+
+def check_meta(schema, state, core=None):
+    return isinstance(state, ABCMeta)
 
 def check_list(schema, state, core):
     element_type = core.find_parameter(
@@ -2892,6 +2906,18 @@ base_types = {
         '_serialize': serialize_function,
         '_deserialize': deserialize_function,
         '_check': check_function},
+
+    'method': {
+        '_type': 'function',
+        '_apply': apply_meta,
+        '_serialize': serialize_function,
+        '_deserialize': deserialize_function,
+        '_check': check_method},
+
+    'meta': {
+        '_inherit': 'function',
+        '_apply': apply_meta,
+        '_check': check_meta},
 
     'path': {
         '_type': 'path',
