@@ -4,3 +4,4 @@ from bigraph_schema.registry import (
 from bigraph_schema.utilities import get_path, visit_method
 from bigraph_schema.edge import Edge
 from bigraph_schema.type_system import TypeSystem, type_schema_keys, resolve_path
+from bigraph_schema.protocols import local_lookup_module

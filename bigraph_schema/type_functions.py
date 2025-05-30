@@ -76,6 +76,7 @@ from typing import NewType, Union, Mapping, List, Dict, Optional, Callable
 from dataclasses import field, make_dataclass
 
 from bigraph_schema import get_path, set_path
+from bigraph_schema.protocols import local_lookup_module
 from bigraph_schema.units import units, render_units_type
 from bigraph_schema.registry import (
     is_schema_key, non_schema_keys, type_parameter_key, deep_merge, hierarchy_depth, establish_path
@@ -421,6 +422,14 @@ def apply_array(schema, current, update, top_schema, top_state, path, core):
     else:
         return current + update
 
+def apply_function(schema, current, update, top_schema, top_state, path, core):
+    def compose(a):
+        return update(
+            current(
+                a))
+
+    return compose
+
 
 # =========================
 # Check Functions Overview
@@ -483,6 +492,11 @@ def check_float(schema, state, core=None):
 
 def check_string(schema, state, core=None):
     return isinstance(state, str)
+
+FUNCTION_TYPE = type(check_string)
+
+def check_function(schema, state, core=None):
+    return isinstance(state, FUNCTION_TYPE)
 
 def check_list(schema, state, core):
     element_type = core.find_parameter(
@@ -1070,6 +1084,9 @@ def serialize_maybe(schema, value, core):
             value_type,
             value)
 
+def serialize_function(schema, value, core=None):
+    return f'{value.__module__}.{value.__name__}'
+
 def serialize_map(schema, value, core=None):
     value_type = core.find_parameter(
         schema,
@@ -1314,6 +1331,9 @@ def deserialize_units(schema, encoded, core):
         return encoded
     else:
         return units(encoded)
+
+def deserialize_function(schema, value, core=None):
+    return local_lookup_module(value)
 
 def deserialize_map(schema, encoded, core=None):
     if isinstance(encoded, dict):
@@ -2189,6 +2209,33 @@ def generate_any(core, schema, state, top_schema=None, top_state=None, path=None
 
     return generated_schema, generated_state, top_schema, top_state
 
+
+def generate_list(core, schema, state, top_schema=None, top_state=None, path=None):
+    schema = schema or {}
+    state = state or core.default(schema)
+    top_schema = top_schema or schema
+    top_state = top_state or state
+    path = path or []
+
+    element_type = core.find_parameter(
+        schema,
+        'element')
+
+    generated_state = []
+
+    for index, element in enumerate(state):
+        subschema, substate, top_schema, top_state = core.generate_recur(
+                element_type,
+                element,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path + [index])
+
+        generated_state.append(substate)
+
+    return schema, generated_state, top_schema, top_state
+    
+
 def generate_quote(core, schema, state, top_schema=None, top_state=None, path=None):
     return schema, state, top_schema, top_state
 
@@ -2764,6 +2811,7 @@ base_types = {
     'list': {
         '_type': 'list',
         '_default': [],
+        # '_generate': generate_list,
         '_check': check_list,
         '_slice': slice_list,
         '_apply': apply_list,
@@ -2837,6 +2885,13 @@ base_types = {
         '_fold': fold_maybe,
         '_type_parameters': ['value'],
         '_description': 'type to represent values that could be empty'},
+
+    'function': {
+        '_type': 'function',
+        '_apply': apply_function,
+        '_serialize': serialize_function,
+        '_deserialize': deserialize_function,
+        '_check': check_function},
 
     'path': {
         '_type': 'path',
