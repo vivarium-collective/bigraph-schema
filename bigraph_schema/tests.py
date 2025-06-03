@@ -7,10 +7,10 @@ import pprint
 import numpy as np
 from dataclasses import asdict
 
+from bigraph_schema import TypeSystem, local_lookup_module
 from bigraph_schema.type_functions import (
     divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, data_module)
 from bigraph_schema.utilities import compare_dicts, NONE_SYMBOL
-from bigraph_schema import TypeSystem
 from bigraph_schema.units import units
 from bigraph_schema.registry import establish_path, remove_omitted
 
@@ -1227,6 +1227,29 @@ def test_reaction(core):
                 'daughters': [
                     {'id': 'daughter1', 'ratio': 0.3},
                     {'id': 'daughter2', 'ratio': 0.7}]}}}
+
+
+def A(a):
+    return a * 5
+
+def B(b):
+    return b + 11
+
+def test_function_type(core):
+    A_serialized = core.serialize(
+        'function',
+        A)
+
+    A_deserialized = core.deserialize(
+        'function',
+        A_serialized)
+
+    C = core.apply(
+        'function',
+        A_deserialized,
+        B)
+
+    assert C(6) == 41
 
 
 def test_map_type(core):
@@ -2508,6 +2531,7 @@ if __name__ == '__main__':
     test_maybe_type(core)
     test_tuple_type(core)
     test_array_type(core)
+    test_function_type(core)
     test_union_type(core)
     test_union_values(core)
     test_infer_edge(core)
