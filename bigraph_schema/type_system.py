@@ -6,7 +6,6 @@ Type System
 
 import copy
 import functools
-import inspect
 import random
 import traceback
 from pprint import pformat as pf
@@ -14,56 +13,14 @@ from pprint import pformat as pf
 from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge, type_parameter_key
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.utilities import union_keys
-from bigraph_schema.registry import remove_omitted, set_path, transform_path, set_star_path
+from bigraph_schema.registry import remove_omitted, transform_path, set_star_path
 
 from bigraph_schema.type_functions import (
-    registry_types, base_types, unit_types, register_base_reactions, is_empty, apply_schema, set_apply)
+    registry_types, base_types, unit_types, register_base_reactions, is_empty,
+    set_apply, TYPE_FUNCTION_KEYS, SYMBOL_TYPES, is_method_key,
+    type_schema_keys, resolve_path)
+from bigraph_schema.type_system_adjunct import TypeSystemAdjunct
 
-
-TYPE_FUNCTION_KEYS = [
-    '_apply',
-    '_check',
-    '_fold',
-    '_divide',
-    '_react',
-    '_serialize',
-    '_deserialize',
-    '_slice',
-    '_bind',
-    '_merge']
-
-TYPE_SCHEMAS = {
-    'float': 'float'}
-
-SYMBOL_TYPES = ['enum']
-
-required_schema_keys = {'_default', '_apply', '_check', '_serialize', '_deserialize', '_fold'}
-
-optional_schema_keys = {'_type', '_value', '_description', '_type_parameters', '_inherit', '_divide'}
-
-type_schema_keys = required_schema_keys | optional_schema_keys
-
-
-def is_method_key(key, parameters):
-    return key.startswith('_') and key not in type_schema_keys and key not in [
-        f'_{parameter}' for parameter in parameters]
-
-def resolve_path(path):
-    """
-    Given a path that includes '..' steps, resolve the path to a canonical form
-    """
-    resolve = []
-
-    for step in path:
-        if step == '..':
-            if len(resolve) == 0:
-                raise Exception(f'cannot go above the top in path: "{path}"')
-            else:
-                resolve = resolve[:-1]
-        else:
-            resolve.append(step)
-
-    return tuple(resolve)
 
 class TypeSystem(Registry):
     """Handles type schemas and their operation"""
@@ -140,10 +97,6 @@ class TypeSystem(Registry):
                 update=is_update)
 
         return self
-
-
-    def lookup(self, type_key, attribute):
-        return self.access(type_key).get(attribute)
 
 
     def lookup_registry(self, underscore_key):
@@ -248,27 +201,10 @@ class TypeSystem(Registry):
             strict=strict)
 
 
-    def resolve_parameters(self, type_parameters, schema):
-        """
-        find the types associated with any type parameters in the schema
-        """
-
-        return {
-            type_parameter: self.access(
-                schema.get(f'_{type_parameter}'))
-            for type_parameter in type_parameters}
-
-
     def register_reaction(self, reaction_key, reaction):
         self.react_registry.register(
             reaction_key,
             reaction)
-
-
-    def types(self):
-        return {
-            type_key: type_data
-            for type_key, type_data in self.registry.items()}
 
 
     def merge_schemas(self, current, update):
@@ -496,183 +432,6 @@ class TypeSystem(Registry):
                         parameter_type)
 
             return result
-
-
-    def validate_schema(self, schema, enforce_connections=False):
-        # TODO:
-        #   check() always returns true or false,
-        #   validate() returns information about what doesn't match
-
-        # add ports and wires
-        # validate ports are wired to a matching type,
-        #   either the same type or a subtype (more specific type)
-        # declared ports are equivalent to the presence of a process
-        #   where the ports need to be looked up
-
-        report = {}
-
-        if schema is None:
-            report = 'schema cannot be None'
-
-        elif isinstance(schema, str):
-            typ = self.access(
-                schema,
-                strict=True)
-
-            if typ is None:
-                report = f'type: {schema} is not in the registry'
-
-        elif isinstance(schema, dict):
-            report = {}
-
-            schema_keys = set([])
-            branches = set([])
-
-            for key, value in schema.items():
-                if key == '_type':
-                    typ = self.access(
-                        value,
-                        strict=True)
-                    if typ is None:
-                        report[key] = f'type: {value} is not in the registry'
-
-                elif key in type_schema_keys:
-                    schema_keys.add(key)
-                    registry = self.lookup_registry(key)
-                    if registry is None or key == '_default':
-                        # deserialize and serialize back and check it is equal
-                        pass
-                    elif isinstance(value, str):
-                        element = registry.access(
-                            value,
-                            strict=True)
-
-                        if element is None:
-                            report[key] = f'no entry in the {key} registry for: {value}'
-                    elif not inspect.isfunction(value):
-                        report[key] = f'unknown value for key {key}: {value}'
-                else:
-                    branches.add(key)
-                    branch_report = self.validate_schema(value)
-                    if len(branch_report) > 0:
-                        report[key] = branch_report
-
-        return report
-
-
-    # TODO: if its an edge, ensure ports match wires
-    # TODO: make this work again, return information about what is wrong
-    #   with the schema
-    def validate_state(self, original_schema, state):
-        schema = self.access(original_schema)
-        validation = {}
-
-        if '_serialize' in schema:
-            if '_deserialize' not in schema:
-                validation = {
-                    '_deserialize': f'serialize found in type without deserialize: {schema}'
-                }
-            else:
-                serialize = self.serialize_registry.access(
-                    schema['_serialize'])
-                deserialize = self.deserialize_registry.access(
-                    schema['_deserialize'])
-                serial = serialize(state)
-                pass_through = deserialize(serial)
-
-                if state != pass_through:
-                    validation = f'state and pass_through are not the same: {serial}'
-        else:
-            for key, subschema in schema.items():
-                if key not in type_schema_keys:
-                    if key not in state:
-                        validation[key] = f'key present in schema but not in state: {key}\nschema: {schema}\nstate: {state}\n'
-                    else:
-                        subvalidation = self.validate_state(
-                            subschema,
-                            state[key])
-                        if not (subvalidation is None or len(subvalidation) == 0):
-                            validation[key] = subvalidation
-
-        return validation
-
-
-    def representation(self, schema, path=None, parents=None):
-        '''
-        produce a string representation of the schema
-        * intended to be the inverse of parse_expression()
-        '''
-
-        path = path or []
-        parents = parents or []
-        schema_id = id(schema)
-
-        if schema_id in parents:
-            index = parents.index(schema_id)
-            reference = path[:index]
-            output = '/'.join(reference)
-
-            return f'/{output}'
-
-        if isinstance(schema, str):
-            return schema
-
-        elif isinstance(schema, tuple):
-            inner = [
-                self.representation(
-                    element,
-                    path + [index],
-                    parents + [schema_id])
-                for index, element in enumerate(schema)]
-
-            pipes = '|'.join(inner)
-            return f'({pipes})'
-
-        elif isinstance(schema, dict):
-            if '_type' in schema:
-                type = schema['_type']
-
-                inner = []
-                block = ''
-                if '_type_parameters' in schema:
-                    for parameter_key in schema['_type_parameters']:
-                        schema_key = f'_{parameter_key}'
-                        if schema_key in schema:
-                            parameter = self.representation(
-                                schema[schema_key],
-                                path + [schema_key],
-                                parents + [schema_id])
-                            inner.append(parameter)
-                        else:
-                            inner.append('()')
-
-                    commas = ','.join(inner)
-                    block = f'[{commas}]'
-
-                if type == 'tuple':
-                    pipes = '|'.join(inner)
-                    return f'({pipes})'
-                else:
-                    return f"{type}{block}"
-
-            else:
-                inner = {}
-                for key in non_schema_keys(schema):
-                    subschema = self.representation(
-                        schema[key],
-                        path + [key],
-                        parents + [schema_id])
-
-                    inner[key] = subschema
-
-                colons = [
-                    f'{key}:{value}'
-                    for key, value in inner.items()]
-
-                pipes = '|'.join(colons)
-                return f'({pipes})'
-        else:
-            return str(schema)
 
 
     def default(self, schema):
@@ -936,21 +695,6 @@ class TypeSystem(Registry):
         return state
 
 
-    # TODO: maybe all fields are optional?
-    def dataclass(self, schema, path=None):
-        path = path or []
-
-        dataclass_function = self.choose_method(
-            schema,
-            {},
-            'dataclass')
-
-        return dataclass_function(
-            schema,
-            path,
-            self)
-
-
     def resolve(self, schema, update):
         if update is None:
             return schema
@@ -1066,14 +810,6 @@ class TypeSystem(Registry):
             values)
 
 
-    def validate(self, schema, state):
-        # TODO:
-        #   go through the state using the schema and
-        #   return information about what doesn't match
-
-        return {}
-
-
     def apply_update(self, schema, state, update, top_schema=None, top_state=None, path=None):
         schema = self.access(schema)
 
@@ -1165,87 +901,6 @@ class TypeSystem(Registry):
             schema,
             state,
             update)
-
-
-    def apply_slice(self, schema, state, path, update):
-        path = path or ()
-        if len(path) == 0:
-            result = self.apply(
-                schema,
-                state,
-                update)
-
-        else:
-            subschema, substate = self.slice(
-                schema,
-                state,
-                path[0])
-
-            if len(path) == 1:
-                subresult = self.apply(
-                    subschema,
-                    substate,
-                    update)
-
-                result = self.bind(
-                    schema,
-                    state,
-                    path[1:],
-                    subschema,
-                    subresult)
-
-            else:
-                subresult = self.apply_slice(
-                    subschema,
-                    substate,
-                    path[1:],
-                    update)
-
-                result = state
-
-        return result
-
-
-    def set_update(self, schema, state, update):
-        if '_apply' in schema:
-            apply_function = self.apply_registry.access('set')
-
-            state = apply_function(
-                schema,
-                state,
-                update,
-                self)
-
-        elif isinstance(schema, str) or isinstance(schema, list):
-            schema = self.access(schema)
-            state = self.set_update(schema, state, update)
-
-        elif isinstance(update, dict):
-            for key, branch in update.items():
-                if key not in schema:
-                    raise Exception(
-                        f'trying to update a key that is not in the schema'
-                        f'for state: {key}\n{state}\nwith schema:\n{schema}')
-                else:
-                    subupdate = self.set_update(
-                        schema[key],
-                        state[key],
-                        branch)
-
-                    state[key] = subupdate
-        else:
-            raise Exception(
-                f'trying to apply update\n  {update}\nto state\n  {state}\n'
-                f'with schema\n{schema}, but the update is not a dict')
-
-        return state
-
-
-    def set(self, original_schema, initial, update):
-        schema = self.access(original_schema)
-        state = copy.deepcopy(initial)
-
-        return self.set_update(schema, state, update)
 
 
     def merge_recur(self, schema, state, update):
@@ -1447,56 +1102,6 @@ class TypeSystem(Registry):
         return deserialized
 
 
-    def fill_ports(self, interface, wires=None, state=None, top_schema=None, top_state=None, path=None):
-        # deal with wires
-        if wires is None:
-            wires = {}
-        if state is None:
-            state = {}
-        if top_schema is None:
-            top_schema = schema
-        if top_state is None:
-            top_state = state
-        if path is None:
-            path = []
-
-        if isinstance(interface, str):
-            interface = {'_type': interface}
-
-        for port_key, subwires in wires.items():
-            if port_key in interface:
-                port_schema = interface[port_key]
-            else:
-                port_schema, subwires = self.slice(
-                    interface,
-                    wires,
-                    port_key)
-
-            if isinstance(subwires, dict):
-                if isinstance(state, dict):
-                    state = self.fill_ports(
-                        port_schema,
-                        wires=subwires,
-                        state=state,
-                        top_schema=top_schema,
-                        top_state=top_state,
-                        path=path)
-
-            else:
-                if isinstance(subwires, str):
-                    subwires = [subwires]
-
-                subschema, substate = self.set_slice(
-                    top_schema,
-                    top_state,
-                    path[:-1] + subwires,
-                    port_schema,
-                    self.default(port_schema),
-                    defer=True)
-
-        return state
-
-
     def fill_state(self, schema, state=None, top_schema=None, top_state=None, path=None, type_key=None, context=None):
         # if a port is disconnected, build a store
         # for it under the '_open' key in the current
@@ -1592,6 +1197,7 @@ class TypeSystem(Registry):
         return ports_schema, ports
 
 
+    # start here for different methods of execution
     def view(self, schema, wires, path, top_schema=None, top_state=None):
         result = {}
 
@@ -1846,199 +1452,6 @@ class TypeSystem(Registry):
         return True
 
 
-    # def infer_wires(self, ports, state, wires, top_schema=None, top_state=None, path=None, internal_path=None):
-    def infer_wires(self, ports, wires, top_schema=None, top_state=None, path=None, internal_path=None):
-        top_schema = top_schema or {}
-        top_state = top_state or state
-        path = path or ()
-        internal_path = internal_path or ()
-
-        if isinstance(ports, str):
-            ports = self.access(ports)
-
-        if isinstance(wires, (list, tuple)):
-            if len(wires) == 0:
-                destination_schema, destination_state = top_schema, top_state
-
-            else:
-                destination_schema, destination_state = self.slice(
-                    top_schema,
-                    top_state,
-                    path[:-1] + wires)
-
-            merged_schema = apply_schema(
-                'schema',
-                destination_schema,
-                ports,
-                self)
-
-            merged_state = self.complete(
-                merged_schema,
-                destination_state)
-
-        else:
-            for port_key, port_wires in wires.items():
-                subschema, substate = self.slice(
-                    ports,
-                    {},
-                    port_key)
-
-                if isinstance(port_wires, dict):
-                    top_schema, top_state = self.infer_wires(
-                        subschema,
-                        # substate,
-                        port_wires,
-                        top_schema=top_schema,
-                        top_state=top_state,
-                        path=path,
-                        internal_path=internal_path+(port_key,))
-
-                # port_wires must be a list
-                elif len(port_wires) == 0:
-                    raise Exception(f'no wires at port "{port_key}" in ports {ports} with state {state}')
-
-                else:
-                    compound_path = resolve_path(
-                        path[:-1] + tuple(port_wires))
-
-                    compound_schema, compound_state = self.set_slice(
-                        {}, {},
-                        compound_path,
-                        subschema or 'any',
-                        self.default(subschema))
-
-                    top_schema = self.resolve(
-                        top_schema,
-                        compound_schema)
-
-                    top_state = self.merge_recur(
-                        top_schema,
-                        compound_state,
-                        top_state)
-
-        return top_schema, top_state
-
-
-    def infer_edge(self, schema, state, top_schema=None, top_state=None, path=None):
-        '''
-        given the schema and state for this edge, and its path relative to
-        the top_schema and top_state, make all the necessary completions to
-        both the schema and the state according to the input and output schemas
-        of this edge in '_inputs' and '_outputs', along the wires in its state
-        under 'inputs' and 'outputs'.
-
-        returns the top_schema and top_state, even if the edge is deeply embedded,
-        as the particular wires could have implications anywhere in the tree.
-        '''
-
-        schema = schema or {}
-        top_schema = top_schema or schema
-        top_state = top_state or state
-        path = path or ()
-
-        if self.check('edge', state):
-            for port_key in ['inputs', 'outputs']:
-                ports = state.get(port_key)
-                schema_key = f'_{port_key}'
-                port_schema = schema.get(schema_key, {})
-                state_schema = state.get(schema_key, {})
-
-                schema[schema_key] = self.resolve(
-                    port_schema,
-                    self.access(
-                        state_schema))
-
-                if ports:
-                    top_schema, top_state = self.infer_wires(
-                        schema[schema_key],
-                        # state,
-                        ports,
-                        top_schema=top_schema,
-                        top_state=top_state,
-                        path=path)
-
-        return top_schema, top_state
-
-
-    def infer_schema(self, schema, state, top_schema=None, top_state=None, path=None):
-        """
-        Given a schema fragment and an existing state with _type keys,
-        return the full schema required to describe that state,
-        and whatever state was hydrated (edges) during this process
-
-        """
-
-        # during recursive call, schema is kept at the top level and the
-        # path is used to access it (!)
-
-        schema = schema or {}
-        top_schema = top_schema or schema
-        top_state = top_state or state
-        path = path or ()
-
-        if isinstance(state, dict):
-            state_schema = None
-            if '_type' in state:
-                state_type = {
-                    key: value
-                    for key, value in state.items()
-                    if is_schema_key(key)}
-
-                schema = self.resolve(
-                    schema,
-                    state_type)
-
-            if '_type' in schema:
-                hydrated_state = self.deserialize(
-                    schema,
-                    state)
-
-                top_schema, top_state = self.set_slice(
-                    top_schema,
-                    top_state,
-                    path,
-                    schema,
-                    hydrated_state)
-
-                top_schema, top_state = self.infer_edge(
-                    schema,
-                    hydrated_state,
-                    top_schema,
-                    top_state,
-                    path)
-
-            else:
-                for key in state:
-                    inner_path = path + (key,)
-                    inner_schema, inner_state = self.slice(
-                        schema,
-                        state,
-                        key)
-
-                    top_schema, top_state = self.infer_schema(
-                        inner_schema,
-                        inner_state,
-                        top_schema=top_schema,
-                        top_state=top_state,
-                        path=inner_path)
-
-        elif isinstance(state, str):
-            pass
-
-        else:
-            type_schema = TYPE_SCHEMAS.get(
-                type(state).__name__,
-                'any')
-
-            top_schema, top_state = self.set_slice(
-                top_schema,
-                top_state,
-                path,
-                type_schema,
-                state)
-
-        return top_schema, top_state
-
 
     def wire_schema(self, schema, wires, path=None):
         outcome = {}
@@ -2055,31 +1468,6 @@ class TypeSystem(Registry):
             _, outcome = self.slice('schema', schema, wires)
 
         return outcome
-
-
-    def hydrate(self, schema, state):
-        hydrated = self.deserialize(schema, state)
-        return self.fill(schema, hydrated)
-
-
-    def complete(self, initial_schema, initial_state):
-        full_schema = self.access(
-            initial_schema)
-
-        state = self.deserialize(
-            full_schema,
-            initial_state)
-
-        # fill in the parts of the composition schema
-        # determined by the state
-        schema, state = self.infer_schema(
-            full_schema,
-            state)
-
-        final_state = self.fill(schema, state)
-
-        # TODO: add flag to types.access(copy=True)
-        return self.access(schema), final_state
 
 
     def generate_recur(self, schema, state, top_schema=None, top_state=None, path=None):
@@ -2126,31 +1514,25 @@ class TypeSystem(Registry):
 
                 return method
 
-
-    def import_types(self, package, strict=False):
-        for type_key, type_data in package.items():
-            if not (strict and self.exists(type_key)):
-                self.register(
-                    type_key,
-                    type_data)
-
-
-    def define(self, method_name, methods):
-        method_key = f'_{method_name}'
-        for type_key, method in methods.items():
-            self.register(
-                type_key,
-                {method_key: method})
-
-
-    def link_place(self, place, link):
-        pass
-
-
-    def compose(self, a, b):
-        pass
-
-
-    def query(self, schema, instance, redex):
-        subschema = {}
-        return subschema
+    apply_slice = TypeSystemAdjunct.apply_slice
+    complete = TypeSystemAdjunct.complete
+    compose = TypeSystemAdjunct.compose
+    dataclass = TypeSystemAdjunct.dataclass
+    define = TypeSystemAdjunct.define
+    fill_ports = TypeSystemAdjunct.fill_ports
+    hydrate = TypeSystemAdjunct.hydrate
+    import_types = TypeSystemAdjunct.import_types
+    infer_wires = TypeSystemAdjunct.infer_wires
+    infer_edge = TypeSystemAdjunct.infer_edge
+    infer_schema = TypeSystemAdjunct.infer_schema
+    link_place = TypeSystemAdjunct.link_place
+    lookup = TypeSystemAdjunct.lookup
+    query = TypeSystemAdjunct.query
+    representation = TypeSystemAdjunct.representation
+    resolve_parameters = TypeSystemAdjunct.resolve_parameters
+    set = TypeSystemAdjunct.set
+    set_update = TypeSystemAdjunct.set_update
+    types = TypeSystemAdjunct.types
+    validate = TypeSystemAdjunct.validate
+    validate_schema = TypeSystemAdjunct.validate_schema
+    validate_state = TypeSystemAdjunct.validate_state
