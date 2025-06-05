@@ -1514,6 +1514,83 @@ class TypeSystem(Registry):
 
                 return method
 
+    def representation(self, schema, path=None, parents=None):
+        '''
+        produce a string representation of the schema
+        * intended to be the inverse of parse_expression()
+        '''
+
+        path = path or []
+        parents = parents or []
+        schema_id = id(schema)
+
+        if schema_id in parents:
+            index = parents.index(schema_id)
+            reference = path[:index]
+            output = '/'.join(reference)
+
+            return f'/{output}'
+
+        if isinstance(schema, str):
+            return schema
+
+        elif isinstance(schema, tuple):
+            inner = [
+                self.representation(
+                    element,
+                    path + [index],
+                    parents + [schema_id])
+                for index, element in enumerate(schema)]
+
+            pipes = '|'.join(inner)
+            return f'({pipes})'
+
+        elif isinstance(schema, dict):
+            if '_type' in schema:
+                type = schema['_type']
+
+                inner = []
+                block = ''
+                if '_type_parameters' in schema:
+                    for parameter_key in schema['_type_parameters']:
+                        schema_key = f'_{parameter_key}'
+                        if schema_key in schema:
+                            parameter = self.representation(
+                                schema[schema_key],
+                                path + [schema_key],
+                                parents + [schema_id])
+                            inner.append(parameter)
+                        else:
+                            inner.append('()')
+
+                    commas = ','.join(inner)
+                    block = f'[{commas}]'
+
+                if type == 'tuple':
+                    pipes = '|'.join(inner)
+                    return f'({pipes})'
+                else:
+                    return f"{type}{block}"
+
+            else:
+                inner = {}
+                for key in non_schema_keys(schema):
+                    subschema = self.representation(
+                        schema[key],
+                        path + [key],
+                        parents + [schema_id])
+
+                    inner[key] = subschema
+
+                colons = [
+                    f'{key}:{value}'
+                    for key, value in inner.items()]
+
+                pipes = '|'.join(colons)
+                return f'({pipes})'
+        else:
+            return str(schema)
+
     apply_slice = TypeSystemAdjunct.apply_slice
     complete = TypeSystemAdjunct.complete
     compose = TypeSystemAdjunct.compose
@@ -1527,8 +1604,8 @@ class TypeSystem(Registry):
     infer_schema = TypeSystemAdjunct.infer_schema
     link_place = TypeSystemAdjunct.link_place
     lookup = TypeSystemAdjunct.lookup
+    merge_schemas = TypeSystemAdjunct.merge_schemas
     query = TypeSystemAdjunct.query
-    representation = TypeSystemAdjunct.representation
     resolve_parameters = TypeSystemAdjunct.resolve_parameters
     set = TypeSystemAdjunct.set
     set_update = TypeSystemAdjunct.set_update
