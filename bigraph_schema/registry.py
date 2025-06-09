@@ -367,7 +367,7 @@ class Registry(object):
         elif inspect.isfunction(function):
             found = function
             module_key = function_module(found)
-        
+
         function_name = module_key.split('.')[-1]
         self.register(function_name, found)
         self.register(module_key, found)
@@ -381,7 +381,7 @@ class Registry(object):
 
     def find(self, key):
         return self.registry.get(key)
-        
+
 
     def access(self, key):
         """

@@ -1638,7 +1638,7 @@ def slice_edge(schema, state, path, core):
         return slice_any(schema, state, path, core)
     else:
         return schema, state
-    
+
 
 def slice_map(schema, state, path, core):
     value_type = core.find_parameter(
@@ -2248,7 +2248,7 @@ def generate_list(core, schema, state, top_schema=None, top_state=None, path=Non
         generated_state.append(substate)
 
     return schema, generated_state, top_schema, top_state
-    
+
 
 def generate_quote(core, schema, state, top_schema=None, top_state=None, path=None):
     return schema, state, top_schema, top_state
@@ -3002,3 +3002,51 @@ registry_types = {
         '_fold': fold_union,
         '_resolve': resolve_union,
         '_description': 'union of a set of possible types'}}
+
+
+TYPE_FUNCTION_KEYS = [
+    '_apply',
+    '_check',
+    '_fold',
+    '_divide',
+    '_react',
+    '_serialize',
+    '_deserialize',
+    '_slice',
+    '_bind',
+    '_merge']
+
+TYPE_SCHEMAS = {
+    'float': 'float'}
+
+SYMBOL_TYPES = ['enum']
+
+required_schema_keys = {'_default', '_apply', '_check', '_serialize', '_deserialize', '_fold'}
+
+optional_schema_keys = {'_type', '_value', '_description', '_type_parameters', '_inherit', '_divide'}
+
+type_schema_keys = required_schema_keys | optional_schema_keys
+
+
+def is_method_key(key, parameters):
+    parameter_tags = [f'_{parameter}' for parameter in parameters]
+    return key.startswith('_') and\
+            key not in type_schema_keys and\
+            key not in parameter_tags
+
+def resolve_path(path):
+    """
+    Given a path that includes '..' steps, resolve the path to a canonical form
+    """
+    resolve = []
+
+    for step in path:
+        if step == '..':
+            if len(resolve) == 0:
+                raise Exception(f'cannot go above the top in path: "{path}"')
+            else:
+                resolve = resolve[:-1]
+        else:
+            resolve.append(step)
+
+    return tuple(resolve)
