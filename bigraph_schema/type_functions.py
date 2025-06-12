@@ -1347,7 +1347,10 @@ def deserialize_units(schema, encoded, core):
         return units(encoded)
 
 def deserialize_function(schema, value, core=None):
-    return local_lookup_module(value)
+    if isinstance(value, str):
+        return local_lookup_module(value)
+    else:
+        return value
 
 def deserialize_map(schema, encoded, core=None):
     if isinstance(encoded, dict):
@@ -1913,6 +1916,7 @@ def dataclass_any(schema, path, core):
         dataclass = make_dataclass(
             dataclass_name,
             branches.values(),
+            # TODO: use module= here instead?
             namespace={
                 '__module__': 'bigraph_schema.data'})
 
@@ -1981,6 +1985,7 @@ def dataclass_tree(schema, path, core):
     leaf_type = core.find_parameter(schema, 'leaf')
     leaf_dataclass = core.dataclass(leaf_type, path + ['leaf'])
 
+    # TODO: find a more direct/non-eval way to do this
     dataclass_name = '_'.join(path)
     block = f"NewType('{dataclass_name}', Union[{leaf_dataclass}, Mapping[str, '{dataclass_name}']])"
 
