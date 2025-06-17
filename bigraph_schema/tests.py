@@ -913,8 +913,8 @@ def test_apply_schema(core):
     assert applied['a']['_type'] == 'float'
     assert applied['b']['_value']['_type'] == 'path'
     assert applied['c']['_type'] == 'string'
-    assert applied['d']['_0']['_type'] == 'float'
-    assert applied['d']['_1']['_type'] == 'float'
+    assert applied['d']['_0'] == 'float'
+    assert applied['d']['_1'] == 'float'
     assert applied['d']['_2']['_type'] == 'path'
 
 
@@ -2247,8 +2247,8 @@ def test_generate(core):
             '_type': 'enum[x,y,z]',
             '_default': 'y'},
         'units': {
-            'x': 11.1111,
-            'y': 22.833333}}
+            'meters': 11.1111,
+            'seconds': 22.833333}}
 
     generated_schema, generated_state = core.generate(
         schema,
@@ -2257,8 +2257,8 @@ def test_generate(core):
     assert generated_state['A'] == 0.0
     assert generated_state['B'] == 'one'
     assert generated_state['C'] == 'y'
-    assert generated_state['units']['y'] == 22.833333
-    assert 'x' not in generated_schema['units']
+    assert generated_state['units']['seconds'] == 22.833333
+    assert 'meters' not in generated_schema['units']
 
 
 def test_edge_cycle(core):
