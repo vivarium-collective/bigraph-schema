@@ -6,19 +6,23 @@ Type System
 
 import copy
 import functools
+import inspect
 import random
 import traceback
 from pprint import pformat as pf
 
-from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge, type_parameter_key
+from bigraph_schema import (
+        deep_merge, is_schema_key, non_schema_keys, Registry,
+        type_parameter_key)
 from bigraph_schema.parse import parse_expression
 from bigraph_schema.utilities import union_keys
-from bigraph_schema.registry import remove_omitted, transform_path, set_star_path
+from bigraph_schema.registry import (
+        remove_omitted, set_star_path, transform_path)
 
 from bigraph_schema.type_functions import (
-    registry_types, base_types, unit_types, register_base_reactions, is_empty,
-    set_apply, TYPE_FUNCTION_KEYS, SYMBOL_TYPES, is_method_key,
-    type_schema_keys, resolve_path)
+    base_types, is_empty, is_method_key, register_base_reactions,
+    registry_types, resolve_path, set_apply, SYMBOL_TYPES, TYPE_FUNCTION_KEYS,
+    type_schema_keys, unit_types)
 from bigraph_schema.type_system_adjunct import TypeSystemAdjunct
 
 
@@ -69,15 +73,20 @@ class TypeSystem(Registry):
             'set',
             set_apply)
 
-        self.register_types(registry_types)
-        self.register_types(base_types)
-        self.register_types(unit_types)
+        self._register_types(registry_types)
+        self._register_types(base_types)
+        self._register_types(unit_types)
 
         # # TODO -- add a proper registration into registry
         register_base_reactions(self)
 
 
-    def register_types(self, type_library):
+    def _register_types(self, type_library):
+        """
+        private method to implement initialization
+
+        basically the same as update_types, except it never updates
+        """
         for type_key, type_data in type_library.items():
             if not self.exists(type_key):
                 self.register(
@@ -87,7 +96,11 @@ class TypeSystem(Registry):
         return self
 
 
+    # is it useful just because it's simpler?
     def update_types(self, type_updates):
+        """
+        initialize or update multiple types
+        """
         for type_key, type_data in type_updates.items():
             is_update = self.exists(type_key)
 
@@ -99,9 +112,17 @@ class TypeSystem(Registry):
         return self
 
 
-    def lookup_registry(self, underscore_key):
+    def _lookup_registry(self, underscore_key):
         """
+        private helper method
+
         access the registry for the given key
+
+        >>> t = TypeSystem()
+        >>> t.foo_registry = "OK"
+        >>> t._lookup_registry('_foo')
+        'OK'
+
         """
 
         if underscore_key == '_type':
@@ -112,15 +133,25 @@ class TypeSystem(Registry):
             return getattr(self, registry_key)
 
 
-    def find_registry(self, underscore_key):
+    def _find_registry(self, underscore_key):
         """
         access the registry for the given key
         and create if it doesn't exist
+
+        >>> t = TypeSystem()
+        >>> hasattr(t, 'foo_registry')
+        False
+        >>> t._find_registry('_foo').__class__ == Registry
+        True
+        >>> hasattr(t, 'foo_registry')
+        True
         """
 
-        registry = self.lookup_registry(underscore_key)
+        registry = self._lookup_registry(underscore_key)
         if registry is None:
             registry = Registry()
+            # setattr is needed here because the key is dynamically
+            # constructed
             setattr(
                 self,
                 f'{underscore_key[1:]}_registry',
@@ -133,23 +164,62 @@ class TypeSystem(Registry):
     def register(self, key, schema, alternate_keys=tuple(), strict=True, update=False):
         """
         register the schema under the given key in the registry
+
+        if schema is a string, we expand and duplicate it under a new name
+        >>> t = TypeSystem()
+        >>> t.register('regetni', 'integer')
+        >>> t.find('regetni') == t.find('integer')
+        True
+        >>> id(t.find('regetni')) != id(t.find('integer'))
+        True
+
+        if '_type' is not provided, it will be filled in
+        >>> t = TypeSystem()
+        >>> i = copy.deepcopy(t.find('integer'))
+        >>> del(i['_type'])
+        >>> t.register('regetni', i)
+        >>> t.find('regetni')['_type'] == 'regetni'
+        True
+
+        inherated schemas are merged
+        >>> t = TypeSystem()
+        >>> t.register('foo', {'bar':{'baz':42}})
+        >>> t.register('bar', {'haz':{'quux':12}})
+        >>> t.register('quux', {'_inherit':['foo', 'bar']})
+        >>> t.find('quux')['bar']['baz'] == 42
+        True
+        >>> t.find('quux')['haz']['quux'] == 12
+        True
+
+        type parameters define subtypes specific to the schema, each subtype
+        is expanded
+        >>> t = TypeSystem()
+        >>> s = {'_0':'any', '_1':'any'}
+        >>> s['_type_parameters'] = ['0','1']
+        >>> s['_type'] = 'tuple'
+        >>> t.register('foo', s)
+        >>> t.find('foo')['_0']['_serialize'] == 'serialize_any'
+        True
         """
 
         if isinstance(schema, str):
             schema = self.find(schema)
         schema = copy.deepcopy(schema)
         if self.exists(key) and update:
-            if update:
-                found = self.find(key)
-                schema = deep_merge(
-                    found,
-                    schema)
-                strict = False
+            found = self.find(key)
+            schema = deep_merge(
+                found,
+                schema)
+            strict = False
 
-        if '_type' not in schema:
-            schema['_type'] = key
+        if not(isinstance(schema, dict)):
+            raise Exception(
+                f'all type definitions must be dicts '
+                f'with the following keys: {type_schema_keys}\nnot: {schema}')
+        else:
+            if '_type' not in schema:
+                schema['_type'] = key
 
-        if isinstance(schema, dict):
             inherits = schema.get('_inherit', [])  # list of immediate inherits
             if isinstance(inherits, str):
                 inherits = [inherits]
@@ -169,14 +239,16 @@ class TypeSystem(Registry):
 
             parameters = schema.get('_type_parameters', [])
             for subkey, subschema in schema.items():
-                if subkey == '_default' or subkey in TYPE_FUNCTION_KEYS or is_method_key(subkey, parameters):
-                    if callable(subschema):
-                        registry = self.find_registry(subkey)
+                if subkey == '_default' \
+                        or subkey in TYPE_FUNCTION_KEYS \
+                        or is_method_key(subkey, parameters):
+                    if not(callable(subschema)):
+                        schema[subkey] = subschema
+                    else:
+                        registry = self._find_registry(subkey)
                         function_name, module_key = registry.register_function(subschema)
 
                         schema[subkey] = function_name
-                    else:
-                        schema[subkey] = subschema
 
                 elif subkey not in type_schema_keys:
                     if schema['_type'] in SYMBOL_TYPES:
@@ -189,10 +261,6 @@ class TypeSystem(Registry):
                                 f'but it depends on a type ({subkey}) which is not in the registry')
                         else:
                             schema[subkey] = lookup
-        else:
-            raise Exception(
-                f'all type definitions must be dicts '
-                f'with the following keys: {type_schema_keys}\nnot: {schema}')
 
         super().register(
             key,
@@ -208,39 +276,29 @@ class TypeSystem(Registry):
 
 
     def merge_schemas(self, current, update):
-        if current == update:
-            return update
-        if current is None:
-            return update
-        if update is None:
-            return current
-        if not isinstance(current, dict):
-            return update
-        if not isinstance(update, dict):
-            return update
+        """
+        deep merge of two dicts (recursive merge of sub-dicts)
+        """
 
-        merged = {}
+        result = current.copy()
 
-        for key in union_keys(current, update):
-            if key in current:
-                if key in update:
-                    subcurrent = current[key]
-                    subupdate = update[key]
-                    if subcurrent == current or subupdate == update:
-                        continue
-
-                    merged[key] = self.merge_schemas(
-                        subcurrent,
-                        subupdate)
-                else:
-                    merged[key] = current[key]
+        for key, value in update.items():
+            if key in result \
+                     and isinstance(result[key], dict) \
+                     and isinstance(value, dict):
+                result[key] = self.merge_schemas(result[key], value)
             else:
-                merged[key] = update[key]
+                result[key] = value
 
-        return merged
+        return result
 
 
-    def sort(self, schema, state):
+    def _sort(self, schema, state):
+        """
+        separates state and schema if they are mixed
+
+        helper used by type_functions
+        """
         schema = self.access(schema)
 
         sort_function = self.choose_method(
@@ -261,12 +319,52 @@ class TypeSystem(Registry):
     def find(self, schema, strict=False):
         """
         expand the schema to its full type information from the type registry
+
+        strings are looked up in the registry if present as a key
+        >>> core = TypeSystem()
+        >>> for k,v in core.registry.items():
+        ...       assert isinstance(k, str)
+        ...       assert v == core.find(k)
+
         """
 
         found = None
 
         if schema is None:
             return self.access('any', strict=strict)
+
+        elif isinstance(schema, int):
+            return schema
+
+        elif isinstance(schema, tuple):
+            tuple_schema = {
+                '_type': 'tuple',
+                '_type_parameters': []}
+
+            for index, element in enumerate(schema):
+                tuple_schema['_type_parameters'].append(str(index))
+                tuple_schema[f'_{index}'] = element
+
+            return self.access(
+                tuple_schema,
+                strict=strict)
+
+        elif isinstance(schema, str):
+            found = self.registry.get(schema)
+
+            if found is None and schema not in ('', '{}'):
+                try:
+                    parse = parse_expression(schema)
+                    if parse != schema:
+                        found = self.access(
+                            parse,
+                            strict=strict)
+                    elif not strict:
+                        found = {'_type': schema}
+
+                except Exception:
+                    print(f'type did not parse: {schema}')
+                    traceback.print_exc()
 
         elif isinstance(schema, dict):
             if '_description' in schema:
@@ -300,22 +398,6 @@ class TypeSystem(Registry):
                        strict=strict) if key != '_default' else branch
                    for key, branch in schema.items()}
 
-        elif isinstance(schema, int):
-            return schema
-
-        elif isinstance(schema, tuple):
-            tuple_schema = {
-                '_type': 'tuple',
-                '_type_parameters': []}
-
-            for index, element in enumerate(schema):
-                tuple_schema['_type_parameters'].append(str(index))
-                tuple_schema[f'_{index}'] = element
-
-            return self.access(
-                tuple_schema,
-                strict=strict)
-
         elif isinstance(schema, list):
             if isinstance(schema[0], int):
                 return schema
@@ -344,23 +426,6 @@ class TypeSystem(Registry):
                             strict=strict) or binding
 
                         found[f'_{parameter}'] = binding_type
-
-        elif isinstance(schema, str):
-            found = self.registry.get(schema)
-
-            if found is None and schema not in ('', '{}'):
-                try:
-                    parse = parse_expression(schema)
-                    if parse != schema:
-                        found = self.access(
-                            parse,
-                            strict=strict)
-                    elif not strict:
-                        found = {'_type': schema}
-
-                except Exception:
-                    print(f'type did not parse: {schema}')
-                    traceback.print_exc()
 
         return found
 
@@ -393,7 +458,12 @@ class TypeSystem(Registry):
         return found
 
 
-    def find_parameter(self, schema, parameter):
+    def _find_parameter(self, schema, parameter):
+        """
+        resolves the type parameter
+
+        helper for type_functions
+        """
         schema_key = f'_{parameter}'
         if schema_key not in schema:
             schema = self.access(schema)
@@ -407,9 +477,11 @@ class TypeSystem(Registry):
         return parameter_type
 
 
-    def parameters_for(self, initial_schema):
+    def _parameters_for(self, initial_schema):
         '''
         find any type parameters for this schema if they are present
+
+        helper for type_functions
         '''
 
         if '_type_parameters' in initial_schema:
@@ -495,7 +567,7 @@ class TypeSystem(Registry):
             any_type = self.access('any')
             found = any_type[method_key]
 
-        registry = self.lookup_registry(method_key)
+        registry = self._lookup_registry(method_key)
         method_function = registry.access(
             found)
 
@@ -563,7 +635,11 @@ class TypeSystem(Registry):
             return pattern == state
 
 
-    def match_recur(self, schema, state, pattern, mode='first', path=()):
+    def _match_recur(self, schema, state, pattern, mode='first', path=()):
+        """
+        private helper method for match
+        """
+
         matches = []
 
         match = self.match_node(
@@ -589,7 +665,7 @@ class TypeSystem(Registry):
                 else:
                     subschema = schema
 
-                submatches = self.match_recur(
+                submatches = self._match_recur(
                     subschema,
                     state[key],
                     pattern,
@@ -618,7 +694,7 @@ class TypeSystem(Registry):
 
         schema = self.access(original_schema)
 
-        matches = self.match_recur(
+        matches = self._match_recur(
             schema,
             state,
             pattern,
@@ -636,7 +712,10 @@ class TypeSystem(Registry):
         return matches
 
 
-    def react(self, schema, state, reaction, mode='random'):
+    def _react(self, schema, state, reaction, mode='random'):
+        """
+        helper for apply_update
+        """
         # TODO: explain all this
         # TODO: after the reaction, fill in the state with missing values
         #   from the schema
@@ -674,7 +753,10 @@ class TypeSystem(Registry):
         #         state,
         #         path)
 
-        def merge_state(before):
+        def _merge_state(before):
+            """
+            helper used in call to transform_path
+            """
             remaining = remove_omitted(
                 redex,
                 reactum,
@@ -690,7 +772,7 @@ class TypeSystem(Registry):
             state = transform_path(
                 state,
                 path,
-                merge_state)
+                _merge_state)
 
         return state
 
@@ -711,6 +793,8 @@ class TypeSystem(Registry):
 
 
     def resolve_schemas(self, initial_current, initial_update):
+        """
+        """
         if initial_current == initial_update:
             return initial_current
 
@@ -812,7 +896,8 @@ class TypeSystem(Registry):
             values)
 
 
-    def apply_update(self, schema, state, update, top_schema=None, top_state=None, path=None):
+    def apply_update(self, schema, state, update,
+                     top_schema=None, top_state=None, path=None):
         schema = self.access(schema)
 
         top_schema = top_schema or schema
@@ -820,7 +905,7 @@ class TypeSystem(Registry):
         path = path or []
 
         if isinstance(update, dict) and '_react' in update:
-            new_state = self.react(
+            new_state = self._react(
                 schema,
                 state,
                 update['_react'])
@@ -850,6 +935,16 @@ class TypeSystem(Registry):
                 method,
                 values)
 
+        elif isinstance(schema, str) or isinstance(schema, list):
+            schema = self.access(schema)
+            state = self.apply_update(
+                schema,
+                state,
+                update,
+                top_schema=top_schema,
+                top_state=top_state,
+                path=path)
+
         elif '_apply' in schema and schema['_apply'] != 'any':
             apply_function = self.apply_registry.access(schema['_apply'])
 
@@ -861,16 +956,6 @@ class TypeSystem(Registry):
                 top_state,
                 path,
                 self)
-
-        elif isinstance(schema, str) or isinstance(schema, list):
-            schema = self.access(schema)
-            state = self.apply_update(
-                schema,
-                state,
-                update,
-                top_schema=top_schema,
-                top_state=top_state,
-                path=path)
 
         elif isinstance(update, dict):
             for key, branch in update.items():
@@ -906,6 +991,9 @@ class TypeSystem(Registry):
 
 
     def merge_recur(self, schema, state, update):
+        """
+        not a helper to merge, as it would first appear
+        """
         if is_empty(schema):
             merge_state = update
 
@@ -1472,7 +1560,10 @@ class TypeSystem(Registry):
         return outcome
 
 
-    def generate_recur(self, schema, state, top_schema=None, top_state=None, path=None):
+    def _generate_recur(self, schema, state, top_schema=None, top_state=None, path=None):
+        """
+        helper for type_functions
+        """
         found = self.retrieve(
             schema)
 
@@ -1491,11 +1582,11 @@ class TypeSystem(Registry):
 
 
     def generate(self, schema, state):
-        merged_schema, merged_state = self.sort(
+        merged_schema, merged_state = self._sort(
             schema,
             state)
 
-        _, _, top_schema, top_state = self.generate_recur(
+        _, _, top_schema, top_state = self._generate_recur(
             merged_schema,
             merged_state)
 
@@ -1507,7 +1598,7 @@ class TypeSystem(Registry):
             schema = self.access(schema)
 
         if method_key in schema:
-            registry = self.lookup_registry(
+            registry = self._lookup_registry(
                 method_key)
 
             if registry is not None:
@@ -1519,6 +1610,7 @@ class TypeSystem(Registry):
     def representation(self, schema, path=None, parents=None):
         '''
         produce a string representation of the schema
+
         * intended to be the inverse of parse_expression()
         '''
 
@@ -1593,6 +1685,72 @@ class TypeSystem(Registry):
         else:
             return str(schema)
 
+    def validate_schema(self, schema, enforce_connections=False):
+        """
+        """
+        # TODO: needs documentation and testing
+
+        # TODO:
+        #   check() always returns true or false,
+        #   validate() returns information about what doesn't match
+
+        # add ports and wires
+        # validate ports are wired to a matching type,
+        #   either the same type or a subtype (more specific type)
+        # declared ports are equivalent to the presence of a process
+        #   where the ports need to be looked up
+
+        report = {}
+
+        if schema is None:
+            report = 'schema cannot be None'
+
+        elif isinstance(schema, str):
+            typ = self.access(
+                schema,
+                strict=True)
+
+            if typ is None:
+                report = f'type: {schema} is not in the registry'
+
+        elif isinstance(schema, dict):
+            report = {}
+
+            schema_keys = set([])
+            branches = set([])
+
+            for key, value in schema.items():
+                if key == '_type':
+                    typ = self.access(
+                        value,
+                        strict=True)
+                    if typ is None:
+                        report[key] = f'type: {value} is not in the registry'
+
+                elif key in type_schema_keys:
+                    schema_keys.add(key)
+                    registry = self._lookup_registry(key)
+                    if registry is None or key == '_default':
+                        # deserialize and serialize back and check it is equal
+                        pass
+                    elif isinstance(value, str):
+                        element = registry.access(
+                            value,
+                            strict=True)
+
+                        if element is None:
+                            report[key] = f'no entry in the {key} registry for: {value}'
+                    elif not inspect.isfunction(value):
+                        report[key] = f'unknown value for key {key}: {value}'
+                else:
+                    branches.add(key)
+                    branch_report = self.validate_schema(value)
+                    if len(branch_report) > 0:
+                        report[key] = branch_report
+
+        return report
+
+
     apply_slice = TypeSystemAdjunct.apply_slice
     complete = TypeSystemAdjunct.complete
     compose = TypeSystemAdjunct.compose
@@ -1613,5 +1771,4 @@ class TypeSystem(Registry):
     set_update = TypeSystemAdjunct.set_update
     types = TypeSystemAdjunct.types
     validate = TypeSystemAdjunct.validate
-    validate_schema = TypeSystemAdjunct.validate_schema
     validate_state = TypeSystemAdjunct.validate_state

@@ -23,10 +23,13 @@ def deep_merge_copy(dct, merge_dct):
 
 
 def deep_merge(dct, merge_dct):
-    """Recursive dict merge
-    
-    This mutates dct - the contents of merge_dct are added to dct (which is also returned).
-    If you want to keep dct you could call it like deep_merge(copy.deepcopy(dct), merge_dct)
+    """
+    Recursive dict merge
+
+    This mutates dct - the contents of merge_dct are added to dct (which is
+    also returned).
+
+    If you want to keep dct you could use deep_merge_copy
     """
     if dct is None:
         dct = {}
@@ -45,10 +48,14 @@ def deep_merge(dct, merge_dct):
 
 
 def validate_merge(state, dct, merge_dct):
-    """Recursive dict merge
-    
-    This mutates dct - the contents of merge_dct are added to dct (which is also returned).
-    If you want to keep dct you could call it like deep_merge(copy.deepcopy(dct), merge_dct)
+    """
+    Recursive dict merge
+
+    This mutates dct - the contents of merge_dct are added to dct (which is
+    also returned).
+
+    If you want to keep dct you could call it like
+    deep_merge(copy.deepcopy(dct), merge_dct)
     """
     dct = dct or {}
     merge_dct = merge_dct or {}
@@ -77,16 +84,16 @@ def validate_merge(state, dct, merge_dct):
 
 def establish_path(tree, path, top=None, cursor=()):
     """
-    Given a tree and a path in the tree that may or may not yet exist,
-    add nodes along the path and return the final node which is now at the
-    given path.
-    
+    Given a tree and a path in the tree that may or may not yet exist, add
+    nodes along the path and return the final node which is now at the given
+    path.
+
     Args:
     - tree: the tree we are establishing a path in
     - path: where the new subtree will be located in the tree
     - top: (None) a reference to the top of the tree
     - cursor: (()) the current location we are visiting in the tree
-    
+
     Returns:
     - node: the new node of the tree that exists at the given path
     """
@@ -127,14 +134,14 @@ def set_path(tree, path, value, top=None, cursor=None):
     """
     Given a tree, a path, and a value, sets the location
     in the tree corresponding to the path to the given value
-    
+
     Args:
     - tree: the tree we are setting a value in
     - path: where the new value will be located in the tree
     - value: the value to set at the given path in the tree
     - top: (None) a reference to the top of the tree
     - cursor: (()) the current location we are visiting in the tree
-    
+
     Returns:
     - node: the new node of the tree that exists at the given path
     """
@@ -199,14 +206,16 @@ def set_star_path(tree, path, value, top=None, cursor=()):
 
 def transform_path(tree, path, transform):
     """
-    Given a tree, a path, and a transform (function), mutate the tree by replacing the subtree at the path by whatever 
-    is returned from applying the transform to the existing value.
-    
+    Given a tree, a path, and a transform (function), mutate the tree by
+    replacing the subtree at the path by whatever is returned from applying the
+    transform to the existing value.
+
     Args:
     - tree: the tree we are setting a value in
     - path: where the new value will be located in the tree
-    - transform: the function to apply to whatever currently lives at the given path in the tree
-    
+    - transform: the function to apply to whatever currently lives at the given
+      path in the tree
+
     Returns:
     - node: the node of the tree that exists at the given path
     """
@@ -278,7 +287,9 @@ def non_schema_keys(schema):
 
 
 def strip_schema_keys(state):
-    """remove schema keys from a state dictionary, including nested dictionaries"""
+    """
+    remove schema keys from a state dictionary, including nested dictionaries
+    """
     if isinstance(state, dict):
         output = {}
         for key, value in state.items():
@@ -300,7 +311,9 @@ def default(type, default):
 
 
 class Registry(object):
-    """A Registry holds a collection of functions or objects"""
+    """
+    A Registry holds a collection of functions or objects
+    """
 
     def __init__(self, function_keys=None):
         function_keys = function_keys or []
@@ -315,10 +328,12 @@ class Registry(object):
         Args:
         - key: Item key.
         - item: The item to add.
-        - alternate_keys: Additional keys under which to register the item. These keys will not be included in the list
-            returned by ``Registry.list()``. This may be useful if you want to be able to look up an item in the
-            registry under multiple keys.
-        - strict (bool): Disallow re-registration, overriding existing keys. False by default.
+        - alternate_keys: Additional keys under which to register the item.
+          These keys will not be included in the list returned by
+          ``Registry.list()``. This may be useful if you want to be able to
+          look up an item in the registry under multiple keys.
+        - strict (bool): Disallow re-registration, overriding existing keys.
+          False by default.
         """
 
         # check that registered function have the required function keys
