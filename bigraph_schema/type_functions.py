@@ -178,6 +178,9 @@ def set_apply(schema, current, update, top_schema, top_state, path, core):
                 subschema,
                 current.get(key),
                 value,
+                top_schema, 
+                top_state, 
+                path,
                 core)
 
         return current
