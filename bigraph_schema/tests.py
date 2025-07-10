@@ -7,9 +7,10 @@ import pprint
 import numpy as np
 from dataclasses import asdict
 
-from bigraph_schema import TypeSystem, local_lookup_module
+from bigraph_schema import local_lookup_module, TypeSystem
 from bigraph_schema.type_functions import (
-    divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, data_module)
+        accumulate, base_types, data_module, deserialize_integer,
+        divide_longest, to_string)
 from bigraph_schema.utilities import compare_dicts, NONE_SYMBOL
 from bigraph_schema.units import units
 from bigraph_schema.registry import establish_path, remove_omitted
@@ -21,7 +22,30 @@ def core():
     return register_test_types(core)
 
 
+def register_test_types(core):
+    """
+    defines the test schemas
+    """
+    register_cube(core)
+
+    core.register('compartment', {
+        'counts': 'tree[float]',
+        'inner': 'tree[compartment]'})
+
+    core.register('metaedge', {
+        '_inherit': 'edge',
+        '_inputs': {
+            'before': 'metaedge'},
+        '_outputs': {
+            'after': 'metaedge'}})
+
+    return core
+
+
 def register_cube(core):
+    """
+    adds an additional simple schema for the test fixture
+    """
     cube_schema = {
         'shape': {
             '_type': 'shape',
@@ -50,24 +74,24 @@ def register_cube(core):
     return core
 
 
-def register_test_types(core):
-    register_cube(core)
+def test_basic_types(core):
+    assert core.find('integer')
+    assert core.find('cube')['depth']['_type'] == 'integer'
 
-    core.register('compartment', {
-        'counts': 'tree[float]',
-        'inner': 'tree[compartment]'})
 
-    core.register('metaedge', {
-        '_inherit': 'edge',
-        '_inputs': {
-            'before': 'metaedge'},
-        '_outputs': {
-            'after': 'metaedge'}})
-
-    return core
+def test_update_types(core):
+    core.update_types({'A': "payload"})
+    desc =  "a placeholder type with no structure"
+    core.update_types({'A': {'_description':desc}})
+    assert core.access('A') == {'_type': 'payload', '_description': desc}
 
 
 def test_reregister_type(core):
+    """
+    register raises an exception if replacing a schema with strict
+
+    it replaces the schema if not strict
+    """
     core.register('A', {'_default': 'a'})
     with pytest.raises(Exception) as e:
         core.register(
@@ -77,6 +101,18 @@ def test_reregister_type(core):
     core.register('A', {'_default': 'b'}, strict=False)
 
     assert core.access('A')['_default'] == 'b'
+
+
+def test_merge_schemas(core):
+    a = {'foo': {'bar': [1],
+                 'baz': [2]}}
+    b = {'foo': {'bar': 3},
+         'baz': 12}
+
+    assert core.merge_schemas(a, b) == \
+            {'foo': {'bar': 3,
+                     'baz': [2]},
+             'baz': 12}
 
 
 def test_generate_default(core):
@@ -126,6 +162,15 @@ def test_apply_update(core):
 
 
 def print_schema_validation(core, library, should_pass):
+    """
+    validate_schema returns nothing for a valid schema declaration
+
+    this helper function makes clearer reports out of the test
+    failures
+
+    this is also why running the file outside pytest prints out
+    a huge wall of text
+    """
     for key, declaration in library.items():
         report = core.validate_schema(declaration)
         if len(report) == 0:
@@ -1368,106 +1413,108 @@ def test_maybe_type(core):
 
 
 def test_tuple_type(core):
-    schema = {
+    schemas = [{
         '_type': 'tuple',
         '_type_parameters': ['0', '1', '2'],
         '_0': 'string',
-        '_1': 'int',
-        '_2': 'map[maybe[float]]'}
+        '_1': 'integer',
+        '_2': 'map[maybe[float]]'},
 
-    schema = ('string', 'int', 'map[maybe[float]]')
-    schema = 'tuple[string,int,map[maybe[float]]]'
-    schema = 'string|integer|map[maybe[float]]'
+        ('string', 'integer', 'map[maybe[float]]'),
+        'tuple[string,integer,map[maybe[float]]]',
+        'string|integer|map[maybe[float]]']
 
-    state = (
-        'aaaaa',
-        13, {
-            'a': 1.1,
-            'b': None})
+    for schema in schemas:
+        state = (
+            'aaaaa',
+            13, {
+                'a': 1.1,
+                'b': None})
 
-    update = (
-        'bbbbbb',
-        10, {
-            'a': 33.33,
-            'b': 4.44444})
+        update = (
+            'bbbbbb',
+            10, {
+                'a': 33.33,
+                'b': 4.44444})
 
-    assert core.check(schema, state)
-    assert core.check(schema, update)
-    assert not core.check(schema, 15)
+        assert core.check(schema, state)
+        assert core.check(schema, update)
+        assert not core.check(schema, 15)
 
-    result = core.apply(
-        schema,
-        state,
-        update)
+        result = core.apply(
+            schema,
+            state,
+            update)
 
-    assert len(result) == 3
-    assert result[0] == update[0]
-    assert result[1] == 23
-    assert result[2]['a'] == 34.43
-    assert result[2]['b'] == update[2]['b']
+        assert len(result) == 3
+        assert result[0] == update[0]
+        assert result[1] == 23
+        assert result[2]['a'] == 34.43
+        assert result[2]['b'] == update[2]['b']
 
-    encode = core.serialize(schema, state)
-    assert encode[2]['b'] == NONE_SYMBOL
-    assert encode[1] == '13'
+        encode = core.serialize(schema, state)
+        assert encode[2]['b'] == NONE_SYMBOL
+        assert encode[1] == '13'
 
-    decode = core.deserialize(schema, encode)
-    assert decode == state
+        decode = core.deserialize(schema, encode)
+        assert decode == state
 
-    tuple_type = core.access('(3|4|10)')
-    assert '_2' in tuple_type
-    assert tuple_type['_2'] == '10'
+        tuple_type = core.access('(3|4|10)')
+        assert '_2' in tuple_type
+        assert tuple_type['_2'] == '10'
 
-    tuple_type = core.access('tuple[9,float,7]')
-    assert '_2' in tuple_type
-    assert tuple_type['_2'] == '7'
+        tuple_type = core.access('tuple[9,float,7]')
+        assert '_2' in tuple_type
+        assert tuple_type['_2'] == '7'
 
 
 def test_union_type(core):
-    schema = {
+    schemas = [{
         '_type': 'union',
         '_type_parameters': ['0', '1', '2'],
         '_0': 'string',
         '_1': 'integer',
-        '_2': 'map[maybe[float]]'}
+        '_2': 'map[maybe[float]]'},
 
-    schema = 'string~integer~map[maybe[float]]'
+        'string~integer~map[maybe[float]]']
 
-    state = {
-        'a': 1.1,
-        'b': None}
+    for schema in schemas:
+        state = {
+            'a': 1.1,
+            'b': None}
 
-    update = {
-        'a': 33.33,
-        'b': 4.44444}
+        update = {
+            'a': 33.33,
+            'b': 4.44444}
 
-    assert core.check(schema, state)
-    assert core.check(schema, update)
-    assert core.check(schema, 15)
+        assert core.check(schema, state)
+        assert core.check(schema, update)
+        assert core.check(schema, 15)
 
-    wrong_state = {
-        'a': 1.1,
-        'b': None}
+        wrong_state = {
+            'a': 1.1,
+            'b': None}
 
-    wrong_update = 'a different type'
+        wrong_update = 'a different type'
 
-    assert core.check(schema, wrong_state)
-    assert core.check(schema, wrong_update)
+        assert core.check(schema, wrong_state)
+        assert core.check(schema, wrong_update)
 
-    # TODO: deal with union apply of different types
+        # TODO: deal with union apply of different types
 
-    result = core.apply(
-        schema,
-        state,
-        update)
+        result = core.apply(
+            schema,
+            state,
+            update)
 
-    assert result['a'] == 34.43
-    assert result['b'] == update['b']
+        assert result['a'] == 34.43
+        assert result['b'] == update['b']
 
-    encode = core.serialize(schema, state)
-    assert encode['b'] == NONE_SYMBOL
+        encode = core.serialize(schema, state)
+        assert encode['b'] == NONE_SYMBOL
 
-    decode = core.deserialize(schema, encode)
-    assert decode == state
+        decode = core.deserialize(schema, encode)
+        assert decode == state
 
 
 def test_union_values(core):
@@ -2121,6 +2168,7 @@ def test_enum_type(core):
         'planet',
         'enum[mercury,venus,earth,mars,jupiter,saturn,neptune]')
 
+    # this is equivalent to the above (TODO: test this)
     # core.register('planet', {
     #     '_type': 'enum',
     #     '_type_parameters': ['0', '1', '2', '3', '4', '5', '6'],
@@ -2504,6 +2552,7 @@ if __name__ == '__main__':
     core = TypeSystem()
     core = register_test_types(core)
 
+    test_basic_types(core)
     test_reregister_type(core)
     test_generate_default(core)
     test_apply_update(core)
@@ -2554,6 +2603,7 @@ if __name__ == '__main__':
     test_union_key_error(core)
     test_tree_equivalence(core)
     test_star_view_project(core)
+    test_merge_schemas(core)
 
     # test_slice_edge(core)
     # test_complex_wiring(core)

@@ -1,5 +1,4 @@
 import copy
-import inspect
 from bigraph_schema.utilities import union_keys
 from bigraph_schema import non_schema_keys, is_schema_key
 from bigraph_schema.type_functions import (
@@ -112,68 +111,6 @@ class TypeSystemAdjunct():
 
         return merged
 
-
-    @staticmethod
-    def validate_schema(type_system, schema, enforce_connections=False):
-        # TODO:
-        #   check() always returns true or false,
-        #   validate() returns information about what doesn't match
-
-        # add ports and wires
-        # validate ports are wired to a matching type,
-        #   either the same type or a subtype (more specific type)
-        # declared ports are equivalent to the presence of a process
-        #   where the ports need to be looked up
-
-        report = {}
-
-        if schema is None:
-            report = 'schema cannot be None'
-
-        elif isinstance(schema, str):
-            typ = type_system.access(
-                schema,
-                strict=True)
-
-            if typ is None:
-                report = f'type: {schema} is not in the registry'
-
-        elif isinstance(schema, dict):
-            report = {}
-
-            schema_keys = set([])
-            branches = set([])
-
-            for key, value in schema.items():
-                if key == '_type':
-                    typ = type_system.access(
-                        value,
-                        strict=True)
-                    if typ is None:
-                        report[key] = f'type: {value} is not in the registry'
-
-                elif key in type_schema_keys:
-                    schema_keys.add(key)
-                    registry = type_system.lookup_registry(key)
-                    if registry is None or key == '_default':
-                        # deserialize and serialize back and check it is equal
-                        pass
-                    elif isinstance(value, str):
-                        element = registry.access(
-                            value,
-                            strict=True)
-
-                        if element is None:
-                            report[key] = f'no entry in the {key} registry for: {value}'
-                    elif not inspect.isfunction(value):
-                        report[key] = f'unknown value for key {key}: {value}'
-                else:
-                    branches.add(key)
-                    branch_report = type_system.validate_schema(value)
-                    if len(branch_report) > 0:
-                        report[key] = branch_report
-
-        return report
 
 
     # TODO: if its an edge, ensure ports match wires
