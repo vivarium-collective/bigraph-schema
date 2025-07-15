@@ -558,21 +558,6 @@ class TypeSystemAdjunct():
 
         return top_schema, top_state
 
-    # TODO: maybe all fields are optional?
-    @staticmethod
-    def dataclass(type_system, schema, path=None):
-        path = path or []
-
-        dataclass_function = type_system.choose_method(
-            schema,
-            {},
-            'dataclass')
-
-        return dataclass_function(
-            schema,
-            path,
-            type_system)
-
     @staticmethod
     def hydrate(type_system, schema, state):
         hydrated = type_system.deserialize(schema, state)

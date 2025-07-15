@@ -12,7 +12,7 @@ from pprint import pformat as pf
 
 from bigraph_schema import Registry, non_schema_keys, is_schema_key, deep_merge, type_parameter_key
 from bigraph_schema.parse import parse_expression
-from bigraph_schema.utilities import union_keys
+from bigraph_schema.utilities import union_keys, state_instance
 from bigraph_schema.registry import remove_omitted, transform_path, set_star_path
 
 from bigraph_schema.type_functions import (
@@ -467,6 +467,29 @@ class TypeSystem(Registry):
                     default[key] = self.default(subschema)
 
         return default
+
+
+    def dataclass(type_system, schema, path=None):
+        path = path or []
+        if not isinstance(path, list):
+            path = [path]
+
+        dataclass_function = type_system.choose_method(
+            schema,
+            {},
+            'dataclass')
+
+        return dataclass_function(
+            schema,
+            path,
+            type_system)
+
+
+    def default_instance(core, schema, path=None):
+        dataclass = core.dataclass(schema, path)
+        default = core.default(schema)
+
+        return state_instance(dataclass, default)
 
 
     def choose_method(self, schema, state, method_name):
@@ -1596,7 +1619,6 @@ class TypeSystem(Registry):
     apply_slice = TypeSystemAdjunct.apply_slice
     complete = TypeSystemAdjunct.complete
     compose = TypeSystemAdjunct.compose
-    dataclass = TypeSystemAdjunct.dataclass
     define = TypeSystemAdjunct.define
     fill_ports = TypeSystemAdjunct.fill_ports
     hydrate = TypeSystemAdjunct.hydrate

@@ -220,3 +220,24 @@ def type_parameters_for(schema):
         parameters.append(subschema)
 
     return parameters
+
+
+def state_instance(dataclass, state):
+    if hasattr(dataclass, '__dataclass_fields__'):
+        fields = dataclass.__dataclass_fields__
+        state = state or {}
+
+        init = {}
+        for key, field in fields.items():
+            substate = state_instance(
+                field.type,
+                state.get(key))
+            init[key] = substate
+        instance = dataclass(**init)
+    # elif get_origin(dataclass) in [typing.Union, typing.Mapping]:
+    #     instance = state
+    else:
+        instance = state
+        # instance = dataclass(state)
+
+    return instance

@@ -10,7 +10,7 @@ from dataclasses import asdict
 from bigraph_schema import TypeSystem, local_lookup_module
 from bigraph_schema.type_functions import (
     divide_longest, base_types, accumulate, to_string, deserialize_integer, apply_schema, data_module)
-from bigraph_schema.utilities import compare_dicts, NONE_SYMBOL
+from bigraph_schema.utilities import compare_dicts, NONE_SYMBOL, state_instance
 from bigraph_schema.units import units
 from bigraph_schema.registry import establish_path, remove_omitted
 
@@ -605,7 +605,8 @@ def test_link_place(core):
 
 def test_units(core):
     schema_length = {
-        'distance': {'_type': 'length'}}
+        'distance': {
+            '_type': 'length'}}
 
     state = {'distance': 11 * units.meter}
     update = {'distance': -5 * units.feet}
@@ -1992,27 +1993,6 @@ def test_set_slice(core):
             1])[1] == 33
 
 
-def from_state(dataclass, state):
-    if hasattr(dataclass, '__dataclass_fields__'):
-        fields = dataclass.__dataclass_fields__
-        state = state or {}
-
-        init = {}
-        for key, field in fields.items():
-            substate = from_state(
-                field.type,
-                state.get(key))
-            init[key] = substate
-        instance = dataclass(**init)
-    # elif get_origin(dataclass) in [typing.Union, typing.Mapping]:
-    #     instance = state
-    else:
-        instance = state
-        # instance = dataclass(state)
-
-    return instance
-
-
 def test_dataclass(core):
     simple_schema = {
         'a': 'float',
@@ -2023,7 +2003,7 @@ def test_dataclass(core):
     # TODO: accept just a string instead of only a path
     simple_dataclass = core.dataclass(
         simple_schema,
-        ['simple'])
+        'simple')
 
     simple_state = {
         'a': 88.888,
@@ -2037,9 +2017,13 @@ def test_dataclass(core):
         c=True,
         x='what')
 
-    simple_from = from_state(
+    simple_from = state_instance(
         simple_dataclass,
         simple_state)
+
+    default_simple = core.default_instance(
+        simple_schema,
+        'simple_default')
 
     nested_schema = {
         'a': {
@@ -2050,7 +2034,7 @@ def test_dataclass(core):
 
     nested_dataclass = core.dataclass(
         nested_schema,
-        ['nested'])
+        'nested')
 
     nested_state = {
         'a': {
@@ -2066,7 +2050,7 @@ def test_dataclass(core):
                 b=3.3333),
             5555.55))
 
-    nested_from = from_state(
+    nested_from = state_instance(
         nested_dataclass,
         nested_state)
 
@@ -2079,7 +2063,7 @@ def test_dataclass(core):
 
     complex_dataclass = core.dataclass(
         complex_schema,
-        ['complex'])
+        'complex')
 
     complex_state = {
         'a': {
@@ -2103,7 +2087,7 @@ def test_dataclass(core):
                         'OOO': ['..', '..', 'a', 'w']}}},
             'e': np.zeros((3, 4, 10))}}
 
-    complex_from = from_state(
+    complex_from = state_instance(
         complex_dataclass,
         complex_state)
 
@@ -2382,6 +2366,14 @@ def test_union_key_error(core):
         result = generate_method(core, schema, state)
 
 
+def test_update_removed(core):
+    schema = 'map[float]'
+    state = {
+        'a': 11.11,
+        'b': 12.2222,
+        'c': 13.33333333}
+
+
 def fix_test_slice_edge(core):
     initial_schema = {
         'edge': {
@@ -2554,6 +2546,7 @@ if __name__ == '__main__':
     test_union_key_error(core)
     test_tree_equivalence(core)
     test_star_view_project(core)
+    test_update_removed(core)
 
     # test_slice_edge(core)
     # test_complex_wiring(core)
