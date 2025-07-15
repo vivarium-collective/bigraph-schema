@@ -884,7 +884,7 @@ def test_inherits_from(core):
 
     assert core.inherits_from(
         'tree[path]',
-        'tree[list[string~integer]]')
+        'tree[list[mark]]')
 
     assert not core.inherits_from(
         'tree[path]',

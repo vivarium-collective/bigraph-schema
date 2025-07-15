@@ -446,6 +446,25 @@ def apply_maybe(schema, current, update, top_schema, top_state, path, core):
             path=path)
 
 
+def apply_mark(schema, current, update, top_schema, top_state, path, core):
+    return update
+
+
+def check_mark(schema, state, core):
+    return isinstance(state, (int, str, type(None)))
+
+
+def deserialize_mark(schema, value, core):
+    try:
+        return int(value)
+    except Exception as e:
+        return value
+
+
+def resolve_mark(schema, other, core):
+    return schema
+
+
 def apply_path(schema, current, update, top_schema, top_state, path, core):
     # paths replace previous paths
     return update
@@ -3216,9 +3235,17 @@ base_types = {
         '_apply': apply_meta,
         '_check': check_meta},
 
+    'mark': {
+        '_type': 'mark',
+        # '_inherit': ['string', 'integer'],
+        '_apply': apply_mark,
+        '_check': check_mark,
+        '_deserialize': deserialize_mark,
+        '_resolve': resolve_mark},
+
     'path': {
         '_type': 'path',
-        '_inherit': 'list[string~integer]',
+        '_inherit': 'list[mark]',
         '_apply': apply_path},
 
     'wires': {
