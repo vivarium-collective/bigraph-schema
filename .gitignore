@@ -12,3 +12,6 @@ lib/
 *.ipynb_checkpoints/
 dist/
 bigraph_schema.egg-info/
+.devenv*
+.devenv/
+devenv.lock
