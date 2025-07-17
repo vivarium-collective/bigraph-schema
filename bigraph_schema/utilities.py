@@ -59,15 +59,26 @@ def type_merge(dct, merge_dct, path=tuple(), merge_supers=False):
     return dct
 
 
+"""
+used by visit_method to cache methods by (method_key, schema id, state id)
+"""
+_visit_method_cache = {}
+
 def visit_method(schema, state, method, values, core):
     """
     Visit a method for a schema and state and apply it, returning the result
     """
+
     schema = core.access(schema)
     method_key = f'_{method}'
 
-    # TODO: we should probably cache all this
-    if isinstance(state, dict) and method_key in state:
+    global _visit_method_cache
+    cache_key = (method_key, id(schema), id(state))
+    cached = _visit_method_cache.get(cache_key, None)
+
+    if cached:
+        visit = cached
+    elif isinstance(state, dict) and method_key in state:
         visit = core.find_method(
             {method_key: state[method_key]},
             method_key)
@@ -79,6 +90,8 @@ def visit_method(schema, state, method, values, core):
         visit = core.find_method(
             'any',
             method_key)
+
+    _visit_method_cache[cache_key] = visit
 
     result = visit(
         schema,
