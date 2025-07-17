@@ -15,7 +15,7 @@ in
   packages = with pkgs; [
     git
     (python312.withPackages (py: with py;
-      [ ipython jupyter ]
+      [ ipdb jupyter ]
     ))
   ];
 

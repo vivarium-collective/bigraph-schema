@@ -5,17 +5,16 @@ description = "A serializable type schema for compositional systems biology"
 readme = "README.md"
 requires-python = "==3.12.9"
 dependencies = [
-    "numpy",
-    "parsimonious",
     "fire",
-    "pytest",
+    "numpy",
+    "orjson",
+    "parsimonious",
     "pint",
-    "plum-dispatch"
+    "plum-dispatch",
+    "pytest",
 ]
 
 [tool.setuptools]
 packages = [
     "bigraph_schema"
 ]
-
-
