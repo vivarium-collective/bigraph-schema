@@ -821,8 +821,8 @@ class TypeSystem(Registry):
         if initial_current == initial_update:
             return initial_current
 
-        current = initial_current
-        update = initial_update
+        current = self.access(initial_current)
+        update = self.access(initial_update)
 
         if self.equivalent(current, update):
             outcome = current
@@ -833,44 +833,67 @@ class TypeSystem(Registry):
         elif self.inherits_from(update, current):
             outcome = update
 
-        elif '_type' in current and '_type' in update and current['_type'] == update['_type']:
+        elif '_type' in current and '_type' in update and current['_type'] != update['_type']:
+            import ipdb; ipdb.set_trace()
+            raise Exception(f'schemas do not match\n{current}\n{update}')
+
+        else:
             outcome = {}
 
-            for key in update:
-                if key == '_type_parameters' and '_type_parameters' in current:
-                    for parameter in update['_type_parameters']:
-                        parameter_key = f'_{parameter}'
-                        if parameter in current['_type_parameters']:
-                            if parameter_key in current:
-                                if parameter_key in update:
-                                    outcome[parameter_key] = self.resolve_schemas(
-                                        current[parameter_key],
-                                        update[parameter_key])
-                                else:
-                                    outcome[parameter_key] = current[parameter_key]
-                            elif parameter_key in update:
-                                outcome[parameter_key] = update[parameter_key]
+            all_keys = union_keys(current, update)
+            for key in all_keys:
+                if key in current:
+                    if key in update:
+                        if key == '_type_parameters':
+                            parameters = update['_type_parameters']
+                            outcome['_type_parameters'] = parameters
+                            for parameter in parameters:
+                                parameter_key = f'_{parameter}'
+                                subschema = self.resolve(
+                                    current[parameter_key],
+                                    update[parameter_key])
+                                outcome[parameter_key] = subschema
+                        elif type_parameter_key(current, key):
+                            pass
                         else:
-                            outcome[parameter_key] = update[parameter_key]
-                elif key not in current or type_parameter_key(current, key):
-                    if update[key]:
-                        outcome[key] = update[key]
+                            outcome[key] = update[key]
                     else:
-                        outcome[key] = current.get(key)
-                elif key in current and current[key]:
-                    outcome[key] = self.resolve_schemas(
-                        current[key],
-                        update[key])
+                        outcome[key] = current[key]
                 else:
                     outcome[key] = update[key]
 
-        elif '_type' in update and '_type' not in current:
-            outcome = self.resolve(update, current)
 
-        else:
-            current = self.access(initial_current)
-            update = self.access(initial_update)
-            outcome = self.resolve(current, update)
+                #         if parameter in current['_type_parameters']:
+                #             if parameter_key in current:
+                #                 if parameter_key in update:
+                #                     outcome[parameter_key] = self.resolve_schemas(
+                #                         current[parameter_key],
+                #                         update[parameter_key])
+                #                 else:
+                #                     outcome[parameter_key] = current[parameter_key]
+                #             elif parameter_key in update:
+                #                 outcome[parameter_key] = update[parameter_key]
+                #         else:
+                #             outcome[parameter_key] = update[parameter_key]
+                # elif key not in current or type_parameter_key(current, key):
+                #     if update[key]:
+                #         outcome[key] = update[key]
+                #     else:
+                #         outcome[key] = current.get(key)
+                # elif key in current and current[key]:
+                #     outcome[key] = self.resolve_schemas(
+                #         current[key],
+                #         update[key])
+                # else:
+                #     outcome[key] = update[key]
+
+        # elif '_type' in update and '_type' not in current:
+        #     outcome = self.resolve(update, current)
+
+        # else:
+        #     current = self.access(initial_current)
+        #     update = self.access(initial_update)
+        #     outcome = self.resolve(current, update)
 
         return outcome
 

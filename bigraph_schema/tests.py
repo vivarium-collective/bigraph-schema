@@ -741,8 +741,7 @@ def test_project(core):
             'a0.1': 'float',
             'a0.2': {
                 'a0.2.0': 'string'}},
-        'a1': {
-            '_type': 'tree[integer]'}}
+        'a1': 'tree[integer]'}
 
     path_format = {
         '1': 'a0>a0.0',
@@ -779,7 +778,10 @@ def test_project(core):
                 'branch3': 22},
             'branch4': 44}}
 
-    instance = core.fill(schema, instance)
+    import ipdb; ipdb.set_trace()
+
+    instance = core.generate(schema, instance)
+    # instance = core.fill(schema, instance)
 
     states = core.view_edge(
         schema,
@@ -943,13 +945,16 @@ def test_apply_schema(core):
     current = {
         'a': 'number',
         'b': 'map[path]',
-        'd': ('float', 'number', 'list[string]')}
+        'x': 'string',
+        'd': ('float', 'number', 'list[string~integer]')}
 
     update = {
         'a': 'float',
-        'b': 'map[list[string]]',
+        'b': 'map[list[string~integer]]',
         'c': 'string',
         'd': ('number', 'float', 'path')}
+
+    import ipdb; ipdb.set_trace()
 
     applied = core.apply(
         'schema',
@@ -959,6 +964,7 @@ def test_apply_schema(core):
     assert applied['a']['_type'] == 'float'
     assert applied['b']['_value']['_type'] == 'path'
     assert applied['c']['_type'] == 'string'
+    assert applied['x']['_type'] == 'string'
     assert applied['d']['_0'] == 'float'
     assert applied['d']['_1'] == 'float'
     assert applied['d']['_2']['_type'] == 'path'
