@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 
-VERSION = '0.0.61'
+VERSION = '0.0.62'
 
 
 with open("README.md", "r") as readme:
