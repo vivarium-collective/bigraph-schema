@@ -821,8 +821,10 @@ class TypeSystem(Registry):
         if initial_current == initial_update:
             return initial_current
 
-        current = initial_current
-        update = initial_update
+        current = self.access(initial_current)
+        update = self.access(initial_update)
+        # current = initial_current
+        # update = initial_update
 
         if self.equivalent(current, update):
             outcome = current
@@ -868,8 +870,8 @@ class TypeSystem(Registry):
             outcome = self.resolve(update, current)
 
         else:
-            current = self.access(initial_current)
-            update = self.access(initial_update)
+            # current = self.access(initial_current)
+            # update = self.access(initial_update)
             outcome = self.resolve(current, update)
 
         return outcome

@@ -959,8 +959,8 @@ def test_apply_schema(core):
     assert applied['a']['_type'] == 'float'
     assert applied['b']['_value']['_type'] == 'path'
     assert applied['c']['_type'] == 'string'
-    assert applied['d']['_0'] == 'float'
-    assert applied['d']['_1'] == 'float'
+    assert applied['d']['_0']['_type'] == 'float'
+    assert applied['d']['_1']['_type'] == 'float'
     assert applied['d']['_2']['_type'] == 'path'
 
 
