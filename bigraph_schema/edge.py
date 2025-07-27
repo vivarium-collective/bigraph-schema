@@ -6,6 +6,12 @@ Edge
 Base class for all edges in the bigraph schema.
 """
 
+def default_wires(schema):
+    return {
+        key: [key]
+        for key in schema}
+
+
 class Edge:
     config_schema = {}
 
@@ -52,8 +58,21 @@ class Edge:
         return {}
 
 
+    def default_inputs(self):
+        schema = self.inputs()
+        wires = default_wires(schema)
+        return wires
+
+
+    def default_outputs(self):
+        schema = self.outputs()
+        wires = default_wires(schema)
+        return wires
+
+
     def interface(self):
         """Returns the schema for this type"""
         return {
             'inputs': self.inputs(),
             'outputs': self.outputs()}
+ 
