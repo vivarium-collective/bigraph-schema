@@ -2,12 +2,15 @@
 ======================
 Parse Bigraph Notation
 ======================
+
+Parses and renders bigraph-style type expressions used in schema definitions,
+such as parameterized types, nested trees, merges (`|`), and unions (`~`).
 """
 
 from parsimonious.grammar import Grammar
 from parsimonious.nodes import NodeVisitor
 
-
+# --- Example Expressions -----------------------------------------------------
 parameter_examples = {
     'no-parameters': 'simple',
     'one-parameter': 'parameterized[A]',
@@ -25,7 +28,7 @@ parameter_examples = {
     'units_type': 'length^2*mass/time^1_5',
     'nothing': '()'}
 
-
+# --- Grammar -----------------------------------------------------------------
 parameter_grammar = Grammar(
     """
     expression = merge / union / tree / nothing
@@ -54,46 +57,30 @@ parameter_grammar = Grammar(
     """)
 
 
+# --- Visitor -----------------------------------------------------------------
 class ParameterVisitor(NodeVisitor):
+    """Visitor that walks a parsed tree and builds structured type expressions."""
+
     def visit_expression(self, node, visit):
         return visit[0]
 
-
     def visit_union(self, node, visit):
         head = [visit[0]]
-        tail = [
-            tree['visit'][1]
-            for tree in visit[1]['visit']]
-
-        return {
-            '_union': head + tail}
-
+        tail = [tree['visit'][1] for tree in visit[1]['visit']]
+        return {'_union': head + tail}
 
     def visit_merge(self, node, visit):
         head = [visit[0]]
-        tail = [
-            tree['visit'][1]
-            for tree in visit[1]['visit']]
-
+        tail = [tree['visit'][1] for tree in visit[1]['visit']]
         nodes = head + tail
 
-        if all([
-            isinstance(tree, dict)
-            for tree in nodes]):
-
-            merge = {}
+        if all(isinstance(tree, dict) for tree in nodes):
+            merged = {}
             for tree in nodes:
-                merge.update(tree)
-
-            return merge
-
+                merged.update(tree)
+            return merged
         else:
-            values = []
-            for tree in head + tail:
-                values.append(tree)
-
-            return tuple(values)
-
+            return tuple(nodes)
 
     def visit_tree(self, node, visit):
         return visit[0]
@@ -102,34 +89,23 @@ class ParameterVisitor(NodeVisitor):
         return visit[0]
 
     def visit_group(self, node, visit):
-        # return visit[1]
-        if isinstance(visit[1], (list, tuple, dict)):
-            return visit[1]
-        else:
-            return tuple([visit[1]])
+        group_value = visit[1]
+        return group_value if isinstance(group_value, (list, tuple, dict)) else (group_value,)
 
     def visit_nest(self, node, visit):
-        return {
-            visit[0]: visit[2]}
+        return {visit[0]: visit[2]}
 
     def visit_type_name(self, node, visit):
         type_name = visit[0]
         type_parameters = visit[1]['visit']
-        if len(type_parameters) > 0:
-            type_parameters = type_parameters[0]
-            return [type_name, type_parameters]
-        else:
-            return type_name
+        if type_parameters:
+            return [type_name, type_parameters[0]]
+        return type_name
 
     def visit_parameter_list(self, node, visit):
-        first_type = [visit[1]]
-        rest_types = [
-            inner['visit'][1]
-            for inner in visit[2]['visit']]
-
-        parameters = first_type + rest_types
-
-        return parameters
+        first = [visit[1]]
+        rest = [inner['visit'][1] for inner in visit[2]['visit']]
+        return first + rest
 
     def visit_symbol(self, node, visit):
         return node.text
@@ -138,67 +114,52 @@ class ParameterVisitor(NodeVisitor):
         return {}
 
     def generic_visit(self, node, visit):
-        return {
-            'node': node,
-            'visit': visit,
-        }
+        return {'node': node, 'visit': visit}
 
-
+# --- API ---------------------------------------------------------------------
 def parse_expression(expression):
-    parse = parameter_grammar.parse(expression)
+    """
+    Parse a bigraph-style type expression into a structured Python object.
+    """
+    parsed = parameter_grammar.parse(expression)
     visitor = ParameterVisitor()
-    type_parameters = visitor.visit(parse)
-
-    return type_parameters
-
+    return visitor.visit(parsed)
 
 def is_type_expression(expression):
-    return len(expression) == 2 and isinstance(expression[1], list)
-
+    """
+    Return True if the expression is a parameterized type list.
+    """
+    return isinstance(expression, list) and len(expression) == 2 and isinstance(expression[1], list)
 
 def render_expression(expression):
+    """
+    Render a structured type expression back into a bigraph-style string.
+    """
     if isinstance(expression, str):
         return expression
-
     elif isinstance(expression, list):
         type_name, parameters = expression
-        render = ','.join([
-            render_expression(parameter)
-            for parameter in parameters])
-        return f'{type_name}[{render}]'
-
+        inner = ','.join(render_expression(p) for p in parameters)
+        return f'{type_name}[{inner}]'
     elif isinstance(expression, tuple):
-        render = '|'.join([
-            render_expression(subexpression)
-            for subexpression in expression])
-        return f'({render})'
-
+        return '(' + '|'.join(render_expression(e) for e in expression) + ')'
     elif isinstance(expression, dict):
-        parts = []
         if '_union' in expression:
-            parts = [
-                render_expression(part)
-                for part in expression['_union']]
-            return '~'.join(parts)
+            return '~'.join(render_expression(p) for p in expression['_union'])
         else:
-            for key, tree in expression.items():
-                render = render_expression(tree)
-                parts.append(f'{key}:{render}')
+            parts = [f'{k}:{render_expression(v)}' for k, v in expression.items()]
+            return f'({ "|".join(parts) })'
+    return str(expression)  # fallback for unknown structures
 
-            inner = '|'.join(parts)
-            return f'({inner})'
-
-
-# Test the functions
+# --- Debugging/Testing ---------------------------------------------------------
 def test_parse_parameters():
-    for key, example in parameter_examples.items():
-        types = parse_expression(example)
-
-        print(f'{key}: {example}')
-        if types:
-            print(f'  {types}')
-            print(f'  {render_expression(types)}')
-
+    """Test parsing and rendering for all example expressions."""
+    for label, expr in parameter_examples.items():
+        parsed = parse_expression(expr)
+        print(f'{label}: {expr}')
+        if parsed:
+            print(f'  Parsed: {parsed}')
+            print(f'  Rendered: {render_expression(parsed)}')
 
 if __name__ == '__main__':
     test_parse_parameters()
