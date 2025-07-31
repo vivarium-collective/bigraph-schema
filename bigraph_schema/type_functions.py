@@ -399,24 +399,21 @@ def apply_map(schema, current, update, top_schema, top_state, path, core=None):
                     del result[remove_key]
 
         elif key not in current:
-            # This supports adding without the '_add' key, if the key is not in
+            # # This supports adding without the '_add' key, if the key is not in
             #   the state
-            _, generated_state, top_schema, top_state = core._generate_recur(
-                value_type,
-                update_value,
-                top_schema=top_schema,
-                top_state=top_state,
-                path=path + [key])
-
-            result[key] = generated_state
-
-            # generated_schema, generated_state = core.generate(
+            # _, generated_state, top_schema, top_state = core._generate_recur(
             #     value_type,
-            #     update_value)
+            #     update_value,
+            #     top_schema=top_schema,
+            #     top_state=top_state,
+            #     path=path + [key])
 
             # result[key] = generated_state
 
+            # # Or raise an exception
             # raise Exception(f'trying to update a key that does not exist:\n  value: {current}\n  update: {update}')
+
+            pass
         else:
             result[key] = core.apply_update(
                 value_type,
