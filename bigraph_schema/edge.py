@@ -49,8 +49,8 @@ class Edge:
         self.config = self.core.fill(self.config_schema, config)
         self.initialize(self.config)
 
-        # Register port types
-        self.register_interface()
+        # # Register port types
+        # self.register_interface()
 
     def initialize(self, config):
         """Optional hook for subclass-specific initialization."""
