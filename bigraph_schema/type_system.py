@@ -478,11 +478,11 @@ class TypeSystem(Registry):
 
 
     def _parameters_for(self, initial_schema):
-        '''
+        """
         find any type parameters for this schema if they are present
 
         helper for type_functions
-        '''
+        """
 
         if '_type_parameters' in initial_schema:
             schema = initial_schema
@@ -507,9 +507,9 @@ class TypeSystem(Registry):
 
 
     def default(self, schema):
-        '''
+        """
         produce the default value for the provided schema
-        '''
+        """
 
         default = None
         found = self.retrieve(schema)
@@ -565,10 +565,10 @@ class TypeSystem(Registry):
 
 
     def choose_method(self, schema, state, method_name):
-        '''
+        """
         find in the provided state, or schema if not there,
         a method for the given method_name
-        '''
+        """
 
         method_key = f'_{method_name}'
         found = None
@@ -601,10 +601,10 @@ class TypeSystem(Registry):
 
 
     def slice(self, schema, state, path):
-        '''
+        """
         find the subschema and substate at a node in the place graph
         given by the provided path
-        '''
+        """
 
         if not isinstance(path, (list, tuple)):
             path = [path]
@@ -1077,10 +1077,10 @@ class TypeSystem(Registry):
 
 
     def set_slice(self, schema, state, path, target_schema, target_state, defer=False):
-        '''
+        """
         Makes a local modification to the schema/state at the path, and
         returns the top_schema and top_state
-        '''
+        """
 
         path = resolve_path(path)
 
@@ -1633,11 +1633,11 @@ class TypeSystem(Registry):
                 return method
 
     def representation(self, schema, path=None, parents=None):
-        '''
+        """
         produce a string representation of the schema
 
         * intended to be the inverse of parse_expression()
-        '''
+        """
 
         path = path or []
         parents = parents or []

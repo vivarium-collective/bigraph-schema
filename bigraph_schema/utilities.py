@@ -146,8 +146,11 @@ def lookup_dtype(data_name):
 
 
 def read_datatype(data_schema):
-    return lookup_dtype(
-        data_schema['_type'])
+    try:
+        return lookup_dtype(
+            data_schema['_type'])
+    except:
+        breakpoint()
 
 
 def read_shape(shape):
