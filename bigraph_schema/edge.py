@@ -46,11 +46,38 @@ class Edge:
         if config is None:
             config = {}
 
-        self.config = self.core.fill(self.config_schema, config)
-        self.initialize(self.config)
+        self._config = self.core.fill(self.config_schema, config)
+        self._composition = 'edge'
+        self._state = {}
+
+        self.initialize(self._config)
 
         # # Register port types
         # self.register_interface()
+
+    @property
+    def config(self):
+        return self._config
+
+    @config.setter
+    def config(self, config):
+        self._config = config
+
+    @property
+    def composition(self):
+        return self._composition
+
+    @composition.setter
+    def composition(self, composition):
+        self._composition = composition
+
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, state):
+        self._state = state
 
     def initialize(self, config):
         """Optional hook for subclass-specific initialization."""
