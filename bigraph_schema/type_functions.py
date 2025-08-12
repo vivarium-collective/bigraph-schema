@@ -3276,9 +3276,9 @@ base_types = {
 registry_types = {
     'any': {
         '_type': 'any',
-        '_default': default_any,
+        '_default': default_any, # ****
         '_slice': slice_any,
-        '_apply': apply_any,
+        '_apply': apply_any, # ****
         '_check': check_any,
         '_sort': sort_any,
         '_generate': generate_any,
@@ -3288,7 +3288,7 @@ registry_types = {
         '_resolve': resolve_any,
         '_fold': fold_any,
         '_bind': bind_any,
-        '_divide': divide_any},
+        '_divide': divide_any}, # ****
 
     'quote': {
         '_type': 'quote',
