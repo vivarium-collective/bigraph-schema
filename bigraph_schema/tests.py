@@ -2540,9 +2540,27 @@ def test_tree_equivalence(core):
     assert store_state == tree_state == fill_state == inline_state == target_state
 
 
+def test_type_network(core):
+    A = {'A': 'float'}
+
+    One = {
+        'A': 'float',
+        'B': 'string'}
+
+    Two = {
+        'B': 'string',
+        'C': 'One'}
+
+    Three = {
+        'C': 'A',
+        'A': 'float'}
+
+
 if __name__ == '__main__':
     core = TypeSystem()
     core = register_test_types(core)
+
+    import ipdb; ipdb.set_trace()
 
     test_basic_types(core)
     test_reregister_type(core)
