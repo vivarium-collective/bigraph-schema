@@ -19,6 +19,13 @@ from bigraph_schema.schema import (
     Tree,
     Dtype,
     Array,
+    Key,
+    Path,
+    # Jump,
+    # Wire,
+    Wires,
+    Schema,
+    Edge,
 )
 
 
@@ -79,6 +86,30 @@ def default(schema: Array):
         dtype=dtype(schema._data))
 
 @dispatch
+def default(schema: Key):
+    return 0
+
+@dispatch
+def default(schema: dict):
+    result = {}
+    for key in schema:
+        if not key.startswith('_'):
+            if schema[key] is None:
+                import ipdb; ipdb.set_trace()
+            inner = default(
+                schema[key])
+            result[key] = inner
+
+    return result
+
+@dispatch
 def default(schema: Node):
-    return {}
+    result = {}
+    for key in schema.__dataclass_fields__:
+        if not key.startswith('_'):
+            inner = default(
+                schema.getattr(key))
+            result[key] = inner
+
+    return result
 

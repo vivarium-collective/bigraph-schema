@@ -16,6 +16,7 @@ dependencies = [
     "pint",
     "plum-dispatch",
     "pytest",
+    "ipdb",
 ]
 
 [tool.setuptools]

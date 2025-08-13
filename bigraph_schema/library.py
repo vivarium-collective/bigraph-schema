@@ -32,10 +32,11 @@ class Library():
     def select_fields(self, base, schema):
         select = {}
         for key in base.__dataclass_fields__.keys():
-            schema_key = schema.get(key, 'node')
-            down = self.access(
-                schema_key)
-            select[key] = down
+            schema_key = schema.get(key)
+            if schema_key:
+                down = self.access(
+                    schema_key)
+                select[key] = down
 
         return select
 
@@ -57,9 +58,19 @@ class Library():
                 return self.registry[key]()
 
         elif isinstance(key, dict):
-            type_key = key.get('_type', 'node')
-            base = self.registry[type_key]
-            return self.make_instance(base, key)
+            if '_type' in key:
+                type_key = key.get('_type', 'node')
+                base = self.registry[type_key]
+                return self.make_instance(base, key)
+            else:
+                result = {}
+                for subkey in key:
+                    if subkey.startswith('_'):
+                        result[subkey] = key[subkey]
+                    else:
+                        result[subkey] = self.access(
+                            key[subkey])
+                return result
 
     def check(self, schema, state):
         found = self.access(schema)
@@ -86,8 +97,6 @@ def test_library():
         '_type': 'tree',
         '_leaf': 'float'}
 
-    import ipdb; ipdb.set_trace()
-
     assert library.check(
         tree_schema,
         tree_a)
@@ -99,6 +108,83 @@ def test_library():
     assert not library.check(
         tree_schema,
         'not a tree')
+
+    edge_schema = {
+        '_type': 'edge',
+        '_inputs': {
+            'mass': 'float',
+            'concentrations': {
+                '_type': 'map',
+                '_key': 'string',
+                '_value': 'float'}},
+        '_outputs': {
+            'mass': 'delta',
+            'concentrations': {
+                '_type': 'map',
+                '_key': 'string',
+                '_value': 'delta'}}}
+
+    edge_a = {
+        'inputs': {
+            'mass': ['cell', 'mass'],
+            'concentrations': ['cell', 'internal']},
+        'outputs': {
+            'mass': ['cell', 'mass'],
+            'concentrations': ['cell', 'internal']}}
+
+    edge_b = {
+        'inputs': 5.0,
+        'outputs': {
+            'mass': ['cell', 'mass'],
+            'concentrations': ['cell', 'internal']}}
+
+    edge_c = {
+        'outputs': {
+            'mass': ['cell', 'mass'],
+            'concentrations': ['cell', 'internal']}}
+
+    edge_d = {
+        'inputs': {
+            'mass': ['cell', 11.111],
+            'concentrations': ['cell', 'internal']},
+        'outputs': {
+            'mass': ['cell', 'mass'],
+            'concentrations': ['cell', 'internal']}}
+
+    node_type = library.access({
+        'a': 'float',
+        'b': 'string'})
+
+    default_node = default(node_type)
+
+    assert 'a' in default_node
+    assert isinstance(default_node['a'], float)
+    assert 'b' in default_node
+    assert isinstance(default_node['b'], str)
+
+    edge_type = library.access(edge_schema)
+
+    # import ipdb; ipdb.set_trace()
+
+    assert library.check(
+        edge_schema,
+        edge_a)
+
+    assert not library.check(
+        edge_schema,
+        edge_b)
+
+    assert not library.check(
+        edge_schema,
+        edge_c)
+
+    assert not library.check(
+        edge_schema,
+        edge_d)
+
+    assert not library.check(
+        edge_schema,
+        44.44444)
 
 
 if __name__ == '__main__':
