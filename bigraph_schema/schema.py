@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import typing
 import numpy as np
 
 from plum import dispatch
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, is_dataclass, field
 
 
 @dataclass(kw_only=True)
@@ -15,12 +17,12 @@ class Maybe(Node):
 
 @dataclass(kw_only=True)
 class Union(Node):
-    _options: typing.List[
+    _options: typing.Tuple[
         Node]
 
 @dataclass(kw_only=True)
 class Tuple(Node):
-    _values: typing.List[
+    _values: typing.Tuple[
         Node]
 
 @dataclass(kw_only=True)
@@ -53,7 +55,7 @@ class String(Node):
 
 @dataclass(kw_only=True)
 class Enum(String):
-    _values: typing.List[
+    _values: typing.Tuple[
         str]
 
 @dataclass(kw_only=True)
@@ -73,16 +75,51 @@ class Tree(Node):
 class Dtype(Node):
     _fields: typing.Union[
         str,
-        typing.List[
+        typing.Tuple[
             typing.Tuple[
                 str,
                 'Dtype']]]
 
 @dataclass(kw_only=True)
 class Array(Node):
-    _shape: typing.List[
+    _shape: typing.Tuple[
         int]
     _data: Dtype
+
+@dataclass(kw_only=True)
+class Key(Union):
+    _options: typing.Tuple[Node] = (String(), Integer())
+
+@dataclass(kw_only=True)
+class Path(List):
+    _item: Node = field(default_factory=Key)
+
+# @dataclass(kw_only=True)
+# class Jump(Node):
+#     path: Path = field(default_factory=Path)
+#     wires: Wires = field(default_factory=make_wires)
+
+# @dataclass(kw_only=True)
+# class Wire(Union):
+#     _options: typing.Tuple[Node] = (Key(), Jump())
+
+def make_wires():
+    return Tree(_leaf=Path())
+
+@dataclass(kw_only=True)
+class Wires(Tree):
+    _leaf: Node = field(default_factory=make_wires)
+
+@dataclass(kw_only=True)
+class Schema(Tree):
+    _leaf: Node = field(default_factory=Node)
+
+@dataclass(kw_only=True)
+class Edge(Node):
+    _inputs: Schema = field(default_factory=Schema)
+    _outputs: Schema = field(default_factory=Schema)
+    inputs: Wires = field(default_factory=Wires)
+    outputs: Wires = field(default_factory=Wires)
 
 
 BASE_TYPES = {
@@ -96,12 +133,21 @@ BASE_TYPES = {
     'float': Float,
     'delta': Delta,
     'nonnegative': Nonnegative,
+    'string': String,
     'enum': Enum,
     'list': List,
     'map': Map,
     'tree': Tree,
     'dtype': Dtype,
-    'array': Array}
+    'array': Array,
+    'key': Key,
+    'path': Path,
+    # 'jump': Jump,
+    # 'wire': Wire,
+    'wires': Wires,
+    'schema': Schema,
+    'edge': Edge,
+}
 
 
 # @dataclass
@@ -142,7 +188,7 @@ BASE_TYPES = {
 #         return {
 #             'environment': 'map[cell]',
 #             'mass_delta': 'delta',
-#             'energy': 'set_float',
+#             'energy': 'float',
 #             'concentrations': 'array[(20|10),float]'}
 
 #             # 'environment': {

@@ -19,6 +19,13 @@ from bigraph_schema.schema import (
     Tree,
     Dtype,
     Array,
+    Key,
+    Path,
+    # Jump,
+    # Wire,
+    Wires,
+    Schema,
+    Edge,
 )
 
 
@@ -136,7 +143,25 @@ def check(schema: Array, state):
     data_match = check(schema._data, state.dtype)
 
 @dispatch
+def check(schema: Key, state):
+    return isinstance(state, int) or isinstance(state, str)
+
+@dispatch
 def check(schema: Node, state):
+    if not isinstance(state, dict):
+        return False
+
+    for key in schema.__dataclass_fields__:
+        if not key.startswith('_'):
+            if key not in state:
+                return False
+            else:
+                down = check(
+                    getattr(schema, key),
+                    state[key])
+                if down is False:
+                    return False
+
     return True
 
 @dispatch
