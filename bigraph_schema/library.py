@@ -1,9 +1,11 @@
 import typing
 import numpy as np
 
+from parsimonious.nodes import NodeVisitor
 from dataclasses import dataclass, is_dataclass
 
 from bigraph_schema.schema import BASE_TYPES
+from bigraph_schema.parse import visit_expression
 from bigraph_schema.methods import (
     default,
     check,
@@ -17,10 +19,86 @@ from bigraph_schema.methods import (
     resolve)
 
 
+def schema_keys(schema):
+    keys = []
+    for key in schema.__dataclass_fields__:
+        if key.startswith('_'):
+            keys.append(key)
+
+    return keys
+
+
+class LibraryVisitor(NodeVisitor):
+    """Visitor that walks a parsed tree and builds structured type expressions."""
+
+    def __init__(self, library):
+        self.library = library
+
+    def visit_expression(self, node, visit):
+        return visit[0]
+
+    def visit_union(self, node, visit):
+        head = [visit[0]]
+        tail = [tree['visit'][1] for tree in visit[1]['visit']]
+        return Union(_options=head + tail)
+
+    def visit_merge(self, node, visit):
+        head = [visit[0]]
+        tail = [tree['visit'][1] for tree in visit[1]['visit']]
+        nodes = head + tail
+
+        if all(isinstance(tree, dict) for tree in nodes):
+            merged = {}
+            for tree in nodes:
+                merged.update(tree)
+            return merged
+        else:
+            return Tuple(_values=nodes)
+
+    def visit_tree(self, node, visit):
+        return visit[0]
+
+    def visit_bigraph(self, node, visit):
+        return visit[0]
+
+    def visit_group(self, node, visit):
+        group_value = visit[1]
+        return group_value if isinstance(group_value, (list, tuple, dict)) else (group_value,)
+
+    def visit_nest(self, node, visit):
+        return {visit[0]: visit[2]}
+
+    def visit_type_name(self, node, visit):
+        schema = visit[0]
+        type_parameters = visit[1]['visit']
+        if type_parameters:
+            parameters = []
+            keys = schema_keys(schema)[1:]
+            for key, parameter in zip(keys, type_parameters):
+                setattr(schema, key, parameter[0])
+            
+        return schema
+
+    def visit_parameter_list(self, node, visit):
+        first = [visit[1]]
+        rest = [inner['visit'][1] for inner in visit[2]['visit']]
+        return first + rest
+
+    def visit_symbol(self, node, visit):
+        return self.library.access(node.text)
+
+    def visit_nothing(self, node, visit):
+        return None
+
+    def generic_visit(self, node, visit):
+        return {'node': node, 'visit': visit}
+
+
 class Library():
     def __init__(self, types):
         self.registry = {}
         self.register_types(types)
+        self.parse_visitor = LibraryVisitor(self)
 
     def register_type(self, key, data):
         if key in self.registry:
@@ -65,8 +143,12 @@ class Library():
 
         elif isinstance(key, str):
             if key not in self.registry:
-                # parse
-                pass
+                try:
+                    parse = visit_expression(key, self.parse_visitor)
+                    return parse
+                except Exception as e:
+                    print(f'could not parse:\n{key}\n{e}')
+                    return key
             else:
                 return self.registry[key]()
 
@@ -119,12 +201,14 @@ def test_library():
         '_type': 'tree',
         '_leaf': 'float'}
 
+    tree_parse = 'tree[float]'
+
     assert library.check(
         tree_schema,
         tree_a)
 
     assert library.check(
-        tree_schema,
+        tree_parse,
         tree_b)
 
     assert not library.check(

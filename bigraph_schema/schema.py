@@ -13,17 +13,15 @@ class Node():
 
 @dataclass(kw_only=True)
 class Maybe(Node):
-    _value: Node
+    _value: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Union(Node):
-    _options: typing.Tuple[
-        Node]
+    _options: typing.Tuple[Node] = field(default_factory=tuple)
 
 @dataclass(kw_only=True)
 class Tuple(Node):
-    _values: typing.Tuple[
-        Node]
+    _values: typing.Tuple[Node] = field(default_factory=tuple)
 
 @dataclass(kw_only=True)
 class Boolean(Node):
@@ -55,21 +53,20 @@ class String(Node):
 
 @dataclass(kw_only=True)
 class Enum(String):
-    _values: typing.Tuple[
-        str]
+    _values: typing.Tuple[str] = field(default_factory=tuple)
 
 @dataclass(kw_only=True)
 class List(Node):
-    _item: Node
+    _item: Node = field(default_factory=Node)
     
 @dataclass(kw_only=True)
 class Map(Node):
-    _key: Node
-    _value: Node
+    _key: Node = field(default_factory=String)
+    _value: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Tree(Node):
-    _leaf: Node
+    _leaf: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Dtype(Node):
@@ -78,13 +75,12 @@ class Dtype(Node):
         typing.Tuple[
             typing.Tuple[
                 str,
-                'Dtype']]]
+                'Dtype']]] = field(default_factory=lambda: 'float64')
 
 @dataclass(kw_only=True)
 class Array(Node):
-    _shape: typing.Tuple[
-        int]
-    _data: Dtype
+    _shape: typing.Tuple[int] = field(default_factory=tuple)
+    _data: Dtype = field(default_factory=lambda: 'float64')
 
 @dataclass(kw_only=True)
 class Key(Union):
