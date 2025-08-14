@@ -1,8 +1,9 @@
 from plum import dispatch
 import numpy as np
 
-MISSING_TYPES = {}
+from types import NoneType
 
+MISSING_TYPES = {}
 
 @dispatch
 def infer(value: (int | np.int32 | np.int64 |
@@ -75,7 +76,7 @@ def infer(value: tuple, path: tuple):
     return f'({inner})'
 
 @dispatch
-def infer(value: NONETYPE, path: tuple):
+def infer(value: NoneType, path: tuple):
     return 'maybe[any]'
 
 @dispatch

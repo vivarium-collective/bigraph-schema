@@ -4,7 +4,17 @@ import numpy as np
 from dataclasses import dataclass, is_dataclass
 
 from bigraph_schema.schema import BASE_TYPES
-from bigraph_schema.methods import default, check
+from bigraph_schema.methods import (
+    default,
+    check,
+    serialize,
+    deserialize,
+    generate,
+    infer,
+    slice,
+    bind,
+    merge,
+    resolve)
 
 
 class Library():
@@ -34,8 +44,11 @@ class Library():
         for key in base.__dataclass_fields__.keys():
             schema_key = schema.get(key)
             if schema_key:
-                down = self.access(
-                    schema_key)
+                if key == '_default':
+                    down = schema_key
+                else:
+                    down = self.access(
+                        schema_key)
                 select[key] = down
 
         return select
@@ -71,11 +84,20 @@ class Library():
                         result[subkey] = self.access(
                             key[subkey])
                 return result
+        else:
+            return key
 
     def check(self, schema, state):
         found = self.access(schema)
         return check(found, state)
 
+    def default(self, schema):
+        found = self.access(schema)
+        return default(found)
+
+    def serialize(self, schema, state):
+        found = self.access(schema)
+        return serialize(found, state)
 
 
 def test_library():
@@ -151,40 +173,45 @@ def test_library():
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
 
-    node_type = library.access({
-        'a': 'float',
-        'b': 'string'})
+    default_a = 11.111
+    node_schema = {
+        'a': {
+            '_type': 'float',
+            '_default': default_a},
+        'b': {
+            '_type': 'string',
+            '_default': 'hello world!'}}
 
-    default_node = default(node_type)
+    node_type = library.access(node_schema)
 
-    assert 'a' in default_node
-    assert isinstance(default_node['a'], float)
-    assert 'b' in default_node
-    assert isinstance(default_node['b'], str)
+    default_node_a = default(node_type)
+    default_node_b = library.default(node_schema)
+
+    assert default_node_a == default_node_b
+
+    assert 'a' in default_node_a
+    assert isinstance(default_node_a['a'], float)
+    assert default_node_a['a'] == default_a
+    assert 'b' in default_node_a
+    assert isinstance(default_node_a['b'], str)
 
     edge_type = library.access(edge_schema)
 
-    # import ipdb; ipdb.set_trace()
+    assert library.check(edge_schema, edge_a)
+    assert not library.check(edge_schema, edge_b)
+    assert not library.check(edge_schema, edge_c)
+    assert not library.check(edge_schema, edge_d)
+    assert not library.check(edge_schema, 44.44444)
 
-    assert library.check(
-        edge_schema,
-        edge_a)
+    encoded_a = serialize(edge_type, edge_a)
 
-    assert not library.check(
-        edge_schema,
-        edge_b)
+    assert encoded_a == edge_a
 
-    assert not library.check(
-        edge_schema,
-        edge_c)
+    encoded_b = library.serialize(
+        {'a': 'float'},
+        {'a': 55.55555})
 
-    assert not library.check(
-        edge_schema,
-        edge_d)
-
-    assert not library.check(
-        edge_schema,
-        44.44444)
+    assert encoded_b['a'] == '55.55555'
 
 
 if __name__ == '__main__':

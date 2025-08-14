@@ -21,8 +21,6 @@ from bigraph_schema.schema import (
     Array,
     Key,
     Path,
-    # Jump,
-    # Wire,
     Wires,
     Schema,
     Edge,

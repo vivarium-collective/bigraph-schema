@@ -21,8 +21,6 @@ from bigraph_schema.schema import (
     Array,
     Key,
     Path,
-    # Jump,
-    # Wire,
     Wires,
     Schema,
     Edge,
@@ -31,85 +29,133 @@ from bigraph_schema.schema import (
 
 @dispatch
 def default(schema: Maybe):
-    return None
+    if schema._default:
+        return schema._default
+    else:
+        return None
 
 @dispatch
 def default(schema: Union):
-    return default(schema._options[0])
+    if schema._default:
+        return schema._default
+    else:
+        return default(schema._options[0])
 
 @dispatch
 def default(schema: Tuple):
-    return [
-        default(subschema)
-        for subschema in schema._values]
+    if schema._default:
+        return schema._default
+    else:
+        return [
+            default(subschema)
+            for subschema in schema._values]
 
 @dispatch
 def default(schema: Boolean):
-    return False
+    if schema._default:
+        return schema._default
+    else:
+        return False
 
 @dispatch
 def default(schema: Integer):
-    return 0
+    if schema._default:
+        return schema._default
+    else:
+        return 0
 
 @dispatch
 def default(schema: Float):
-    return 0.0
+    if schema._default:
+        return schema._default
+    else:
+        return 0.0
 
 @dispatch
 def default(schema: String):
-    return ''
+    if schema._default:
+        return schema._default
+    else:
+        return ''
 
 @dispatch
 def default(schema: Enum):
-    return schema._values[0]
+    if schema._default:
+        return schema._default
+    else:
+        return schema._values[0]
 
 @dispatch
 def default(schema: List):
-    return []
+    if schema._default:
+        return schema._default
+    else:
+        return []
 
 @dispatch
 def default(schema: Map):
-    return {}
+    if schema._default:
+        return schema._default
+    else:
+        return {}
 
 @dispatch
 def default(schema: Tree):
-    return {}
+    if schema._default:
+        return schema._default
+    else:
+        return {}
 
 @dispatch
 def default(schema: Dtype):
-    return np.dtype(schema._fields)
+    if schema._default:
+        return schema._default
+    else:
+        return np.dtype(schema._fields)
 
 @dispatch
 def default(schema: Array):
-    return np.zeros(
-        tuple(schema._shape),
-        dtype=dtype(schema._data))
+    if schema._default:
+        return schema._default
+    else:
+        return np.zeros(
+            tuple(schema._shape),
+            dtype=dtype(schema._data))
 
 @dispatch
 def default(schema: Key):
-    return 0
+    if schema._default:
+        return schema._default
+    else:
+        return 0
 
 @dispatch
 def default(schema: dict):
-    result = {}
-    for key in schema:
-        if not key.startswith('_'):
-            if schema[key] is None:
-                import ipdb; ipdb.set_trace()
-            inner = default(
-                schema[key])
-            result[key] = inner
+    if '_default' in schema: 
+        return schema['_default']
+    else:
+        result = {}
+        for key in schema:
+            if not key.startswith('_'):
+                if schema[key] is None:
+                    import ipdb; ipdb.set_trace()
+                inner = default(
+                    schema[key])
+                result[key] = inner
 
-    return result
+        return result
 
 @dispatch
 def default(schema: Node):
-    result = {}
-    for key in schema.__dataclass_fields__:
-        if not key.startswith('_'):
-            inner = default(
-                schema.getattr(key))
-            result[key] = inner
+    if schema._default:
+        return schema._default
+    else:
+        result = {}
+        for key in schema.__dataclass_fields__:
+            if not key.startswith('_'):
+                inner = default(
+                    schema.getattr(key))
+                result[key] = inner
 
-    return result
+        return result
 
