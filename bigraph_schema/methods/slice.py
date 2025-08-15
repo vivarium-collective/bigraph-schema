@@ -30,5 +30,5 @@ from bigraph_schema.schema import (
 
 
 @dispatch
-def slice(schema: Node):
+def slice(schema: Node, state, path, context):
     pass
