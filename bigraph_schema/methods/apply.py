@@ -30,9 +30,5 @@ from bigraph_schema.schema import (
 
 
 @dispatch
-def apply(schema: Node, state, update, top_schema=None, top_state=None, path=()):
-    if top_schema is None:
-        top_schema = schema
-    if top_state is None:
-        top_state = state
-
+def apply(schema: Node, state, update, context):
+    pass

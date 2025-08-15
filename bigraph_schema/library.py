@@ -274,10 +274,15 @@ class Library():
             schema: found,
             state: state,
             path: ()}
-        return generate(found, state, context=context)
+        return generate(found, state, context)
 
     def slice(self, schema, state, path):
-        pass
+        found = self.access(schema)
+        context = {
+            schema: found,
+            state: state,
+            path: ()}
+        return slice(schema, state, path, context)
 
     def bind(self, schema, state, key, target):
         pass
@@ -287,7 +292,11 @@ class Library():
 
     def apply(self, schema, state, update):
         found = self.access(schema)
-        return apply(schema, state, update)
+        context = {
+            schema: found,
+            state: state,
+            path: ()}
+        return apply(schema, state, update, context)
 
 
 
