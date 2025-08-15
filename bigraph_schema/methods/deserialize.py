@@ -47,7 +47,8 @@ def deserialize(schema: Tuple, encode):
     if isinstance(encode, (list, tuple)):
         return tuple([
             deserialize(value, code)
-            for value, code in zip(schema._values, encode)])
+            for value, code in zip(
+                schema._values, encode)])
 
 @dispatch
 def deserialize(schema: Boolean, encode):
@@ -60,6 +61,7 @@ def deserialize(schema: Boolean, encode):
 def deserialize(schema: Integer, encode):
     try:
         result = int(encode)
+        return result
     except Exception:
         pass
 
@@ -67,6 +69,7 @@ def deserialize(schema: Integer, encode):
 def deserialize(schema: Float, encode):
     try:
         result = float(encode)
+        return result
     except Exception:
         pass
 
@@ -142,3 +145,23 @@ def deserialize(schema: Node, encode):
 
     if result:
         return result
+
+@dispatch
+def deserialize(schema: dict, encode):
+    if isinstance(encode, str):
+        encode = literal_eval(encode)
+
+    if isinstance(encode, dict):
+        result = {}
+        for key, subschema in schema.items():
+            if key in encode:
+                outcome = deserialize(
+                    subschema,
+                    encode[key])
+
+                if outcome:
+                    result[key] = outcome
+
+        if result:
+            return result
+
