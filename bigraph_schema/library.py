@@ -515,8 +515,8 @@ if __name__ == '__main__':
     test_resolve(core)
     test_check(core)
     test_serialize(core)
-
     test_deserialize(core)
+
     test_generate(core)
     test_slice(core)
     test_bind(core)

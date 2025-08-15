@@ -3,7 +3,6 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
-    Maybe,
     Union,
     Tuple,
     Boolean,
@@ -14,6 +13,9 @@ from bigraph_schema.schema import (
     Nonnegative,
     String,
     Enum,
+    Wrap,
+    Maybe,
+    Overwrite,
     List,
     Map,
     Tree,
@@ -28,11 +30,11 @@ from bigraph_schema.schema import (
 
 
 @dispatch
-def default(schema: Maybe):
+def default(schema: Wrap):
     if schema._default:
         return schema._default
     else:
-        return None
+        return default(schema._value)
 
 @dispatch
 def default(schema: Union):

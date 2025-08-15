@@ -5,7 +5,6 @@ from bigraph_schema.utilities import NONE_SYMBOL
 
 from bigraph_schema.schema import (
     Node,
-    Maybe,
     Union,
     Tuple,
     Boolean,
@@ -16,6 +15,9 @@ from bigraph_schema.schema import (
     Nonnegative,
     String,
     Enum,
+    Wrap,
+    Maybe,
+    Overwrite,
     List,
     Map,
     Tree,

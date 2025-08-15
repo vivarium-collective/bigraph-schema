@@ -3,7 +3,6 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
-    Maybe,
     Union,
     Tuple,
     Boolean,
@@ -14,6 +13,9 @@ from bigraph_schema.schema import (
     Nonnegative,
     String,
     Enum,
+    Wrap,
+    Maybe,
+    Overwrite,
     List,
     Map,
     Tree,
@@ -33,6 +35,10 @@ def check(schema: Maybe, state):
         return True
     else:
         return check(schema._value, state)
+
+@dispatch
+def check(schema: Wrap, state):
+    return check(schema._value, state)
 
 @dispatch
 def check(schema: Union, state):
