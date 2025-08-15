@@ -186,6 +186,11 @@ class Library():
         found = self.access(schema)
         return render(found)
 
+    def resolve(self, current_schema, update_schema):
+        current = self.access(current_schema)
+        update = self.access(update_schema)
+        return resolve(current, update)
+
 
 def test_library():
     library = Library(
@@ -274,6 +279,8 @@ def test_library():
             '_default': 'hello world!'}}
 
     node_type = library.access(node_schema)
+    node_render = render(node_type)
+    assert node_render == node_schema
 
     default_node_a = default(node_type)
     default_node_b = library.default(node_schema)
@@ -287,8 +294,6 @@ def test_library():
     assert isinstance(default_node_a['b'], str)
 
     edge_type = library.access(edge_schema)
-
-    import ipdb; ipdb.set_trace()
 
     assert library.check(edge_schema, edge_a)
     assert not library.check(edge_schema, edge_b)
@@ -306,6 +311,30 @@ def test_library():
 
     assert encoded_b['a'] == '55.55555'
 
+    float_number = library.resolve('float', 'number')
+    assert render(float_number) == 'float'
+    assert type(float_number) == BASE_TYPES['float']
+
+    node_resolve = library.resolve(
+        {'a': 'delta', 'b': 'node'},
+        node_schema)
+
+    assert render(node_resolve)['a']['_type'] == 'delta'
+    assert render(node_resolve)['a']['_default'] == node_schema['a']['_default']
+
+    failed = False
+
+    try:
+        library.resolve(
+            {'a': 'map[string]', 'b': 'node'},
+            node_schema)
+
+    except Exception as e:
+        print(e)
+        failed = True
+
+    assert failed
+    
 
 if __name__ == '__main__':
     test_library()
