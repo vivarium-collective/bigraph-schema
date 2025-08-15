@@ -125,10 +125,15 @@ class Edge(Node):
     inputs: Wires = field(default_factory=Wires)
     outputs: Wires = field(default_factory=Wires)
 
+@dataclass(kw_only=True)
+class Context(Node):
+    schema: Schema = field(default_factory=Schema),
+    state: Node = field(default_factory=Node),
+    path: Path = field(default_factory=Path)
+
 
 BASE_TYPES = {
     'node': Node,
-    'maybe': Maybe,
     'union': Union,
     'tuple': Tuple,
     'boolean': Boolean,
@@ -140,6 +145,7 @@ BASE_TYPES = {
     'string': String,
     'enum': Enum,
     'wrap': Wrap,
+    'maybe': Maybe,
     'overwrite': Overwrite,
     'list': List,
     'map': Map,
@@ -163,22 +169,6 @@ BASE_TYPES = {
 #     def __init__(self, cell_data):
 #         self.position = cell_data['position']
 #         self.radius = cell_data['radius']
-
-
-# @dispatch
-# def merge(current: float, update: Delta):
-#     return current + update.value
-
-# @dispatch
-# def merge(current: Cell, update: Cell):
-#     current.position = merge(current.position, update.position)
-#     current.radius = merge(current.radius, update.radius)
-
-#     return current
-
-# @dispatch
-# def merge(current, update):
-#     return update
 
 
 # def ColonyProcess(Process):

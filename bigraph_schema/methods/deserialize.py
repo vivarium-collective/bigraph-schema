@@ -32,8 +32,7 @@ from bigraph_schema.schema import (
 
 @dispatch
 def deserialize(schema: Wrap, encode):
-    decode = deserialize(schema._value, encode)
-    return decode
+    return deserialize(schema._value, encode)
 
 @dispatch
 def deserialize(schema: Union, encode):
