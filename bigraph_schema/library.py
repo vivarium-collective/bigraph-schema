@@ -173,32 +173,124 @@ class Library():
     def infer(self, state):
         return infer(state)
 
-    def check(self, schema, state):
+    def render(self, schema):
         found = self.access(schema)
-        return check(found, state)
+        return render(found)
 
     def default(self, schema):
         found = self.access(schema)
         return default(found)
-
-    def serialize(self, schema, state):
-        found = self.access(schema)
-        return serialize(found, state)
-
-    def render(self, schema):
-        found = self.access(schema)
-        return render(found)
 
     def resolve(self, current_schema, update_schema):
         current = self.access(current_schema)
         update = self.access(update_schema)
         return resolve(current, update)
 
+    def check(self, schema, state):
+        found = self.access(schema)
+        return check(found, state)
 
-def test_library():
-    library = Library(
-        BASE_TYPES)
+    def serialize(self, schema, state):
+        found = self.access(schema)
+        return serialize(found, state)
 
+
+# test data ----------------------------
+
+default_a = 11.111
+node_schema = {
+    'a': {
+        '_type': 'float',
+        '_default': default_a},
+    'b': {
+        '_type': 'string',
+        '_default': 'hello world!'}}
+
+edge_schema = {
+    '_type': 'edge',
+    '_inputs': {
+        'mass': 'float',
+        'concentrations': {
+            '_type': 'map',
+            '_key': 'string',
+            '_value': 'float'}},
+    '_outputs': {
+        'mass': 'delta',
+        'concentrations': {
+            '_type': 'map',
+            '_key': 'string',
+            '_value': 'delta'}}}
+
+edge_a = {
+    'inputs': {
+        'mass': ['cell', 'mass'],
+        'concentrations': ['cell', 'internal']},
+    'outputs': {
+        'mass': ['cell', 'mass'],
+        'concentrations': ['cell', 'internal']}}
+
+
+# tests --------------------------------------
+
+def test_infer(core):
+    default_node = core.default(node_schema)
+    node_inferred = core.infer(default_node)
+
+    print(f"inferred {node_inferred}\nfrom {default_node}")
+    print(f'rendered schema:\n{render(node_inferred)}')
+
+    assert render(node_inferred)['a'] == node_schema['a']['_type']
+    assert render(node_inferred)['b'] == node_schema['b']['_type']
+
+
+def test_render(core):
+    node_type = core.access(node_schema)
+    node_render = core.render(node_schema)
+    assert node_render == node_schema == render(node_type)
+
+
+def test_default(core):
+    node_type = core.access(node_schema)
+
+    default_node_a = default(node_type)
+    default_node_b = core.default(node_schema)
+
+    assert default_node_a == default_node_b
+
+    assert 'a' in default_node_a
+    assert isinstance(default_node_a['a'], float)
+    assert default_node_a['a'] == default_a
+    assert 'b' in default_node_a
+    assert isinstance(default_node_a['b'], str)
+
+
+def test_resolve(core):
+    float_number = core.resolve('float', 'number')
+    assert render(float_number) == 'float'
+    assert type(float_number) == BASE_TYPES['float']
+
+    node_resolve = core.resolve(
+        {'a': 'delta', 'b': 'node'},
+        node_schema)
+
+    assert render(node_resolve)['a']['_type'] == 'delta'
+    assert render(node_resolve)['a']['_default'] == node_schema['a']['_default']
+
+    failed = False
+
+    try:
+        core.resolve(
+            {'a': 'map[string]', 'b': 'node'},
+            node_schema)
+
+    except Exception as e:
+        print(e)
+        failed = True
+
+    assert failed
+
+
+def test_check(core):
     tree_a = {
         'a': {
             'b': 5.5},
@@ -215,35 +307,20 @@ def test_library():
         '_leaf': 'float'}
 
     tree_parse = 'tree[float]'
-    tree_type = library.access(
+    tree_type = core.access(
         tree_parse)
 
-    assert library.check(
+    assert core.check(
         tree_schema,
         tree_a)
 
-    assert library.check(
+    assert core.check(
         tree_parse,
         tree_b)
 
-    assert not library.check(
+    assert not core.check(
         tree_schema,
         'not a tree')
-
-    edge_schema = {
-        '_type': 'edge',
-        '_inputs': {
-            'mass': 'float',
-            'concentrations': {
-                '_type': 'map',
-                '_key': 'string',
-                '_value': 'float'}},
-        '_outputs': {
-            'mass': 'delta',
-            'concentrations': {
-                '_type': 'map',
-                '_key': 'string',
-                '_value': 'delta'}}}
 
     edge_a = {
         'inputs': {
@@ -272,77 +349,55 @@ def test_library():
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
 
-    default_a = 11.111
-    node_schema = {
-        'a': {
-            '_type': 'float',
-            '_default': default_a},
-        'b': {
-            '_type': 'string',
-            '_default': 'hello world!'}}
+    assert core.check(edge_schema, edge_a)
+    assert not core.check(edge_schema, edge_b)
+    assert not core.check(edge_schema, edge_c)
+    assert not core.check(edge_schema, edge_d)
+    assert not core.check(edge_schema, 44.44444)
 
-    node_type = library.access(node_schema)
-    node_render = render(node_type)
-    assert node_render == node_schema
 
-    default_node_a = default(node_type)
-    default_node_b = library.default(node_schema)
-
-    assert default_node_a == default_node_b
-
-    assert 'a' in default_node_a
-    assert isinstance(default_node_a['a'], float)
-    assert default_node_a['a'] == default_a
-    assert 'b' in default_node_a
-    assert isinstance(default_node_a['b'], str)
-
-    edge_type = library.access(edge_schema)
-
-    assert library.check(edge_schema, edge_a)
-    assert not library.check(edge_schema, edge_b)
-    assert not library.check(edge_schema, edge_c)
-    assert not library.check(edge_schema, edge_d)
-    assert not library.check(edge_schema, 44.44444)
-
+def test_serialize(core):
+    edge_type = core.access(edge_schema)
     encoded_a = serialize(edge_type, edge_a)
 
     assert encoded_a == edge_a
 
-    encoded_b = library.serialize(
+    encoded_b = core.serialize(
         {'a': 'float'},
         {'a': 55.55555})
 
     assert encoded_b['a'] == '55.55555'
 
-    float_number = library.resolve('float', 'number')
-    assert render(float_number) == 'float'
-    assert type(float_number) == BASE_TYPES['float']
 
-    node_resolve = library.resolve(
-        {'a': 'delta', 'b': 'node'},
-        node_schema)
+def test_deserialize(core):
+    core
 
-    assert render(node_resolve)['a']['_type'] == 'delta'
-    assert render(node_resolve)['a']['_default'] == node_schema['a']['_default']
+def test_generate(core):
+    core
 
-    failed = False
+def test_slice(core):
+    core
 
-    try:
-        library.resolve(
-            {'a': 'map[string]', 'b': 'node'},
-            node_schema)
+def test_bind(core):
+    core
 
-    except Exception as e:
-        print(e)
-        failed = True
-
-    assert failed
-    
-    node_inferred = library.infer(default_node_a)
-    print(f"inferred {node_inferred}\nfrom {default_node_a}")
-    assert render(node_inferred)['a'] == node_schema['a']['_type']
-    assert render(node_inferred)['b'] == node_schema['b']['_type']
+def test_merge(core):
+    core
 
 
 if __name__ == '__main__':
-    test_library()
+    core = Library(
+        BASE_TYPES)
+
+    test_infer(core)
+    test_render(core)
+    test_default(core)
+    test_resolve(core)
+    test_check(core)
+    test_serialize(core)
+
+    test_deserialize(core)
+    test_generate(core)
+    test_slice(core)
+    test_bind(core)
+    test_merge(core)
