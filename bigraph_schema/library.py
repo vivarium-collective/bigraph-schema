@@ -269,16 +269,18 @@ class Library():
         return deserialize(found, state)
 
     def generate_nomethod(self, schema, state):
-        found = self.access(schema)
-        decode = deserialize(found, state)
-        stage = deep_merge(state, decode)
-        inferred_schema = infer(decode)
-        default_state = default(found)
+        given_schema = self.access(schema)
+
+        default_state = default(given_schema)
+        decode = deserialize(given_schema, state)
+        decoded_state = deep_merge(state, decode)
+        inferred_schema = infer(decoded_state)
+
         final_schema, final_state = merge(
             inferred_schema,
             default_state,
-            found,
-            stage) # ?
+            given_schema,
+            decoded_state) # ?
 
     def generate(self, schema, state):
         found = self.access(schema)
@@ -300,7 +302,8 @@ class Library():
         pass
 
     def merge(self, schema, state, merge_schema, merge_state):
-        pass
+        base_schema = self.resolve(schema, merge_schema)
+        return merge(state, merge_state)
 
     def apply(self, schema, state, update):
         found = self.access(schema)
