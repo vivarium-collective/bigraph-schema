@@ -4,7 +4,6 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
-    Maybe,
     Union,
     Tuple,
     Boolean,
@@ -15,6 +14,9 @@ from bigraph_schema.schema import (
     Nonnegative,
     String,
     Enum,
+    Wrap,
+    Maybe,
+    Overwrite,
     List,
     Map,
     Tree,
@@ -27,8 +29,9 @@ from bigraph_schema.schema import (
     Edge,
 )
 
+
 @dispatch
-def deserialize(schema: Maybe, encode):
+def deserialize(schema: Wrap, encode):
     decode = deserialize(schema._value, encode)
     return decode
 

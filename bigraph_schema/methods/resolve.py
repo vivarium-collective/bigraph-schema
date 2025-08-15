@@ -3,7 +3,6 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
-    Maybe,
     Union,
     Tuple,
     Boolean,
@@ -14,6 +13,9 @@ from bigraph_schema.schema import (
     Nonnegative,
     String,
     Enum,
+    Wrap,
+    Maybe,
+    Overwrite,
     List,
     Map,
     Tree,
@@ -46,6 +48,22 @@ def resolve_subclass(subclass, superclass):
     resolved = type(subclass)(**result)
     return resolved
 
+
+@dispatch
+def resolve(current: Wrap, update: Wrap):
+    if type(current) == type(update):
+        value = resolve(current._value, update._value)
+        return type(current)(_value=value)
+
+@dispatch
+def resolve(current: Wrap, update: Node):
+    value = resolve(current._value, update)
+    return type(current)(_value=value)
+
+@dispatch
+def resolve(current: Node, update: Wrap):
+    value = resolve(current, update._value)
+    return type(update)(_value=value)
 
 @dispatch
 def resolve(current: Node, update: Node):

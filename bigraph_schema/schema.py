@@ -12,10 +12,6 @@ class Node():
     _default: object = None
 
 @dataclass(kw_only=True)
-class Maybe(Node):
-    _value: Node = field(default_factory=Node)
-
-@dataclass(kw_only=True)
 class Union(Node):
     _options: typing.Tuple[Node] = field(default_factory=tuple)
 
@@ -54,6 +50,18 @@ class String(Node):
 @dataclass(kw_only=True)
 class Enum(String):
     _values: typing.Tuple[str] = field(default_factory=tuple)
+
+@dataclass(kw_only=True)
+class Wrap(Node):
+    _value: Node = field(default_factory=Node)
+
+@dataclass(kw_only=True)
+class Maybe(Wrap):
+    pass
+
+@dataclass(kw_only=True)
+class Overwrite(Wrap):
+    pass
 
 @dataclass(kw_only=True)
 class List(Node):
@@ -131,6 +139,8 @@ BASE_TYPES = {
     'nonnegative': Nonnegative,
     'string': String,
     'enum': Enum,
+    'wrap': Wrap,
+    'overwrite': Overwrite,
     'list': List,
     'map': Map,
     'tree': Tree,

@@ -3,7 +3,6 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
-    Maybe,
     Union,
     Tuple,
     Boolean,
@@ -14,6 +13,9 @@ from bigraph_schema.schema import (
     Nonnegative,
     String,
     Enum,
+    Wrap,
+    Maybe,
+    Overwrite,
     List,
     Map,
     Tree,
@@ -40,6 +42,12 @@ def wrap_default(schema, result):
 def render(schema: Maybe):
     value = render(schema._value)
     result = f'maybe[{value}]'
+    return wrap_default(schema, result)
+
+@dispatch
+def render(schema: Overwrite):
+    value = render(schema._value)
+    result = f'overwrite[{value}]'
     return wrap_default(schema, result)
 
 @dispatch
