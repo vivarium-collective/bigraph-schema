@@ -2,6 +2,7 @@ from plum import dispatch
 import numpy as np
 
 from bigraph_schema.schema import (
+    Context,
     Node,
     Union,
     Tuple,
@@ -30,5 +31,5 @@ from bigraph_schema.schema import (
 
 
 @dispatch
-def generate(schema: Node):
+def generate(schema: Node, state, context):
     pass

@@ -8,7 +8,6 @@ from dataclasses import dataclass, is_dataclass
 from bigraph_schema.schema import (
     BASE_TYPES,
     Node,
-    Maybe,
     Union,
     Tuple,
     Boolean,
@@ -19,6 +18,9 @@ from bigraph_schema.schema import (
     Nonnegative,
     String,
     Enum,
+    Wrap,
+    Maybe,
+    Overwrite,
     List,
     Map,
     Tree,
@@ -267,7 +269,12 @@ class Library():
         return deserialize(found, state)
 
     def generate(self, schema, state):
-        pass
+        found = self.access(schema)
+        context = {
+            schema: found,
+            state: state,
+            path: ()}
+        return generate(found, state, context=context)
 
     def slice(self, schema, state, path):
         pass
@@ -479,7 +486,7 @@ def test_deserialize(core):
 
     code = {
         'a': '5555',
-        'b': ('1111.1', "okay", '{"x": "5", "y": "11"}')}
+        'b': ('1111.1', "okay", '{"x": 5, "y": "11"}')}
 
     decode = core.deserialize(
         schema,
