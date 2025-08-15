@@ -16,7 +16,8 @@ from bigraph_schema.methods import (
     slice,
     bind,
     merge,
-    resolve)
+    resolve,
+    render)
 
 
 def schema_keys(schema):
@@ -181,6 +182,10 @@ class Library():
         found = self.access(schema)
         return serialize(found, state)
 
+    def render(self, schema):
+        found = self.access(schema)
+        return render(found)
+
 
 def test_library():
     library = Library(
@@ -202,6 +207,8 @@ def test_library():
         '_leaf': 'float'}
 
     tree_parse = 'tree[float]'
+    tree_type = library.access(
+        tree_parse)
 
     assert library.check(
         tree_schema,
@@ -280,6 +287,8 @@ def test_library():
     assert isinstance(default_node_a['b'], str)
 
     edge_type = library.access(edge_schema)
+
+    import ipdb; ipdb.set_trace()
 
     assert library.check(edge_schema, edge_a)
     assert not library.check(edge_schema, edge_b)
