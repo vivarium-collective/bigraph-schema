@@ -501,6 +501,9 @@ def test_bind(core):
 def test_merge(core):
     core
 
+def test_apply(core):
+    core
+
 
 if __name__ == '__main__':
     core = Library(
@@ -518,3 +521,4 @@ if __name__ == '__main__':
     test_slice(core)
     test_bind(core)
     test_merge(core)
+    test_apply(core)
