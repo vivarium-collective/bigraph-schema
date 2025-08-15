@@ -51,6 +51,11 @@ def render(schema: Overwrite):
     return wrap_default(schema, result)
 
 @dispatch
+def render(schema: Wrap):
+    result = render(schema._value)
+    return wrap_default(schema, result)
+
+@dispatch
 def render(schema: Union):
     options = [
         render(option)
