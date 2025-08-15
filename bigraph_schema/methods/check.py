@@ -88,8 +88,8 @@ def check(schema: List, state):
         return False
 
     return all([
-        check(schema._item, item)
-        for item in state])
+        check(schema._element, element)
+        for element in state])
 
 @dispatch
 def check(schema: Map, state):

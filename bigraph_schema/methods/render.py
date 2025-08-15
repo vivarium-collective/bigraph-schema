@@ -102,8 +102,8 @@ def render(schema: Enum):
 
 @dispatch
 def render(schema: List):
-    item = render(schema._item)
-    result = f'list[{item}]'
+    element = render(schema._element)
+    result = f'list[{element}]'
     return wrap_default(schema, result)
 
 @dispatch

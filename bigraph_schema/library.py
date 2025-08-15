@@ -170,6 +170,9 @@ class Library():
         else:
             return key
 
+    def infer(self, state):
+        return infer(state)
+
     def check(self, schema, state):
         found = self.access(schema)
         return check(found, state)
@@ -335,6 +338,11 @@ def test_library():
 
     assert failed
     
+    node_inferred = library.infer(default_node_a)
+    print(f"inferred {node_inferred}\nfrom {default_node_a}")
+    assert render(node_inferred)['a'] == node_schema['a']['_type']
+    assert render(node_inferred)['b'] == node_schema['b']['_type']
+
 
 if __name__ == '__main__':
     test_library()
