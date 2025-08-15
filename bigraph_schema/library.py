@@ -39,12 +39,13 @@ from bigraph_schema.methods import (
     resolve,
     check,
     serialize,
-
     deserialize,
+
     generate,
     slice,
     bind,
-    merge)
+    merge,
+    apply)
 
 
 def schema_keys(schema):
@@ -271,11 +272,16 @@ class Library():
     def slice(self, schema, state, path):
         pass
 
-    def bind(self, schema, state, key, target_schema, target_state):
+    def bind(self, schema, state, key, target):
         pass
 
-    def merge(self, schema, state, update_schema, update_state):
+    def merge(self, schema, state, merge_schema, merge_state):
         pass
+
+    def apply(self, schema, state, update):
+        found = self.access(schema)
+        return apply(schema, state, update)
+
 
 
 # test data ----------------------------
