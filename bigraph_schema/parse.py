@@ -126,7 +126,7 @@ def parse_expression(expression):
     Parse a bigraph-style type expression into a structured Python object.
     """
     visitor = ParameterVisitor()
-    return visit_expression(parsed, visitor)
+    return visit_expression(expression, visitor)
 
 def is_type_expression(expression):
     """

@@ -7,3 +7,4 @@ from bigraph_schema.methods.slice import slice
 from bigraph_schema.methods.bind import bind
 from bigraph_schema.methods.merge import merge
 from bigraph_schema.methods.resolve import resolve
+from bigraph_schema.methods.render import render
