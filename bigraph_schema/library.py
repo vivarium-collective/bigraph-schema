@@ -1,10 +1,36 @@
 import typing
 import numpy as np
 
+from plum import dispatch
 from parsimonious.nodes import NodeVisitor
 from dataclasses import dataclass, is_dataclass
 
-from bigraph_schema.schema import BASE_TYPES
+from bigraph_schema.schema import (
+    BASE_TYPES,
+    Node,
+    Maybe,
+    Union,
+    Tuple,
+    Boolean,
+    Number,
+    Integer,
+    Float,
+    Delta,
+    Nonnegative,
+    String,
+    Enum,
+    List,
+    Map,
+    Tree,
+    Dtype,
+    Array,
+    Key,
+    Path,
+    Wires,
+    Schema,
+    Edge,
+)
+
 from bigraph_schema.parse import visit_expression
 from bigraph_schema.methods import (
     infer,
@@ -28,6 +54,41 @@ def schema_keys(schema):
             keys.append(key)
 
     return keys
+
+
+@dispatch
+def handle_parameters(schema: Tuple, parameters):
+    schema._values = parameters
+    return schema
+
+@dispatch
+def handle_parameters(schema: Enum, parameters):
+    schema._values = parameters
+    return schema
+
+@dispatch
+def handle_parameters(schema: Union, parameters):
+    schema._options = parameters
+    return schema
+
+@dispatch
+def handle_parameters(schema: Map, parameters):
+    if len(parameters) == 1:
+        schema._value = parameters[0]
+    else:
+        schema._key, schema._value = parameters
+    return schema
+
+@dispatch
+def handle_parameters(schema: Node, parameters):
+    keys = schema_keys(schema)[1:]
+    for key, parameter in zip(keys, parameters):
+        setattr(schema, key, parameter)
+    return schema
+        
+@dispatch
+def handle_parameters(schema, parameters):
+    return schema
 
 
 class LibraryVisitor(NodeVisitor):
@@ -72,19 +133,24 @@ class LibraryVisitor(NodeVisitor):
 
     def visit_type_name(self, node, visit):
         schema = visit[0]
-        type_parameters = visit[1]['visit']
+
+        type_parameters = [
+            parameter
+            for parameter in visit[1]['visit']]
+
         if type_parameters:
-            parameters = []
-            keys = schema_keys(schema)[1:]
-            for key, parameter in zip(keys, type_parameters):
-                setattr(schema, key, parameter[0])
+            schema = handle_parameters(
+                schema,
+                type_parameters[0])
             
         return schema
 
     def visit_parameter_list(self, node, visit):
         first = [visit[1]]
         rest = [inner['visit'][1] for inner in visit[2]['visit']]
-        return first + rest
+        full = first + rest
+            
+        return full
 
     def visit_symbol(self, node, visit):
         return self.library.access(node.text)
@@ -399,7 +465,22 @@ def test_deserialize(core):
         edge_schema,
         encoded_edge)
 
-    import ipdb; ipdb.set_trace()
+    assert decoded == edge_a
+
+    schema = {
+        'a': 'integer',
+        'b': 'tuple[float,string,map[integer]]'}
+
+    code = {
+        'a': '5555',
+        'b': ('1111.1', "okay", '{"x": "5", "y": "11"}')}
+
+    decode = core.deserialize(
+        schema,
+        code)
+
+    assert decode['a'] == 5555
+    assert decode['b'][2]['y'] == 11
 
 
 def test_generate(core):
