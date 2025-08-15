@@ -69,8 +69,8 @@ def serialize(schema: String, state):
 @dispatch
 def serialize(schema: List, state):
     return [
-        serialize(schema._item, item)
-        for item in state]
+        serialize(schema._element, element)
+        for element in state]
 
 @dispatch
 def serialize(schema: Map, state):

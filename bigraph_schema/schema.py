@@ -57,7 +57,7 @@ class Enum(String):
 
 @dataclass(kw_only=True)
 class List(Node):
-    _item: Node = field(default_factory=Node)
+    _element: Node = field(default_factory=Node)
     
 @dataclass(kw_only=True)
 class Map(Node):
@@ -88,7 +88,7 @@ class Key(Union):
 
 @dataclass(kw_only=True)
 class Path(List):
-    _item: Node = field(default_factory=Key)
+    _element: Node = field(default_factory=Key)
 
 # @dataclass(kw_only=True)
 # class Jump(Node):
