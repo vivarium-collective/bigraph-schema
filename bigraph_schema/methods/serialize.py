@@ -42,6 +42,10 @@ def serialize(schema: Maybe, state):
             state)
 
 @dispatch
+def serialize(schema: Wrap, state):
+    return serialize(schema._value, state)
+
+@dispatch
 def serialize(schema: Union, state):
     match = None
     for option in schema._options:
