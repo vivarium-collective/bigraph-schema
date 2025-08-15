@@ -7,17 +7,18 @@ from dataclasses import dataclass, is_dataclass
 from bigraph_schema.schema import BASE_TYPES
 from bigraph_schema.parse import visit_expression
 from bigraph_schema.methods import (
+    infer,
+    render,
     default,
+    resolve,
     check,
     serialize,
+
     deserialize,
     generate,
-    infer,
     slice,
     bind,
-    merge,
-    resolve,
-    render)
+    merge)
 
 
 def schema_keys(schema):
@@ -193,6 +194,22 @@ class Library():
     def serialize(self, schema, state):
         found = self.access(schema)
         return serialize(found, state)
+
+    def deserialize(self, schema, state):
+        found = self.access(schema)
+        return deserialize(found, state)
+
+    def generate(self, schema, state):
+        pass
+
+    def slice(self, schema, state, path):
+        pass
+
+    def bind(self, schema, state, key, target_schema, target_state):
+        pass
+
+    def merge(self, schema, state, update_schema, update_state):
+        pass
 
 
 # test data ----------------------------
@@ -370,7 +387,20 @@ def test_serialize(core):
 
 
 def test_deserialize(core):
-    core
+    encoded_edge = {
+        'inputs': {
+            'mass': ['cell','mass'],
+            'concentrations': '["cell","internal"]'},
+        'outputs': '{\
+            "mass":["cell","mass"],\
+            "concentrations":["cell","internal"]}'}
+
+    decoded = core.deserialize(
+        edge_schema,
+        encoded_edge)
+
+    import ipdb; ipdb.set_trace()
+
 
 def test_generate(core):
     core
