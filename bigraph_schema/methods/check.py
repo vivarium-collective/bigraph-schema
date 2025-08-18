@@ -146,6 +146,8 @@ def check(schema: Array, state):
     shape_match = tuple(schema._shape) == state.shape
     data_match = check(schema._data, state.dtype)
 
+    return shape_match and data_match
+
 @dispatch
 def check(schema: Key, state):
     return isinstance(state, int) or isinstance(state, str)
