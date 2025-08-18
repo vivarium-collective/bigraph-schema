@@ -270,16 +270,16 @@ class Library():
 
     def generate_nomethod(self, schema, state):
         given_schema = self.access(schema)
-
+        decode_state = deserialize(given_schema, state)
         default_state = default(given_schema)
-        decode = deserialize(given_schema, state)
-        decoded_state = deep_merge(state, decode)
-        inferred_schema = infer(decoded_state)
+        merged_state = merge(given_schema, default_state, decode_state)
+
+        inferred_schema = infer(merged_state)
+        resolved_schema = resolve(inferred_schema, given_schema)
 
         final_schema, final_state = merge(
-            inferred_schema,
-            default_state,
-            given_schema,
+            resolved_schema,
+            state,
             decoded_state) # ?
 
     def generate(self, schema, state):
@@ -395,6 +395,14 @@ def test_resolve(core):
 
     assert render(node_resolve)['a']['_type'] == 'delta'
     assert render(node_resolve)['a']['_default'] == node_schema['a']['_default']
+
+    mutual = core.resolve(
+        {'a': 'float', 'b': 'string'},
+        {'b': 'wrap[string]', 'c': 'boolean'})
+
+    assert 'a' in mutual
+    assert 'b' in mutual
+    assert 'c' in mutual
 
     failed = False
 
