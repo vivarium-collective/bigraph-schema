@@ -74,6 +74,9 @@ def resolve(current: Node, update: Node):
     elif issubclass(update_type, current_type):
         return resolve_subclass(update, current)
     else:
+        # raise Exception('cannot resolve types', {
+        #     'current': current,
+        #     'update': update})
         raise Exception(f'\ncannot resolve types:\n{current}\n{update}\n')
 
 @dispatch
@@ -98,4 +101,7 @@ def resolve(current, update):
     elif update is None:
         return current
     else:
+        # raise Exception('cannot resolve types, not schemas', {
+        #     'current': current,
+        #     'update': update})
         raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')

@@ -42,11 +42,11 @@ from bigraph_schema.methods import (
     check,
     serialize,
     deserialize,
+    merge,
 
     generate,
     slice,
     bind,
-    merge,
     apply)
 
 
@@ -268,19 +268,19 @@ class Library():
         found = self.access(schema)
         return deserialize(found, state)
 
-    def generate_nomethod(self, schema, state):
-        given_schema = self.access(schema)
-        decode_state = deserialize(given_schema, state)
-        default_state = default(given_schema)
-        merged_state = merge(given_schema, default_state, decode_state)
+    # def generate_nomethod(self, schema, state):
+    #     given_schema = self.access(schema)
+    #     decode_state = deserialize(given_schema, state)
+    #     default_state = default(given_schema)
+    #     merged_state = merge(given_schema, default_state, decode_state)
 
-        inferred_schema = infer(merged_state)
-        resolved_schema = resolve(inferred_schema, given_schema)
+    #     inferred_schema = infer(merged_state)
+    #     resolved_schema = resolve(inferred_schema, given_schema)
 
-        final_schema, final_state = merge(
-            resolved_schema,
-            state,
-            decoded_state) # ?
+    #     final_schema, final_state = merge(
+    #         resolved_schema,
+    #         state,
+    #         decoded_state) # ?
 
     def generate(self, schema, state):
         found = self.access(schema)
@@ -301,9 +301,9 @@ class Library():
     def bind(self, schema, state, key, target):
         pass
 
-    def merge(self, schema, state, merge_schema, merge_state):
-        base_schema = self.resolve(schema, merge_schema)
-        return merge(state, merge_state)
+    def merge(self, schema, state, merge_state):
+        found = self.access(schema)
+        return merge(found, state, merge_state)
 
     def apply(self, schema, state, update):
         found = self.access(schema)
@@ -538,7 +538,27 @@ def test_bind(core):
     core
 
 def test_merge(core):
-    core
+    tree_a = {
+        'a': {
+            'b': 5.5,
+            'y': 555.55,
+            'x': {'further': {'down': 111111.111}}},
+        'c': 3.3}
+
+    tree_b = {
+        'a': {
+            'b': 0.111,
+            'z': 999999.4444,
+            'x': 444.444},
+        'd': 11.11}
+
+    tree_merge = core.merge(
+        'tree[float]',
+        tree_b,
+        tree_a)
+
+    assert(tree_merge['a']['x']['further']['down'])
+
 
 def test_apply(core):
     core
