@@ -559,6 +559,17 @@ def test_merge(core):
 
     assert(tree_merge['a']['x']['further']['down'])
 
+    key_merge = core.merge(
+        {'a': 'float', 'b': 'string'},
+        {'a': 333.333, 'c': 4444},
+        {'a': 55555.555, 'd': '111111'})
+
+    assert(key_merge == {
+        'a': 55555.555,
+        'b': '',
+        'c': 4444,
+        'd': '111111'})
+
 
 def test_apply(core):
     core

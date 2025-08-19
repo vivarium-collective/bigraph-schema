@@ -28,7 +28,7 @@ from bigraph_schema.schema import (
     Edge,
 )
 
-from bigraph_schema.methods import check
+from bigraph_schema.methods import check, default
 
 
 @dispatch
@@ -121,4 +121,34 @@ def merge(schema: Tree, current, update):
 
 @dispatch
 def merge(schema: Node, current, update):
-    return update
+    result = None
+    if update is not None:
+        result = update
+    elif current is not None:
+        result = current
+    else:
+        result = default(schema)
+
+    return result
+
+
+@dispatch
+def merge(schema: dict, current, update):
+    result = {}
+
+    for key in schema.keys() | current.keys() | update.keys():
+        if key in schema:
+            result[key] = merge(
+                schema[key],
+                current.get(key),
+                update.get(key))
+        elif key in update:
+            result[key] = update[key]
+        else:
+            result[key] = current[key]
+
+        if key in schema and result[key] is None:
+            result[key] = default(
+                schema[key])
+
+    return result
