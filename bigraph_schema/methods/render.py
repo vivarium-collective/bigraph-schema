@@ -3,6 +3,8 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
+    Atom,
+    Empty,
     Union,
     Tuple,
     Boolean,
@@ -37,6 +39,10 @@ def wrap_default(schema, result):
     else:
         return result
 
+
+@dispatch
+def render(schema: Empty):
+    return 'empty'
 
 @dispatch
 def render(schema: Maybe):

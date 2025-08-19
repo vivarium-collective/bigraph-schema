@@ -12,6 +12,14 @@ class Node():
     _default: object = None
 
 @dataclass(kw_only=True)
+class Atom(Node):
+    pass
+
+@dataclass(kw_only=True)
+class Empty(Atom):
+    pass
+
+@dataclass(kw_only=True)
 class Union(Node):
     _options: typing.Tuple[Node] = field(default_factory=tuple)
 
@@ -20,11 +28,11 @@ class Tuple(Node):
     _values: typing.Tuple[Node] = field(default_factory=tuple)
 
 @dataclass(kw_only=True)
-class Boolean(Node):
+class Boolean(Atom):
     pass
 
 @dataclass(kw_only=True)
-class Number(Node):
+class Number(Atom):
     pass
 
 @dataclass(kw_only=True)
@@ -44,7 +52,7 @@ class Nonnegative(Float):
     pass
 
 @dataclass(kw_only=True)
-class String(Node):
+class String(Atom):
     pass
 
 @dataclass(kw_only=True)
@@ -96,7 +104,7 @@ class Key(Union):
 
 @dataclass(kw_only=True)
 class Path(List):
-    _element: Node = field(default_factory=Key)
+    _element: Node = field(default_factory=String)
 
 # @dataclass(kw_only=True)
 # class Jump(Node):
@@ -107,12 +115,9 @@ class Path(List):
 # class Wire(Union):
 #     _options: typing.Tuple[Node] = (Key(), Jump())
 
-def make_wires():
-    return Tree(_leaf=Path())
-
 @dataclass(kw_only=True)
 class Wires(Tree):
-    _leaf: Node = field(default_factory=make_wires)
+    _leaf: Node = field(default_factory=Path)
 
 @dataclass(kw_only=True)
 class Schema(Tree):
@@ -134,6 +139,8 @@ class Context(Node):
 
 BASE_TYPES = {
     'node': Node,
+    'atom': Atom,
+    'empty': Empty,
     'union': Union,
     'tuple': Tuple,
     'boolean': Boolean,
@@ -158,8 +165,7 @@ BASE_TYPES = {
     # 'wire': Wire,
     'wires': Wires,
     'schema': Schema,
-    'edge': Edge,
-}
+    'edge': Edge}
 
 
 # @dataclass
