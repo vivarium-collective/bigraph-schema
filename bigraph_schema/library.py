@@ -286,18 +286,18 @@ class Library():
     def generate(self, schema, state):
         found = self.access(schema)
         context = {
-            schema: found,
-            state: state,
-            path: ()}
+            'schema': found,
+            'state': state,
+            'path': ()}
         return generate(found, state, context)
 
     def traverse(self, schema, state, path):
         found = self.access(schema)
         context = {
-            schema: found,
-            state: state,
-            path: ()}
-        return traverse(schema, state, path, context)
+            'schema': found,
+            'state': state,
+            'path': ()}
+        return traverse(found, state, path, context)
 
     def bind(self, schema, state, key, target):
         pass
@@ -530,7 +530,49 @@ def test_deserialize(core):
 
 
 def test_traverse(core):
-    core
+    tree_a = {
+        'a': {
+            'b': 5.5,
+            'y': 555.55,
+            'x': {'further': {'down': 111111.111}}},
+        'c': 3.3}
+
+    further_schema, further_state = core.traverse(
+        'tree[float]',
+        tree_a,
+        ['a', 'x', 'further'])
+
+    assert isinstance(further_schema, Tree)
+    assert further_state == {'down': 111111.111}
+
+    down_schema, down_state = core.traverse(
+        'tree[float]',
+        tree_a,
+        ['a', 'x', 'further', 'down'])
+
+    assert isinstance(down_schema, Float)
+    assert down_state == 111111.111
+
+    star_schema, star_state = core.traverse(
+        {'_type': 'map', '_value': {'a': 'float', 'b': 'string'}},
+        {'X': {'a': 5.5, 'b': 'green'},
+         'Y': {'a': 11.11, 'b': 'another green'},
+         'Z': {'a': 22.2222, 'b': 'yet another green'}},
+        ['*', 'a'])
+
+    assert isinstance(star_schema, Map)
+    assert isinstance(star_schema._value, Float)
+    assert star_state['Y'] == 11.11
+    assert 'Z' in star_state
+
+    edge_schema = {
+        'inputs': {
+            'mass': ['cell', 'mass'],
+            'concentrations': ['cell', 'internal']},
+        'outputs': {
+            'mass': ['cell', 'mass'],
+            'concentrations': ['cell', 'internal']}}
+
 
 def test_generate(core):
     core
