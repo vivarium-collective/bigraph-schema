@@ -30,11 +30,13 @@ from bigraph_schema.schema import (
     Edge,
 )
 
+from bigraph_schema.methods import check, serialize, resolve
+
 
 def walk_path(context, step):
     return {
         **context,
-        'path': context[path] + (step,)}
+        'path': context['path'] + (step,)}
 
 
 @dispatch
@@ -306,14 +308,14 @@ def traverse(schema: dict, state, path, context):
             return value_schema, values
 
         else:
-            if key in schema and key in state:
-                subcontext = walk_path(context, key)
+            if step in schema and step in state:
+                subcontext = walk_path(context, step)
                 return traverse(
-                    schema[key],
-                    state[key],
+                    schema[step],
+                    state[step],
                     subpath,
                     subcontext)
             else:
-                raise Exception(f'traverse: no key "{key}" in state {state} at path {context["path"]}')
+                raise Exception(f'traverse: no key "{step}" in state {state} at path {context["path"]}')
     else:
         return schema, state
