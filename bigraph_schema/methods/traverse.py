@@ -233,3 +233,86 @@ def traverse(schema: Atom, state, path, context):
         raise Exception(f'more path to traverse: {path}\nbut state is an atom: {state}')
     else:
         return schema, state
+
+
+# @dispatch
+# def traverse(schema: Edge, state, path, context):
+#     pass
+
+
+@dispatch
+def traverse(schema: Node, state, path, context):
+    if path:
+        step = path[0]
+        subpath = path[1:]
+
+        if step == '*':
+            value_schema = {}
+            values = {}
+
+            for key, value in schema.__dataclass_fields__:
+                if key in state:
+                    subcontext = walk_path(context, key)
+                    subschema, subvalue = traverse(
+                        getattr(schema, key),
+                        state[key],
+                        subpath,
+                        subcontext)
+
+                    value_schema[key]= subschema
+                    values[key] = subvalue
+                else:
+                    raise Exception(f'traverse: no key "{key}" in state {state} at path {context["path"]}')
+
+            return value_schema, values
+
+        else:
+            subcontext = walk_path(context, key)
+            if key in state:
+                return traverse(
+                    getattr(schema, key),
+                    state[key],
+                    subpath,
+                    subcontext)
+            else:
+                raise Exception(f'traverse: no key "{key}" in state {state} at path {context["path"]}')
+    else:
+        return schema, state
+
+
+@dispatch
+def traverse(schema: dict, state, path, context):
+    if path:
+        step = path[0]
+        subpath = path[1:]
+
+        if step == '*':
+            value_schema = {}
+            values = {}
+
+            for key in schema:
+                if key in state:
+                    subcontext = walk_path(context, key)
+                    subschema, subvalue = traverse(
+                        schema[key],
+                        state[key],
+                        subpath,
+                        subcontext)
+
+                    value_schema[key]= subschema
+                    values[key] = subvalue
+
+            return value_schema, values
+
+        else:
+            if key in schema and key in state:
+                subcontext = walk_path(context, key)
+                return traverse(
+                    schema[key],
+                    state[key],
+                    subpath,
+                    subcontext)
+            else:
+                raise Exception(f'traverse: no key "{key}" in state {state} at path {context["path"]}')
+    else:
+        return schema, state
