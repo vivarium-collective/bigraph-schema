@@ -3,6 +3,8 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
+    Atom,
+    Empty,
     Union,
     Tuple,
     Boolean,
@@ -30,15 +32,22 @@ from bigraph_schema.schema import (
 
 
 @dispatch
+def check(schema: Empty, state):
+    return state is None
+
+
+@dispatch
 def check(schema: Maybe, state):
     if state is None:
         return True
     else:
         return check(schema._value, state)
 
+
 @dispatch
 def check(schema: Wrap, state):
     return check(schema._value, state)
+
 
 @dispatch
 def check(schema: Union, state):
@@ -47,6 +56,7 @@ def check(schema: Union, state):
             return True
 
     return False
+
 
 @dispatch
 def check(schema: Tuple, state):
@@ -61,25 +71,31 @@ def check(schema: Tuple, state):
     else:
         return False
 
+
 @dispatch
 def check(schema: Boolean, state):
     return isinstance(state, bool)
+
 
 @dispatch
 def check(schema: Integer, state):
     return isinstance(state, int)
 
+
 @dispatch
 def check(schema: Float, state):
     return isinstance(state, float)
+
 
 @dispatch
 def check(schema: Nonnegative, state):
     return state >= 0
 
+
 @dispatch
 def check(schema: String, state):
     return isinstance(state, str)
+
 
 @dispatch
 def check(schema: Enum, state):
@@ -87,6 +103,7 @@ def check(schema: Enum, state):
         return False
 
     return state in schema._values
+
 
 @dispatch
 def check(schema: List, state):
@@ -96,6 +113,7 @@ def check(schema: List, state):
     return all([
         check(schema._element, element)
         for element in state])
+
 
 @dispatch
 def check(schema: Map, state):
@@ -119,6 +137,7 @@ def check(schema: Map, state):
 
         return all_keys and all_values
 
+
 @dispatch
 def check(schema: Tree, state):
     if check(schema._leaf, state):
@@ -131,12 +150,14 @@ def check(schema: Tree, state):
     else:
         return False
 
+
 @dispatch
 def check(schema: Dtype, state):
     if not isinstance(state, np.dtype):
         return False
 
     return np.dtype(schema._fields) == state
+
 
 @dispatch
 def check(schema: Array, state):
@@ -148,27 +169,37 @@ def check(schema: Array, state):
 
     return shape_match and data_match
 
+
 @dispatch
 def check(schema: Key, state):
     return isinstance(state, int) or isinstance(state, str)
 
+
 @dispatch
 def check(schema: Node, state):
-    if not isinstance(state, dict):
-        return False
+    fields = [
+        field
+        for field in schema.__dataclass_fields__
+        if not field.startswith('_')]
 
-    for key in schema.__dataclass_fields__:
-        if not key.startswith('_'):
-            if key not in state:
-                return False
-            else:
-                down = check(
-                    getattr(schema, key),
-                    state[key])
-                if down is False:
-                    return False
+    if fields:
+        if isinstance(state, dict):
+            for key in schema.__dataclass_fields__:
+                if not key.startswith('_'):
+                    if key not in state:
+                        return False
+                    else:
+                        down = check(
+                            getattr(schema, key),
+                            state[key])
+                        if down is False:
+                            return False
+            return True
+        else:
+            return False
+    else:
+        return True
 
-    return True
 
 @dispatch
 def check(schema, state):

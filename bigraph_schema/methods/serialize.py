@@ -5,6 +5,8 @@ from bigraph_schema.utilities import NONE_SYMBOL
 
 from bigraph_schema.schema import (
     Node,
+    Atom,
+    Empty,
     Union,
     Tuple,
     Boolean,
@@ -31,6 +33,10 @@ from bigraph_schema.schema import (
 )
 
 from bigraph_schema.methods import check
+
+@dispatch
+def serialize(schema: Empty, state):
+    return NONE_SYMBOL
 
 @dispatch
 def serialize(schema: Maybe, state):
@@ -100,6 +106,12 @@ def serialize(schema: dict, state):
             subschema,
             state.get(key))
         for key, subschema in schema.items()}
+
+
+@dispatch
+def serialize(schema: Atom, state):
+    return str(state)
+
 
 @dispatch
 def serialize(schema: Node, state):

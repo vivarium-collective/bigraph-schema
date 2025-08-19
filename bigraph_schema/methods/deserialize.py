@@ -2,8 +2,11 @@ from ast import literal_eval
 from plum import dispatch
 import numpy as np
 
+from bigraph_schema.utilities import NONE_SYMBOL
+
 from bigraph_schema.schema import (
     Node,
+    Empty,
     Union,
     Tuple,
     Boolean,
@@ -29,6 +32,15 @@ from bigraph_schema.schema import (
     Edge,
 )
 
+
+@dispatch
+def deserialize(schema: Empty, encode):
+    return None
+
+@dispatch
+def deserialize(schema: Maybe, encode):
+    if encode is not None and encode != NONE_SYMBOL:
+        return deserialize(schema._value, encode)
 
 @dispatch
 def deserialize(schema: Wrap, encode):
@@ -128,7 +140,10 @@ def deserialize(schema: Dtype, encode):
 @dispatch
 def deserialize(schema: Node, encode):
     if isinstance(encode, str):
-        encode = literal_eval(encode)
+        try:
+            encode = literal_eval(encode)
+        except Exception as e:
+            return encode
 
     result = {}
     if isinstance(encode, dict):
@@ -151,7 +166,10 @@ def deserialize(schema: Node, encode):
 @dispatch
 def deserialize(schema: dict, encode):
     if isinstance(encode, str):
-        encode = literal_eval(encode)
+        try:
+            encode = literal_eval(encode)
+        except Exception as e:
+            return encode
 
     if isinstance(encode, dict):
         result = {}

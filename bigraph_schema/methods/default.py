@@ -3,6 +3,7 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
+    Empty,
     Union,
     Tuple,
     Boolean,
@@ -28,6 +29,10 @@ from bigraph_schema.schema import (
     Edge,
 )
 
+
+@dispatch
+def default(schema: Empty):
+    return None
 
 @dispatch
 def default(schema: Wrap):

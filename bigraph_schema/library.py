@@ -290,13 +290,13 @@ class Library():
             path: ()}
         return generate(found, state, context)
 
-    def slice(self, schema, state, path):
+    def traverse(self, schema, state, path):
         found = self.access(schema)
         context = {
             schema: found,
             state: state,
             path: ()}
-        return slice(schema, state, path, context)
+        return traverse(schema, state, path, context)
 
     def bind(self, schema, state, key, target):
         pass
@@ -586,9 +586,9 @@ if __name__ == '__main__':
     test_check(core)
     test_serialize(core)
     test_deserialize(core)
+    test_merge(core)
 
     test_generate(core)
     test_slice(core)
     test_bind(core)
-    test_merge(core)
     test_apply(core)

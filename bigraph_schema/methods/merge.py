@@ -3,6 +3,8 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
+    Atom,
+    Empty,
     Union,
     Tuple,
     Boolean,
@@ -29,6 +31,11 @@ from bigraph_schema.schema import (
 )
 
 from bigraph_schema.methods import check, default
+
+
+@dispatch
+def merge(schema: Empty, current, update):
+    return None
 
 
 @dispatch
@@ -120,7 +127,7 @@ def merge(schema: Tree, current, update):
 
 
 @dispatch
-def merge(schema: Node, current, update):
+def merge(schema: Atom, current, update):
     result = None
     if update is not None:
         result = update
@@ -130,6 +137,25 @@ def merge(schema: Node, current, update):
         result = default(schema)
 
     return result
+
+
+@dispatch
+def merge(schema: Node, current, update):
+    if isinstance(current, dict) and isinstance(update, dict):
+        down = {}
+        for key in schema.__dataclass_fields__:
+            down[key] = schema.getattr(key)
+        return merge(down, current, update)
+    else:
+        result = merge(
+            Atom(),
+            current,
+            update)
+
+        if result is None:
+            result = default(schema)
+
+        return result
 
 
 @dispatch
