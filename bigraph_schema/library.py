@@ -43,6 +43,7 @@ from bigraph_schema.methods import (
     serialize,
     deserialize,
     merge,
+    traverse,
 
     generate,
     slice,
@@ -528,6 +529,9 @@ def test_deserialize(core):
     assert decode['b'][2]['y'] == 11
 
 
+def test_traverse(core):
+    core
+
 def test_generate(core):
     core
 
@@ -587,6 +591,7 @@ if __name__ == '__main__':
     test_serialize(core)
     test_deserialize(core)
     test_merge(core)
+    test_traverse(core)
 
     test_generate(core)
     test_slice(core)
