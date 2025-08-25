@@ -77,6 +77,8 @@ def register_cube(core):
 def test_basic_types(core):
     assert core.find('integer')
     assert core.find('cube')['depth']['_type'] == 'integer'
+    # inheritance
+    assert core.find('cube')['width']['_type'] == 'integer'
 
 
 def test_update_types(core):
@@ -85,6 +87,11 @@ def test_update_types(core):
     core.update_types({'A': {'_description':desc}})
     assert core.access('A') == {'_type': 'payload', '_description': desc}
 
+    core.update_types({'B': "alternate", 'C': "tertiary"})
+    assert core.access('A') == {'_type': 'payload', '_description': desc}
+    assert core.access('B') == {'_type': 'alternate'}
+    assert core.access('C') == {'_type': 'tertiary'}
+
 
 def test_reregister_type(core):
     """
@@ -92,15 +99,15 @@ def test_reregister_type(core):
 
     it replaces the schema if not strict
     """
-    core.register('A', {'_default': 'a'})
+    core.register('R_A', {'_default': 'a'})
     with pytest.raises(Exception) as e:
         core.register(
-            'A', {'_default': 'b'},
+            'R_A', {'_default': 'b'},
             strict=True)
 
-    core.register('A', {'_default': 'b'}, strict=False)
+    core.register('R_A', {'_default': 'b'}, strict=False)
 
-    assert core.access('A')['_default'] == 'b'
+    assert core.access('R_A')['_default'] == 'b'
 
 
 def test_merge_schemas(core):
@@ -161,37 +168,36 @@ def test_apply_update(core):
     assert new_state['depth'] == 39
 
 
-def print_schema_validation(core, library, should_pass):
+def check_validation(core, library, print_log=False):
     """
     validate_schema returns nothing for a valid schema declaration
 
     this helper function makes clearer reports out of the test
     failures
-
-    this is also why running the file outside pytest prints out
-    a huge wall of text
     """
     for key, declaration in library.items():
-        report = core.validate_schema(declaration)
-        if len(report) == 0:
-            message = f'valid schema: {key}'
-            if should_pass:
-                print(f'PASS: {message}')
-                pprint.pprint(declaration)
-            else:
-                raise Exception(f'FAIL: {message}\n{declaration}\n{report}')
-        else:
-            message = f'invalid schema: {key}'
-            if not should_pass:
-                print(f'PASS: {message}')
-                pprint.pprint(declaration)
-            else:
-                raise Exception(f'FAIL: {message}\n{declaration}\n{report}')
+        errors = core.validate_schema(declaration)
+        assert len(errors) == 0, {'key': key, 'declaration': declaration}
+        if print_log:
+            print(f'PASS: valid schema {key}')
+            pprint.pprint(declaration)
+
+
+def check_nonvalidation(core, library, print_log=False):
+    """
+    like check_validation but expects one or more errors
+    """
+    for key, declaration in library.items():
+        errors = core.validate_schema(declaration)
+        assert len(errors) != 0, {'key': key, 'declaration': declaration}
+        if print_log:
+            print(f'PASS: invalid schema {key}')
+            pprint.pprint(declaration)
 
 
 def test_validate_schema(core):
     # good schemas
-    print_schema_validation(core, base_types, True)
+    check_validation(core, base_types)
 
     good = {
         'not quite int': {
@@ -215,6 +221,7 @@ def test_validate_schema(core):
             }
         }
     }
+    check_validation(core, good)
 
     # bad schemas
     bad = {
@@ -225,11 +232,9 @@ def test_validate_schema(core):
             'right': {'_default': 1, '_apply': accumulate},
         },
     }
-
+    check_nonvalidation(core, bad)
     # test for ports and wires mismatch
 
-    print_schema_validation(core, good, True)
-    print_schema_validation(core, bad, False)
 
 
 def test_fill_integer(core):
@@ -344,14 +349,21 @@ def test_fill_from_parse(core):
                 'O': ['a']}}}
 
 
-# def test_fill_in_disconnected_port(core):
-#     test_schema = {
-#         'edge1': {
-#             '_type': 'edge',
-#             '_ports': {
-#                 '1': {'_type': 'float'}}}}
+def test_fill_in_disconnected_port(core):
+    test_schema = {
+        'edge1': {
+            '_type': 'edge',
+            '_ports': {
+                '1': {'_type': 'float'}}}}
 
-#     test_state = {}
+    test_state = {
+            # TODO - js - how do I represent non connection, rather
+            # than a connection with an empty value?
+            'edge1': {}}
+
+    filled = core.fill(
+            test_schema,
+            test_state)
 
 
 # def test_fill_type_mismatch(core):
@@ -366,6 +378,14 @@ def test_fill_from_parse(core):
 #                 '1': ['..', 'a'],
 #                 '2': ['a']},
 #             'a': 5}}
+#
+#     test_state = {
+#             'edge1': {},
+#             'a': 2}
+#
+#     filled = core.fill(
+#             test_schema,
+#             test_state)
 
 
 # def test_edge_type_mismatch(core):
@@ -749,7 +769,7 @@ def test_project(core):
         '2': 'a0>a0.1',
         '3': 'a0>a0.2>a0.2.0'}
 
-    # TODO: support separate schema/instance, and 
+    # TODO: support separate schema/instance, and
     #   instances with '_type' and type parameter keys
     # TODO: support overriding various type methods
     instance = {
@@ -2140,7 +2160,7 @@ def test_dataclass(core):
 
     complex_dict = asdict(complex_from)
 
-    # assert complex_dict == complex_state ? 
+    # assert complex_dict == complex_state ?
 
     assert complex_from.a['x']['oooo'] is None
     assert len(complex_from.c.d['A']['inputs']['GGG'])
@@ -2350,7 +2370,7 @@ def test_edge_cycle(core):
             assert key in result
 
 
-def test_merge(core):
+def test_merge2(core):
     schema = {
         'A': 'float',
         'B': 'enum[one,two,three]',
@@ -2422,6 +2442,7 @@ def test_update_removed(core):
         'c': 13.33333333}
 
 
+# TODO fix this test
 def fix_test_slice_edge(core):
     initial_schema = {
         'edge': {
@@ -2460,6 +2481,7 @@ def fix_test_slice_edge(core):
     assert inner_state == 55555
 
 
+# TODO fix this test
 def fix_test_complex_wiring(core):
     initial_schema = {
         'edge': {
@@ -2545,6 +2567,7 @@ if __name__ == '__main__':
     core = register_test_types(core)
 
     test_basic_types(core)
+    test_update_types(core)
     test_reregister_type(core)
     test_generate_default(core)
     test_apply_update(core)
@@ -2554,6 +2577,7 @@ if __name__ == '__main__':
     test_establish_path(core)
     test_overwrite_existing(core)
     test_fill_in_missing_nodes(core)
+    test_fill_in_disconnected_port(core)
     test_fill_from_parse(core)
     test_fill_ports(core)
     test_expected_schema(core)
@@ -2561,12 +2585,12 @@ if __name__ == '__main__':
     test_serialize_deserialize(core)
     test_project(core)
     test_inherits_from(core)
+    test_check(core)
     test_apply_schema(core)
     test_resolve_schemas(core)
     test_add_reaction(core)
     test_remove_reaction(core)
     test_replace_reaction(core)
-    test_unit_conversion(core)
     test_map_type(core)
     test_tree_type(core)
     test_maybe_type(core)
@@ -2581,8 +2605,10 @@ if __name__ == '__main__':
     test_foursquare(core)
     test_divide(core)
     test_merge(core)
+    test_merge2(core)
     test_bind(core)
     test_slice(core)
+    test_star_path(core)
     test_set_slice(core)
     test_dataclass(core)
     test_enum_type(core)
@@ -2590,7 +2616,6 @@ if __name__ == '__main__':
     test_representation(core)
     test_generate(core)
     test_edge_cycle(core)
-    test_merge(core)
     test_remove_omitted(core)
     test_union_key_error(core)
     test_tree_equivalence(core)
@@ -2598,5 +2623,9 @@ if __name__ == '__main__':
     test_update_removed(core)
     test_merge_schemas(core)
 
+    # test_reaction(core)
+    # test_link_place(core)
+    # test_unit_conversion(core)
     # test_slice_edge(core)
     # test_complex_wiring(core)
+    # test_fill_type_mismatch(core)
