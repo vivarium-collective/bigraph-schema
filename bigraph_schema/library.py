@@ -7,6 +7,8 @@ from dataclasses import dataclass, is_dataclass
 
 from bigraph_schema.schema import (
     BASE_TYPES,
+    resolve_path,
+    convert_jump,
     Node,
     Union,
     Tuple,
@@ -245,21 +247,21 @@ class Library():
         else:
             return key
 
+    def blank_context(self, schema, state):
+        return {
+            'schema': schema,
+            'state': state,
+            'continue': lambda sch, st: (sch, st),
+            'path': ()}
+
+    def convert_jump(self, key):
+        return convert_jump(key)
+
     def convert_path(self, path):
-        convert = []
-        for step in path:
-            convert_step = Jump(_value=step)
-            if isinstance(step, str):
-                if step == '*':
-                    convert_step = Star(_value=step)
-                else:
-                    convert_step = Key(_value=step)
-            elif isinstance(step, int):
-                convert_step = Index(_value=step)
-
-            convert.append(convert_step)
-
-        return convert
+        resolved = resolve_path(path)
+        return [
+            self.convert_jump(key)
+            for key in resolved]
 
     def infer(self, state):
         return infer(state)
@@ -311,15 +313,18 @@ class Library():
             'path': ()}
         return generate(found, state, context)
 
+    def jump(self, schema, state, raw_key):
+        found = self.access(schema)
+        key = self.convert_jump(raw_key)
+        context = self.blank_context(found, state)
+
+        return jump(found, state, key, context)
+
     def traverse(self, schema, state, raw_path):
         found = self.access(schema)
-        context = {
-            'schema': found,
-            'state': state,
-            'continue': lambda sch, st: (sch, st),
-            'path': ()}
-        
+        context = self.blank_context(found, state)
         path = self.convert_path(raw_path)
+
         return traverse(found, state, path, context)
 
     def bind(self, schema, state, key, target):
@@ -588,13 +593,76 @@ def test_traverse(core):
     assert star_state['Y'] == 11.11
     assert 'Z' in star_state
 
-    edge_schema = {
+    puts = {
+        'mass': 'float',
+        'concentrations': 'map[float]'}
+
+    edge_interface = {
+        '_type': 'edge',
+        '_inputs': puts,
+        '_outputs': puts}
+
+    edge_schema = core.access(
+        edge_interface)
+
+    edge_state = {
         'inputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']},
         'outputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
+
+    assert core.check(edge_interface, edge_state)
+
+    default_edge = core.default(edge_schema)
+
+    assert default_edge['inputs']['mass'] == ['mass']
+
+    simple_interface = {
+        'cell': {
+            'mass': 'float',
+            'internal': 'map[float]'},
+        'edge': edge_interface}
+
+    initial_mass = 11.1111
+    simple_graph = {
+        'cell': {
+            'mass': initial_mass,
+            'internal': {
+                'A': 3.333,
+                'B': 44.44444,
+                'C': 5555.555}},
+        'edge': edge_state}
+
+    simple_schema = core.access(
+        simple_interface)
+
+    down_schema, down_state = core.jump(
+        simple_interface,
+        simple_graph,
+        'edge')
+
+    assert isinstance(down_schema, Edge)
+    assert 'inputs' in down_state
+
+    mass_schema, mass_state = core.traverse(
+        simple_interface,
+        simple_graph,
+        ['edge', 'inputs', 'mass'])
+
+    assert isinstance(mass_schema, Float)
+    assert mass_state == initial_mass
+
+    concentration_schema, concentration_state = core.traverse(
+        simple_interface,
+        simple_graph,
+        ['edge', 'outputs', 'concentrations', 'A'])
+
+    # assert isinstance(concentration_schema, Float)
+    # assert concentration_state == simple_graph['cell']['internal']['A']
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_generate(core):
