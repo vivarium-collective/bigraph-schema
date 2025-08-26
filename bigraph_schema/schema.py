@@ -99,10 +99,6 @@ class Array(Node):
     _data: Dtype = field(default_factory=lambda: 'float64')
 
 @dataclass(kw_only=True)
-class Key(Union):
-    _options: typing.Tuple[Node] = (String(), Integer())
-
-@dataclass(kw_only=True)
 class Path(List):
     _element: Node = field(default_factory=String)
 
@@ -135,6 +131,32 @@ class Context(Node):
     schema: Schema = field(default_factory=Schema),
     state: Node = field(default_factory=Node),
     path: Path = field(default_factory=Path)
+
+# types for jumps in traversals
+
+@dataclass(kw_only=True)
+class Jump():
+    _value: object
+
+@dataclass(kw_only=True)
+class Key(Jump):
+    _value: str
+
+@dataclass(kw_only=True)
+class Index(Jump):
+    _value: int
+
+@dataclass(kw_only=True)
+class Slice(Jump):
+    _value: slice
+
+@dataclass(kw_only=True)
+class Star(Jump):
+    _value: str = '*'
+
+@dataclass(kw_only=True)
+class Match(Jump):
+    _match = str # regex
 
 
 BASE_TYPES = {

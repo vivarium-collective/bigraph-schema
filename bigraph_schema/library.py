@@ -31,6 +31,9 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Edge,
+    Jump,
+    Star,
+    Index,
 )
 
 from bigraph_schema.parse import visit_expression
@@ -43,6 +46,7 @@ from bigraph_schema.methods import (
     serialize,
     deserialize,
     merge,
+    jump,
     traverse,
 
     generate,
@@ -241,6 +245,22 @@ class Library():
         else:
             return key
 
+    def convert_path(self, path):
+        convert = []
+        for step in path:
+            convert_step = Jump(_value=step)
+            if isinstance(step, str):
+                if step == '*':
+                    convert_step = Star(_value=step)
+                else:
+                    convert_step = Key(_value=step)
+            elif isinstance(step, int):
+                convert_step = Index(_value=step)
+
+            convert.append(convert_step)
+
+        return convert
+
     def infer(self, state):
         return infer(state)
 
@@ -291,12 +311,15 @@ class Library():
             'path': ()}
         return generate(found, state, context)
 
-    def traverse(self, schema, state, path):
+    def traverse(self, schema, state, raw_path):
         found = self.access(schema)
         context = {
             'schema': found,
             'state': state,
+            'continue': lambda sch, st: (sch, st),
             'path': ()}
+        
+        path = self.convert_path(raw_path)
         return traverse(found, state, path, context)
 
     def bind(self, schema, state, key, target):
