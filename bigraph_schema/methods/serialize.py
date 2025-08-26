@@ -38,6 +38,7 @@ from bigraph_schema.methods import check
 def serialize(schema: Empty, state):
     return NONE_SYMBOL
 
+
 @dispatch
 def serialize(schema: Maybe, state):
     if state is None:
@@ -47,9 +48,11 @@ def serialize(schema: Maybe, state):
             schema._value,
             state)
 
+
 @dispatch
 def serialize(schema: Wrap, state):
     return serialize(schema._value, state)
+
 
 @dispatch
 def serialize(schema: Union, state):
@@ -61,11 +64,13 @@ def serialize(schema: Union, state):
             break
     return match
 
+
 @dispatch
 def serialize(schema: Tuple, state):
     return [
         serialize(subschema, value)
         for subschema, value in zip(schema._values, state)]
+
 
 @dispatch
 def serialize(schema: Boolean, state):
@@ -74,9 +79,11 @@ def serialize(schema: Boolean, state):
     else:
         return 'false'
 
+
 @dispatch
 def serialize(schema: String, state):
     return state
+
 
 @dispatch
 def serialize(schema: List, state):
@@ -84,11 +91,13 @@ def serialize(schema: List, state):
         serialize(schema._element, element)
         for element in state]
 
+
 @dispatch
 def serialize(schema: Map, state):
     return {
         key: serialize(schema._value, value)
         for key, value in state.items()}
+
 
 @dispatch
 def serialize(schema: Tree, state):
@@ -98,6 +107,7 @@ def serialize(schema: Tree, state):
         return {
             key: serialize(schema, branch)
             for key, branch in state.items()}
+
 
 @dispatch
 def serialize(schema: dict, state):
@@ -127,4 +137,3 @@ def serialize(schema: Node, state):
         return result
     else:
         return str(state)
-

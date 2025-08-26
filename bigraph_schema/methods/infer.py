@@ -40,9 +40,11 @@ def infer(value: (int | np.int32 | np.int64 |
           path: tuple = ()):
     return Integer()
 
+
 @dispatch
 def infer(value: bool, path: tuple = ()):
     return Boolean()
+
 
 @dispatch
 def infer(value: (float | np.float32 | np.float64 |
@@ -50,13 +52,16 @@ def infer(value: (float | np.float32 | np.float64 |
           path: tuple = ()):
     return Float()
 
+
 @dispatch
 def infer(value: str, path: tuple = ()):
     return String()
 
+
 @dispatch
 def infer(value: np.ndarray, path: tuple = ()):
     return Array(_shape=value.shape, _data=value.dtype)
+
 
 @dispatch
 def infer(value: list, path: tuple = ()):
@@ -66,8 +71,9 @@ def infer(value: list, path: tuple = ()):
             path+('_element',))
     else:
         element = Node()
-    
+
     return List(_element=element)
+
 
 @dispatch
 def infer(value: tuple, path: tuple = ()):
@@ -78,15 +84,18 @@ def infer(value: tuple, path: tuple = ()):
         for index, item in enumerate(value)]
     return Tuple(_values=result)
 
+
 @dispatch
 def infer(value: NoneType, path: tuple = ()):
     return Maybe(_value=Node())
+
 
 @dispatch
 def infer(value: set, path: tuple = ()):
     return infer(
         list(value),
         path)
+
 
 @dispatch
 def infer(value: dict, path: tuple = ()):
@@ -106,6 +115,7 @@ def infer(value: dict, path: tuple = ()):
         return Map(_value=map_value)
     else:
         return subvalues
+
 
 @dispatch
 def infer(value: object, path: tuple = ()):
@@ -133,4 +143,3 @@ def infer(value: object, path: tuple = ()):
                 value_schema[key] = Node()
 
     return value_schema
-

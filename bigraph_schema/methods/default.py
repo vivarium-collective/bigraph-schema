@@ -34,6 +34,7 @@ from bigraph_schema.schema import (
 def default(schema: Empty):
     return None
 
+
 @dispatch
 def default(schema: Wrap):
     if schema._default:
@@ -41,12 +42,14 @@ def default(schema: Wrap):
     else:
         return default(schema._value)
 
+
 @dispatch
 def default(schema: Union):
     if schema._default:
         return schema._default
     else:
         return default(schema._options[0])
+
 
 @dispatch
 def default(schema: Tuple):
@@ -57,12 +60,14 @@ def default(schema: Tuple):
             default(subschema)
             for subschema in schema._values]
 
+
 @dispatch
 def default(schema: Boolean):
     if schema._default:
         return schema._default
     else:
         return False
+
 
 @dispatch
 def default(schema: Integer):
@@ -71,12 +76,14 @@ def default(schema: Integer):
     else:
         return 0
 
+
 @dispatch
 def default(schema: Float):
     if schema._default:
         return schema._default
     else:
         return 0.0
+
 
 @dispatch
 def default(schema: String):
@@ -85,12 +92,14 @@ def default(schema: String):
     else:
         return ''
 
+
 @dispatch
 def default(schema: Enum):
     if schema._default:
         return schema._default
     else:
         return schema._values[0]
+
 
 @dispatch
 def default(schema: List):
@@ -99,12 +108,14 @@ def default(schema: List):
     else:
         return []
 
+
 @dispatch
 def default(schema: Map):
     if schema._default:
         return schema._default
     else:
         return {}
+
 
 @dispatch
 def default(schema: Tree):
@@ -113,12 +124,14 @@ def default(schema: Tree):
     else:
         return {}
 
+
 @dispatch
 def default(schema: Dtype):
     if schema._default:
         return schema._default
     else:
         return np.dtype(schema._fields)
+
 
 @dispatch
 def default(schema: Array):
@@ -152,6 +165,7 @@ def default(schema: Edge):
         'inputs': default_wires(schema._inputs),
         'outputs': default_wires(schema._outputs)}
 
+
 @dispatch
 def default(schema: dict):
     if '_default' in schema: 
@@ -168,6 +182,7 @@ def default(schema: dict):
 
         return result
 
+
 @dispatch
 def default(schema: Node):
     if schema._default:
@@ -181,4 +196,3 @@ def default(schema: Node):
                 result[key] = inner
 
         return result
-

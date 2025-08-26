@@ -70,15 +70,18 @@ def handle_parameters(schema: Tuple, parameters):
     schema._values = parameters
     return schema
 
+
 @dispatch
 def handle_parameters(schema: Enum, parameters):
     schema._values = parameters
     return schema
 
+
 @dispatch
 def handle_parameters(schema: Union, parameters):
     schema._options = parameters
     return schema
+
 
 @dispatch
 def handle_parameters(schema: Map, parameters):
@@ -88,13 +91,15 @@ def handle_parameters(schema: Map, parameters):
         schema._key, schema._value = parameters
     return schema
 
+
 @dispatch
 def handle_parameters(schema: Node, parameters):
     keys = schema_keys(schema)[1:]
     for key, parameter in zip(keys, parameters):
         setattr(schema, key, parameter)
     return schema
-        
+
+
 @dispatch
 def handle_parameters(schema, parameters):
     return schema
@@ -106,13 +111,16 @@ class LibraryVisitor(NodeVisitor):
     def __init__(self, library):
         self.library = library
 
+
     def visit_expression(self, node, visit):
         return visit[0]
+
 
     def visit_union(self, node, visit):
         head = [visit[0]]
         tail = [tree['visit'][1] for tree in visit[1]['visit']]
         return Union(_options=head + tail)
+
 
     def visit_merge(self, node, visit):
         head = [visit[0]]
@@ -127,18 +135,23 @@ class LibraryVisitor(NodeVisitor):
         else:
             return Tuple(_values=nodes)
 
+
     def visit_tree(self, node, visit):
         return visit[0]
 
+
     def visit_bigraph(self, node, visit):
         return visit[0]
+
 
     def visit_group(self, node, visit):
         group_value = visit[1]
         return group_value if isinstance(group_value, (list, tuple, dict)) else (group_value,)
 
+
     def visit_nest(self, node, visit):
         return {visit[0]: visit[2]}
+
 
     def visit_type_name(self, node, visit):
         schema = visit[0]
@@ -151,21 +164,25 @@ class LibraryVisitor(NodeVisitor):
             schema = handle_parameters(
                 schema,
                 type_parameters[0])
-            
+
         return schema
+
 
     def visit_parameter_list(self, node, visit):
         first = [visit[1]]
         rest = [inner['visit'][1] for inner in visit[2]['visit']]
         full = first + rest
-            
+
         return full
+
 
     def visit_symbol(self, node, visit):
         return self.library.access(node.text)
 
+
     def visit_nothing(self, node, visit):
         return None
+
 
     def generic_visit(self, node, visit):
         return {'node': node, 'visit': visit}
@@ -177,11 +194,13 @@ class Library():
         self.register_types(types)
         self.parse_visitor = LibraryVisitor(self)
 
+
     def register_type(self, key, data):
         if key in self.registry:
             self.update_type(key, data)
         else:
             self.registry[key] = data
+
 
     def register_types(self, types):
         for key, data in types.items():
@@ -189,10 +208,12 @@ class Library():
                 key,
                 data)
 
+
     def update_type(self, key, data):
         self.registry[key] = deep_merge(
             self.registry[key],
             data)
+
 
     def select_fields(self, base, schema):
         select = {}
@@ -208,11 +229,13 @@ class Library():
 
         return select
 
+
     def make_instance(self, base, state):
         fields = self.select_fields(base, state)
         instance = base(**fields)
 
         return instance
+
 
     def access(self, key):
         if is_dataclass(key):
@@ -246,6 +269,7 @@ class Library():
         else:
             return key
 
+
     def blank_context(self, schema, state, path):
         return {
             'schema': schema,
@@ -253,8 +277,10 @@ class Library():
             'path': (),
             'subpath': path}
 
+
     def convert_jump(self, key):
         return convert_jump(key)
+
 
     def convert_path(self, path):
         resolved = resolve_path(path)
@@ -262,29 +288,36 @@ class Library():
             self.convert_jump(key)
             for key in resolved])
 
+
     def infer(self, state):
         return infer(state)
+
 
     def render(self, schema):
         found = self.access(schema)
         return render(found)
 
+
     def default(self, schema):
         found = self.access(schema)
         return default(found)
+
 
     def resolve(self, current_schema, update_schema):
         current = self.access(current_schema)
         update = self.access(update_schema)
         return resolve(current, update)
 
+
     def check(self, schema, state):
         found = self.access(schema)
         return check(found, state)
 
+
     def serialize(self, schema, state):
         found = self.access(schema)
         return serialize(found, state)
+
 
     def deserialize(self, schema, state):
         found = self.access(schema)
@@ -312,12 +345,14 @@ class Library():
             'path': ()}
         return generate(found, state, context)
 
+
     def jump(self, schema, state, raw_key):
         found = self.access(schema)
         key = self.convert_jump(raw_key)
         context = self.blank_context(found, state, ())
 
         return jump(found, state, key, context)
+
 
     def traverse(self, schema, state, raw_path):
         found = self.access(schema)
@@ -326,12 +361,15 @@ class Library():
 
         return traverse(found, state, path, context)
 
+
     def bind(self, schema, state, key, target):
         pass
+
 
     def merge(self, schema, state, merge_state):
         found = self.access(schema)
         return merge(found, state, merge_state)
+
 
     def apply(self, schema, state, update):
         found = self.access(schema)
@@ -665,8 +703,10 @@ def test_traverse(core):
 def test_generate(core):
     core
 
+
 def test_bind(core):
     core
+
 
 def test_merge(core):
     tree_a = {

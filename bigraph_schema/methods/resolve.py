@@ -56,15 +56,18 @@ def resolve(current: Wrap, update: Wrap):
         value = resolve(current._value, update._value)
         return type(current)(_value=value)
 
+
 @dispatch
 def resolve(current: Wrap, update: Node):
     value = resolve(current._value, update)
     return type(current)(_value=value)
 
+
 @dispatch
 def resolve(current: Node, update: Wrap):
     value = resolve(current, update._value)
     return type(update)(_value=value)
+
 
 @dispatch
 def resolve(current: Node, update: Node):
@@ -80,6 +83,7 @@ def resolve(current: Node, update: Node):
         #     'update': update})
         raise Exception(f'\ncannot resolve types:\n{current}\n{update}\n')
 
+
 @dispatch
 def resolve(current: dict, update: dict):
     result = {}
@@ -94,6 +98,7 @@ def resolve(current: dict, update: dict):
 
         result[key] = value
     return result
+
 
 @dispatch
 def resolve(current, update):

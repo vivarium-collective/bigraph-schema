@@ -61,13 +61,16 @@ parameter_grammar = Grammar(
 class ParameterVisitor(NodeVisitor):
     """Visitor that walks a parsed tree and builds structured type expressions."""
 
+
     def visit_expression(self, node, visit):
         return visit[0]
+
 
     def visit_union(self, node, visit):
         head = [visit[0]]
         tail = [tree['visit'][1] for tree in visit[1]['visit']]
         return {'_union': head + tail}
+
 
     def visit_merge(self, node, visit):
         head = [visit[0]]
@@ -82,18 +85,23 @@ class ParameterVisitor(NodeVisitor):
         else:
             return tuple(nodes)
 
+
     def visit_tree(self, node, visit):
         return visit[0]
 
+
     def visit_bigraph(self, node, visit):
         return visit[0]
+
 
     def visit_group(self, node, visit):
         group_value = visit[1]
         return group_value if isinstance(group_value, (list, tuple, dict)) else (group_value,)
 
+
     def visit_nest(self, node, visit):
         return {visit[0]: visit[2]}
+
 
     def visit_type_name(self, node, visit):
         type_name = visit[0]
@@ -102,24 +110,30 @@ class ParameterVisitor(NodeVisitor):
             return [type_name, type_parameters[0]]
         return type_name
 
+
     def visit_parameter_list(self, node, visit):
         first = [visit[1]]
         rest = [inner['visit'][1] for inner in visit[2]['visit']]
         return first + rest
 
+
     def visit_symbol(self, node, visit):
         return node.text
+
 
     def visit_nothing(self, node, visit):
         return {}
 
+
     def generic_visit(self, node, visit):
         return {'node': node, 'visit': visit}
+
 
 # --- API ---------------------------------------------------------------------
 def visit_expression(expression, visitor):
     parsed = parameter_grammar.parse(expression)
     return visitor.visit(parsed)
+
 
 def parse_expression(expression):
     """
@@ -128,11 +142,13 @@ def parse_expression(expression):
     visitor = ParameterVisitor()
     return visit_expression(expression, visitor)
 
+
 def is_type_expression(expression):
     """
     Return True if the expression is a parameterized type list.
     """
     return isinstance(expression, list) and len(expression) == 2 and isinstance(expression[1], list)
+
 
 def render_expression(expression):
     """
@@ -154,6 +170,7 @@ def render_expression(expression):
             return f'({ "|".join(parts) })'
     return str(expression)  # fallback for unknown structures
 
+
 # --- Debugging/Testing ---------------------------------------------------------
 def test_parse_parameters():
     """Test parsing and rendering for all example expressions."""
@@ -163,6 +180,7 @@ def test_parse_parameters():
         if parsed:
             print(f'  Parsed: {parsed}')
             print(f'  Rendered: {render_expression(parsed)}')
+
 
 if __name__ == '__main__':
     test_parse_parameters()

@@ -37,14 +37,17 @@ from bigraph_schema.schema import (
 def deserialize(schema: Empty, encode):
     return None
 
+
 @dispatch
 def deserialize(schema: Maybe, encode):
     if encode is not None and encode != NONE_SYMBOL:
         return deserialize(schema._value, encode)
 
+
 @dispatch
 def deserialize(schema: Wrap, encode):
     return deserialize(schema._value, encode)
+
 
 @dispatch
 def deserialize(schema: Union, encode):
@@ -52,6 +55,7 @@ def deserialize(schema: Union, encode):
         decode = deserialize(option, encode)
         if decode:
             return decode
+
 
 @dispatch
 def deserialize(schema: Tuple, encode):
@@ -64,13 +68,15 @@ def deserialize(schema: Tuple, encode):
             for value, code in zip(
                 schema._values, encode)])
 
+
 @dispatch
 def deserialize(schema: Boolean, encode):
     if encode == 'true':
         return True
     elif encode == 'false':
         return False
-        
+
+
 @dispatch
 def deserialize(schema: Integer, encode):
     try:
@@ -78,6 +84,7 @@ def deserialize(schema: Integer, encode):
         return result
     except Exception:
         pass
+
 
 @dispatch
 def deserialize(schema: Float, encode):
@@ -87,9 +94,11 @@ def deserialize(schema: Float, encode):
     except Exception:
         pass
 
+
 @dispatch
 def deserialize(schema: String, encode):
     return encode
+
 
 @dispatch
 def deserialize(schema: List, encode):
@@ -100,6 +109,7 @@ def deserialize(schema: List, encode):
         return [
             deserialize(schema._element, element)
             for element in encode]
+
 
 @dispatch
 def deserialize(schema: Map, encode):
@@ -117,6 +127,7 @@ def deserialize(schema: Map, encode):
 
         return result
 
+
 @dispatch
 def deserialize(schema: Tree, encode):
     if isinstance(encode, str):
@@ -130,12 +141,14 @@ def deserialize(schema: Tree, encode):
             key: deserialize(schema, value)
             for key, value in encode.items()}
 
+
 @dispatch
 def deserialize(schema: Dtype, encode):
     if isinstance(encode, str):
         encode = literal_eval(encode)
 
     return encode
+
 
 @dispatch
 def deserialize(schema: Node, encode):
@@ -162,6 +175,7 @@ def deserialize(schema: Node, encode):
 
     if result:
         return result
+
 
 @dispatch
 def deserialize(schema: dict, encode):

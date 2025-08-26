@@ -11,78 +11,97 @@ from dataclasses import dataclass, is_dataclass, field
 class Node():
     _default: object = None
 
+
 @dataclass(kw_only=True)
 class Atom(Node):
     pass
+
 
 @dataclass(kw_only=True)
 class Empty(Atom):
     pass
 
+
 @dataclass(kw_only=True)
 class Union(Node):
     _options: typing.Tuple[Node] = field(default_factory=tuple)
+
 
 @dataclass(kw_only=True)
 class Tuple(Node):
     _values: typing.Tuple[Node] = field(default_factory=tuple)
 
+
 @dataclass(kw_only=True)
 class Boolean(Atom):
     pass
+
 
 @dataclass(kw_only=True)
 class Number(Atom):
     pass
 
+
 @dataclass(kw_only=True)
 class Integer(Number):
     pass
+
 
 @dataclass(kw_only=True)
 class Float(Number):
     pass
 
+
 @dataclass(kw_only=True)
 class Delta(Float):
     pass
+
 
 @dataclass(kw_only=True)
 class Nonnegative(Float):
     pass
 
+
 @dataclass(kw_only=True)
 class String(Atom):
     pass
+
 
 @dataclass(kw_only=True)
 class Enum(String):
     _values: typing.Tuple[str] = field(default_factory=tuple)
 
+
 @dataclass(kw_only=True)
 class Wrap(Node):
     _value: Node = field(default_factory=Node)
+
 
 @dataclass(kw_only=True)
 class Maybe(Wrap):
     pass
 
+
 @dataclass(kw_only=True)
 class Overwrite(Wrap):
     pass
 
+
 @dataclass(kw_only=True)
 class List(Node):
     _element: Node = field(default_factory=Node)
-    
+
+
 @dataclass(kw_only=True)
 class Map(Node):
     _key: Node = field(default_factory=String)
     _value: Node = field(default_factory=Node)
 
+
 @dataclass(kw_only=True)
 class Tree(Node):
     _leaf: Node = field(default_factory=Node)
+
 
 @dataclass(kw_only=True)
 class Dtype(Node):
@@ -93,14 +112,17 @@ class Dtype(Node):
                 str,
                 'Dtype']]] = field(default_factory=lambda: 'float64')
 
+
 @dataclass(kw_only=True)
 class Array(Node):
     _shape: typing.Tuple[int] = field(default_factory=tuple)
     _data: Dtype = field(default_factory=lambda: 'float64')
 
+
 @dataclass(kw_only=True)
 class Path(List):
     _element: Node = field(default_factory=String)
+
 
 # @dataclass(kw_only=True)
 # class Wire(Union):
@@ -110,9 +132,11 @@ class Path(List):
 class Wires(Tree):
     _leaf: Node = field(default_factory=Path)
 
+
 @dataclass(kw_only=True)
 class Schema(Tree):
     _leaf: Node = field(default_factory=Node)
+
 
 @dataclass(kw_only=True)
 class Edge(Node):
@@ -120,6 +144,7 @@ class Edge(Node):
     _outputs: Schema = field(default_factory=Schema)
     inputs: Wires = field(default_factory=Wires)
     outputs: Wires = field(default_factory=Wires)
+
 
 @dataclass(kw_only=True)
 class Context(Node):
@@ -239,7 +264,7 @@ BASE_TYPES = {
 #         return {
 #             'environment': 'map[cell]'}
 
-    
+
 #     def outputs(self):
 #         return {
 #             'environment': 'map[cell]',
@@ -256,7 +281,7 @@ BASE_TYPES = {
 #             #     '_type': 'float',
 #             #     '_divide': 'binomial'}}
 
-    
+
 #     def update(self, state, interval):
 #         delta = evolve(
 #             state['environment'])
