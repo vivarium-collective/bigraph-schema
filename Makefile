@@ -7,10 +7,10 @@ pytest:
 	uv run pytest
 
 library:
-	uv run bigraph_schema/library.py
+	PYTHONPATH=`pwd` uv run bigraph_schema/library.py
 
 doctest:
-	uv run python3 -m doctest ${DOCTEST_FILES}
+	PYTHONPATH=`pwd` uv run python3 -m doctest ${DOCTEST_FILES}
 
 debug:
 	PYTHONPATH=`pwd` uv run python3 -i $(DEBUG_FILE)
