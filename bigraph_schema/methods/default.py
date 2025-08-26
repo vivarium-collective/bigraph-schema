@@ -129,12 +129,28 @@ def default(schema: Array):
             tuple(schema._shape),
             dtype=dtype(schema._data))
 
+
+def default_wires(schema, path=None):
+    path = path or []
+
+    if isinstance(schema, dict):
+        result = {}
+        for key, subschema in schema.items():
+            subpath = path+[key]
+            result[key] = default_wires(
+                subschema,
+                subpath)
+        return result
+
+    elif isinstance(schema, Node):
+        return path
+
+
 @dispatch
-def default(schema: Key):
-    if schema._default:
-        return schema._default
-    else:
-        return 0
+def default(schema: Edge):
+    return {
+        'inputs': default_wires(schema._inputs),
+        'outputs': default_wires(schema._outputs)}
 
 @dispatch
 def default(schema: dict):
@@ -161,7 +177,7 @@ def default(schema: Node):
         for key in schema.__dataclass_fields__:
             if not key.startswith('_'):
                 inner = default(
-                    schema.getattr(key))
+                    getattr(schema, key))
                 result[key] = inner
 
         return result

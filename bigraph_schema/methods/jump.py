@@ -31,6 +31,7 @@ from bigraph_schema.schema import (
     Star,
     Index,
     Jump,
+    convert_path,
 )
 
 from bigraph_schema.methods import check, serialize, resolve
@@ -182,14 +183,14 @@ def jump(schema: Map, state, to: Jump, context):
 def jump(schema: Tree, state, to: Key, context):
     down = state[to._value]
 
+    subschema = schema
     if check(schema._leaf, down):
-        return context['continue'](
-            schema._leaf,
-            down)
-    else:
-        return context['continue'](
-            schema,
-            down)
+        subschema = schema._leaf
+
+    return context['continue'](
+        subschema,
+        down)
+
 
 @dispatch
 def jump(schema: Tree, state, to: Star, context):
@@ -197,14 +198,13 @@ def jump(schema: Tree, state, to: Star, context):
     branches = {}
 
     for key, branch in state.items():
+        subschema = schema
         if check(schema._leaf, branch):
-            branch_schema, branch_value = context['continue'](
-                schema._leaf,
-                branch)
-        else:
-            branch_schema, branch_value = context['continue'](
-                schema,
-                branch)
+            subschema = schema._leaf
+
+        branch_schema, branch_value = context['continue'](
+            subschema,
+            branch)
 
         leaf_schema = resolve(leaf_schema, branch_schema)
         branches[key] = branch_value
@@ -227,15 +227,54 @@ def jump(schema: Atom, state, to, context):
 
 
 @dispatch
-def jump(schema: Node, state, to: Key, context):
+def jump(schema: Edge, state, to: Key, context):
     key = to._value
-    if key in state:
-        return context['continue'](
-            getattr(schema, key),
-            state[key])
-    else:
-        raise Exception(f'traverse: no key "{key}" in state {state} at path {context["path"]}')
+    if key in ['inputs', 'outputs']:
+        if not key in state:
+            raise Exception(f'no "{key}" key in state to jump to:\n{state}')
 
+        puts_schema = getattr(schema, f'_{key}')
+        wires_schema = getattr(schema, key)
+        additional = {
+            'ports_key': key,
+            'edge_path': context['path'][:-1],
+            f'_{key}': puts_schema}
+
+        return context['continue'](
+            wires_schema,
+            state[key],
+            additional=additional)
+    else:
+        return jump(Node(), state, to, context)
+
+
+@dispatch
+def jump(schema: Wires, state, to: Key, context):
+    key = to._value
+
+    if not key in state:
+        raise Exception(f'no entry "{key}" for wires:\n{state}')
+
+    substate = state[key]
+    if isinstance(substate, list):
+        outer_path = context['edge_path'][:-1]
+        subpath = tuple(convert_path(substate))
+        target_path = outer_path + subpath
+        additional = {
+            'path': outer_path}
+
+        import ipdb; ipdb.set_trace()
+
+        return context['continue'](
+            context['schema'],
+            context['state'],
+            path=target_path,
+            additional=additional)
+        
+    else:
+        return context['continue'](
+            schema,
+            substate)
 
 @dispatch
 def jump(schema: Node, state, to: Star, context):
@@ -258,6 +297,17 @@ def jump(schema: Node, state, to: Star, context):
 
 @dispatch
 def jump(schema: Node, state, to: Jump, context):
+    key = to._value
+    if key in state:
+        return context['continue'](
+            getattr(schema, key),
+            state[key])
+    else:
+        raise Exception(f'traverse: no key "{key}" in state {state} at path {context["path"]}')
+
+
+@dispatch
+def jump(schema: Node, state, to, context):
     raise Exception(f'cannot lookup key "{to._value}" in state {state}\ncontext:\n{context}')
 
 
@@ -269,7 +319,7 @@ def jump(schema: dict, state, to: Key, context):
             schema[key],
             state[key])
     else:
-        raise Exception(f'traverse: no key "{key}" in state {state} at path {context["path"]}')
+        raise Exception(f'no key "{key}" in state {state} at path {context["path"]}')
 
 
 @dispatch
@@ -279,14 +329,11 @@ def jump(schema: dict, state, to: Star, context):
 
     for key in schema:
         if key in state:
-            subcontext = walk_path(context, key)
-            subschema, subvalue = traverse(
+            subschema, subvalue = context['continue'](
                 schema[key],
-                state[key],
-                subpath,
-                subcontext)
+                state[key])
 
-            value_schema[key]= subschema
+            value_schema[key] = subschema
             values[key] = subvalue
 
     return value_schema, values
@@ -297,23 +344,21 @@ def jump(schema: dict, state, to: Jump, context):
     raise Exception(f'cannot lookup key "{to._value}" in state {state}\ncontext:\n{context}')
 
 
-@dispatch
-def jump(schema: Edge, state, to: Jump, context):
-    pass
-
-
 def traverse(schema, state, path, context):
     if path:
         to = path[0]
         subpath = path[1:]
         subcontext = walk_path(context, to)
 
-        def subcontinue(schema, state):
-            return traverse(schema, state, subpath, subcontext)
+        def subcontinue(schema, state, path=None, additional=None):
+            path = path or subpath
+            down = subcontext
+            if additional is not None:
+                down = dict(down, **additional)
+
+            return traverse(schema, state, path, down)
 
         subcontext['continue'] = subcontinue
         return jump(schema, state, to, subcontext)
     else:
         return schema, state
-
-

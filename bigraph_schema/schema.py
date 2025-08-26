@@ -103,11 +103,6 @@ class Path(List):
     _element: Node = field(default_factory=String)
 
 # @dataclass(kw_only=True)
-# class Jump(Node):
-#     path: Path = field(default_factory=Path)
-#     wires: Wires = field(default_factory=make_wires)
-
-# @dataclass(kw_only=True)
 # class Wire(Union):
 #     _options: typing.Tuple[Node] = (Key(), Jump())
 
@@ -158,6 +153,44 @@ class Star(Jump):
 class Match(Jump):
     _match = str # regex
 
+def convert_jump(key):
+    if isinstance(key, Jump):
+        return key
+
+    convert_key = None
+    if isinstance(key, str):
+        if key == '*':
+            convert_key = Star(_value=key)
+        else:
+            convert_key = Key(_value=key)
+    elif isinstance(key, int):
+        convert_key = Index(_value=key)
+
+    return convert_key or Jump(_value=key)
+
+def resolve_path(path):
+    """
+    Given a path that includes '..' steps, resolve the path to a canonical form
+    """
+    resolve = []
+
+    for step in path:
+        if step == '..':
+            if len(resolve) == 0:
+                raise Exception(f'cannot go above the top in path: "{path}"')
+            else:
+                resolve = resolve[:-1]
+        else:
+            resolve.append(step)
+
+    return resolve
+
+def convert_path(path):
+    resolved = resolve_path(path)
+    return [
+        convert_jump(key)
+        for key in resolved]
+
 
 BASE_TYPES = {
     'node': Node,
@@ -181,7 +214,6 @@ BASE_TYPES = {
     'tree': Tree,
     'dtype': Dtype,
     'array': Array,
-    'key': Key,
     'path': Path,
     # 'jump': Jump,
     # 'wire': Wire,
