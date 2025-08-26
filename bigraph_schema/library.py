@@ -52,7 +52,6 @@ from bigraph_schema.methods import (
     traverse,
 
     generate,
-    slice,
     bind,
     apply)
 
@@ -666,9 +665,6 @@ def test_traverse(core):
 def test_generate(core):
     core
 
-def test_slice(core):
-    core
-
 def test_bind(core):
     core
 
@@ -725,6 +721,5 @@ if __name__ == '__main__':
     test_traverse(core)
 
     test_generate(core)
-    test_slice(core)
     test_bind(core)
     test_apply(core)
