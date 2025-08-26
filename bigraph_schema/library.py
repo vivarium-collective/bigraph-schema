@@ -247,21 +247,21 @@ class Library():
         else:
             return key
 
-    def blank_context(self, schema, state):
+    def blank_context(self, schema, state, path):
         return {
             'schema': schema,
             'state': state,
-            'continue': lambda sch, st: (sch, st),
-            'path': ()}
+            'path': (),
+            'subpath': path}
 
     def convert_jump(self, key):
         return convert_jump(key)
 
     def convert_path(self, path):
         resolved = resolve_path(path)
-        return [
+        return tuple([
             self.convert_jump(key)
-            for key in resolved]
+            for key in resolved])
 
     def infer(self, state):
         return infer(state)
@@ -316,14 +316,14 @@ class Library():
     def jump(self, schema, state, raw_key):
         found = self.access(schema)
         key = self.convert_jump(raw_key)
-        context = self.blank_context(found, state)
+        context = self.blank_context(found, state, ())
 
         return jump(found, state, key, context)
 
     def traverse(self, schema, state, raw_path):
         found = self.access(schema)
-        context = self.blank_context(found, state)
         path = self.convert_path(raw_path)
+        context = self.blank_context(found, state, path)
 
         return traverse(found, state, path, context)
 
@@ -659,10 +659,8 @@ def test_traverse(core):
         simple_graph,
         ['edge', 'outputs', 'concentrations', 'A'])
 
-    # assert isinstance(concentration_schema, Float)
-    # assert concentration_state == simple_graph['cell']['internal']['A']
-
-    import ipdb; ipdb.set_trace()
+    assert isinstance(concentration_schema, Float)
+    assert concentration_state == simple_graph['cell']['internal']['A']
 
 
 def test_generate(core):
