@@ -202,5 +202,16 @@ def check(schema: Node, state):
 
 
 @dispatch
+def check(schema: dict, state):
+    for key, subschema in schema.items():
+        if key not in state:
+            return False
+        elif not check(subschema, state[key]):
+            return False
+
+    return True
+
+
+@dispatch
 def check(schema, state):
     raise Exception(f'not a valid schema: {schema}')

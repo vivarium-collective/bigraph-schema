@@ -25,7 +25,7 @@ class Union(Node):
 
 @dataclass(kw_only=True)
 class Tuple(Node):
-    _values: typing.Tuple[Node] = field(default_factory=tuple)
+    _values: typing.List[Node] = field(default_factory=list)
 
 @dataclass(kw_only=True)
 class Boolean(Atom):

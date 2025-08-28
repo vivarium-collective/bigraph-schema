@@ -55,6 +55,8 @@ from bigraph_schema.methods import (
     bind,
     apply)
 
+# view
+# project
 
 def schema_keys(schema):
     keys = []
@@ -411,6 +413,10 @@ def test_default(core):
     assert 'b' in default_node_a
     assert isinstance(default_node_a['b'], str)
 
+    import ipdb; ipdb.set_trace()
+
+    assert core.check(node_schema, default_node_a)
+
 
 def test_resolve(core):
     float_number = core.resolve('float', 'number')
@@ -504,6 +510,8 @@ def test_check(core):
         'outputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
+
+    import ipdb; ipdb.set_trace()
 
     assert core.check(edge_schema, edge_a)
     assert not core.check(edge_schema, edge_b)
@@ -694,6 +702,11 @@ def test_merge(core):
         {'a': 'float', 'b': 'string'},
         {'a': 333.333, 'c': 4444},
         {'a': 55555.555, 'd': '111111'})
+
+    def inputs(self):
+        return {
+            'mass': 'wrap[float]'} 
+
 
     assert(key_merge == {
         'a': 55555.555,
