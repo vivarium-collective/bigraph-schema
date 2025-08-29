@@ -117,13 +117,16 @@ class ParameterVisitor(NodeVisitor):
         return {'node': node, 'visit': visit}
 
 # --- API ---------------------------------------------------------------------
+def visit_expression(expression, visitor):
+    parsed = parameter_grammar.parse(expression)
+    return visitor.visit(parsed)
+
 def parse_expression(expression):
     """
     Parse a bigraph-style type expression into a structured Python object.
     """
-    parsed = parameter_grammar.parse(expression)
     visitor = ParameterVisitor()
-    return visitor.visit(parsed)
+    return visit_expression(expression, visitor)
 
 def is_type_expression(expression):
     """
