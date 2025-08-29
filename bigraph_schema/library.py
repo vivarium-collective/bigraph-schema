@@ -50,9 +50,9 @@ from bigraph_schema.methods import (
     merge,
     jump,
     traverse,
+    bind,
 
     generate,
-    bind,
     apply)
 
 # view
@@ -222,12 +222,12 @@ class Library():
 
         elif isinstance(key, str):
             if key not in self.registry:
-                try:
+                # try:
                     parse = visit_expression(key, self.parse_visitor)
                     return parse
-                except Exception as e:
-                    print(f'could not parse:\n{key}\n{e}')
-                    return key
+                # except Exception as e:
+                #     print(f'could not parse:\n{key}\n{e}')
+                #     return key
             else:
                 return self.registry[key]()
 
@@ -292,6 +292,17 @@ class Library():
         found = self.access(schema)
         return deserialize(found, state)
 
+    def generate(self, schema, state):
+        found = self.access(schema)
+        default_state = self.default(found)
+        inferred = self.infer(state)
+        resolved = self.resolve(inferred, found)
+
+        import ipdb; ipdb.set_trace()
+        merged = self.merge(resolved, default_state, state)
+
+        return merged
+
     # def generate_nomethod(self, schema, state):
     #     given_schema = self.access(schema)
     #     decode_state = deserialize(given_schema, state)
@@ -328,8 +339,11 @@ class Library():
 
         return traverse(found, state, path, context)
 
-    def bind(self, schema, state, key, target):
-        pass
+    def bind(self, schema, state, raw_key, target):
+        found = self.access(schema)
+        key = self.convert_jump(raw_key)
+
+        return bind(found, state, key, target)
 
     def merge(self, schema, state, merge_state):
         found = self.access(schema)
@@ -412,8 +426,6 @@ def test_default(core):
     assert default_node_a['a'] == default_a
     assert 'b' in default_node_a
     assert isinstance(default_node_a['b'], str)
-
-    import ipdb; ipdb.set_trace()
 
     assert core.check(node_schema, default_node_a)
 
@@ -510,8 +522,6 @@ def test_check(core):
         'outputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
-
-    import ipdb; ipdb.set_trace()
 
     assert core.check(edge_schema, edge_a)
     assert not core.check(edge_schema, edge_b)
@@ -671,7 +681,29 @@ def test_traverse(core):
 
 
 def test_generate(core):
-    core
+    schema = {
+        'A': 'float',
+        'B': 'enum[one,two,three]',
+        'units': 'map[float]'}
+
+    state = {
+        'C': {
+            '_type': 'enum[x,y,z]',
+            '_default': 'y'},
+        'units': {
+            'meters': 11.1111,
+            'seconds': 22.833333}}
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    assert generated_state['A'] == 0.0
+    assert generated_state['B'] == 'one'
+    assert generated_state['C'] == 'y'
+    assert generated_state['units']['seconds'] == 22.833333
+    assert 'meters' not in generated_schema['units']
+
 
 def test_bind(core):
     core
