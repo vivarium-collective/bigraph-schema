@@ -34,7 +34,7 @@ from bigraph_schema.schema import (
     convert_path,
 )
 
-from bigraph_schema.methods import check, serialize, resolve
+from bigraph_schema.methods import check
 
 
 @dispatch
@@ -70,14 +70,27 @@ def bind(schema: Tuple, state, to: Key, to_schema, to_state, context):
 
 
 @dispatch
-def bind(schema: Tuple, state, to: Index, to_schema, to_state, context):
-    subschema, substate = jump(schema, state, to, {'subpath': ()})
-    resolved_schema = resolve(subschema, to_schema)
-    return traverse(
-        schema._values[to._value],
-        state[to._value],
-        context['subpath'],
-        context)
+def bind(schema: Tuple, state, to: Index, to_state, context):
+    if not check(schema._values[to._value], to_state):
+        raise Exception(f'trying to bind at index {to._value}\n{to_state}\nbut does match tuple entry schema\n{schema[to._value]}')
+
+    state[to._value] = to_state
+    return state
+
+
+@dispatch
+def bind(schema: List, state, to: Key, to_schema, to_state, context):
+    index = Index(int(to._value))
+    return bind(schema, state, index, to_schema, to_state, context)
+
+
+@dispatch
+def bind(schema: List, state, to: Index, to_state, context):
+    if not check(schema._element, to_state):
+        raise Exception(f'trying to bind at index {to._value}\n{to_state}\nbut does match list element schema\n{schema._element}')
+
+    state[to._value] = to_state
+    return state
 
 
 # @dispatch

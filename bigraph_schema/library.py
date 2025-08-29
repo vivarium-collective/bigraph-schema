@@ -306,13 +306,13 @@ class Library():
     #         state,
     #         decoded_state) # ?
 
-    def generate(self, schema, state):
-        found = self.access(schema)
-        context = {
-            'schema': found,
-            'state': state,
-            'path': ()}
-        return generate(found, state, context)
+    # def generate(self, schema, state):
+    #     found = self.access(schema)
+    #     context = {
+    #         'schema': found,
+    #         'state': state,
+    #         'path': ()}
+    #     return generate(found, state, context)
 
     def jump(self, schema, state, raw_key):
         found = self.access(schema)
