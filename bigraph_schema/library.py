@@ -298,7 +298,7 @@ class Library():
         inferred = self.infer(state)
         resolved = self.resolve(inferred, found)
 
-        import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         merged = self.merge(resolved, default_state, state)
 
         return merged
@@ -400,8 +400,8 @@ def test_infer(core):
     default_node = core.default(node_schema)
     node_inferred = core.infer(default_node)
 
-    print(f"inferred {node_inferred}\nfrom {default_node}")
-    print(f'rendered schema:\n{render(node_inferred)}')
+    # print(f"inferred {node_inferred}\nfrom {default_node}")
+    # print(f'rendered schema:\n{render(node_inferred)}')
 
     assert render(node_inferred)['a'] == node_schema['a']['_type']
     assert render(node_inferred)['b'] == node_schema['b']['_type']
@@ -458,7 +458,7 @@ def test_resolve(core):
             node_schema)
 
     except Exception as e:
-        print(e)
+        # print(e)
         failed = True
 
     assert failed
@@ -765,6 +765,6 @@ if __name__ == '__main__':
     test_merge(core)
     test_traverse(core)
 
-    test_generate(core)
+    # test_generate(core)
     test_bind(core)
     test_apply(core)
