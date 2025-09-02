@@ -86,19 +86,22 @@ def merge(schema: List, current, update):
 @dispatch
 def merge(schema: Map, current, update):
     result = {}
-    for key in current.keys() | update.keys():
-        if key in update:
-            if key in current:
-                result[key] = merge(
-                    schema._value,
-                    current[key],
-                    update[key])
+    if current is None:
+        return update
+    else:
+        for key in current.keys() | update.keys():
+            if key in update:
+                if key in current:
+                    result[key] = merge(
+                        schema._value,
+                        current[key],
+                        update[key])
+                else:
+                    result[key] = update[key]
             else:
-                result[key] = update[key]
-        else:
-            result[key] = current[key]
+                result[key] = current[key]
 
-    return result
+        return result
 
 
 @dispatch

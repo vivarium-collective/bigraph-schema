@@ -126,7 +126,7 @@ def parsed_leftmost_leaf(parsed):
 def visit_expression(expression, visitor):
     parsed = parameter_grammar.parse(expression)
     leaf = parsed_leftmost_leaf(parsed)
-    if leaf.match[0] == expression:
+    if hasattr(leaf, 'match') and leaf.match[0] == expression:
         return expression
     else:
         return visitor.visit(parsed)

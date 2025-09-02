@@ -60,6 +60,8 @@ from bigraph_schema.methods import (
 # view
 # project
 
+
+
 def schema_keys(schema):
     keys = []
     for key in schema.__dataclass_fields__:
@@ -162,7 +164,7 @@ class LibraryVisitor(NodeVisitor):
         first = [visit[1]]
         rest = [inner['visit'][1] for inner in visit[2]['visit']]
         full = first + rest
-            
+
         return full
 
     def visit_symbol(self, node, visit):
@@ -303,7 +305,7 @@ class Library():
         # import ipdb; ipdb.set_trace()
         merged = self.merge(resolved, default_state, state)
 
-        return merged
+        return resolved, merged
 
     # def generate_nomethod(self, schema, state):
     #     given_schema = self.access(schema)
@@ -727,6 +729,7 @@ def test_generate(core):
 
     assert generated_state['A'] == 0.0
     assert generated_state['B'] == 'one'
+    import ipdb; ipdb.set_trace()
     assert generated_state['C'] == 'y'
     assert generated_state['units']['seconds'] == 22.833333
     assert 'meters' not in generated_schema['units']
