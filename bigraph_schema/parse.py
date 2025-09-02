@@ -117,9 +117,19 @@ class ParameterVisitor(NodeVisitor):
         return {'node': node, 'visit': visit}
 
 # --- API ---------------------------------------------------------------------
+def parsed_leftmost_leaf(parsed):
+    if len(parsed.children) == 0:
+        return parsed
+    else:
+        return parsed_leftmost_leaf(parsed.children[0])
+
 def visit_expression(expression, visitor):
     parsed = parameter_grammar.parse(expression)
-    return visitor.visit(parsed)
+    leaf = parsed_leftmost_leaf(parsed)
+    if leaf.match[0] == expression:
+        return expression
+    else:
+        return visitor.visit(parsed)
 
 def parse_expression(expression):
     """

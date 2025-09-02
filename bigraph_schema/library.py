@@ -1,5 +1,7 @@
 import typing
 import numpy as np
+import pytest
+import logging
 
 from plum import dispatch
 from parsimonious.nodes import NodeVisitor
@@ -222,12 +224,12 @@ class Library():
 
         elif isinstance(key, str):
             if key not in self.registry:
-                # try:
+                try:
                     parse = visit_expression(key, self.parse_visitor)
                     return parse
-                # except Exception as e:
-                #     print(f'could not parse:\n{key}\n{e}')
-                #     return key
+                except Exception as e:
+                    # logging.error(f'could not parse: {key}', exc_info = e)
+                    return key
             else:
                 return self.registry[key]()
 
@@ -361,7 +363,13 @@ class Library():
 
 # test data ----------------------------
 
+@pytest.fixture
+def core():
+    return Library(
+        BASE_TYPES)
+
 default_a = 11.111
+# represents a hash where keys a and b are required with types specified
 node_schema = {
     'a': {
         '_type': 'float',
@@ -393,6 +401,10 @@ edge_a = {
         'mass': ['cell', 'mass'],
         'concentrations': ['cell', 'internal']}}
 
+map_schema = {
+        '_type': 'map',
+        '_key': 'string',
+        '_value': 'float'}
 
 # tests --------------------------------------
 
@@ -406,11 +418,26 @@ def test_infer(core):
     assert render(node_inferred)['a'] == node_schema['a']['_type']
     assert render(node_inferred)['b'] == node_schema['b']['_type']
 
-
+# render is the inverse of access
 def test_render(core):
     node_type = core.access(node_schema)
     node_render = core.render(node_schema)
     assert node_render == node_schema == render(node_type)
+
+    edge_type = core.access(edge_schema)
+    edge_render = core.render(edge_type)
+
+    # can't do the same assertion as above, because two different renderings
+    # exist
+    assert core.access(edge_render) == core.access(edge_schema)
+    assert edge_render == core.render(core.access(edge_render))
+
+    map_type = core.access(map_schema)
+    map_render = core.render(map_type)
+
+    assert core.access(map_render) == core.access(map_schema)
+    # fixed point is found
+    assert map_render == core.render(core.access(map_render))
 
 
 def test_default(core):
@@ -765,6 +792,6 @@ if __name__ == '__main__':
     test_merge(core)
     test_traverse(core)
 
-    # test_generate(core)
+    test_generate(core)
     test_bind(core)
     test_apply(core)
