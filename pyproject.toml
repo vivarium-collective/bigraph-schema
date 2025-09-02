@@ -16,6 +16,7 @@ dependencies = [
     "pint",
     "plum-dispatch",
     "pytest",
+    "requests>=2.31.0",
 ]
 
 [tool.setuptools]
