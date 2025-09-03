@@ -52,9 +52,6 @@ class Edge:
 
         self.initialize(self._config)
 
-        # # Register port types
-        # self.register_interface()
-
     @property
     def config(self):
         return self._config
