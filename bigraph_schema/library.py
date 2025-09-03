@@ -1,5 +1,7 @@
 import typing
 import numpy as np
+import pytest
+import logging
 
 from plum import dispatch
 from parsimonious.nodes import NodeVisitor
@@ -57,6 +59,8 @@ from bigraph_schema.methods import (
 
 # view
 # project
+
+
 
 def schema_keys(schema):
     keys = []
@@ -160,7 +164,7 @@ class LibraryVisitor(NodeVisitor):
         first = [visit[1]]
         rest = [inner['visit'][1] for inner in visit[2]['visit']]
         full = first + rest
-            
+
         return full
 
     def visit_symbol(self, node, visit):
@@ -222,12 +226,12 @@ class Library():
 
         elif isinstance(key, str):
             if key not in self.registry:
-                # try:
+                try:
                     parse = visit_expression(key, self.parse_visitor)
                     return parse
-                # except Exception as e:
-                #     print(f'could not parse:\n{key}\n{e}')
-                #     return key
+                except Exception as e:
+                    # logging.error(f'could not parse: {key}', exc_info = e)
+                    return key
             else:
                 return self.registry[key]()
 
@@ -298,10 +302,10 @@ class Library():
         inferred = self.infer(state)
         resolved = self.resolve(inferred, found)
 
-        import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         merged = self.merge(resolved, default_state, state)
 
-        return merged
+        return resolved, merged
 
     # def generate_nomethod(self, schema, state):
     #     given_schema = self.access(schema)
@@ -361,7 +365,13 @@ class Library():
 
 # test data ----------------------------
 
+@pytest.fixture
+def core():
+    return Library(
+        BASE_TYPES)
+
 default_a = 11.111
+# represents a hash where keys a and b are required with types specified
 node_schema = {
     'a': {
         '_type': 'float',
@@ -393,6 +403,10 @@ edge_a = {
         'mass': ['cell', 'mass'],
         'concentrations': ['cell', 'internal']}}
 
+map_schema = {
+        '_type': 'map',
+        '_key': 'string',
+        '_value': 'float'}
 
 # tests --------------------------------------
 
@@ -400,17 +414,32 @@ def test_infer(core):
     default_node = core.default(node_schema)
     node_inferred = core.infer(default_node)
 
-    print(f"inferred {node_inferred}\nfrom {default_node}")
-    print(f'rendered schema:\n{render(node_inferred)}')
+    # print(f"inferred {node_inferred}\nfrom {default_node}")
+    # print(f'rendered schema:\n{render(node_inferred)}')
 
     assert render(node_inferred)['a'] == node_schema['a']['_type']
     assert render(node_inferred)['b'] == node_schema['b']['_type']
 
-
+# render is the inverse of access
 def test_render(core):
     node_type = core.access(node_schema)
     node_render = core.render(node_schema)
     assert node_render == node_schema == render(node_type)
+
+    edge_type = core.access(edge_schema)
+    edge_render = core.render(edge_type)
+
+    # can't do the same assertion as above, because two different renderings
+    # exist
+    assert core.access(edge_render) == core.access(edge_schema)
+    assert edge_render == core.render(core.access(edge_render))
+
+    map_type = core.access(map_schema)
+    map_render = core.render(map_type)
+
+    assert core.access(map_render) == core.access(map_schema)
+    # fixed point is found
+    assert map_render == core.render(core.access(map_render))
 
 
 def test_default(core):
@@ -458,7 +487,7 @@ def test_resolve(core):
             node_schema)
 
     except Exception as e:
-        print(e)
+        # print(e)
         failed = True
 
     assert failed
@@ -700,6 +729,7 @@ def test_generate(core):
 
     assert generated_state['A'] == 0.0
     assert generated_state['B'] == 'one'
+    import ipdb; ipdb.set_trace()
     assert generated_state['C'] == 'y'
     assert generated_state['units']['seconds'] == 22.833333
     assert 'meters' not in generated_schema['units']
