@@ -17,6 +17,7 @@ dependencies = [
     "plum-dispatch",
     "pytest",
     "ipdb",
+    "requests>=2.31.0",
 ]
 
 [tool.setuptools]
