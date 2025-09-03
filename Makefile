@@ -1,5 +1,5 @@
 DOCTEST_FILES=bigraph_schema/type_system.py
-DEBUG_FILE=bigraph_schema/tests.py
+DEBUG_FILE ?= bigraph_schema/tests.py
 
 tests: pytest doctest library
 
