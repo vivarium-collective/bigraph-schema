@@ -75,7 +75,10 @@ def infer(core, value: str, path: tuple = ()):
 
 @dispatch
 def infer(core, value: np.ndarray, path: tuple = ()):
-    schema = Array(_shape=value.shape, _data=value.dtype)
+    schema = Array(
+        _shape=value.shape,
+        _data=value.dtype) # Dtype(_fields=value.dtype))
+
     return set_default(schema, value)
 
 @dispatch

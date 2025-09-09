@@ -165,7 +165,7 @@ def check(schema: Array, state):
         return False
 
     shape_match = tuple(schema._shape) == state.shape
-    data_match = check(schema._data, state.dtype)
+    data_match = schema._data == state.dtype
 
     return shape_match and data_match
 

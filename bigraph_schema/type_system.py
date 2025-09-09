@@ -73,17 +73,17 @@ class TypeSystem(Registry):
             'set',
             set_apply)
 
-        self._register_types(registry_types)
-        self._register_types(base_types)
-        self._register_types(unit_types)
+        self.register_types(registry_types)
+        self.register_types(base_types)
+        self.register_types(unit_types)
 
         # # TODO -- add a proper registration into registry
         register_base_reactions(self)
 
 
-    def _register_types(self, type_library):
+    def register_types(self, type_library):
         """
-        private method to implement initialization
+        method to implement initialization
 
         basically the same as update_types, except it never updates
         """

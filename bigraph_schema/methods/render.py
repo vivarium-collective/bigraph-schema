@@ -171,8 +171,8 @@ def render(schema: Dtype):
 
 @dispatch
 def render(schema: Array):
-    shape = '|'.join(schema._shape)
-    data = render(schema._data)
+    shape = '|'.join([str(value) for value in schema._shape])
+    data = schema._data.str
     result = f'array[({shape}),{data}]'
     return wrap_default(schema, result)
 

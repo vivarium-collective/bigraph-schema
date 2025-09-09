@@ -126,9 +126,8 @@ def default(schema: Array):
         return schema._default
     else:
         return np.zeros(
-            tuple(schema._shape),
-            dtype=dtype(schema._data))
-
+            schema._shape,
+            dtype=schema._data)
 
 def default_wires(schema, path=None):
     path = path or []

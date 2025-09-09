@@ -132,8 +132,15 @@ def deserialize(schema: Tree, encode):
 
 @dispatch
 def deserialize(schema: Dtype, encode):
-    if isinstance(encode, str):
-        encode = literal_eval(encode)
+    # if isinstance(encode, str):
+    #     encode = literal_eval(encode)
+
+    return encode
+
+@dispatch
+def deserialize(schema: Array, encode):
+    # if isinstance(encode, str):
+    #     encode = literal_eval(encode)
 
     return encode
 

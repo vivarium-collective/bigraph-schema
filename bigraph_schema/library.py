@@ -1,5 +1,6 @@
 import typing
 import numpy as np
+from numpy import dtype
 import pytest
 import logging
 
@@ -92,6 +93,22 @@ def handle_parameters(schema: Map, parameters):
         schema._value = parameters[0]
     else:
         schema._key, schema._value = parameters
+    return schema
+
+@dispatch
+def handle_parameters(schema: Array, parameters):
+    schema._shape = tuple([
+        int(value)
+        for value in parameters[0][0]._values])
+    schema._data = dtype(parameters[1])
+
+    return schema
+
+@dispatch
+def handle_parameters(schema: Edge, parameters):
+    schema._inputs = parameters[0]
+    schema._outputs = parameters[1]
+
     return schema
 
 @dispatch
@@ -236,13 +253,7 @@ class Library():
 
     def access(self, key):
         if is_dataclass(key):
-            result = type(key)()
-            for field in key.__dataclass_fields__:
-                value = getattr(key, field)
-                if field != '_default':
-                    value = self.access(value)
-                setattr(result, field, value)
-            return result
+            return key
 
         elif isinstance(key, str):
             if key not in self.registry:
@@ -250,7 +261,6 @@ class Library():
                     parsed = visit_expression(key, self.parse_visitor)
                     return parsed
                 except Exception as e:
-                    # logging.error(f'could not parse: {key}', exc_info = e)
                     return key
             else:
                 return self.registry[key]()
@@ -258,17 +268,17 @@ class Library():
         elif isinstance(key, dict):
             if '_type' in key:
                 type_key = key['_type']
-                key_copy = key.copy()
-                del key_copy['_type']
-
-                fields = {
-                    field: self.access(value)
-                    for field, value in key_copy.items()}
-
                 if not isinstance(type_key, Node):
                     type_key = self.access(type_key)
 
+                fields = {
+                    field: self.access(value)
+                    for field, value in key.items()
+                    if field not in ('_type', '_default')}
+
                 base = replace(type_key, **fields)
+                if key.get('_default') is not None:
+                    base._default = key['_default']
                 return base
 
             else:
@@ -389,7 +399,8 @@ node_schema = {
         '_default': default_a},
     'b': {
         '_type': 'string',
-        '_default': 'hello world!'}}
+        '_default': 'hello world!'},
+    'c': 'array[(3|4),U36]'}
 
 map_schema = {
         '_type': 'map',
@@ -487,7 +498,7 @@ def test_render(core):
 
     # can't do the same assertion as above, because two different renderings
     # exist
-    assert core.access(edge_render) == core.access(edge_schema)
+    assert core.access(edge_render) == edge_type
     assert edge_render == core.render(core.access(edge_render))
 
     map_type = core.access(map_schema)
@@ -510,19 +521,15 @@ def test_render(core):
 
 def test_default(core):
     node_type = core.access(node_schema)
+    default_node = core.default(node_schema)
 
-    default_node_a = default(node_type)
-    default_node_b = core.default(node_schema)
+    assert 'a' in default_node
+    assert isinstance(default_node['a'], float)
+    assert default_node['a'] == default_a
+    assert 'b' in default_node
+    assert isinstance(default_node['b'], str)
 
-    assert default_node_a == default_node_b
-
-    assert 'a' in default_node_a
-    assert isinstance(default_node_a['a'], float)
-    assert default_node_a['a'] == default_a
-    assert 'b' in default_node_a
-    assert isinstance(default_node_a['b'], str)
-
-    assert core.check(node_schema, default_node_a)
+    assert core.check(node_schema, default_node)
 
 
 def test_resolve(core):
