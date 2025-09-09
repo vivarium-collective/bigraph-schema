@@ -598,7 +598,7 @@ def check_integer(schema, state, core=None):
 
 
 def check_float(schema, state, core=None):
-    return isinstance(state, float)
+    return isinstance(state, float) or isinstance(state, int)
 
 
 def check_string(schema, state, core=None):

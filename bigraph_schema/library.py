@@ -316,28 +316,6 @@ class Library():
 
         return resolved, merged
 
-    # def generate_nomethod(self, schema, state):
-    #     given_schema = self.access(schema)
-    #     decode_state = deserialize(given_schema, state)
-    #     default_state = default(given_schema)
-    #     merged_state = merge(given_schema, default_state, decode_state)
-
-    #     inferred_schema = infer(merged_state)
-    #     resolved_schema = resolve(inferred_schema, given_schema)
-
-    #     final_schema, final_state = merge(
-    #         resolved_schema,
-    #         state,
-    #         decoded_state) # ?
-
-    # def generate(self, schema, state):
-    #     found = self.access(schema)
-    #     context = {
-    #         'schema': found,
-    #         'state': state,
-    #         'path': ()}
-    #     return generate(found, state, context)
-
     def jump(self, schema, state, raw_key):
         found = self.access(schema)
         key = self.convert_jump(raw_key)
@@ -491,11 +469,15 @@ def test_render(core):
     # fixed point is found
     assert map_render == core.render(core.access(map_render))
 
+<<<<<<< Updated upstream
     uni_type = core.access(uni_schema)
     uni_render = core.render(uni_type)
     import ipdb; ipdb.set_trace()
     assert core.access(uni_render) == core.access(uni_schema)
     assert uni_render == core.render(core.access(uni_type))
+=======
+    import ipdb; ipdb.set_trace()
+>>>>>>> Stashed changes
 
 
 def test_default(core):
