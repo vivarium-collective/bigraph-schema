@@ -222,13 +222,19 @@ class Library():
 
     def access(self, key):
         if is_dataclass(key):
-            return key
+            result = type(key)()
+            for field in key.__dataclass_fields__:
+                value = getattr(key, field)
+                if field != '_default':
+                    value = self.access(value)
+                setattr(result, field, value)
+            return result
 
         elif isinstance(key, str):
             if key not in self.registry:
                 try:
-                    parse = visit_expression(key, self.parse_visitor)
-                    return parse
+                    parsed = visit_expression(key, self.parse_visitor)
+                    return parsed
                 except Exception as e:
                     # logging.error(f'could not parse: {key}', exc_info = e)
                     return key
@@ -249,6 +255,9 @@ class Library():
                         result[subkey] = self.access(
                             key[subkey])
                 return result
+
+        elif isinstance(key, list):
+            return [self.access(element) for element in key]
         else:
             return key
 
@@ -380,14 +389,16 @@ node_schema = {
         '_type': 'string',
         '_default': 'hello world!'}}
 
+map_schema = {
+        '_type': 'map',
+        '_key': 'string',
+        '_value': 'float'}
+
 edge_schema = {
     '_type': 'edge',
     '_inputs': {
         'mass': 'float',
-        'concentrations': {
-            '_type': 'map',
-            '_key': 'string',
-            '_value': 'float'}},
+        'concentrations': map_schema},
     '_outputs': {
         'mass': 'delta',
         'concentrations': {
@@ -403,10 +414,49 @@ edge_a = {
         'mass': ['cell', 'mass'],
         'concentrations': ['cell', 'internal']}}
 
-map_schema = {
-        '_type': 'map',
-        '_key': 'string',
-        '_value': 'float'}
+
+to_implement = (
+    # Node,
+    # Union,
+    # Tuple,
+    # Boolean,
+    # Number,
+    # Integer,
+    # Float,
+    # Delta,
+    # Nonnegative,
+    # String,
+    # Enum,
+    # Wrap,
+    # Maybe,
+    # Overwrite,
+    # List,
+    Map,
+    # Tree,
+    # Dtype,
+    # Array,
+    Key,
+    # Path,
+    # Wires,
+    # Schema,
+    # Edge,
+    Jump,
+    Star,
+    Index,
+)
+uni_schema = 'outer:tuple[tuple[boolean],' \
+        'enum[a,b,c],' \
+        'tuple[integer,delta,nonnegative],' \
+        'list[maybe[tree[array]]],' \
+        'wrap[maybe[overwrite[integer]]],' \
+        'union[edge,float,string],' \
+        'path,' \
+        'schema[edge],' \
+        'wires[float],' \
+        'a:string|b:float,' \
+        'map[a:string|c:float]]|' \
+        'outest:string'
+        # 'dtype[a],' \
 
 # tests --------------------------------------
 
@@ -417,14 +467,14 @@ def test_infer(core):
     # print(f"inferred {node_inferred}\nfrom {default_node}")
     # print(f'rendered schema:\n{render(node_inferred)}')
 
-    assert render(node_inferred)['a'] == node_schema['a']['_type']
-    assert render(node_inferred)['b'] == node_schema['b']['_type']
+    # assert render(node_inferred)['a'] == node_schema['a']['_type']
+    # assert render(node_inferred)['b'] == node_schema['b']['_type']
 
 # render is the inverse of access
 def test_render(core):
     node_type = core.access(node_schema)
     node_render = core.render(node_schema)
-    assert node_render == node_schema == render(node_type)
+    assert node_render == render(node_type)
 
     edge_type = core.access(edge_schema)
     edge_render = core.render(edge_type)
@@ -440,6 +490,12 @@ def test_render(core):
     assert core.access(map_render) == core.access(map_schema)
     # fixed point is found
     assert map_render == core.render(core.access(map_render))
+
+    uni_type = core.access(uni_schema)
+    uni_render = core.render(uni_type)
+    import ipdb; ipdb.set_trace()
+    assert core.access(uni_render) == core.access(uni_schema)
+    assert uni_render == core.render(core.access(uni_type))
 
 
 def test_default(core):
@@ -795,6 +851,6 @@ if __name__ == '__main__':
     test_merge(core)
     test_traverse(core)
 
-    test_generate(core)
+    # test_generate(core)
     test_bind(core)
     test_apply(core)

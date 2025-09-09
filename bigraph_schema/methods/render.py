@@ -1,5 +1,6 @@
 from plum import dispatch
 import numpy as np
+from bigraph_schema.methods.serialize import serialize
 
 from bigraph_schema.schema import (
     Node,
@@ -32,12 +33,7 @@ from bigraph_schema.schema import (
 
 
 def wrap_default(schema, result):
-    if schema._default:
-        return {
-            '_type': result,
-            '_default': schema._default}
-    else:
-        return result
+    return f'{result}' # TODO syntax for defaults
 
 
 @dispatch
@@ -66,7 +62,10 @@ def render(schema: Union):
     options = [
         render(option)
         for option in schema._options]
-    result = '~'.join(options)
+    if all([isinstance(option,str) for option in options]):
+        result = '~'.join(options)
+    else:
+        result = {'_type': 'union', '_options': options}
     return wrap_default(schema, result)
 
 @dispatch
@@ -74,8 +73,11 @@ def render(schema: Tuple):
     values = [
         render(value)
         for value in schema._values]
-    join = ','.join(values)
-    result = f'tuple[{join}]'
+    if all([isinstance(value, str) for value in values]):
+        join = ','.join(values)
+        result = f'tuple[{join}]'
+    else:
+        result = {'_type': 'tuple', '_values': values}
     return wrap_default(schema, result)
 
 @dispatch
@@ -122,7 +124,10 @@ def render(schema: Enum):
 @dispatch
 def render(schema: List):
     element = render(schema._element)
-    result = f'list[{element}]'
+    if isinstance(element,str):
+        result = f'list[{element}]'
+    else:
+        result = {'_type': 'list', '_element': element}
     return wrap_default(schema, result)
 
 @dispatch
@@ -130,22 +135,28 @@ def render(schema: Map):
     key = render(schema._key)
     value = render(schema._value)
 
-    if key == 'string':
-        result = f'map[{value}]'
+    if isinstance(key,str) and isinstance(value,str):
+        if key == 'string':
+            result = f'map[{value}]'
+        else:
+            result = f'map[{key},{value}]'
     else:
-        result = f'map[{key},{value}]'
+        result = {'_type': 'map', '_key': key, '_value': value}
 
     return wrap_default(schema, result)
 
 @dispatch
 def render(schema: Tree):
     leaf = render(schema._leaf)
-    result = f'tree[{leaf}]'
+    if isinstance(leaf, str):
+        result = f'tree[{leaf}]'
+    else:
+        result = {'_type': 'tree', '_leaf': leaf}
     return wrap_default(schema, result)
 
 @dispatch
 def render(schema: Dtype):
-    result = render(schema._fields)
+    result = schema._fields
     return wrap_default(schema, result)
 
 @dispatch
@@ -172,25 +183,41 @@ def render(schema: Wires):
 
 @dispatch
 def render(schema: Edge):
-    result = {
+    intermediate = {
         '_type': 'edge',
         '_inputs': render(schema._inputs),
         '_outputs': render(schema._outputs),
         'inputs': render(schema.inputs),
         'outputs': render(schema.outputs)}
-    return wrap_default(schema, result)
+    import ipdb; ipdb.set_trace()
+    result = f'edge[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
+    # return wrap_default(schema, result)
+    return result
 
 @dispatch
 def render(schema: dict):
     result = {
         key: render(value)
         for key, value in schema.items()}
+
+    if all([isinstance(value, str) for value in result.values()]):
+        parts = [f'{key}:{value}' for key, value in result.items()]
+        result = '|'.join(parts)
+
     return result
 
 @dispatch
 def render(schema: Node):
     result = {}
-    for key, value in schema.__dataclass_fields__:
-        result[key] = render(value)
+    for key in schema.__dataclass_fields__:
+        value = getattr(schema,key)
+        if key == '_default':
+            result[key] = serialize(schema, value)
+        else:
+            result[key] = render(value)
+
+    if all([isinstance(value, str) for value in result.values()]):
+        parts = [f'{key}:{value}' for key, value in result.items()]
+        result = '|'.join(parts)
 
     return wrap_default(schema, result)

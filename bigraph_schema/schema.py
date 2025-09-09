@@ -96,7 +96,7 @@ class Dtype(Node):
 @dataclass(kw_only=True)
 class Array(Node):
     _shape: typing.Tuple[int] = field(default_factory=tuple)
-    _data: Dtype = field(default_factory=lambda: 'float64')
+    _data: Dtype = field(default_factory=Dtype)
 
 @dataclass(kw_only=True)
 class Path(List):
@@ -116,8 +116,8 @@ class Schema(Tree):
 
 @dataclass(kw_only=True)
 class Edge(Node):
-    _inputs: Schema = field(default_factory=Schema)
-    _outputs: Schema = field(default_factory=Schema)
+    _inputs: Node = field(default_factory=lambda: Node(_default={}))
+    _outputs: Node = field(default_factory=lambda: Node(_default={}))
     inputs: Wires = field(default_factory=Wires)
     outputs: Wires = field(default_factory=Wires)
 
