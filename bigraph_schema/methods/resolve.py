@@ -132,3 +132,5 @@ def resolve(current, update):
         return current
     else:
         raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')
+
+

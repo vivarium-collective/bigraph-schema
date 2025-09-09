@@ -53,8 +53,8 @@ from bigraph_schema.methods import (
     jump,
     traverse,
     bind,
-
     generate,
+
     apply)
 
 # view
@@ -260,20 +260,17 @@ class Library():
                 type_key = key['_type']
                 key_copy = key.copy()
                 del key_copy['_type']
+
                 fields = {
                     field: self.access(value)
                     for field, value in key_copy.items()}
 
-                if isinstance(type_key, Node):
-                    base = replace(type_key, **fields)
-                    return base
-                    # base = type(type_key)
-                    # return base(**fields)
-                else:
-                    found = self.access(type_key)
-                    base = replace(found, **fields)
-                    return base
-                    # return self.make_instance(base, key)
+                if not isinstance(type_key, Node):
+                    type_key = self.access(type_key)
+
+                base = replace(type_key, **fields)
+                return base
+
             else:
                 result = {}
                 for subkey in key:
@@ -336,13 +333,10 @@ class Library():
 
     def generate(self, schema, state):
         found = self.access(schema)
-        default_found = self.default(found)
-
         inferred = self.infer(state)
-        default_inferred = self.default(inferred)
-
         resolved = self.resolve(inferred, found)
-        merged = self.merge(resolved, default_found, default_inferred)
+
+        merged = self.default(resolved)
 
         return resolved, merged
 
@@ -785,6 +779,7 @@ def test_generate(core):
     schema = {
         'A': 'float',
         'B': 'enum[one,two,three]',
+        'D': 'string{hello}',
         'units': 'map[number]'}
 
     state = {

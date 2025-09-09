@@ -50,7 +50,7 @@ def deserialize(schema: Wrap, encode):
 def deserialize(schema: Union, encode):
     for option in schema._options:
         decode = deserialize(option, encode)
-        if decode:
+        if decode is not None:
             return decode
 
 @dispatch
@@ -123,7 +123,7 @@ def deserialize(schema: Tree, encode):
         encode = literal_eval(encode)
 
     leaf_code = deserialize(schema._leaf, encode)
-    if leaf_code:
+    if leaf_code is not None:
         return leaf_code
     elif isinstance(encode, dict):
         return {
@@ -179,7 +179,7 @@ def deserialize(schema: dict, encode):
                     subschema,
                     encode[key])
 
-                if outcome:
+                if outcome is not None:
                     result[key] = outcome
 
         if result:
