@@ -244,8 +244,14 @@ class Library():
         elif isinstance(key, dict):
             if '_type' in key:
                 type_key = key.get('_type', 'node')
-                base = self.registry[type_key]
-                return self.make_instance(base, key)
+                if isinstance(type_key, Node):
+                    fields = key.copy()
+                    del fields['_type']
+                    base = type(type_key)
+                    return base(**fields)
+                else:
+                    base = self.registry[type_key]
+                    return self.make_instance(base, key)
             else:
                 result = {}
                 for subkey in key:
@@ -431,6 +437,7 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'path,' \
         'schema[edge[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
         'wires[float],' \
+        '_type:integer|_default:11,' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \
         'outest:string'
@@ -469,15 +476,13 @@ def test_render(core):
     # fixed point is found
     assert map_render == core.render(core.access(map_render))
 
-<<<<<<< Updated upstream
     uni_type = core.access(uni_schema)
     uni_render = core.render(uni_type)
+
     import ipdb; ipdb.set_trace()
+
     assert core.access(uni_render) == core.access(uni_schema)
     assert uni_render == core.render(core.access(uni_type))
-=======
-    import ipdb; ipdb.set_trace()
->>>>>>> Stashed changes
 
 
 def test_default(core):
