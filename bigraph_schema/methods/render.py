@@ -33,8 +33,17 @@ from bigraph_schema.schema import (
 
 
 def wrap_default(schema, result):
-    return f'{result}' # TODO syntax for defaults
+    found = None
+    if isinstance(schema, Node) and schema._default:
+        found = schema._default
+    elif isinstance(schema, dict) and '_default' in schema:
+        found = schema['_default']
 
+    if found:
+        inner_default = serialize(schema, found)
+        return result + '{' + inner_default + '}'
+    else:
+        return result
 
 @dispatch
 def render(schema: Empty):
@@ -54,7 +63,8 @@ def render(schema: Overwrite):
 
 @dispatch
 def render(schema: Wrap):
-    result = render(schema._value)
+    value = render(schema._value)
+    result = f'wrap[{value}]'
     return wrap_default(schema, result)
 
 @dispatch
@@ -191,18 +201,19 @@ def render(schema: Edge):
         'outputs': render(schema.outputs)}
 
     result = f'edge[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
-
     return wrap_default(schema, result)
 
 @dispatch
 def render(schema: dict):
-    subrender = {
-        key: render(value)
-        for key, value in schema.items()}
+    parts = {}
+    for key, value in schema.items():
+        subrender = render(value)
+        if isinstance(value, dict):
+            subrender = f'({subrender})'
+        parts[key] = subrender
 
-    result = render_associated(subrender)
-
-    return result
+    result = render_associated(parts)
+    return wrap_default(schema, result)
 
 @dispatch
 def render(schema: Node):
@@ -216,5 +227,4 @@ def render(schema: Node):
             subrender[key] = render(value)
 
     result = render_associated(subrender)
-
     return wrap_default(schema, result)

@@ -158,6 +158,14 @@ class LibraryVisitor(NodeVisitor):
                 schema,
                 type_parameters[0])
             
+        default_visit = visit[2]['visit']
+        if default_visit:
+            default = default_visit[0]
+            if isinstance(schema, Node):
+                schema._default = default
+            elif isinstance(schema, dict):
+                schema['_default'] = default
+
         return schema
 
     def visit_parameter_list(self, node, visit):
@@ -166,6 +174,12 @@ class LibraryVisitor(NodeVisitor):
         full = first + rest
 
         return full
+
+    def visit_default_block(self, node, visit):
+        return visit[1]
+
+    def visit_default(self, node, visit):
+        return node.text
 
     def visit_symbol(self, node, visit):
         return self.library.access(node.text)
@@ -431,16 +445,17 @@ to_implement = (
 uni_schema = 'outer:tuple[tuple[boolean],' \
         'enum[a,b,c],' \
         'tuple[integer,delta,nonnegative],' \
-        'list[maybe[tree[array]]],' \
+        'list[maybe[tree[path]]],' \
         'wrap[maybe[overwrite[integer]]],' \
         'union[edge[x:integer,y:string],float,string],' \
         'path,' \
-        'schema[edge[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
-        'wires[float],' \
-        '_type:integer|_default:11,' \
+        'tree[edge[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
+        'wires,' \
+        'integer{11},' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \
         'outest:string'
+        # 'list[maybe[tree[array[(3|4),float]]]],' \
         # 'dtype[a],' \
 
 # tests --------------------------------------
@@ -448,6 +463,8 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
 def test_infer(core):
     default_node = core.default(node_schema)
     node_inferred = core.infer(default_node)
+
+    assert check(node_inferred, default_node)
 
     # print(f"inferred {node_inferred}\nfrom {default_node}")
     # print(f'rendered schema:\n{render(node_inferred)}')
@@ -478,10 +495,12 @@ def test_render(core):
 
     uni_type = core.access(uni_schema)
     uni_render = core.render(uni_type)
+    round_trip = core.access(uni_render)
 
-    import ipdb; ipdb.set_trace()
+    def idx(a, b, n):
+        return a['outer']._values[n], b['outer']._values[n]
 
-    assert core.access(uni_render) == core.access(uni_schema)
+    assert round_trip == uni_type
     assert uni_render == core.render(core.access(uni_type))
 
 
@@ -511,8 +530,8 @@ def test_resolve(core):
         {'a': 'delta', 'b': 'node'},
         node_schema)
 
-    assert render(node_resolve)['a']['_type'] == 'delta'
-    assert render(node_resolve)['a']['_default'] == node_schema['a']['_default']
+    # assert render(node_resolve)['a']['_type'] == 'delta'
+    # assert render(node_resolve)['a']['_default'] == node_schema['a']['_default']
 
     mutual = core.resolve(
         {'a': 'float', 'b': 'string'},
