@@ -2,6 +2,7 @@ from plum import dispatch
 import numpy as np
 
 from types import NoneType
+from dataclasses import replace
 
 from bigraph_schema.schema import (
     Node,
@@ -31,84 +32,122 @@ from bigraph_schema.schema import (
 )
 
 
+from bigraph_schema.methods.serialize import serialize
+
 MISSING_TYPES = {}
 
 
+def set_default(schema, value):
+    if value is not None:
+        serialized = serialize(schema, value)
+        if isinstance(schema, Node):
+            schema = replace(schema, _default=serialized)
+        elif isinstance(schema, dict):
+            schema['_default'] = serialized
+
+    return schema
+
 @dispatch
-def infer(value: (int | np.int32 | np.int64 |
+def infer(core,
+          value: (int | np.int32 | np.int64 |
                   np.dtypes.Int32DType | np.dtypes.Int64DType),
           path: tuple = ()):
-    return Integer()
+    schema = Integer()
+    return set_default(schema, value)
 
 @dispatch
-def infer(value: bool, path: tuple = ()):
-    return Boolean()
+def infer(core, value: bool, path: tuple = ()):
+    schema = Boolean()
+    return set_default(schema, value)
 
 @dispatch
-def infer(value: (float | np.float32 | np.float64 |
+def infer(core,
+          value: (float | np.float32 | np.float64 |
                   np.dtypes.Float32DType | np.dtypes.Float64DType),
           path: tuple = ()):
-    return Float()
+    schema = Float()
+    return set_default(schema, value)
 
 @dispatch
-def infer(value: str, path: tuple = ()):
-    return String()
+def infer(core, value: str, path: tuple = ()):
+    schema = String()
+    return set_default(schema, value)
 
 @dispatch
-def infer(value: np.ndarray, path: tuple = ()):
-    return Array(_shape=value.shape, _data=value.dtype)
+def infer(core, value: np.ndarray, path: tuple = ()):
+    schema = Array(_shape=value.shape, _data=value.dtype)
+    return set_default(schema, value)
 
 @dispatch
-def infer(value: list, path: tuple = ()):
+def infer(core, value: list, path: tuple = ()):
     if len(value) > 0:
         element = infer(
+            core,
             value[0],
             path+('_element',))
     else:
         element = Node()
     
-    return List(_element=element)
+    schema = List(_element=element)
+    return set_default(schema, value)
 
 @dispatch
-def infer(value: tuple, path: tuple = ()):
+def infer(core, value: tuple, path: tuple = ()):
     result = [
         infer(
             item,
             path+(index,))
         for index, item in enumerate(value)]
-    return Tuple(_values=result)
+    schema = Tuple(_values=result)
+    return set_default(schema, value)    
 
 @dispatch
-def infer(value: NoneType, path: tuple = ()):
-    return Maybe(_value=Node())
+def infer(core, value: NoneType, path: tuple = ()):
+    schema = Maybe(_value=Node())
+    return set_default(schema, value)    
 
 @dispatch
-def infer(value: set, path: tuple = ()):
+def infer(core, value: set, path: tuple = ()):
     return infer(
+        core,
         list(value),
         path)
 
 @dispatch
-def infer(value: dict, path: tuple = ()):
-    subvalues = {}
-    distinct_subvalues = []
-    for key, subvalue in value.items():
-        subvalues[key] = infer(
-            subvalue,
-            path+(key,))
+def infer(core, value: dict, path: tuple = ()):
+    if '_type' in value:
+        schema = core.access(value)
+        default_value = None
+        if '_default' in value:
+            default_value = value['_default']
+        elif isinstance(schema, Node) and schema._default is not None:
+            default_value = schema._default
+        elif isinstance(schema, dict) and '_default' in schema:
+            default_value = schema['_default']
+        return set_default(schema, default_value)
 
-        if subvalues[key] not in distinct_subvalues:
-            distinct_subvalues.append(
-                subvalues[key])
-
-    if len(distinct_subvalues) == 1:
-        map_value = distinct_subvalues[0]
-        return Map(_value=map_value)
     else:
-        return subvalues
+        subvalues = {}
+        distinct_subvalues = []
+        for key, subvalue in value.items():
+            subvalues[key] = infer(
+                core,
+                subvalue,
+                path+(key,))
+
+            if subvalues[key] not in distinct_subvalues:
+                distinct_subvalues.append(
+                    subvalues[key])
+
+        if len(distinct_subvalues) == 1:
+            map_value = distinct_subvalues[0]
+            schema = Map(_value=map_value)
+            return set_default(schema, value)
+        else:
+            return subvalues
 
 @dispatch
-def infer(value: object, path: tuple = ()):
+def infer(core, value: object, path: tuple = ()):
     type_name = str(type(value))
 
     value_keys = value.__dict__.keys()
@@ -118,6 +157,7 @@ def infer(value: object, path: tuple = ()):
         if not key.startswith('_'):
             try:
                 value_schema[key] = infer(
+                    core,
                     getattr(value, key),
                     path + (key,))
             except Exception as e:

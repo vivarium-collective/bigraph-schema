@@ -5,7 +5,7 @@ import logging
 
 from plum import dispatch
 from parsimonious.nodes import NodeVisitor
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, is_dataclass, replace
 
 from bigraph_schema.schema import (
     BASE_TYPES,
@@ -257,15 +257,23 @@ class Library():
 
         elif isinstance(key, dict):
             if '_type' in key:
-                type_key = key.get('_type', 'node')
+                type_key = key['_type']
+                key_copy = key.copy()
+                del key_copy['_type']
+                fields = {
+                    field: self.access(value)
+                    for field, value in key_copy.items()}
+
                 if isinstance(type_key, Node):
-                    fields = key.copy()
-                    del fields['_type']
-                    base = type(type_key)
-                    return base(**fields)
+                    base = replace(type_key, **fields)
+                    return base
+                    # base = type(type_key)
+                    # return base(**fields)
                 else:
-                    base = self.registry[type_key]
-                    return self.make_instance(base, key)
+                    found = self.access(type_key)
+                    base = replace(found, **fields)
+                    return base
+                    # return self.make_instance(base, key)
             else:
                 result = {}
                 for subkey in key:
@@ -298,7 +306,7 @@ class Library():
             for key in resolved])
 
     def infer(self, state):
-        return infer(state)
+        return infer(self, state)
 
     def render(self, schema):
         found = self.access(schema)
@@ -306,7 +314,8 @@ class Library():
 
     def default(self, schema):
         found = self.access(schema)
-        return default(found)
+        value = default(found)
+        return deserialize(found, value)
 
     def resolve(self, current_schema, update_schema):
         current = self.access(current_schema)
@@ -327,12 +336,13 @@ class Library():
 
     def generate(self, schema, state):
         found = self.access(schema)
-        default_state = self.default(found)
-        inferred = self.infer(state)
-        resolved = self.resolve(inferred, found)
+        default_found = self.default(found)
 
-        # import ipdb; ipdb.set_trace()
-        merged = self.merge(resolved, default_state, state)
+        inferred = self.infer(state)
+        default_inferred = self.default(inferred)
+
+        resolved = self.resolve(inferred, found)
+        merged = self.merge(resolved, default_found, default_inferred)
 
         return resolved, merged
 
@@ -775,7 +785,7 @@ def test_generate(core):
     schema = {
         'A': 'float',
         'B': 'enum[one,two,three]',
-        'units': 'map[float]'}
+        'units': 'map[number]'}
 
     state = {
         'C': {
@@ -791,10 +801,10 @@ def test_generate(core):
 
     assert generated_state['A'] == 0.0
     assert generated_state['B'] == 'one'
-    import ipdb; ipdb.set_trace()
     assert generated_state['C'] == 'y'
     assert generated_state['units']['seconds'] == 22.833333
-    assert 'meters' not in generated_schema['units']
+
+    assert not hasattr(generated_schema['units'], 'meters')
 
 
 def test_bind(core):
@@ -857,6 +867,6 @@ if __name__ == '__main__':
     test_merge(core)
     test_traverse(core)
 
-    # test_generate(core)
+    test_generate(core)
     test_bind(core)
     test_apply(core)

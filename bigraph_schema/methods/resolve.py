@@ -1,6 +1,8 @@
 from plum import dispatch
 import numpy as np
 
+from dataclasses import replace
+
 from bigraph_schema.schema import (
     Node,
     Empty,
@@ -28,6 +30,9 @@ from bigraph_schema.schema import (
     Schema,
     Edge,
 )
+
+
+from bigraph_schema.methods.default import default
 
 
 def resolve_subclass(subclass, superclass):
@@ -75,10 +80,34 @@ def resolve(current: Node, update: Node):
     elif issubclass(update_type, current_type):
         return resolve_subclass(update, current)
     else:
-        # raise Exception('cannot resolve types', {
-        #     'current': current,
-        #     'update': update})
         raise Exception(f'\ncannot resolve types:\n{current}\n{update}\n')
+
+@dispatch
+def resolve(current: Map, update: dict):
+    result = current._value
+    for key, value in update.items():
+        result = resolve(result, value)
+    resolved = replace(current, _value=result)
+
+    state = default(update)
+    if state:
+        resolved = replace(resolved, _default=state)
+
+    return resolved
+
+@dispatch
+def resolve(current: dict, update: Map):
+    result = update._value
+    for key, value in current.items():
+        result = resolve(result, value)
+    result = replace(result, _default=update._value._default)
+    resolved = replace(update, _value=result)
+
+    state = default(current)
+    if state:
+        resolved = replace(resolved, _default=state)
+
+    return resolved
 
 @dispatch
 def resolve(current: dict, update: dict):
@@ -102,7 +131,4 @@ def resolve(current, update):
     elif update is None:
         return current
     else:
-        # raise Exception('cannot resolve types, not schemas', {
-        #     'current': current,
-        #     'update': update})
         raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')
