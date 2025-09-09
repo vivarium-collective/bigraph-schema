@@ -25,6 +25,7 @@ parameter_examples = {
     'tuple': 'what[is,happening|(with:yellow|this:green)|this:now]',
     'single': 'hello[(3),over]',
     'double': 'hello[(3|4),over]',
+    'double_default': 'hello[(3|4),over]{3,3,3,3,3}',
     'units_type': 'length^2*mass/time^1_5',
     'nothing': '()'}
 
@@ -38,8 +39,9 @@ parameter_grammar = Grammar(
     bigraph = group / nest
     group = paren_left expression paren_right
     nest = symbol colon tree
-    type_name = symbol parameter_list?
+    type_name = symbol parameter_list? default?
     parameter_list = square_left expression (comma expression)* square_right
+    default = curly_left ~r"[^}]*" curly_right
     symbol = ~r"[\\w\\d-_/*&^%$#@!`+ ]+"
     dot = "."
     colon = ":"
@@ -48,6 +50,8 @@ parameter_grammar = Grammar(
     paren_right = ")"
     square_left = "["
     square_right = "]"
+    curly_left = "{"
+    curly_right = "}"
     comma = ","
     tilde = "~"
     not_newline = ~r"[^\\n\\r]"*

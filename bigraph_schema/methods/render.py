@@ -1,6 +1,6 @@
 from plum import dispatch
 import numpy as np
-from bigraph_schema.methods.serialize import serialize
+from bigraph_schema.methods.serialize import serialize, render_associated
 
 from bigraph_schema.schema import (
     Node,
@@ -189,36 +189,32 @@ def render(schema: Edge):
         '_outputs': render(schema._outputs),
         'inputs': render(schema.inputs),
         'outputs': render(schema.outputs)}
+
     result = f'edge[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
 
-    # return wrap_default(schema, result)
-    return result
+    return wrap_default(schema, result)
 
 @dispatch
 def render(schema: dict):
-    result = {
+    subrender = {
         key: render(value)
         for key, value in schema.items()}
 
-    if all([isinstance(value, str) for value in result.values()]):
-        parts = [f'{key}:{value}' for key, value in result.items()]
-        result = '|'.join(parts)
+    result = render_associated(subrender)
 
     return result
 
 @dispatch
 def render(schema: Node):
-    result = {}
+    subrender = {}
 
     for key in schema.__dataclass_fields__:
         value = getattr(schema,key)
         if key == '_default':
-            result[key] = serialize(schema, value)
+            subrender[key] = serialize(schema, value)
         else:
-            result[key] = render(value)
+            subrender[key] = render(value)
 
-    if all([isinstance(value, str) for value in result.values()]):
-        parts = [f'{key}:{value}' for key, value in result.items()]
-        result = '|'.join(parts)
+    result = render_associated(subrender)
 
     return wrap_default(schema, result)
