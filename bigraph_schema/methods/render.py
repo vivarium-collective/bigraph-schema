@@ -189,8 +189,8 @@ def render(schema: Edge):
         '_outputs': render(schema._outputs),
         'inputs': render(schema.inputs),
         'outputs': render(schema.outputs)}
-    import ipdb; ipdb.set_trace()
     result = f'edge[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
+
     # return wrap_default(schema, result)
     return result
 
@@ -209,6 +209,7 @@ def render(schema: dict):
 @dispatch
 def render(schema: Node):
     result = {}
+
     for key in schema.__dataclass_fields__:
         value = getattr(schema,key)
         if key == '_default':

@@ -449,9 +449,9 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'tuple[integer,delta,nonnegative],' \
         'list[maybe[tree[array]]],' \
         'wrap[maybe[overwrite[integer]]],' \
-        'union[edge,float,string],' \
+        'union[edge[x:integer,y:string],float,string],' \
         'path,' \
-        'schema[edge],' \
+        'schema[edge[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
         'wires[float],' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \

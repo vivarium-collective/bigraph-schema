@@ -34,6 +34,14 @@ from bigraph_schema.schema import (
 
 from bigraph_schema.methods import check
 
+
+def render_associated(assoc):
+    if all([isinstance(value, str) for value in assoc.values()]):
+        parts = [f'{key}:{value}' for key, value in assoc.items()]
+        assoc = '|'.join(parts)
+    return assoc
+
+
 @dispatch
 def serialize(schema: Empty, state):
     return NONE_SYMBOL
@@ -124,7 +132,8 @@ def serialize(schema: Node, state):
                     result[key] = serialize(
                         getattr(schema, key),
                         state[key])
-        return result
+
+        return render_associated(result)
     else:
         return str(state)
 
