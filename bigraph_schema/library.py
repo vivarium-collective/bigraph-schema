@@ -54,7 +54,6 @@ from bigraph_schema.methods import (
     jump,
     traverse,
     bind,
-    generate,
 
     apply)
 

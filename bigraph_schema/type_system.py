@@ -454,7 +454,9 @@ class TypeSystem(Registry):
             strict=True)
 
         if found is None:
+            import ipdb; ipdb.set_trace()
             raise Exception(f'schema not found for type: {schema}')
+
         return found
 
 
