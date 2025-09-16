@@ -344,7 +344,6 @@ class Library():
         found = self.access(schema)
         inferred = self.infer(state)
         resolved = self.resolve(inferred, found)
-
         merged = self.default(resolved)
 
         return resolved, merged
@@ -529,6 +528,9 @@ def test_default(core):
     assert isinstance(default_node['b'], str)
 
     assert core.check(node_schema, default_node)
+
+    value = 11.11
+    assert core.default(core.infer(value)) == value
 
 
 def test_resolve(core):
@@ -806,6 +808,10 @@ def test_generate(core):
     assert generated_state['units']['seconds'] == 22.833333
 
     assert not hasattr(generated_schema['units'], 'meters')
+
+    rendered = core.render(generated_schema)
+
+    assert generated_state == core.deserialize(generated_schema, core.serialize(generated_schema, generated_state))
 
 
 def test_bind(core):

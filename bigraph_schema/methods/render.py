@@ -41,9 +41,14 @@ def wrap_default(schema, result):
 
     if found:
         inner_default = serialize(schema, found)
-        return result + '{' + inner_default + '}'
-    else:
-        return result
+        if isinstance(result, str) and isinstance(inner_default, str):
+            result = result + '{' + inner_default + '}'
+        else:
+            result = {
+                '_type': result,
+                '_default': inner_default}
+
+    return result
 
 @dispatch
 def render(schema: Empty):
@@ -52,19 +57,34 @@ def render(schema: Empty):
 @dispatch
 def render(schema: Maybe):
     value = render(schema._value)
-    result = f'maybe[{value}]'
+    if isinstance(value, str):
+        result = f'maybe[{value}]'
+    else:
+        result = {
+            '_type': 'maybe',
+            '_value': value}
     return wrap_default(schema, result)
 
 @dispatch
 def render(schema: Overwrite):
     value = render(schema._value)
-    result = f'overwrite[{value}]'
+    if isinstance(value, str):
+        result = f'overwrite[{value}]'
+    else:
+        result = {
+            '_type': 'overwrite',
+            '_value': value}
     return wrap_default(schema, result)
 
 @dispatch
 def render(schema: Wrap):
     value = render(schema._value)
-    result = f'wrap[{value}]'
+    if isinstance(value, str):
+        result = f'wrap[{value}]'
+    else:
+        result = {
+            '_type': 'wrap',
+            '_value': value}
     return wrap_default(schema, result)
 
 @dispatch
@@ -75,7 +95,9 @@ def render(schema: Union):
     if all([isinstance(option,str) for option in options]):
         result = '~'.join(options)
     else:
-        result = {'_type': 'union', '_options': options}
+        result = {
+            '_type': 'union',
+            '_options': options}
     return wrap_default(schema, result)
 
 @dispatch
@@ -87,7 +109,9 @@ def render(schema: Tuple):
         join = ','.join(values)
         result = f'tuple[{join}]'
     else:
-        result = {'_type': 'tuple', '_values': values}
+        result = {
+            '_type': 'tuple',
+            '_values': values}
     return wrap_default(schema, result)
 
 @dispatch
@@ -134,10 +158,12 @@ def render(schema: Enum):
 @dispatch
 def render(schema: List):
     element = render(schema._element)
-    if isinstance(element,str):
+    if isinstance(element, str):
         result = f'list[{element}]'
     else:
-        result = {'_type': 'list', '_element': element}
+        result = {
+            '_type': 'list',
+            '_element': element}
     return wrap_default(schema, result)
 
 @dispatch
@@ -145,13 +171,16 @@ def render(schema: Map):
     key = render(schema._key)
     value = render(schema._value)
 
-    if isinstance(key,str) and isinstance(value,str):
+    if isinstance(key, str) and isinstance(value,str):
         if key == 'string':
             result = f'map[{value}]'
         else:
             result = f'map[{key},{value}]'
     else:
-        result = {'_type': 'map', '_key': key, '_value': value}
+        result = {
+            '_type': 'map',
+            '_key': key,
+            '_value': value}
 
     return wrap_default(schema, result)
 
@@ -200,7 +229,11 @@ def render(schema: Edge):
         'inputs': render(schema.inputs),
         'outputs': render(schema.outputs)}
 
-    result = f'edge[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
+    if isinstance(intermediate['_inputs'], str) and isinstance(intermediate['_outputs'], str):
+        result = f'edge[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
+    else:
+        result = intermediate
+
     return wrap_default(schema, result)
 
 @dispatch
@@ -208,12 +241,9 @@ def render(schema: dict):
     parts = {}
     for key, value in schema.items():
         subrender = render(value)
-        if isinstance(value, dict):
-            subrender = f'({subrender})'
         parts[key] = subrender
 
-    result = render_associated(parts)
-    return wrap_default(schema, result)
+    return wrap_default(schema, parts)
 
 @dispatch
 def render(schema: Node):
@@ -226,5 +256,4 @@ def render(schema: Node):
         else:
             subrender[key] = render(value)
 
-    result = render_associated(subrender)
-    return wrap_default(schema, result)
+    return wrap_default(schema, subrender)
