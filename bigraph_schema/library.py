@@ -426,6 +426,7 @@ edge_a = {
         'concentrations': ['cell', 'internal']}}
 
 
+# tracking datatypes that should be in the unischema
 to_implement = (
     # Node,
     # Union,
@@ -442,7 +443,7 @@ to_implement = (
     # Maybe,
     # Overwrite,
     # List,
-    Map,
+    # Map,
     # Tree,
     # Dtype,
     # Array,
