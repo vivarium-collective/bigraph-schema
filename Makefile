@@ -1,16 +1,22 @@
 DOCTEST_FILES=bigraph_schema/type_system.py
-DEBUG_FILE ?= bigraph_schema/tests.py
+TESTS=bigraph_schema/tests.py
+LIBRARY=bigraph_schema/library.py
+PY=PYTHONPATH=`pwd` uv run
+
 
 tests: pytest doctest library
 
 pytest:
-	uv run pytest
+	${PY} pytest
 
 library:
-	uv run bigraph_schema/library.py
+	${PY} ${LIBRARY}
 
 doctest:
-	uv run python3 -m doctest ${DOCTEST_FILES}
+	${PY} -m doctest ${DOCTEST_FILES}
 
 debug:
-	PYTHONPATH=`pwd` uv run python3 -i $(DEBUG_FILE)
+	${PY} python3 -i ${TESTS}
+
+debug-lib:
+	${PY} python3 -i ${LIBRARY}
