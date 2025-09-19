@@ -117,9 +117,26 @@ def serialize(schema: dict, state):
 
 
 @dispatch
+def serialize(schema: Number, state):
+    return state
+
+
+@dispatch
 def serialize(schema: Atom, state):
     return str(state)
 
+
+@dispatch
+def serialize(schema: Array, state: np.ndarray):
+    return state.tolist()
+
+@dispatch
+def serialize(schema: Array, state: (list, dict)):
+    return state
+
+@dispatch
+def serialize(schema: Array, state):
+    raise Exception(f'serializing array:\n  {schema}\nbut state is not an array?\n  {state}')
 
 @dispatch
 def serialize(schema: Node, state):
