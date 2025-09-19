@@ -1,5 +1,6 @@
 from plum import dispatch
 import numpy as np
+import traceback
 
 from types import NoneType
 from dataclasses import replace
@@ -155,6 +156,8 @@ def infer(core, value: object, path: tuple = ()):
 
     value_keys = value.__dict__.keys()
     value_schema = {}
+
+    import ipdb; ipdb.set_trace()
 
     for key in value_keys:
         if not key.startswith('_'):

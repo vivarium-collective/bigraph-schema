@@ -132,17 +132,18 @@ def deserialize(schema: Tree, encode):
 
 @dispatch
 def deserialize(schema: Dtype, encode):
-    # if isinstance(encode, str):
-    #     encode = literal_eval(encode)
-
     return encode
 
 @dispatch
 def deserialize(schema: Array, encode):
-    # if isinstance(encode, str):
-    #     encode = literal_eval(encode)
+    state = np.array(
+        encode,
+        dtype=schema._data)
 
-    return encode
+    if state.shape != schema._shape:
+        state.reshape(schema._shape)
+
+    return state
 
 @dispatch
 def deserialize(schema: Node, encode):
