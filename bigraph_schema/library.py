@@ -543,8 +543,9 @@ def test_resolve(core):
         {'a': 'delta', 'b': 'node'},
         node_schema)
 
-    # assert render(node_resolve)['a']['_type'] == 'delta'
-    # assert render(node_resolve)['a']['_default'] == node_schema['a']['_default']
+    rendered_a = render(node_resolve)['a']
+    assert rendered_a['_type'] == 'delta'
+    assert core.access(rendered_a)._default == node_schema['a']['_default']
 
     mutual = core.resolve(
         {'a': 'float', 'b': 'string'},
@@ -644,7 +645,7 @@ def test_serialize(core):
         {'a': 'float'},
         {'a': 55.55555})
 
-    assert encoded_b['a'] == '55.55555'
+    assert encoded_b['a'] == 55.55555
 
 
 def test_deserialize(core):
