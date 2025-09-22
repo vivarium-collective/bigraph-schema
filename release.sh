@@ -4,9 +4,9 @@
 # matching PyPI.
 # Usage: ./release.sh 0.0.1
 
-set -e
+# set -e
 
-version="$1"
+# version="$1"
 
 # # Check version is valid
 # setup_py_version="$(python setup.py --version)"
@@ -15,8 +15,6 @@ version="$1"
 #     echo "Aborting."
 #     exit 1
 # fi
-
-python setup.py
 
 # Check working directory is clean
 if [ ! -z "$(git status --untracked-files=no --porcelain)" ]; then
@@ -33,13 +31,24 @@ if [ "$branch" != "main" ]; then
     exit 1
 fi
 
+rm -rf build/ dist/
+uv version --bump patch
+version=$(uv version --short)
+
 # Create and push git tag
-git tag -m "Version v$version" "v$version"
+git add pyproject.toml
+git commit -m "version $version"
+git tag -m "version v$version" "v$version"
 git push --tags
 
-# Create and publish package
-rm -rf dist
-python setup.py sdist
-twine upload dist/*
+uv build
+uv publish --token $(cat ~/.pypi-token)
+rm -rf build/ dist/
+
+
+# # Create and publish package
+# rm -rf dist
+# python setup.py sdist
+# twine upload dist/*
 
 echo "Version v$version has been published on PyPI and has a git tag."
