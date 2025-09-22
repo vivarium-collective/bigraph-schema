@@ -1,6 +1,6 @@
 [project]
 name = "bigraph-schema"
-version = "0.0.69"
+version = "0.0.70"
 description = "A serializable type schema for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.7"
