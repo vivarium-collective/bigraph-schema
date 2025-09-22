@@ -16,6 +16,8 @@ version="$1"
 #     exit 1
 # fi
 
+python setup.py
+
 # Check working directory is clean
 if [ ! -z "$(git status --untracked-files=no --porcelain)" ]; then
     echo "You have changes that have yet to be committed."
