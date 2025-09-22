@@ -341,6 +341,11 @@ class Library():
         return deserialize(found, state)
 
     def generate(self, schema, state):
+        """
+        creates a unified schema from the given schema and an interpolation
+        of the state into a schema, and generates a state satisfying that
+        unified schema
+        """
         found = self.access(schema)
         inferred = self.infer(state)
         resolved = self.resolve(inferred, found)
@@ -442,11 +447,11 @@ to_implement = (
     # Wrap,
     # Maybe,
     # Overwrite,
-    # List,
+    List,
     # Map,
     # Tree,
-    # Dtype,
-    # Array,
+    Dtype,
+    Array,
     Key,
     # Path,
     # Wires,
@@ -456,6 +461,7 @@ to_implement = (
     Star,
     Index,
 )
+
 uni_schema = 'outer:tuple[tuple[boolean],' \
         'enum[a,b,c],' \
         'tuple[integer,delta,nonnegative],' \
@@ -813,7 +819,57 @@ def test_generate(core):
 
     rendered = core.render(generated_schema)
 
-    assert generated_state == core.deserialize(generated_schema, core.serialize(generated_schema, generated_state))
+    assert generated_state == \
+            core.deserialize(generated_schema,
+                             core.serialize(generated_schema, generated_state))
+    # tracking datatypes that should be covered in this test
+    to_implement = (
+            Node,
+            # Union,
+            Tuple,
+            Boolean,
+            # Number,
+            Integer,
+            # Float,
+            Delta,
+            Nonnegative,
+            # String,
+            # Enum,
+            Wrap,
+            Maybe,
+            Overwrite,
+            List,
+            # Map,
+            Tree,
+            Dtype,
+            Array,
+            Key,
+            Path,
+            Wires,
+            Schema,
+            Edge,
+            Jump,
+            Star,
+            Index,
+            )
+
+def broken_test_generate_overfit(core):
+    # TODO - how to handle this?
+    # the inferred type from the state is overfit
+    # expects map from string to bool
+    schema = {
+            'A': 'edge[x:integer,y:nonnegative]'}
+
+    state = {
+            'B': {
+                '_type': 'boolean',
+                '_default': True}}
+
+    generated_schema, generated_state = core.generate(schema, state)
+
+    assert generated_state == \
+            core.deserialize(generated_schema,
+                             core.serialize(generated_schema, generated_state))
 
 
 def test_bind(core):
@@ -877,5 +933,6 @@ if __name__ == '__main__':
     test_traverse(core)
 
     test_generate(core)
+    # broken_test_generate_overfit(core)
     test_bind(core)
     test_apply(core)
