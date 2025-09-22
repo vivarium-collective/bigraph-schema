@@ -643,7 +643,7 @@ def test_serialize(core):
         {'a': 'float'},
         {'a': 55.55555})
 
-    assert encoded_b['a'] == '55.55555'
+    assert encoded_b['a'] == 55.55555
 
 
 def test_deserialize(core):
