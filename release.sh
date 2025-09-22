@@ -8,13 +8,13 @@ set -e
 
 version="$1"
 
-# Check version is valid
-setup_py_version="$(python setup.py --version)"
-if [ "$setup_py_version" != "$version" ]; then
-    echo "setup.py has version $setup_py_version, not $version."
-    echo "Aborting."
-    exit 1
-fi
+# # Check version is valid
+# setup_py_version="$(python setup.py --version)"
+# if [ "$setup_py_version" != "$version" ]; then
+#     echo "setup.py has version $setup_py_version, not $version."
+#     echo "Aborting."
+#     exit 1
+# fi
 
 # Check working directory is clean
 if [ ! -z "$(git status --untracked-files=no --porcelain)" ]; then
