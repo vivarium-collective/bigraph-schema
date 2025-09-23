@@ -130,6 +130,9 @@ def infer(core, value: dict, path: tuple = ()):
             default_value = schema['_default']
         return set_default(schema, default_value)
 
+    elif '_default' in value:
+        return infer(core, value['_default'])
+
     else:
         subvalues = {}
         distinct_subvalues = []

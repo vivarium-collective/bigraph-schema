@@ -238,12 +238,15 @@ def render(schema: Edge):
 
 @dispatch
 def render(schema: dict):
-    parts = {}
-    for key, value in schema.items():
-        subrender = render(value)
-        parts[key] = subrender
+    if '_type' in schema:
+        return schema
+    else:
+        parts = {}
+        for key, value in schema.items():
+            subrender = render(value)
+            parts[key] = subrender
 
-    return wrap_default(schema, parts)
+        return wrap_default(schema, parts)
 
 @dispatch
 def render(schema: Node):
@@ -257,3 +260,10 @@ def render(schema: Node):
             subrender[key] = render(value)
 
     return wrap_default(schema, subrender)
+
+@dispatch
+def render(schema):
+    import ipdb; ipdb.set_trace()
+
+    return schema
+    # what is happening
