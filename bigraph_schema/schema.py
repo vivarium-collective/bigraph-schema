@@ -52,6 +52,10 @@ class Nonnegative(Float):
     pass
 
 @dataclass(kw_only=True)
+class NPRandom(Node):
+    state: Tuple() = field(default_factory=tuple)
+
+@dataclass(kw_only=True)
 class String(Atom):
     pass
 
@@ -204,6 +208,7 @@ BASE_TYPES = {
     'float': Float,
     'delta': Delta,
     'nonnegative': Nonnegative,
+    'random_state': NPRandom,
     'string': String,
     'enum': Enum,
     'wrap': Wrap,

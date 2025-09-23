@@ -1,5 +1,6 @@
 from plum import dispatch
 import numpy as np
+from numpy.random.mtrand import RandomState
 import traceback
 
 from types import NoneType
@@ -15,6 +16,7 @@ from bigraph_schema.schema import (
     Float,
     Delta,
     Nonnegative,
+    NPRandom,
     String,
     Enum,
     Wrap,
@@ -79,6 +81,14 @@ def infer(core, value: np.ndarray, path: tuple = ()):
     schema = Array(
         _shape=value.shape,
         _data=value.dtype) # Dtype(_fields=value.dtype))
+
+    return set_default(schema, value)
+
+@dispatch
+def infer(core, value: RandomState, path: tuple = ()):
+    state = value.get_state()
+    data = core.infer(state)
+    schema = NPRandom(state=data)
 
     return set_default(schema, value)
 
@@ -160,10 +170,10 @@ def infer(core, value: dict, path: tuple = ()):
 def infer(core, value: object, path: tuple = ()):
     type_name = str(type(value))
 
+    import ipdb; ipdb.set_trace()
+
     value_keys = value.__dict__.keys()
     value_schema = {}
-
-    import ipdb; ipdb.set_trace()
 
     for key in value_keys:
         if not key.startswith('_'):
@@ -172,6 +182,7 @@ def infer(core, value: object, path: tuple = ()):
                     core,
                     getattr(value, key),
                     path + (key,))
+
             except Exception as e:
                 traceback.print_exc()
                 print(e)

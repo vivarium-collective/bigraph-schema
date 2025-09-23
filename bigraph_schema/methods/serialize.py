@@ -1,5 +1,6 @@
 from plum import dispatch
 import numpy as np
+from numpy.random.mtrand import RandomState
 
 from bigraph_schema.utilities import NONE_SYMBOL
 
@@ -15,6 +16,7 @@ from bigraph_schema.schema import (
     Float,
     Delta,
     Nonnegative,
+    NPRandom,
     String,
     Enum,
     Wrap,
@@ -81,6 +83,17 @@ def serialize(schema: Boolean, state):
         return 'true'
     else:
         return 'false'
+
+@dispatch
+def serialize(schema: NPRandom, state):
+    if isinstance(state, RandomState):
+        return serialize(
+            schema.state,
+            state.get_state())
+    elif isinstance(state, (list, tuple)):
+        return state
+    else:
+        import ipdb; ipdb.set_trace()
 
 @dispatch
 def serialize(schema: String, state):

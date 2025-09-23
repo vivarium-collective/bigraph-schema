@@ -14,6 +14,7 @@ from bigraph_schema.schema import (
     Float,
     Delta,
     Nonnegative,
+    NPRandom,
     String,
     Enum,
     Wrap,
@@ -196,6 +197,13 @@ def render(schema: Tree):
 @dispatch
 def render(schema: Dtype):
     result = schema._fields
+    return wrap_default(schema, result)
+
+@dispatch
+def render(schema: NPRandom):
+    result = {
+        '_type': 'random_state',
+        'state': render(schema.state)}
     return wrap_default(schema, result)
 
 @dispatch
