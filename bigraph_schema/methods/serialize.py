@@ -87,6 +87,10 @@ def serialize(schema: String, state):
     return state
 
 @dispatch
+def serialize(schema: np.str_, state):
+    return str(state)
+
+@dispatch
 def serialize(schema: List, state):
     return [
         serialize(schema._element, element)

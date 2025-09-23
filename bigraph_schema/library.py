@@ -283,11 +283,15 @@ class Library():
             else:
                 result = {}
                 for subkey in key:
-                    if subkey.startswith('_'):
-                        result[subkey] = key[subkey]
+                    if isinstance(subkey, str):
+                        if subkey.startswith('_'):
+                            result[subkey] = key[subkey]
+                        else:
+                            result[subkey] = self.access(
+                                key[subkey])
                     else:
-                        result[subkey] = self.access(
-                            key[subkey])
+                        result[subkey] = key[subkey]
+
                 return result
 
         elif isinstance(key, list):

@@ -249,6 +249,10 @@ def render(schema: dict):
         return wrap_default(schema, parts)
 
 @dispatch
+def render(schema: np.str_):
+    return str(schema)
+
+@dispatch
 def render(schema: Node):
     subrender = {}
 
@@ -260,6 +264,10 @@ def render(schema: Node):
             subrender[key] = render(value)
 
     return wrap_default(schema, subrender)
+
+@dispatch
+def render(schema: str):
+    return schema
 
 @dispatch
 def render(schema):

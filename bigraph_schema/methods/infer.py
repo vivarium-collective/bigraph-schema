@@ -97,11 +97,14 @@ def infer(core, value: list, path: tuple = ()):
 
 @dispatch
 def infer(core, value: tuple, path: tuple = ()):
-    result = [
-        infer(
-            item,
-            path+(index,))
-        for index, item in enumerate(value)]
+    result = []
+    for index, item in enumerate(value):
+        if isinstance(item, np.str_):
+            result.append(item)
+        else:
+            inner = infer(core, item, path+(index,))
+            result.append(inner)
+
     schema = Tuple(_values=result)
     return set_default(schema, value)    
 
