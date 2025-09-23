@@ -275,7 +275,15 @@ class Library():
                     for field, value in key.items()
                     if field not in ('_type', '_default')}
 
-                base = replace(type_key, **fields)
+                if isinstance(type_key, Node):
+                    base = replace(type_key, **fields)
+
+                elif isinstance(type_key, dict):
+                    import ipdb; ipdb.set_trace()
+                    base = self.resolve(type_key, fields)
+                else:
+                    import ipdb; ipdb.set_trace()
+
                 if key.get('_default') is not None:
                     base._default = key['_default']
                 return base
