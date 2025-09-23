@@ -50,7 +50,9 @@ class Edge:
         self._composition = 'edge'
         self._state = {}
 
-        self.initialize(self._config)
+        self.initialize(
+            self._config)
+
 
     @property
     def config(self):

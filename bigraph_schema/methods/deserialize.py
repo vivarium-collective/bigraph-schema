@@ -1,6 +1,7 @@
 from ast import literal_eval
 from plum import dispatch
 import numpy as np
+from numpy.random.mtrand import RandomState
 
 from bigraph_schema.utilities import NONE_SYMBOL
 
@@ -15,6 +16,7 @@ from bigraph_schema.schema import (
     Float,
     Delta,
     Nonnegative,
+    NPRandom,
     String,
     Enum,
     Wrap,
@@ -86,6 +88,17 @@ def deserialize(schema: Float, encode):
         return result
     except Exception:
         pass
+
+@dispatch
+def deserialize(schema: NPRandom, encode):
+    if isinstance(encode, RandomState):
+        return encode
+    else:
+        state = deserialize(schema.state, encode)
+        random = RandomState()
+        random.set_state(state)
+
+        return random
 
 @dispatch
 def deserialize(schema: String, encode):

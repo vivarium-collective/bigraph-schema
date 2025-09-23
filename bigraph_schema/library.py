@@ -275,7 +275,15 @@ class Library():
                     for field, value in key.items()
                     if field not in ('_type', '_default')}
 
-                base = replace(type_key, **fields)
+                if isinstance(type_key, Node):
+                    base = replace(type_key, **fields)
+
+                elif isinstance(type_key, dict):
+                    import ipdb; ipdb.set_trace()
+                    base = self.resolve(type_key, fields)
+                else:
+                    import ipdb; ipdb.set_trace()
+
                 if key.get('_default') is not None:
                     base._default = key['_default']
                 return base
@@ -283,11 +291,15 @@ class Library():
             else:
                 result = {}
                 for subkey in key:
-                    if subkey.startswith('_'):
-                        result[subkey] = key[subkey]
+                    if isinstance(subkey, str):
+                        if subkey.startswith('_'):
+                            result[subkey] = key[subkey]
+                        else:
+                            result[subkey] = self.access(
+                                key[subkey])
                     else:
-                        result[subkey] = self.access(
-                            key[subkey])
+                        result[subkey] = key[subkey]
+
                 return result
 
         elif isinstance(key, list):
@@ -311,8 +323,8 @@ class Library():
             self.convert_jump(key)
             for key in resolved])
 
-    def infer(self, state):
-        return infer(self, state)
+    def infer(self, state, path=()):
+        return infer(self, state, path=path)
 
     def render(self, schema):
         found = self.access(schema)
@@ -931,8 +943,8 @@ if __name__ == '__main__':
     test_deserialize(core)
     test_merge(core)
     test_traverse(core)
-
     test_generate(core)
     # broken_test_generate_overfit(core)
     test_bind(core)
+
     test_apply(core)
