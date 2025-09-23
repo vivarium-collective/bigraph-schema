@@ -131,7 +131,11 @@ def serialize(schema: Array, state: np.ndarray):
     return state.tolist()
 
 @dispatch
-def serialize(schema: Array, state: (list, dict)):
+def serialize(schema: Array, state: list):
+    return state
+
+@dispatch
+def serialize(schema: Array, state: dict):
     return state
 
 @dispatch

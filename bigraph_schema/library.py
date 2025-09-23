@@ -311,8 +311,8 @@ class Library():
             self.convert_jump(key)
             for key in resolved])
 
-    def infer(self, state):
-        return infer(self, state)
+    def infer(self, state, path=()):
+        return infer(self, state, path=path)
 
     def render(self, schema):
         found = self.access(schema)
@@ -873,7 +873,7 @@ if __name__ == '__main__':
     test_deserialize(core)
     test_merge(core)
     test_traverse(core)
-
     test_generate(core)
     test_bind(core)
+
     test_apply(core)
