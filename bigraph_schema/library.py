@@ -834,6 +834,8 @@ def test_generate(core):
     assert generated_state == \
             core.deserialize(generated_schema,
                              core.serialize(generated_schema, generated_state))
+
+def test_generate_coverage(core):
     # tracking datatypes that should be covered in this test
     to_implement = (
             Node,
@@ -864,6 +866,44 @@ def test_generate(core):
             Star,
             Index,
             )
+    schema = {
+            'A': 'edge[x:integer,y:nonnegative]'}
+
+    state = {
+            'B': {
+                '_type': 'boolean',
+                '_default': True},
+            'C': {
+                '_type': 'tuple[number,number]',
+                '_default': (0,0)}}
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    assert generated_state == \
+            core.deserialize(generated_schema,
+                             core.serialize(generated_schema, generated_state))
+
+
+def broken_test_generate_tuple_default(core):
+    schema = {
+            'A': 'edge[x:integer,y:nonnegative]'}
+
+    state = {
+            'B': {
+                '_type': 'boolean',
+                '_default': True},
+            'C': {
+                '_type': 'tuple[number,number]',
+                '_default': (0,0)}}
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    assert generated_state['C'] == (0,0)
+
 
 def broken_test_generate_overfit(core):
     # TODO - how to handle this?
