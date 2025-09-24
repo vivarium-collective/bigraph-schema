@@ -12,6 +12,10 @@ class Node():
     _default: object = None
 
 @dataclass(kw_only=True)
+class Place(Node):
+    _subnodes: dict = field(default_factory=dict)
+
+@dataclass(kw_only=True)
 class Atom(Node):
     pass
 
@@ -120,16 +124,10 @@ class Schema(Tree):
 
 @dataclass(kw_only=True)
 class Edge(Node):
-    _inputs: Node = field(default_factory=lambda: Node(_default={}))
-    _outputs: Node = field(default_factory=lambda: Node(_default={}))
+    _inputs: dict = field(default_factory=dict)
+    _outputs: dict = field(default_factory=dict)
     inputs: Wires = field(default_factory=Wires)
     outputs: Wires = field(default_factory=Wires)
-
-@dataclass(kw_only=True)
-class Context(Node):
-    schema: Schema = field(default_factory=Schema),
-    state: Node = field(default_factory=Node),
-    path: Path = field(default_factory=Path)
 
 # types for jumps in traversals
 
@@ -194,6 +192,13 @@ def convert_path(path):
     return [
         convert_jump(key)
         for key in resolved]
+
+def blank_context(schema, state, path):
+    return {
+        'schema': schema,
+        'state': state,
+        'path': (),
+        'subpath': path}
 
 
 BASE_TYPES = {

@@ -276,7 +276,7 @@ def jump(schema: Wires, state, to: Key, context):
     substate = state[key]
     if isinstance(substate, list):
         outer_path = context['edge_path'][:-1]
-        subpath = tuple(convert_path(substate)) + context['subpath']
+        subpath = tuple(convert_path(substate)) + tuple(context['subpath'])
         target_path = outer_path + subpath
         subcontext = dict(context, **{
             'path': outer_path,

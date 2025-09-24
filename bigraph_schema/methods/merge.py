@@ -30,7 +30,8 @@ from bigraph_schema.schema import (
     Edge,
 )
 
-from bigraph_schema.methods import check, default
+from bigraph_schema.methods.check import check
+from bigraph_schema.methods.default import default
 
 
 @dispatch

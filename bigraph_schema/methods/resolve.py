@@ -1,3 +1,4 @@
+import copy
 from plum import dispatch
 import numpy as np
 
@@ -33,6 +34,7 @@ from bigraph_schema.schema import (
 
 
 from bigraph_schema.methods.default import default
+from bigraph_schema.methods.merge import merge
 
 
 def resolve_subclass(subclass, superclass):
@@ -95,6 +97,31 @@ def resolve(current: Map, update: dict):
 
     return resolved
 
+def merge_update(schema, current, update):
+    current_state = default(current)
+    update_state = default(update)
+    state = current_state
+
+    if update_state:
+        if current_state:
+            state = merge(schema, current_state, update_state)
+        else:
+            state = update_state
+
+    schema = replace(schema, _default=state)
+    return schema
+
+@dispatch
+def resolve(current: Tree, update: Map):
+    value = current._leaf
+    leaf = update._value
+    update_leaf = resolve(leaf, value)
+    result = copy.copy(current)
+    resolved = replace(result, _leaf=update_leaf)
+
+    schema = merge_update(resolved, current, update)
+    return schema
+
 @dispatch
 def resolve(current: dict, update: Map):
     result = update._value
@@ -103,11 +130,22 @@ def resolve(current: dict, update: Map):
     result = replace(result, _default=update._value._default)
     resolved = replace(update, _value=result)
 
-    state = default(current)
-    if state:
-        resolved = replace(resolved, _default=state)
+    schema = merge_update(resolved, current, update)
+    return schema
 
-    return resolved
+@dispatch
+def resolve(current: Tree, update: dict):
+    result = copy.copy(current)
+    leaf = current._leaf
+    for key, value in update.items():
+        try:
+            leaf = resolve(leaf, value)
+        except:
+            result = resolve(result, value)
+    resolved = replace(result, _leaf=leaf)
+
+    schema = merge_update(resolved, current, update)
+    return schema
 
 @dispatch
 def resolve(current: dict, update: dict):
@@ -126,6 +164,7 @@ def resolve(current: dict, update: dict):
 
 @dispatch
 def resolve(current, update):
+    
     if current is None:
         return update
     elif update is None:

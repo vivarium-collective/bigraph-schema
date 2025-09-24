@@ -12,6 +12,8 @@ from bigraph_schema.schema import (
     BASE_TYPES,
     resolve_path,
     convert_jump,
+    convert_path,
+    blank_context,
     Node,
     Union,
     Tuple,
@@ -307,22 +309,6 @@ class Library():
         else:
             return key
 
-    def blank_context(self, schema, state, path):
-        return {
-            'schema': schema,
-            'state': state,
-            'path': (),
-            'subpath': path}
-
-    def convert_jump(self, key):
-        return convert_jump(key)
-
-    def convert_path(self, path):
-        resolved = resolve_path(path)
-        return tuple([
-            self.convert_jump(key)
-            for key in resolved])
-
     def infer(self, state, path=()):
         return infer(self, state, path=path)
 
@@ -362,21 +348,21 @@ class Library():
 
     def jump(self, schema, state, raw_key):
         found = self.access(schema)
-        key = self.convert_jump(raw_key)
-        context = self.blank_context(found, state, ())
+        key = convert_jump(raw_key)
+        context = blank_context(found, state, ())
 
         return jump(found, state, key, context)
 
     def traverse(self, schema, state, raw_path):
         found = self.access(schema)
-        path = self.convert_path(raw_path)
-        context = self.blank_context(found, state, path)
+        path = convert_path(raw_path)
+        context = blank_context(found, state, path)
 
         return traverse(found, state, path, context)
 
     def bind(self, schema, state, raw_key, target):
         found = self.access(schema)
-        key = self.convert_jump(raw_key)
+        key = convert_jump(raw_key)
 
         return bind(found, state, key, target)
 
@@ -689,6 +675,25 @@ def test_deserialize(core):
     assert decode['b'][2]['y'] == 11
 
 
+def test_infer_edge(core):
+    edge_state = {
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'n': 'float',
+                'x': {
+                    'y': 'string'}},
+            '_outputs': {
+                'z': 'string'},
+            'inputs': {
+                'n': ['A'],
+                'x': ['E']},
+            'outputs': {
+                'z': ['F', 'f', '_ff']}}}
+
+    edge_schema = core.infer(edge_state)
+
+
 def test_traverse(core):
     tree_a = {
         'a': {
@@ -806,6 +811,23 @@ def test_generate(core):
         'C': {
             '_type': 'enum[x,y,z]',
             '_default': 'y'},
+
+        'concentrations': {
+            'glucose': 0.5353533},
+
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'n': 'float',
+                'x': 'string'},
+            '_outputs': {
+                'z': 'string'},
+            'inputs': {
+                'n': ['A'],
+                'x': ['E']},
+            'outputs': {
+                'z': ['F', 'f', '_ff']}},
+
         'units': {
             'meters': 11.1111,
             'seconds': 22.833333}}
@@ -885,6 +907,7 @@ if __name__ == '__main__':
     test_deserialize(core)
     test_merge(core)
     test_traverse(core)
+    test_infer_edge(core)
     test_generate(core)
     test_bind(core)
 
