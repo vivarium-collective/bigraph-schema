@@ -2,7 +2,6 @@ from plum import dispatch
 import numpy as np
 
 from bigraph_schema.schema import (
-    Context,
     Node,
     Union,
     Tuple,

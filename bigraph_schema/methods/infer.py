@@ -133,14 +133,26 @@ def infer(core, value: set, path: tuple = ()):
 @dispatch
 def infer(core, value: dict, path: tuple = ()):
     if '_type' in value:
-        schema = core.access(value)
+        schema = core.access(value['_type'])
+
         default_value = None
         if '_default' in value:
             default_value = value['_default']
         elif isinstance(schema, Node) and schema._default is not None:
             default_value = schema._default
-        elif isinstance(schema, dict) and '_default' in schema:
-            default_value = schema['_default']
+        # elif isinstance(schema, dict) and '_default' in schema:
+        #     default_value = schema['_default']
+
+        for key in schema.__dataclass_fields__:
+            field = getattr(schema, key)
+            if key != '_default' and key in value:
+                if key.startswith('_'):
+                    subkey = core.access(value[key])
+                else:
+                    subkey = core.infer(value[key], path=path+(key,))
+                resolved = core.resolve(field, subkey)
+                setattr(schema, key, resolved)
+
         return set_default(schema, default_value)
 
     elif '_default' in value:
@@ -164,13 +176,14 @@ def infer(core, value: dict, path: tuple = ()):
             schema = Map(_value=map_value)
             return set_default(schema, value)
         else:
+            # return Place(_default=value, _subnodes=subvalues)
             return subvalues
 
 @dispatch
 def infer(core, value: object, path: tuple = ()):
     type_name = str(type(value))
 
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
 
     value_keys = value.__dict__.keys()
     value_schema = {}

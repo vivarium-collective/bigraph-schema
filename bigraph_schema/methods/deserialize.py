@@ -194,7 +194,10 @@ def deserialize(schema: dict, encode):
 
     if isinstance(encode, dict):
         result = {}
+        
         for key, subschema in schema.items():
+            if subschema == ['A']:
+                import ipdb; ipdb.set_trace()
             if key in encode:
                 outcome = deserialize(
                     subschema,
