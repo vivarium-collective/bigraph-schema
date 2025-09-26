@@ -98,10 +98,18 @@ def handle_parameters(schema: Map, parameters):
 
 @dispatch
 def handle_parameters(schema: Array, parameters):
+    shape = parameters[0]
+    if isinstance(shape, Tuple):
+        shape = shape._values
     schema._shape = tuple([
         int(value)
-        for value in parameters[0][0]._values])
+        for value in shape])
     schema._data = dtype(parameters[1])
+
+    # schema._shape = tuple([
+    #     int(value)
+    #     for value in parameters[0][0]._values])
+    # schema._data = dtype(parameters[1])
 
     return schema
 
@@ -283,6 +291,8 @@ class Library():
                 elif isinstance(type_key, dict):
                     import ipdb; ipdb.set_trace()
                     base = self.resolve(type_key, fields)
+                elif isinstance(type_key, str):
+                    import ipdb; ipdb.set_trace()
                 else:
                     import ipdb; ipdb.set_trace()
 

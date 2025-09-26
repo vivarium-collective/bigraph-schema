@@ -126,6 +126,9 @@ def serialize(schema: Tree, state):
 
 @dispatch
 def serialize(schema: dict, state):
+    if not isinstance(state, dict):
+        import ipdb; ipdb.set_trace()
+
     return {
         key: serialize(
             subschema,

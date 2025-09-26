@@ -167,7 +167,7 @@ def infer(core, value: dict, path: tuple = ()):
                 subvalue,
                 path+(key,))
 
-            if subvalues[key] not in distinct_subvalues:
+            if len(distinct_subvalues) < 2 and subvalues[key] not in distinct_subvalues:
                 distinct_subvalues.append(
                     subvalues[key])
 
@@ -183,7 +183,8 @@ def infer(core, value: dict, path: tuple = ()):
 def infer(core, value: object, path: tuple = ()):
     type_name = str(type(value))
 
-    # import ipdb; ipdb.set_trace()
+    if not ('dataclass' in str(type(value)) or 'media' in str(type(value))):
+        import ipdb; ipdb.set_trace()
 
     value_keys = value.__dict__.keys()
     value_schema = {}
