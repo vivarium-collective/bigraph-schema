@@ -134,6 +134,27 @@ def resolve(current: dict, update: Map):
     return schema
 
 @dispatch
+def resolve(current: Tree, update: Tree):
+    current_leaf = current._leaf
+    update_leaf = update._leaf
+    resolved = resolve(current_leaf, update_leaf)
+    result = replace(current, _leaf=resolved)
+
+    schema = merge_update(result, current, update)
+    return schema
+
+@dispatch
+def resolve(current: Tree, update: Node):
+    leaf = current._leaf
+    try:
+        resolved = resolve(leaf, update)
+    except:
+        raise(f'update schema is neither a tree or a leaf:\n{current}\n{update}')
+
+    replace(current, _leaf=resolved)
+    return current
+
+@dispatch
 def resolve(current: Tree, update: dict):
     result = copy.copy(current)
     leaf = current._leaf
@@ -161,6 +182,17 @@ def resolve(current: dict, update: dict):
 
         result[key] = value
     return result
+
+@dispatch
+def resolve(current: Node, update: dict):
+    fields = set(current.__dataclass_fields__)
+    keys = set(update.keys())
+
+    if len(keys.difference(fields)) > 0:
+        return update
+    else:
+        return current
+
 
 @dispatch
 def resolve(current, update):
