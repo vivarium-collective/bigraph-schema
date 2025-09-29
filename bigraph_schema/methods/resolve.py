@@ -2,7 +2,7 @@ import copy
 from plum import dispatch
 import numpy as np
 
-from dataclasses import replace
+from dataclasses import replace, dataclass
 
 from bigraph_schema.schema import (
     Node,
@@ -87,15 +87,32 @@ def resolve(current: Node, update: Node):
 @dispatch
 def resolve(current: Map, update: dict):
     result = current._value
-    for key, value in update.items():
+    try:
+        for key, value in update.items():
+            result = resolve(result, value)
+        resolved = replace(current, _value=result)
+
+    except:
+        # upgrade from map to struct schema
+        map_default = default(current)
+        resolved = {
+            key: current._value
+            for key in map_default}
+        resolved.update(update)
+
+    schema = merge_update(resolved, current, update)
+    return schema
+
+@dispatch
+def resolve(current: dict, update: Map):
+    result = update._value
+    for key, value in current.items():
         result = resolve(result, value)
-    resolved = replace(current, _value=result)
+    result = replace(result, _default=update._value._default)
+    resolved = replace(update, _value=result)
 
-    state = default(update)
-    if state:
-        resolved = replace(resolved, _default=state)
-
-    return resolved
+    schema = merge_update(resolved, current, update)
+    return schema
 
 def merge_update(schema, current, update):
     current_state = default(current)
@@ -108,7 +125,12 @@ def merge_update(schema, current, update):
         else:
             state = update_state
 
-    schema = replace(schema, _default=state)
+    if isinstance(schema, Node):
+        schema = replace(schema, _default=state)
+    elif isinstance(schema, dict):
+        schema['_default'] = state
+    else:
+        raise Exception(f'do not recognize schema: {schema}')
     return schema
 
 @dispatch
@@ -118,17 +140,6 @@ def resolve(current: Tree, update: Map):
     update_leaf = resolve(leaf, value)
     result = copy.copy(current)
     resolved = replace(result, _leaf=update_leaf)
-
-    schema = merge_update(resolved, current, update)
-    return schema
-
-@dispatch
-def resolve(current: dict, update: Map):
-    result = update._value
-    for key, value in current.items():
-        result = resolve(result, value)
-    result = replace(result, _default=update._value._default)
-    resolved = replace(update, _value=result)
 
     schema = merge_update(resolved, current, update)
     return schema

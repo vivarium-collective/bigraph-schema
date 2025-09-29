@@ -937,10 +937,13 @@ def broken_test_generate_tuple_default(core):
     assert generated_state['C'] == (0,0)
 
 
-def broken_test_generate_overfit(core):
-    # TODO - how to handle this?
-    # the inferred type from the state is overfit
-    # expects map from string to bool
+def test_generate_promote_to_struct(core):
+    """
+    a map schema should update to a struct schema when merged with
+    a struct containing incompatible fields
+    """
+    # TODO - test the doppleganger dict/Map vs. Map/dict
+    # TODO - this should also happen to trees
     schema = {
             'A': 'edge[x:integer,y:nonnegative]'}
 
@@ -951,9 +954,10 @@ def broken_test_generate_overfit(core):
 
     generated_schema, generated_state = core.generate(schema, state)
 
-    assert generated_state == \
-            core.deserialize(generated_schema,
-                             core.serialize(generated_schema, generated_state))
+    serialized = core.serialize(generated_schema, generated_state)
+    assert generated_state == core.deserialize(
+        generated_schema,
+        serialized)
 
 
 def test_bind(core):
@@ -1017,7 +1021,7 @@ if __name__ == '__main__':
     test_traverse(core)
     test_infer_edge(core)
     test_generate(core)
-    # broken_test_generate_overfit(core)
+    test_generate_promote_to_struct(core)
     test_bind(core)
 
     test_apply(core)

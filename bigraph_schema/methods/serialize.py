@@ -129,11 +129,15 @@ def serialize(schema: dict, state):
     if not isinstance(state, dict):
         import ipdb; ipdb.set_trace()
 
-    return {
-        key: serialize(
-            subschema,
-            state.get(key))
-        for key, subschema in schema.items()}
+    result = {}
+
+    for key, subschema in schema.items():
+        if not key.startswith('_'):
+            result[key] = serialize(
+                subschema,
+                state.get(key))
+
+    return result
 
 
 @dispatch
