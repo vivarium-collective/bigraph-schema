@@ -441,11 +441,11 @@ edge_a = {
 
 # tracking datatypes that should be in the unischema
 to_implement = (
-    # Node,
+    Node,
     # Union,
     # Tuple,
     # Boolean,
-    # Number,
+    Number,
     # Integer,
     # Float,
     # Delta,
@@ -455,7 +455,7 @@ to_implement = (
     # Wrap,
     # Maybe,
     # Overwrite,
-    List,
+    # List,
     # Map,
     # Tree,
     Dtype,
@@ -463,7 +463,7 @@ to_implement = (
     Key,
     # Path,
     # Wires,
-    # Schema,
+    Schema,
     # Edge,
     Jump,
     Star,
