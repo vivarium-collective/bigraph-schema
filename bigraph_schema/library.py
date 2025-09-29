@@ -167,7 +167,7 @@ class LibraryVisitor(NodeVisitor):
 
     def visit_group(self, node, visit):
         group_value = visit[1]
-        return group_value if isinstance(group_value, (list, tuple, dict)) else (group_value,)
+        return group_value if isinstance(group_value, (list, tuple, dict, Tuple)) else (group_value,)
 
     def visit_nest(self, node, visit):
         return {visit[0]: visit[2]}
@@ -183,7 +183,7 @@ class LibraryVisitor(NodeVisitor):
             schema = handle_parameters(
                 schema,
                 type_parameters[0])
-            
+
         default_visit = visit[2]['visit']
         if default_visit:
             default = default_visit[0]
