@@ -167,7 +167,7 @@ class LibraryVisitor(NodeVisitor):
 
     def visit_group(self, node, visit):
         group_value = visit[1]
-        return group_value if isinstance(group_value, (list, tuple, dict)) else (group_value,)
+        return group_value if isinstance(group_value, (list, tuple, dict, Tuple)) else (group_value,)
 
     def visit_nest(self, node, visit):
         return {visit[0]: visit[2]}
@@ -183,7 +183,7 @@ class LibraryVisitor(NodeVisitor):
             schema = handle_parameters(
                 schema,
                 type_parameters[0])
-            
+
         default_visit = visit[2]['visit']
         if default_visit:
             default = default_visit[0]
@@ -349,6 +349,11 @@ class Library():
         return deserialize(found, state)
 
     def generate(self, schema, state):
+        """
+        creates a unified schema from the given schema and an interpolation
+        of the state into a schema, and generates a state satisfying that
+        unified schema
+        """
         found = self.access(schema)
         inferred = self.infer(state)
         resolved = self.resolve(inferred, found)
@@ -434,12 +439,13 @@ edge_a = {
         'concentrations': ['cell', 'internal']}}
 
 
+# tracking datatypes that should be in the unischema
 to_implement = (
-    # Node,
+    Node,
     # Union,
     # Tuple,
     # Boolean,
-    # Number,
+    Number,
     # Integer,
     # Float,
     # Delta,
@@ -450,19 +456,20 @@ to_implement = (
     # Maybe,
     # Overwrite,
     # List,
-    Map,
+    # Map,
     # Tree,
-    # Dtype,
-    # Array,
+    Dtype,
+    Array,
     Key,
     # Path,
     # Wires,
-    # Schema,
+    Schema,
     # Edge,
     Jump,
     Star,
     Index,
 )
+
 uni_schema = 'outer:tuple[tuple[boolean],' \
         'enum[a,b,c],' \
         'tuple[integer,delta,nonnegative],' \
@@ -550,8 +557,9 @@ def test_resolve(core):
         {'a': 'delta', 'b': 'node'},
         node_schema)
 
-    # assert render(node_resolve)['a']['_type'] == 'delta'
-    # assert render(node_resolve)['a']['_default'] == node_schema['a']['_default']
+    rendered_a = render(node_resolve)['a']
+    assert rendered_a['_type'] == 'delta'
+    assert core.access(rendered_a)._default == node_schema['a']['_default']
 
     mutual = core.resolve(
         {'a': 'float', 'b': 'string'},
@@ -855,7 +863,101 @@ def test_generate(core):
 
     rendered = core.render(generated_schema)
 
-    assert generated_state == core.deserialize(generated_schema, core.serialize(generated_schema, generated_state))
+    assert generated_state == \
+            core.deserialize(generated_schema,
+                             core.serialize(generated_schema, generated_state))
+
+def test_generate_coverage(core):
+    # tracking datatypes that should be covered in this test
+    to_implement = (
+            Node,
+            # Union,
+            Tuple,
+            Boolean,
+            # Number,
+            Integer,
+            # Float,
+            Delta,
+            Nonnegative,
+            # String,
+            # Enum,
+            Wrap,
+            Maybe,
+            Overwrite,
+            List,
+            # Map,
+            Tree,
+            Dtype,
+            Array,
+            Key,
+            Path,
+            Wires,
+            Schema,
+            Edge,
+            Jump,
+            Star,
+            Index,
+            )
+    schema = {
+            'A': 'edge[x:integer,y:nonnegative]'}
+
+    state = {
+            'B': {
+                '_type': 'boolean',
+                '_default': True},
+            'C': {
+                '_type': 'tuple[number,number]',
+                '_default': (0,0)}}
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    assert generated_state == \
+            core.deserialize(generated_schema,
+                             core.serialize(generated_schema, generated_state))
+
+
+def broken_test_generate_tuple_default(core):
+    schema = {
+            'A': 'edge[x:integer,y:nonnegative]'}
+
+    state = {
+            'B': {
+                '_type': 'boolean',
+                '_default': True},
+            'C': {
+                '_type': 'tuple[number,number]',
+                '_default': (0,0)}}
+
+    generated_schema, generated_state = core.generate(
+        schema,
+        state)
+
+    assert generated_state['C'] == (0,0)
+
+
+def test_generate_promote_to_struct(core):
+    """
+    a map schema should update to a struct schema when merged with
+    a struct containing incompatible fields
+    """
+    # TODO - test the doppleganger dict/Map vs. Map/dict
+    # TODO - this should also happen to trees
+    schema = {
+            'A': 'edge[x:integer,y:nonnegative]'}
+
+    state = {
+            'B': {
+                '_type': 'boolean',
+                '_default': True}}
+
+    generated_schema, generated_state = core.generate(schema, state)
+
+    serialized = core.serialize(generated_schema, generated_state)
+    assert generated_state == core.deserialize(
+        generated_schema,
+        serialized)
 
 
 def test_bind(core):
@@ -919,6 +1021,7 @@ if __name__ == '__main__':
     test_traverse(core)
     test_infer_edge(core)
     test_generate(core)
+    test_generate_promote_to_struct(core)
     test_bind(core)
 
     test_apply(core)

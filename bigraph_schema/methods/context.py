@@ -1,5 +1,6 @@
-from bigraph_schema.schema import resolve_path, convert_path
-from bigraph_schema.methods.traverse import traverse
+from bigraph_schema.schema import resolve_path, convert_path, Node
+from bigraph_schema.methods.jump import traverse
+from dataclasses import dataclass, is_dataclass, field
 
 
 @dataclass(kw_only=True)
@@ -19,4 +20,3 @@ class Context():
         context = blank_context(self.schema, self.state, path)
 
         return traverse(self.schema, self.state, path, context)
-
