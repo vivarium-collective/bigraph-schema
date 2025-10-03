@@ -200,6 +200,12 @@ def blank_context(schema, state, path):
         'path': (),
         'subpath': path}
 
+def walk_path(context, to, subpath=None):
+    return {
+        **context,
+        'path': context['path'] + (to,),
+        'subpath': subpath}
+
 
 BASE_TYPES = {
     'node': Node,

@@ -32,16 +32,10 @@ from bigraph_schema.schema import (
     Index,
     Jump,
     convert_path,
+    walk_path,
 )
 
 from bigraph_schema.methods import check, serialize, resolve
-
-
-def walk_path(context, to, subpath):
-    return {
-        **context,
-        'path': context['path'] + (to,),
-        'subpath': subpath}
 
 
 @dispatch
