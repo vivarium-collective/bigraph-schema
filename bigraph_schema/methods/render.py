@@ -196,7 +196,8 @@ def render(schema: Tree):
 
 @dispatch
 def render(schema: Dtype):
-    result = schema._fields
+    fields = render(schema._fields)
+    result = {'_type': 'dtype', '_fields': fields}
     return wrap_default(schema, result)
 
 @dispatch

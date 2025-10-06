@@ -459,7 +459,7 @@ to_implement = (
     # Map,
     # Tree,
     Dtype,
-    Array,
+    # Array,
     Key,
     # Path,
     # Wires,
@@ -484,9 +484,16 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'map[a:string|c:float]]|' \
         'outest:string'
         # 'list[maybe[tree[array[(3|4),float]]]],' \
-        # 'dtype[a],' \
+        # 'dtype[int],' \
 
 # tests --------------------------------------
+
+def test_dtype_render(core):
+    dtype_schema = 'dtype[int]'
+    dt_type = core.access(dtype_schema)
+    dt_render = core.render(dt_type)
+    dt_round_trip = core.access(dt_render)
+    assert dt_round_trip == dt_type
 
 def test_infer(core):
     default_node = core.default(node_schema)
@@ -521,7 +528,9 @@ def test_render(core):
     # fixed point is found
     assert map_render == core.render(core.access(map_render))
 
+def test_uni_schema(core):
     uni_type = core.access(uni_schema)
+    assert not isinstance(uni_type, str)
     uni_render = core.render(uni_type)
     round_trip = core.access(uni_render)
 
@@ -530,7 +539,6 @@ def test_render(core):
 
     assert round_trip == uni_type
     assert uni_render == core.render(core.access(uni_type))
-
 
 def test_default(core):
     node_type = core.access(node_schema)
@@ -1023,5 +1031,7 @@ if __name__ == '__main__':
     test_generate(core)
     test_generate_promote_to_struct(core)
     test_bind(core)
+    test_dtype_render(core)
+    test_uni_schema(core)
 
     test_apply(core)
