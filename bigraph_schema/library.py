@@ -31,7 +31,6 @@ from bigraph_schema.schema import (
     List,
     Map,
     Tree,
-    Dtype,
     Array,
     Key,
     Path,
@@ -72,7 +71,6 @@ def schema_keys(schema):
 
     return keys
 
-
 @dispatch
 def handle_parameters(schema: Tuple, parameters):
     schema._values = parameters
@@ -106,11 +104,6 @@ def handle_parameters(schema: Array, parameters):
         for value in shape])
     schema._data = dtype(parameters[1])
 
-    # schema._shape = tuple([
-    #     int(value)
-    #     for value in parameters[0][0]._values])
-    # schema._data = dtype(parameters[1])
-
     return schema
 
 @dispatch
@@ -126,7 +119,7 @@ def handle_parameters(schema: Node, parameters):
     for key, parameter in zip(keys, parameters):
         setattr(schema, key, parameter)
     return schema
-        
+
 @dispatch
 def handle_parameters(schema, parameters):
     return schema
@@ -270,6 +263,7 @@ class Library():
                     parsed = visit_expression(key, self.parse_visitor)
                     return parsed
                 except Exception as e:
+                    # TODO - more specific catch
                     return key
             else:
                 return self.registry[key]()
@@ -458,7 +452,6 @@ to_implement = (
     # List,
     # Map,
     # Tree,
-    Dtype,
     # Array,
     Key,
     # Path,
@@ -488,12 +481,24 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
 
 # tests --------------------------------------
 
-def test_dtype_render(core):
+def test_dtype(core):
     dtype_schema = 'dtype[int]'
     dt_type = core.access(dtype_schema)
     dt_render = core.render(dt_type)
     dt_round_trip = core.access(dt_render)
     assert dt_round_trip == dt_type
+
+
+def test_array(core):
+    complex_spec = [('name', np.str_, 16),
+                    ('grades', np.float64, (2,))]
+    complex_dtype = dtype(complex_spec)
+    array = np.zeros((3,4), dtype=complex_dtype)
+    import ipdb; ipdb.set_trace()
+    array_schema = core.infer(array)
+    rendered = core.render(array_schema)
+
+
 
 def test_infer(core):
     default_node = core.default(node_schema)
@@ -895,7 +900,6 @@ def test_generate_coverage(core):
             List,
             # Map,
             Tree,
-            Dtype,
             Array,
             Key,
             Path,
@@ -1031,7 +1035,8 @@ if __name__ == '__main__':
     test_generate(core)
     test_generate_promote_to_struct(core)
     test_bind(core)
-    test_dtype_render(core)
+    test_dtype(core)
     test_uni_schema(core)
 
     test_apply(core)
+    test_array(core)

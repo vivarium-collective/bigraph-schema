@@ -23,7 +23,6 @@ from bigraph_schema.schema import (
     List,
     Map,
     Tree,
-    Dtype,
     Array,
     Key,
     Path,

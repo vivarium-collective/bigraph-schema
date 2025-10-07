@@ -21,7 +21,6 @@ from bigraph_schema.schema import (
     List,
     Map,
     Tree,
-    Dtype,
     Array,
     Key,
     Path,
@@ -151,12 +150,6 @@ def check(schema: Tree, state):
         return False
 
 
-@dispatch
-def check(schema: Dtype, state):
-    if not isinstance(state, np.dtype):
-        return False
-
-    return np.dtype(schema._fields) == state
 
 
 @dispatch
