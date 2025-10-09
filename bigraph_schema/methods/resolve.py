@@ -43,7 +43,7 @@ def resolve_subclass(subclass, superclass):
             result[key] = subclass._default or superclass._default
         else:
             subattr = getattr(subclass, key)
-            if hasattr(superclass, key):
+            if hasattr(superclass, key) and not key.startswith('_'):
                 superattr = getattr(superclass, key)
                 try:
                     outcome = resolve(subattr, superattr)
@@ -55,6 +55,14 @@ def resolve_subclass(subclass, superclass):
     resolved = type(subclass)(**result)
     return resolved
 
+
+@dispatch
+def resolve(current: Empty, update: Node):
+    return update
+
+@dispatch
+def resolve(current: Node, update: Empty):
+    return current
 
 @dispatch
 def resolve(current: Wrap, update: Wrap):

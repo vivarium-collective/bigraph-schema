@@ -34,7 +34,7 @@ from bigraph_schema.schema import (
     walk_path,
 )
 
-from bigraph_schema.methods import check, serialize, resolve
+from bigraph_schema.methods import default, check, serialize, resolve
 
 
 @dispatch
@@ -330,14 +330,19 @@ def jump(schema: Node, state, to, context):
 @dispatch
 def jump(schema: dict, state, to: Key, context):
     key = to._value
-    if key in schema and key in state:
-        return traverse(
-            schema[key],
-            state[key],
-            context['subpath'],
-            context)
+    if key in schema:
+        if key in state:
+            return traverse(
+                schema[key],
+                state[key],
+                context['subpath'],
+                context)
+        else:
+            return schema[key], None
+    elif key in state:
+        return None, state[key]
     else:
-        raise Exception(f'no key "{key}" in state {state} at path {context["path"]}')
+        return Empty(), None
 
 
 @dispatch

@@ -55,6 +55,7 @@ from bigraph_schema.methods import (
     jump,
     traverse,
     bind,
+    unify,
 
     apply)
 
@@ -355,6 +356,12 @@ class Library():
 
         return resolved, merged
 
+    def unify(self, schema, state):
+        found = self.access(schema)
+        context = blank_context(found, state, ())
+        
+        return unify(self, found, state, context)
+
     def jump(self, schema, state, raw_key):
         found = self.access(schema)
         key = convert_jump(raw_key)
@@ -494,10 +501,8 @@ def test_array(core):
                     ('grades', np.float64, (2,))]
     complex_dtype = dtype(complex_spec)
     array = np.zeros((3,4), dtype=complex_dtype)
-    import ipdb; ipdb.set_trace()
     array_schema = core.infer(array)
     rendered = core.render(array_schema)
-
 
 
 def test_infer(core):
@@ -880,6 +885,55 @@ def test_generate(core):
             core.deserialize(generated_schema,
                              core.serialize(generated_schema, generated_state))
 
+def test_unify(core):
+    schema = {
+        'A': 'float',
+        'B': 'enum[one,two,three]',
+        'D': 'string{hello}',
+        'units': 'map[number]'}
+
+    state = {
+        'C': {
+            '_type': 'enum[x,y,z]',
+            '_default': 'y'},
+
+        'concentrations': {
+            'glucose': 0.5353533},
+
+        'edge': {
+            '_type': 'edge',
+            '_inputs': {
+                'n': 'float',
+                'x': 'string'},
+            '_outputs': {
+                'z': 'string'},
+            'inputs': {
+                'n': ['A'],
+                'x': ['E']},
+            'outputs': {
+                'z': ['F', 'f', '_ff']}},
+
+        'units': {
+            'meters': 11.1111,
+            'seconds': 22.833333}}
+
+    generated_schema, generated_state = core.unify(
+        schema,
+        state)
+
+    assert generated_state['A'] == 0.0
+    assert generated_state['B'] == 'one'
+    assert generated_state['C'] == 'y'
+    assert generated_state['units']['seconds'] == 22.833333
+
+    assert not hasattr(generated_schema['units'], 'meters')
+
+    rendered = core.render(generated_schema)
+
+    assert generated_state == \
+            core.deserialize(generated_schema,
+                             core.serialize(generated_schema, generated_state))
+
 def test_generate_coverage(core):
     # tracking datatypes that should be covered in this test
     to_implement = (
@@ -1040,3 +1094,4 @@ if __name__ == '__main__':
 
     test_apply(core)
     test_array(core)
+    test_unify(core)
