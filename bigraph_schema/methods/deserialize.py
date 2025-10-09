@@ -25,7 +25,6 @@ from bigraph_schema.schema import (
     List,
     Map,
     Tree,
-    Dtype,
     Array,
     Key,
     Path,
@@ -143,9 +142,6 @@ def deserialize(schema: Tree, encode):
             key: deserialize(schema, value)
             for key, value in encode.items()}
 
-@dispatch
-def deserialize(schema: Dtype, encode):
-    return encode
 
 @dispatch
 def deserialize(schema: Array, encode):

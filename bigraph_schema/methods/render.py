@@ -23,7 +23,6 @@ from bigraph_schema.schema import (
     List,
     Map,
     Tree,
-    Dtype,
     Array,
     Key,
     Path,
@@ -44,6 +43,8 @@ def wrap_default(schema, result):
         inner_default = serialize(schema, found)
         if isinstance(result, str) and isinstance(inner_default, str):
             result = result + '{' + inner_default + '}'
+        elif isinstance(result, dict) and '_type' in result:
+            result['_default'] = inner_default
         else:
             result = {
                 '_type': result,
@@ -195,22 +196,23 @@ def render(schema: Tree):
     return wrap_default(schema, result)
 
 @dispatch
-def render(schema: Dtype):
-    result = schema._fields
-    return wrap_default(schema, result)
-
-@dispatch
 def render(schema: NPRandom):
     result = {
         '_type': 'random_state',
         'state': render(schema.state)}
     return wrap_default(schema, result)
 
+# @dispatch
+# def render(schema: Dtype):
+    # fields = render(schema._fields)
+    # result = {'_type': 'dtype', '_fields': fields}
+    # return wrap_default(schema, result)
+
 @dispatch
 def render(schema: Array):
     shape = '|'.join([str(value) for value in schema._shape])
-    data = schema._data.str
-    result = f'array[({shape}),{data}]'
+    data = schema._data.descr
+    result = {'_type': 'array', '_shape': shape, '_data': data}
     return wrap_default(schema, result)
 
 @dispatch

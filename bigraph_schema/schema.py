@@ -92,19 +92,11 @@ class Map(Node):
 class Tree(Node):
     _leaf: Node = field(default_factory=Node)
 
-@dataclass(kw_only=True)
-class Dtype(Node):
-    _fields: typing.Union[
-        str,
-        typing.Tuple[
-            typing.Tuple[
-                str,
-                'Dtype']]] = field(default_factory=lambda: 'float64')
 
 @dataclass(kw_only=True)
 class Array(Node):
     _shape: typing.Tuple[int] = field(default_factory=tuple)
-    _data: Dtype = field(default_factory=Dtype)
+    _data: np.dtype = field(default_factory=lambda:np.dtype('float64'))
 
 @dataclass(kw_only=True)
 class Path(List):
@@ -228,7 +220,7 @@ BASE_TYPES = {
     'list': List,
     'map': Map,
     'tree': Tree,
-    'dtype': Dtype,
+    # 'dtype': Dtype,
     'array': Array,
     'path': Path,
     # 'jump': Jump,

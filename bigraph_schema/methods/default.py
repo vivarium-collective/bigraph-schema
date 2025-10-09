@@ -20,7 +20,6 @@ from bigraph_schema.schema import (
     List,
     Map,
     Tree,
-    Dtype,
     Array,
     Key,
     Path,
@@ -113,12 +112,6 @@ def default(schema: Tree):
     else:
         return {}
 
-@dispatch
-def default(schema: Dtype):
-    if schema._default is not None:
-        return schema._default
-    else:
-        return np.dtype(schema._fields)
 
 @dispatch
 def default(schema: Array):
