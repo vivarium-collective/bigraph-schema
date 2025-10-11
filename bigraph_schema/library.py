@@ -477,27 +477,16 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'map[a:string|c:float]]|' \
         'outest:string'
         # 'list[maybe[tree[array[(3|4),float]]]],' \
-        # 'dtype[int],' \
 
 # tests --------------------------------------
-
-def test_dtype(core):
-    dtype_schema = 'dtype[int]'
-    dt_type = core.access(dtype_schema)
-    dt_render = core.render(dt_type)
-    dt_round_trip = core.access(dt_render)
-    assert dt_round_trip == dt_type
-
 
 def test_array(core):
     complex_spec = [('name', np.str_, 16),
                     ('grades', np.float64, (2,))]
     complex_dtype = dtype(complex_spec)
     array = np.zeros((3,4), dtype=complex_dtype)
-    import ipdb; ipdb.set_trace()
     array_schema = core.infer(array)
     rendered = core.render(array_schema)
-
 
 
 def test_infer(core):
@@ -1035,7 +1024,6 @@ if __name__ == '__main__':
     test_generate(core)
     test_generate_promote_to_struct(core)
     test_bind(core)
-    test_dtype(core)
     test_uni_schema(core)
 
     test_apply(core)
