@@ -476,7 +476,30 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \
         'outest:string'
-        # 'list[maybe[tree[array[(3|4),float]]]],' \
+        # 'list[maybe[tree[array[(3|4),float64]]]],' \
+
+
+def do_round_trip(core, schema):
+    type_ = core.access(schema)
+    reified = core.render(type_)
+    round_trip = core.access(reified)
+
+    return type_, reified, round_trip
+
+def test_problem_schema_0(core):
+
+    # providing 'float' as a dtype breaks the parser
+    problem_schema_0 = 'list[maybe[tree[array[(3|4),float]]]]'
+    problem_type_0, re_0, rt_0 = do_round_trip(core, problem_schema_0)
+    assert not isinstance(problem_type_0, str)
+
+def test_problem_schema_1(core):
+    # this round trip is broken, disagrees between <f8 and float64
+    problem_schema_1 = 'list[maybe[tree[array[(3|4),float64]]]]'
+    problem_type_1, re_1, rt_1 = do_round_trip(core, problem_schema_1)
+    assert not isinstance(problem_type_1, str)
+    assert rt_1 == problem_type_1
+
 
 # tests --------------------------------------
 
@@ -525,6 +548,7 @@ def test_render(core):
 def test_uni_schema(core):
     uni_type = core.access(uni_schema)
     assert not isinstance(uni_type, str)
+
     uni_render = core.render(uni_type)
     round_trip = core.access(uni_render)
 
@@ -1028,3 +1052,5 @@ if __name__ == '__main__':
 
     test_apply(core)
     test_array(core)
+    test_problem_schema_0(core)
+    test_problem_schema_1(core)
