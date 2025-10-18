@@ -102,7 +102,12 @@ def handle_parameters(schema: Array, parameters):
     schema._shape = tuple([
         int(value)
         for value in shape])
-    schema._data = dtype(parameters[1])
+
+    dtype_arg = parameters[1]
+    # if not isinstance(dtype_arg, tuple):
+    #     print("shape", shape, "not tuple", dtype_arg)
+    #     dtype_arg = ('', dtype_arg)
+    schema._data = dtype(dtype_arg)
 
     return schema
 
@@ -478,30 +483,55 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'outest:string'
         # 'list[maybe[tree[array[(3|4),float64]]]],' \
 
+# tests --------------------------------------
+
 
 def do_round_trip(core, schema):
+    # generate a schema object from string expression
     type_ = core.access(schema)
+    # generate a json object representing schema
     reified = core.render(type_)
+    # finally, create another schema object
     round_trip = core.access(reified)
 
     return type_, reified, round_trip
 
-def test_problem_schema_0(core):
 
+def test_problem_schema_0(core):
     # providing 'float' as a dtype breaks the parser
-    problem_schema_0 = 'list[maybe[tree[array[(3|4),float]]]]'
-    problem_type_0, re_0, rt_0 = do_round_trip(core, problem_schema_0)
-    assert not isinstance(problem_type_0, str)
+    problem_schema = 'array[3,float]'
+    problem_type, reified, round_trip = do_round_trip(core, problem_schema)
+    assert not isinstance(problem_type, str)
+    assert round_trip == problem_type
+
 
 def test_problem_schema_1(core):
     # this round trip is broken, disagrees between <f8 and float64
-    problem_schema_1 = 'list[maybe[tree[array[(3|4),float64]]]]'
-    problem_type_1, re_1, rt_1 = do_round_trip(core, problem_schema_1)
-    assert not isinstance(problem_type_1, str)
-    assert rt_1 == problem_type_1
+    problem_schema = 'array[3,float64]'
+    import ipdb; ipdb.set_trace()
+    problem_type, reified, round_trip = do_round_trip(core, problem_schema)
+    assert problem_type == \
+            Array(_default=None, _shape=(3,), _data=dtype('float64'))
+    assert reified == {
+            '_type': 'array',
+            '_shape': '3',
+            '_data': [
+                # label, datatype
+                ('', '<f8')]}
+    assert round_trip == \
+            Array(_default=None, _shape='3', _data=[('', '<f8')])
+    assert not isinstance(problem_type, str)
+    assert round_trip == problem_type
 
 
-# tests --------------------------------------
+def test_problem_schema_2(core):
+    # turns (3, int) into ('', '<i8')
+    problem_schema = 'array[3,int]'
+    problem_type, reified, round_trip = do_round_trip(core, problem_schema)
+    # import ipdb; ipdb.set_trace()
+    assert not isinstance(problem_type, str)
+    assert round_trip == problem_type
+
 
 def test_array(core):
     complex_spec = [('name', np.str_, 16),
@@ -1047,10 +1077,12 @@ if __name__ == '__main__':
     test_infer_edge(core)
     test_generate(core)
     test_generate_promote_to_struct(core)
-    test_bind(core)
     test_uni_schema(core)
+    test_array(core)
 
     test_apply(core)
-    test_array(core)
-    test_problem_schema_0(core)
+    test_bind(core)
+
     test_problem_schema_1(core)
+    test_problem_schema_0(core)
+    test_problem_schema_2(core)
