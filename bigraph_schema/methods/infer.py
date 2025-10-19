@@ -132,6 +132,9 @@ def infer(core, value: set, path: tuple = ()):
 @dispatch
 def infer(core, value: dict, path: tuple = ()):
     if '_type' in value:
+        if value['_type'] == 'edge':
+            import ipdb; ipdb.set_trace()
+
         schema = core.access(value['_type'])
 
         default_value = None
@@ -181,9 +184,6 @@ def infer(core, value: dict, path: tuple = ()):
 @dispatch
 def infer(core, value: object, path: tuple = ()):
     type_name = str(type(value))
-
-    if not ('dataclass' in str(type(value)) or 'media' in str(type(value))):
-        import ipdb; ipdb.set_trace()
 
     value_keys = value.__dict__.keys()
     value_schema = {}
