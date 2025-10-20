@@ -130,6 +130,18 @@ def handle_parameters(schema, parameters):
     return schema
 
 
+@dispatch
+def post_access(node: Array, parameters):
+    result = replace(node, **parameters)
+    result._data = dtype(result._data)
+    return result
+
+@dispatch
+def post_access(node, parameters):
+    result = replace(node, **parameters)
+    return result
+
+
 class LibraryVisitor(NodeVisitor):
     """Visitor that walks a parsed tree and builds structured type expressions."""
 
@@ -285,7 +297,7 @@ class Library():
                     if field not in ('_type', '_default')}
 
                 if isinstance(type_key, Node):
-                    base = replace(type_key, **fields)
+                    base = post_access(type_key, fields)
 
                 elif isinstance(type_key, dict):
                     import ipdb; ipdb.set_trace()
@@ -506,21 +518,18 @@ def test_problem_schema_0(core):
 
 
 def test_problem_schema_1(core):
-    # this round trip is broken, disagrees between <f8 and float64
+    # this round trip is broken, shape 3 vs. (3,)
     problem_schema = 'array[3,float64]'
-    import ipdb; ipdb.set_trace()
     problem_type, reified, round_trip = do_round_trip(core, problem_schema)
+    import ipdb; ipdb.set_trace()
     assert problem_type == \
             Array(_default=None, _shape=(3,), _data=dtype('float64'))
     assert reified == {
             '_type': 'array',
             '_shape': '3',
-            '_data': [
-                # label, datatype
-                ('', '<f8')]}
-    assert round_trip == \
-            Array(_default=None, _shape='3', _data=[('', '<f8')])
+            '_data': '<f8'}
     assert not isinstance(problem_type, str)
+    assert isinstance(round_trip._data, dtype)
     assert round_trip == problem_type
 
 
