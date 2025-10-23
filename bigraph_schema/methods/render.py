@@ -1,5 +1,6 @@
 from plum import dispatch
 import numpy as np
+import numpy.lib.format as nf
 from bigraph_schema.methods.serialize import serialize, render_associated
 
 from bigraph_schema.schema import (
@@ -211,10 +212,7 @@ def render(schema: NPRandom):
 @dispatch
 def render(schema: Array):
     shape = '|'.join([str(value) for value in schema._shape])
-    data = schema._data.descr
-    # TODO - take a closer look at this? does it have corner cases?
-    if len(data) == 1 and len(data[0]) == 2 and data[0][0] == '':
-        data = data[0][1]
+    data = nf.dtype_to_descr(schema._data)
     result = {'_type': 'array', '_shape': shape, '_data': data}
     return wrap_default(schema, result)
 

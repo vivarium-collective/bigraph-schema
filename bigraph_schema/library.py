@@ -1,6 +1,7 @@
 import typing
 import numpy as np
 from numpy import dtype
+import numpy.lib.format as nf
 import pytest
 import logging
 
@@ -133,7 +134,8 @@ def handle_parameters(schema, parameters):
 @dispatch
 def post_access(node: Array, parameters):
     result = replace(node, **parameters)
-    result._data = dtype(result._data)
+    result._data = nf.descr_to_dtype(result._data)
+    result._shape = tuple([int(item) for item in result._shape])
     return result
 
 @dispatch
@@ -295,6 +297,8 @@ class Library():
                     field: self.access(value)
                     for field, value in key.items()
                     if field not in ('_type', '_default')}
+                if '_default' in key:
+                    fields['_default'] = key['_default']
 
                 if isinstance(type_key, Node):
                     base = post_access(type_key, fields)
@@ -307,8 +311,6 @@ class Library():
                 else:
                     import ipdb; ipdb.set_trace()
 
-                if key.get('_default') is not None:
-                    base._default = key['_default']
                 return base
 
             else:
@@ -505,14 +507,15 @@ def do_round_trip(core, schema):
     reified = core.render(type_)
     # finally, create another schema object
     round_trip = core.access(reified)
+    final = core.render(round_trip)
 
-    return type_, reified, round_trip
+    return type_, reified, round_trip, final
 
 
 def test_problem_schema_0(core):
     # providing 'float' as a dtype breaks the parser
     problem_schema = 'array[3,float]'
-    problem_type, reified, round_trip = do_round_trip(core, problem_schema)
+    problem_type, reified, round_trip, final = do_round_trip(core, problem_schema)
     assert not isinstance(problem_type, str)
     assert round_trip == problem_type
 
@@ -520,15 +523,9 @@ def test_problem_schema_0(core):
 def test_problem_schema_1(core):
     # this round trip is broken, shape 3 vs. (3,)
     problem_schema = 'array[3,float64]'
-    problem_type, reified, round_trip = do_round_trip(core, problem_schema)
-    import ipdb; ipdb.set_trace()
-    assert problem_type == \
-            Array(_default=None, _shape=(3,), _data=dtype('float64'))
-    assert reified == {
-            '_type': 'array',
-            '_shape': '3',
-            '_data': '<f8'}
-    assert not isinstance(problem_type, str)
+    problem_type, reified, round_trip, final = \
+            do_round_trip(core, problem_schema)
+
     assert isinstance(round_trip._data, dtype)
     assert round_trip == problem_type
 
@@ -536,7 +533,7 @@ def test_problem_schema_1(core):
 def test_problem_schema_2(core):
     # turns (3, int) into ('', '<i8')
     problem_schema = 'array[3,int]'
-    problem_type, reified, round_trip = do_round_trip(core, problem_schema)
+    problem_type, reified, round_trip, final = do_round_trip(core, problem_schema)
     # import ipdb; ipdb.set_trace()
     assert not isinstance(problem_type, str)
     assert round_trip == problem_type
