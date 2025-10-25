@@ -93,7 +93,6 @@ def schema_keys(schema):
     for key in schema.__dataclass_fields__:
         if key.startswith('_'):
             keys.append(key)
-
     return keys
 
 @dispatch
@@ -133,14 +132,12 @@ def handle_parameters(schema: Array, parameters):
     #     print("shape", shape, "not tuple", dtype_arg)
     #     dtype_arg = ('', dtype_arg)
     schema._data = dtype(dtype_arg)
-
     return schema
 
 @dispatch
 def handle_parameters(schema: Edge, parameters):
     schema._inputs = parameters[0]
     schema._outputs = parameters[1]
-
     return schema
 
 @dispatch
@@ -458,7 +455,6 @@ class SchemaRuntime:
         return apply(schema, state, update, context)
 
 
-
 # test data ----------------------------
 
 @pytest.fixture
@@ -501,7 +497,6 @@ edge_a = {
     'outputs': {
         'mass': ['cell', 'mass'],
         'concentrations': ['cell', 'internal']}}
-
 
 # tracking datatypes that should be in the unischema
 to_implement = (
@@ -550,7 +545,6 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
 
 # tests --------------------------------------
 
-
 def do_round_trip(core, schema):
     # generate a schema object from string expression
     type_ = core.access(schema)
@@ -562,7 +556,6 @@ def do_round_trip(core, schema):
 
     return type_, reified, round_trip, final
 
-
 def test_problem_schema_0(core):
     # providing 'float' as a dtype breaks the parser
     problem_schema = 'array[3,float]'
@@ -570,25 +563,20 @@ def test_problem_schema_0(core):
     assert not isinstance(problem_type, str)
     assert round_trip == problem_type
 
-
 def test_problem_schema_1(core):
     # this round trip is broken, shape 3 vs. (3,)
     problem_schema = 'array[3,float64]'
     problem_type, reified, round_trip, final = \
             do_round_trip(core, problem_schema)
-
     assert isinstance(round_trip._data, dtype)
     assert round_trip == problem_type
-
 
 def test_problem_schema_2(core):
     # turns (3, int) into ('', '<i8')
     problem_schema = 'array[3,int]'
     problem_type, reified, round_trip, final = do_round_trip(core, problem_schema)
-    # import ipdb; ipdb.set_trace()
     assert not isinstance(problem_type, str)
     assert round_trip == problem_type
-
 
 def test_array(core):
     complex_spec = [('name', np.str_, 16),
@@ -598,16 +586,12 @@ def test_array(core):
     array_schema = core.infer(array)
     rendered = core.render(array_schema)
 
-
 def test_infer(core):
     default_node = core.default(node_schema)
     node_inferred = core.infer(default_node)
-
     assert check(node_inferred, default_node)
-
     # print(f"inferred {node_inferred}\nfrom {default_node}")
     # print(f'rendered schema:\n{render(node_inferred)}')
-
     # assert render(node_inferred)['a'] == node_schema['a']['_type']
     # assert render(node_inferred)['b'] == node_schema['b']['_type']
 
@@ -627,7 +611,6 @@ def test_render(core):
 
     map_type = core.access(map_schema)
     map_render = core.render(map_type)
-
     assert core.access(map_render) == core.access(map_schema)
     # fixed point is found
     assert map_render == core.render(core.access(map_render))
@@ -648,18 +631,15 @@ def test_uni_schema(core):
 def test_default(core):
     node_type = core.access(node_schema)
     default_node = core.default(node_schema)
-
     assert 'a' in default_node
     assert isinstance(default_node['a'], float)
     assert default_node['a'] == default_a
     assert 'b' in default_node
     assert isinstance(default_node['b'], str)
-
     assert core.check(node_schema, default_node)
 
     value = 11.11
     assert core.default(core.infer(value)) == value
-
 
 def test_resolve(core):
     float_number = core.resolve('float', 'number')
@@ -669,7 +649,6 @@ def test_resolve(core):
     node_resolve = core.resolve(
         {'a': 'delta', 'b': 'node'},
         node_schema)
-
     rendered_a = render(node_resolve)['a']
     assert rendered_a['_type'] == 'delta'
     assert core.access(rendered_a)._default == node_schema['a']['_default']
@@ -677,24 +656,18 @@ def test_resolve(core):
     mutual = core.resolve(
         {'a': 'float', 'b': 'string'},
         {'b': 'wrap[string]', 'c': 'boolean'})
-
     assert 'a' in mutual
     assert 'b' in mutual
     assert 'c' in mutual
 
     failed = False
-
     try:
         core.resolve(
             {'a': 'map[string]', 'b': 'node'},
             node_schema)
-
     except Exception as e:
-        # print(e)
         failed = True
-
     assert failed
-
 
 def test_check(core):
     tree_a = {
@@ -716,17 +689,9 @@ def test_check(core):
     tree_type = core.access(
         tree_parse)
 
-    assert core.check(
-        tree_schema,
-        tree_a)
-
-    assert core.check(
-        tree_parse,
-        tree_b)
-
-    assert not core.check(
-        tree_schema,
-        'not a tree')
+    assert core.check(tree_schema, tree_a)
+    assert core.check(tree_parse, tree_b)
+    assert not core.check(tree_schema,'not a tree')
 
     edge_a = {
         'inputs': {
@@ -761,19 +726,15 @@ def test_check(core):
     assert not core.check(edge_schema, edge_d)
     assert not core.check(edge_schema, 44.44444)
 
-
 def test_serialize(core):
     edge_type = core.access(edge_schema)
     encoded_a = serialize(edge_type, edge_a)
 
     assert encoded_a == edge_a
-
     encoded_b = core.serialize(
         {'a': 'float'},
         {'a': 55.55555})
-
     assert encoded_b['a'] == 55.55555
-
 
 def test_deserialize(core):
     encoded_edge = {
@@ -783,28 +744,18 @@ def test_deserialize(core):
         'outputs': '{\
             "mass":["cell","mass"],\
             "concentrations":["cell","internal"]}'}
-
-    decoded = core.deserialize(
-        edge_schema,
-        encoded_edge)
-
+    decoded = core.deserialize(edge_schema, encoded_edge)
     assert decoded == edge_a
 
     schema = {
         'a': 'integer',
         'b': 'tuple[float,string,map[integer]]'}
-
     code = {
         'a': '5555',
         'b': ('1111.1', "okay", '{"x": 5, "y": "11"}')}
-
-    decode = core.deserialize(
-        schema,
-        code)
-
+    decode = core.deserialize(schema, code)
     assert decode['a'] == 5555
     assert decode['b'][2]['y'] == 11
-
 
 def test_infer_edge(core):
     edge_state = {
@@ -821,9 +772,7 @@ def test_infer_edge(core):
                 'x': ['E']},
             'outputs': {
                 'z': ['F', 'f', '_ff']}}}
-
     edge_schema = core.infer(edge_state)
-
 
 def test_traverse(core):
     tree_a = {
@@ -832,12 +781,10 @@ def test_traverse(core):
             'y': 555.55,
             'x': {'further': {'down': 111111.111}}},
         'c': 3.3}
-
     further_schema, further_state = core.traverse(
         'tree[float]',
         tree_a,
         ['a', 'x', 'further'])
-
     assert isinstance(further_schema, Tree)
     assert further_state == {'down': 111111.111}
 
@@ -845,7 +792,6 @@ def test_traverse(core):
         'tree[float]',
         tree_a,
         ['a', 'x', 'further', 'down'])
-
     assert isinstance(down_schema, Float)
     assert down_state == 111111.111
 
@@ -855,7 +801,6 @@ def test_traverse(core):
          'Y': {'a': 11.11, 'b': 'another green'},
          'Z': {'a': 22.2222, 'b': 'yet another green'}},
         ['*', 'a'])
-
     assert isinstance(star_schema, Map)
     assert isinstance(star_schema._value, Float)
     assert star_state['Y'] == 11.11
@@ -880,11 +825,9 @@ def test_traverse(core):
         'outputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
-
     assert core.check(edge_interface, edge_state)
 
     default_edge = core.default(edge_schema)
-
     assert default_edge['inputs']['mass'] == ['mass']
 
     simple_interface = {
@@ -894,6 +837,7 @@ def test_traverse(core):
         'edge': edge_interface}
 
     initial_mass = 11.1111
+
     simple_graph = {
         'cell': {
             'mass': initial_mass,
@@ -910,7 +854,6 @@ def test_traverse(core):
         simple_interface,
         simple_graph,
         'edge')
-
     assert isinstance(down_schema, Edge)
     assert 'inputs' in down_state
 
@@ -918,7 +861,6 @@ def test_traverse(core):
         simple_interface,
         simple_graph,
         ['edge', 'inputs', 'mass'])
-
     assert isinstance(mass_schema, Float)
     assert mass_state == initial_mass
 
@@ -926,7 +868,6 @@ def test_traverse(core):
         simple_interface,
         simple_graph,
         ['edge', 'outputs', 'concentrations', 'A'])
-
     assert isinstance(concentration_schema, Float)
     assert concentration_state == simple_graph['cell']['internal']['A']
 
@@ -963,19 +904,14 @@ def test_generate(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    generated_schema, generated_state = core.generate(
-        schema,
-        state)
-
+    generated_schema, generated_state = core.generate(schema, state)
     assert generated_state['A'] == 0.0
     assert generated_state['B'] == 'one'
     assert generated_state['C'] == 'y'
     assert generated_state['units']['seconds'] == 22.833333
-
     assert not hasattr(generated_schema['units'], 'meters')
 
     rendered = core.render(generated_schema)
-
     assert generated_state == \
             core.deserialize(generated_schema,
                              core.serialize(generated_schema, generated_state))
@@ -1021,9 +957,7 @@ def test_generate_coverage(core):
                 '_type': 'tuple[number,number]',
                 '_default': (0,0)}}
 
-    generated_schema, generated_state = core.generate(
-        schema,
-        state)
+    generated_schema, generated_state = core.generate(schema, state)
 
     assert generated_state == \
             core.deserialize(generated_schema,
@@ -1042,10 +976,7 @@ def broken_test_generate_tuple_default(core):
                 '_type': 'tuple[number,number]',
                 '_default': (0,0)}}
 
-    generated_schema, generated_state = core.generate(
-        schema,
-        state)
-
+    generated_schema, generated_state = core.generate(schema, state)
     assert generated_state['C'] == (0,0)
 
 
@@ -1058,19 +989,15 @@ def test_generate_promote_to_struct(core):
     # TODO - this should also happen to trees
     schema = {
             'A': 'edge[x:integer,y:nonnegative]'}
-
     state = {
             'B': {
                 '_type': 'boolean',
                 '_default': True}}
-
     generated_schema, generated_state = core.generate(schema, state)
-
     serialized = core.serialize(generated_schema, generated_state)
     assert generated_state == core.deserialize(
         generated_schema,
         serialized)
-
 
 def test_bind(core):
     core
@@ -1090,11 +1017,7 @@ def test_merge(core):
             'x': 444.444},
         'd': 11.11}
 
-    tree_merge = core.merge(
-        'tree[float]',
-        tree_b,
-        tree_a)
-
+    tree_merge = core.merge('tree[float]', tree_b, tree_a)
     assert(tree_merge['a']['x']['further']['down'])
 
     key_merge = core.merge(
@@ -1106,13 +1029,11 @@ def test_merge(core):
         return {
             'mass': 'wrap[float]'} 
 
-
     assert(key_merge == {
         'a': 55555.555,
         'b': '',
         'c': 4444,
         'd': '111111'})
-
 
 def test_apply(core):
     core

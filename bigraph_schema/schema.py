@@ -92,7 +92,6 @@ class Map(Node):
 class Tree(Node):
     _leaf: Node = field(default_factory=Node)
 
-
 @dataclass(kw_only=True)
 class Array(Node):
     _shape: typing.Tuple[int] = field(default_factory=tuple)
@@ -223,59 +222,6 @@ BASE_TYPES = {
     'schema': Schema,
     'edge': Edge}
 
-
-# @dataclass
-# class Cell(Node):
-#     position: typing.Tuple[Float, Float, Float]
-#     radius: Float
-#     def __init__(self, cell_data):
-#         self.position = cell_data['position']
-#         self.radius = cell_data['radius']
-
-
-# def ColonyProcess(Process):
-#     config_schema = {}
-
-
-#     def inputs(self):
-#         return {
-#             'environment': 'map[cell]'}
-
-    
-#     def outputs(self):
-#         return {
-#             'environment': 'map[cell]',
-#             'mass_delta': 'delta',
-#             'energy': 'float',
-#             'concentrations': 'array[(20|10),float]'}
-
-#             # 'environment': {
-#             #     '_type': 'map',
-#             #     '_value': {
-#             #         '_type': 'cell',
-#             #         '_merge': 'merge_cell!'}},
-#             # 'mass': {
-#             #     '_type': 'float',
-#             #     '_divide': 'binomial'}}
-
-    
-#     def update(self, state, interval):
-#         delta = evolve(
-#             state['environment'])
-
-#         return {
-#             'environment': delta,
-#             'mass_delta': 0.0333}
-
-
-# def ConstResolver(Resolver):
-#     def resolve(self, current, updates):
-#         return current
-
-
-# def MergeAdapter(Adapter):
-#     def adapt(self, current, update):
-#         return current + update
 
 
 def test_schema():
