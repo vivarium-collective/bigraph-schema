@@ -1,3 +1,27 @@
+"""
+Bigraph-Schema Runtime & Visitor
+================================
+
+This module provides the primary front door for bigraph-schema:
+
+- **SchemaRuntime**: A registry-backed runtime that parses and normalizes
+  schema representations (strings, dicts, lists) into dataclass nodes
+  (see `schema.py`), and exposes the core operations: `infer`, `render`,
+  `default`, `resolve`, `check`, `serialize`, `deserialize`, `merge`,
+  `jump`, `traverse`, `bind`, `apply`.
+
+- **SchemaVisitor**: A `parsimonious` visitor that lowers parsed bigraph
+  expressions into node structures (e.g., `Union(_options=...)`,
+  `Tuple(_values=...)`, typed mappings, and defaults).
+
+- **Parameter/Access Hooks**:
+  - `handle_parameters(...)` applies type parameters to nodes via multiple
+    dispatch (e.g., `Array[_shape,_dtype]`, `Map[_key,_value]`, `Union[_options]`,
+    `Tuple[_values]`, `Edge[_inputs,_outputs]`).
+  - `post_access(...)` finalizes node construction after dict-based access,
+    enforcing invariants (notably `Array._shape -> tuple[int,...]` and
+    `Array._data -> numpy.dtype` for round-trip stability).
+"""
 import typing
 import numpy as np
 from numpy import dtype
@@ -43,6 +67,7 @@ from bigraph_schema.schema import (
     Index,
 )
 
+from bigraph_schema.registry import deep_merge
 from bigraph_schema.parse import visit_expression
 from bigraph_schema.methods import (
     infer,
@@ -61,7 +86,6 @@ from bigraph_schema.methods import (
 
 # view
 # project
-
 
 
 def schema_keys(schema):
@@ -130,7 +154,6 @@ def handle_parameters(schema: Node, parameters):
 def handle_parameters(schema, parameters):
     return schema
 
-
 @dispatch
 def post_access(node: Array, parameters):
     result = replace(node, **parameters)
@@ -144,25 +167,35 @@ def post_access(node, parameters):
     return result
 
 
-class LibraryVisitor(NodeVisitor):
-    """Visitor that walks a parsed tree and builds structured type expressions."""
+class SchemaVisitor(NodeVisitor):
+    """Visitor that converts parsed bigraph expressions into schema node structures.
 
-    def __init__(self, library):
-        self.library = library
+    Operates within a `SchemaRuntime` context, mapping grammar constructs
+    (unions, merges, type parameters, and defaults) into dataclass-based nodes.
+    Handles normalization of nested expressions (e.g. `tuple[int,float]`,
+    `edge[a:int|b:string]`, `(x:y|z:w)`) into instances of `Union`, `Tuple`,
+    or structured dicts.
+    """
+
+    def __init__(self, runtime):
+        """Initialize with the active `SchemaRuntime`."""
+        self.runtime = runtime
 
     def visit_expression(self, node, visit):
+        """Top-level entry; returns first child."""
         return visit[0]
 
     def visit_union(self, node, visit):
+        """Parse `a~b~c` into a `Union(_options=[a,b,c])`."""
         head = [visit[0]]
         tail = [tree['visit'][1] for tree in visit[1]['visit']]
         return Union(_options=head + tail)
 
     def visit_merge(self, node, visit):
+        """Parse `a|b|c`; dicts merge to one mapping, others form a `Tuple`."""
         head = [visit[0]]
         tail = [tree['visit'][1] for tree in visit[1]['visit']]
         nodes = head + tail
-
         if all(isinstance(tree, dict) for tree in nodes):
             merged = {}
             for tree in nodes:
@@ -172,30 +205,32 @@ class LibraryVisitor(NodeVisitor):
             return Tuple(_values=nodes)
 
     def visit_tree(self, node, visit):
+        """Delegate directly to nested element."""
         return visit[0]
 
     def visit_bigraph(self, node, visit):
+        """Alias for tree; allows recursion within nested bigraphs."""
         return visit[0]
 
     def visit_group(self, node, visit):
+        """Handle grouped subexpression `( ... )`; return tuple or dict."""
         group_value = visit[1]
         return group_value if isinstance(group_value, (list, tuple, dict, Tuple)) else (group_value,)
 
     def visit_nest(self, node, visit):
+        """Handle `key:subtype` pairs (used in trees/maps)."""
         return {visit[0]: visit[2]}
 
     def visit_type_name(self, node, visit):
+        """Resolve base type, parameters, and defaults into schema nodes."""
         schema = visit[0]
 
-        type_parameters = [
-            parameter
-            for parameter in visit[1]['visit']]
-
+        # Parse parameter list
+        type_parameters = [parameter for parameter in visit[1]['visit']]
         if type_parameters:
-            schema = handle_parameters(
-                schema,
-                type_parameters[0])
+            schema = handle_parameters(schema, type_parameters[0])
 
+        # Parse default value `{...}`
         default_visit = visit[2]['visit']
         if default_visit:
             default = default_visit[0]
@@ -207,83 +242,100 @@ class LibraryVisitor(NodeVisitor):
         return schema
 
     def visit_parameter_list(self, node, visit):
+        """Return ordered list of parameters `[A,B,C]`."""
         first = [visit[1]]
         rest = [inner['visit'][1] for inner in visit[2]['visit']]
-        full = first + rest
-
-        return full
+        return first + rest
 
     def visit_default_block(self, node, visit):
+        """Extract contents of `{...}` blocks."""
         return visit[1]
 
     def visit_default(self, node, visit):
+        """Return text inside default braces as string."""
         return node.text
 
     def visit_symbol(self, node, visit):
-        return self.library.access(node.text)
+        """Resolve bare symbol names via the runtime registry or parse visitor."""
+        return self.runtime.access(node.text)
 
     def visit_nothing(self, node, visit):
+        """Handle empty productions (e.g., trailing commas)."""
         return None
 
     def generic_visit(self, node, visit):
+        """Fallback: return raw parse node and visited children."""
         return {'node': node, 'visit': visit}
 
 
-class Library():
+class SchemaRuntime:
+    """Bigraph-schema runtime: registry, parsing, normalization, and ops.
+
+    - Maintains a registry mapping type keys to node constructors (see `BASE_TYPES`).
+    - Normalizes schema representations (strings, dicts, lists) into dataclass nodes
+      via `access(...)` using the bigraph grammar (`parse.visit_expression`).
+    - Exposes core methods (`infer`, `render`, `default`, `resolve`, `check`,
+      `serialize`, `deserialize`, `merge`, `jump`, `traverse`, `bind`, `apply`).
+    - Post-access invariants: e.g., `Array._shape -> tuple[int,...]`,
+      `Array._data -> numpy.dtype`; node fields like `_values`, `_options`,
+      `_key/_value`, `_inputs/_outputs` are populated.
+    """
+
     def __init__(self, types):
+        """Initialize runtime with a base type registry (e.g., `BASE_TYPES`)."""
         self.registry = {}
         self.register_types(types)
-        self.parse_visitor = LibraryVisitor(self)
+        self.parse_visitor = SchemaVisitor(self)
 
     def register_type(self, key, data):
+        """Register a single type key; deep-merge if it already exists."""
         if key in self.registry:
             self.update_type(key, data)
         else:
             self.registry[key] = data
 
     def register_types(self, types):
+        """Bulk register multiple type keys into the runtime registry."""
         for key, data in types.items():
-            self.register_type(
-                key,
-                data)
+            self.register_type(key, data)
 
     def update_type(self, key, data):
-        self.registry[key] = deep_merge(
-            self.registry[key],
-            data)
+        """Deep-merge metadata/overrides into an existing registry entry."""
+        self.registry[key] = deep_merge(self.registry[key], data)
 
     def select_fields(self, base, schema):
+        """Project dict `schema` onto dataclass `base` fields, normalizing values via `access` (except `_default`)."""
         select = {}
         for key in base.__dataclass_fields__.keys():
             schema_key = schema.get(key)
             if schema_key:
-                if key == '_default':
-                    down = schema_key
-                else:
-                    down = self.access(
-                        schema_key)
+                down = schema_key if key == '_default' else self.access(schema_key)
                 select[key] = down
-
         return select
 
     def make_instance(self, base, state):
+        """Instantiate dataclass `base` from dict `state` after field selection/normalization."""
         fields = self.select_fields(base, state)
         instance = base(**fields)
-
         return instance
 
     def access(self, key):
+        """Normalize any schema form into nodes/values.
+
+        - Dataclass node → returned as-is.
+        - String → instantiate via registry; else parse bigraph expression.
+        - Dict with `_type` → resolve `_type`, normalize fields, then `post_access(...)`.
+        - Untyped dict/list → recursively normalized (private `_...` keys kept raw).
+        """
         if is_dataclass(key):
             return key
 
         elif isinstance(key, str):
             if key not in self.registry:
                 try:
-                    parsed = visit_expression(key, self.parse_visitor)
-                    return parsed
-                except Exception as e:
-                    # TODO - more specific catch
-                    return key
+                    return visit_expression(key, self.parse_visitor)
+                except Exception:
+                    return key  # fallback if not a schema expression
             else:
                 return self.registry[key]()
 
@@ -296,13 +348,13 @@ class Library():
                 fields = {
                     field: self.access(value)
                     for field, value in key.items()
-                    if field not in ('_type', '_default')}
+                    if field not in ('_type', '_default')
+                }
                 if '_default' in key:
                     fields['_default'] = key['_default']
 
                 if isinstance(type_key, Node):
                     base = post_access(type_key, fields)
-
                 elif isinstance(type_key, dict):
                     import ipdb; ipdb.set_trace()
                     base = self.resolve(type_key, fields)
@@ -310,21 +362,15 @@ class Library():
                     import ipdb; ipdb.set_trace()
                 else:
                     import ipdb; ipdb.set_trace()
-
                 return base
 
             else:
                 result = {}
                 for subkey in key:
                     if isinstance(subkey, str):
-                        if subkey.startswith('_'):
-                            result[subkey] = key[subkey]
-                        else:
-                            result[subkey] = self.access(
-                                key[subkey])
+                        result[subkey] = key[subkey] if subkey.startswith('_') else self.access(key[subkey])
                     else:
                         result[subkey] = key[subkey]
-
                 return result
 
         elif isinstance(key, list):
@@ -333,77 +379,82 @@ class Library():
             return key
 
     def infer(self, state, path=()):
+        """Infer a schema from example `state` (see `infer.py`); sets `_default` where applicable."""
         return infer(self, state, path=path)
 
     def render(self, schema):
+        """Render a node/schema to a JSON-serializable form (inverse of `access`)."""
         found = self.access(schema)
         return render(found)
 
     def default(self, schema):
+        """Materialize default value for `schema` (`_default` → `deserialize(...)`)."""
         found = self.access(schema)
         value = default(found)
         return deserialize(found, value)
 
     def resolve(self, current_schema, update_schema):
+        """Unify two schemas under node semantics (e.g., Map/Tree/Edge field-wise resolution)."""
         current = self.access(current_schema)
         update = self.access(update_schema)
         return resolve(current, update)
 
     def check(self, schema, state):
+        """Validate `state` against `schema`."""
         found = self.access(schema)
         return check(found, state)
 
     def serialize(self, schema, state):
+        """Encode `state` per `schema` (JSON-friendly)."""
         found = self.access(schema)
         return serialize(found, state)
 
     def deserialize(self, schema, state):
+        """Decode representation into typed value per `schema`."""
         found = self.access(schema)
         return deserialize(found, state)
 
     def generate(self, schema, state):
-        """
-        creates a unified schema from the given schema and an interpolation
-        of the state into a schema, and generates a state satisfying that
-        unified schema
+        """Compute a resolved schema and defaulted state from partial inputs.
+
+        Equivalent to: `resolved = resolve(infer(state), access(schema)); merged = default(resolved)`.
+        Returns `(resolved, merged)`.
         """
         found = self.access(schema)
         inferred = self.infer(state)
         resolved = self.resolve(inferred, found)
         merged = self.default(resolved)
-
         return resolved, merged
 
     def jump(self, schema, state, raw_key):
+        """Navigate by logical jump (`Key`/`Index`/`Star`)."""
         found = self.access(schema)
         key = convert_jump(raw_key)
         context = blank_context(found, state, ())
-
         return jump(found, state, key, context)
 
     def traverse(self, schema, state, raw_path):
+        """Traverse along a resolved path (supports `..` and wildcards) via `convert_path`."""
         found = self.access(schema)
         path = convert_path(raw_path)
         context = blank_context(found, state, path)
-
         return traverse(found, state, path, context)
 
     def bind(self, schema, state, raw_key, target):
+        """Bind a logical key (jump) to a target."""
         found = self.access(schema)
         key = convert_jump(raw_key)
-
         return bind(found, state, key, target)
 
     def merge(self, schema, state, merge_state):
+        """Schema-aware merge of `merge_state` into `state`."""
         found = self.access(schema)
         return merge(found, state, merge_state)
 
     def apply(self, schema, state, update):
+        """Apply a schema-aware update/patch; provides minimal context."""
         found = self.access(schema)
-        context = {
-            schema: found,
-            state: state,
-            path: ()}
+        context = {schema: found, state: state, path: ()}
         return apply(schema, state, update, context)
 
 
@@ -412,7 +463,7 @@ class Library():
 
 @pytest.fixture
 def core():
-    return Library(
+    return SchemaRuntime(
         BASE_TYPES)
 
 default_a = 11.111
@@ -1068,7 +1119,7 @@ def test_apply(core):
 
 
 if __name__ == '__main__':
-    core = Library(
+    core = SchemaRuntime(
         BASE_TYPES)
 
     test_infer(core)
