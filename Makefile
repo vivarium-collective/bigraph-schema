@@ -1,16 +1,16 @@
 DOCTEST_FILES=bigraph_schema/type_system.py
 TESTS=bigraph_schema/tests.py
-LIBRARY=bigraph_schema/library.py
+RUNTIME=bigraph_schema/runtime.py
 PY=PYTHONPATH=`pwd` uv run
 
 
-tests: pytest doctest library
+tests: pytest doctest runtime
 
 pytest:
 	${PY} pytest
 
-library:
-	${PY} ${LIBRARY}
+runtime:
+	${PY} ${RUNTIME}
 
 doctest:
 	${PY} -m doctest ${DOCTEST_FILES}
@@ -18,5 +18,5 @@ doctest:
 debug:
 	${PY} python3 -i ${TESTS}
 
-debug-lib:
-	${PY} python3 -i ${LIBRARY}
+debug-rt:
+	${PY} python3 -i ${RUNTIME}
