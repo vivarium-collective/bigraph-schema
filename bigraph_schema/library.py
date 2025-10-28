@@ -1,6 +1,7 @@
 import typing
 import numpy as np
 from numpy import dtype
+import numpy.lib.format as nf
 import pytest
 import logging
 
@@ -63,6 +64,27 @@ from bigraph_schema.methods import (
 # view
 # project
 
+
+
+def schema_keys(schema):
+    keys = []
+    for key in schema.__dataclass_fields__:
+        if key.startswith('_'):
+            keys.append(key)
+
+    return keys
+
+@dispatch
+def post_access(node: Array, parameters):
+    result = replace(node, **parameters)
+    result._data = nf.descr_to_dtype(result._data)
+    result._shape = tuple([int(item) for item in result._shape])
+    return result
+
+@dispatch
+def post_access(node, parameters):
+    result = replace(node, **parameters)
+    return result
 
 
 class LibraryVisitor(NodeVisitor):
@@ -218,9 +240,11 @@ class Library():
                     field: self.access(value)
                     for field, value in key.items()
                     if field not in ('_type', '_default')}
+                if '_default' in key:
+                    fields['_default'] = key['_default']
 
                 if isinstance(type_key, Node):
-                    base = replace(type_key, **fields)
+                    base = post_access(type_key, fields)
 
                 elif isinstance(type_key, dict):
                     import ipdb; ipdb.set_trace()
@@ -230,8 +254,6 @@ class Library():
                 else:
                     import ipdb; ipdb.set_trace()
 
-                if key.get('_default') is not None:
-                    base._default = key['_default']
                 return base
 
             else:
@@ -422,17 +444,48 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \
         'outest:string'
-        # 'list[maybe[tree[array[(3|4),float]]]],' \
-        # 'dtype[int],' \
+        # 'list[maybe[tree[array[(3|4),float64]]]],' \
 
 # tests --------------------------------------
 
-def test_dtype(core):
-    dtype_schema = 'dtype[int]'
-    dt_type = core.access(dtype_schema)
-    dt_render = core.render(dt_type)
-    dt_round_trip = core.access(dt_render)
-    assert dt_round_trip == dt_type
+
+def do_round_trip(core, schema):
+    # generate a schema object from string expression
+    type_ = core.access(schema)
+    # generate a json object representing schema
+    reified = core.render(type_)
+    # finally, create another schema object
+    round_trip = core.access(reified)
+    final = core.render(round_trip)
+
+    return type_, reified, round_trip, final
+
+
+def test_problem_schema_0(core):
+    # providing 'float' as a dtype breaks the parser
+    problem_schema = 'array[3,float]'
+    problem_type, reified, round_trip, final = do_round_trip(core, problem_schema)
+    assert not isinstance(problem_type, str)
+    assert round_trip == problem_type
+
+
+def test_problem_schema_1(core):
+    # this round trip is broken, shape 3 vs. (3,)
+    problem_schema = 'array[3,float64]'
+    problem_type, reified, round_trip, final = \
+            do_round_trip(core, problem_schema)
+
+    assert isinstance(round_trip._data, dtype)
+    assert round_trip == problem_type
+
+
+def test_problem_schema_2(core):
+    # turns (3, int) into ('', '<i8')
+    problem_schema = 'array[3,int]'
+    problem_type, reified, round_trip, final = do_round_trip(core, problem_schema)
+    # import ipdb; ipdb.set_trace()
+    assert not isinstance(problem_type, str)
+    assert round_trip == problem_type
 
 
 def test_array(core):
@@ -480,6 +533,7 @@ def test_render(core):
 def test_uni_schema(core):
     uni_type = core.access(uni_schema)
     assert not isinstance(uni_type, str)
+
     uni_render = core.render(uni_type)
     round_trip = core.access(uni_render)
 
@@ -1032,10 +1086,14 @@ if __name__ == '__main__':
     test_infer_edge(core)
     test_generate(core)
     test_generate_promote_to_struct(core)
-    test_bind(core)
-    test_dtype(core)
     test_uni_schema(core)
+    test_array(core)
+    test_bind(core)
+
+    test_problem_schema_1(core)
+    test_problem_schema_0(core)
+    test_problem_schema_2(core)
 
     test_apply(core)
-    test_array(core)
     test_unify(core)
+
