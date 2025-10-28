@@ -82,7 +82,7 @@ class Overwrite(Wrap):
 @dataclass(kw_only=True)
 class List(Node):
     _element: Node = field(default_factory=Node)
-    
+
 @dataclass(kw_only=True)
 class Map(Node):
     _key: Node = field(default_factory=String)
