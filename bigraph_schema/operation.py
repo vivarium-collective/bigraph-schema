@@ -529,7 +529,6 @@ def test_array(core):
     rendered = core.render(array_schema)
 
 def test_infer(core):
-    import ipdb; ipdb.set_trace()
     default_node = core.default(node_schema)
     node_inferred = core.infer(default_node)
     assert check(node_inferred, default_node)
@@ -544,7 +543,6 @@ def test_render(core):
     node_render = core.render(node_schema)
     assert node_render == render(node_type)
 
-    import ipdb; ipdb.set_trace()
     edge_type = core.access(edge_schema)
     edge_render = core.render(edge_type)
 
@@ -718,6 +716,8 @@ def test_infer_edge(core):
                 'z': ['F', 'f', 'ff']}}}
 
     edge_schema = core.infer(edge_state)
+    import ipdb; ipdb.set_trace()
+
 
 def test_traverse(core):
     tree_a = {
