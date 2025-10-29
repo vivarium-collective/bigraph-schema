@@ -35,6 +35,7 @@ from bigraph_schema.schema import (
 
 
 from bigraph_schema.methods.serialize import serialize
+from bigraph_schema.methods.handle_parameters import assign_parameters, schema_keys
 
 MISSING_TYPES = {}
 
@@ -135,27 +136,16 @@ def infer(core, value: dict, path: tuple = ()):
         if value['_type'] == 'edge':
             import ipdb; ipdb.set_trace()
 
-        schema = core.access(value['_type'])
-
-        default_value = None
-        if '_default' in value:
-            default_value = value['_default']
-        elif isinstance(schema, Node) and schema._default is not None:
-            default_value = schema._default
-        # elif isinstance(schema, dict) and '_default' in schema:
-        #     default_value = schema['_default']
+        schema = core.access_type(value)
 
         for key in schema.__dataclass_fields__:
-            field = getattr(schema, key)
-            if key != '_default' and key in value:
-                if key.startswith('_'):
-                    subkey = core.access(value[key])
-                else:
-                    subkey = core.infer(value[key], path=path+(key,))
+            if not key.startswith('_'):
+                field = getattr(schema, key)
+                subkey = core.infer(value[key], path=path+(key,))
                 resolved = core.resolve(field, subkey)
                 setattr(schema, key, resolved)
 
-        return set_default(schema, default_value)
+        return set_default(schema, value)
 
     elif '_default' in value:
         return infer(core, value['_default'])

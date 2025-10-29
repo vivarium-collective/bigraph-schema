@@ -70,6 +70,7 @@ from bigraph_schema.schema import (
 from bigraph_schema.registry import deep_merge
 from bigraph_schema.parse import visit_expression
 from bigraph_schema.methods import (
+    assign_parameters,
     handle_parameters,
     infer,
     render,
@@ -96,18 +97,6 @@ def schema_keys(schema):
         if key.startswith('_'):
             keys.append(key)
     return keys
-
-@dispatch
-def post_access(node: Array, parameters):
-    result = replace(node, **parameters)
-    result._data = nf.descr_to_dtype(result._data)
-    result._shape = tuple([int(item) for item in result._shape])
-    return result
-
-@dispatch
-def post_access(node, parameters):
-    result = replace(node, **parameters)
-    return result
 
 
 class SchemaVisitor(NodeVisitor):
@@ -145,7 +134,11 @@ class SchemaVisitor(NodeVisitor):
                 merged.update(tree)
             return merged
         else:
-            return Tuple(_values=nodes)
+            try:
+                values = tuple([int(x) for x in nodes])
+                return values
+            except Exception as e:
+                return Tuple(_values=nodes)
 
     def visit_tree(self, node, visit):
         """Delegate directly to nested element."""
@@ -169,9 +162,12 @@ class SchemaVisitor(NodeVisitor):
         schema = visit[0]
 
         # Parse parameter list
-        type_parameters = [parameter for parameter in visit[1]['visit']]
+        type_parameters = [
+            parameter
+            for parameter in visit[1]['visit']]
+
         if type_parameters:
-            schema = handle_parameters(schema, type_parameters[0])
+            schema = handle_parameters(self.operation, schema, type_parameters[0])
 
         # Parse default value `{...}`
         default_visit = visit[2]['visit']
@@ -262,6 +258,24 @@ class SchemaOperation:
         instance = base(**fields)
         return instance
 
+    def access_type(self, value):
+        if isinstance(value, dict) and '_type' in value:
+            schema = core.access(value['_type'])
+
+            default_value = None
+            if '_default' in value:
+                default_value = value['_default']
+            elif isinstance(schema, Node) and schema._default is not None:
+                default_value = schema._default
+            schema._default = default_value
+
+            parameters = {}
+            for key in schema_keys(schema)[1:]:
+                if key in value:
+                    parameters[key] = value[key]
+            schema = assign_parameters(core, schema, parameters)
+            return schema
+
     def access(self, key):
         """Normalize any schema form into nodes/values.
 
@@ -276,38 +290,12 @@ class SchemaOperation:
         elif isinstance(key, str):
             if key not in self.registry:
                 return visit_expression(key, self.parse_visitor)
-                # try:
-                #     return visit_expression(key, self.parse_visitor)
-                # except Exception as e:
-                #     import ipdb; ipdb.set_trace()
-                #     return key  # fallback if not a schema expression
             else:
                 return self.registry[key]()
 
         elif isinstance(key, dict):
             if '_type' in key:
-                type_key = key['_type']
-                if not isinstance(type_key, Node):
-                    type_key = self.access(type_key)
-
-                fields = {
-                    field: self.access(value)
-                    for field, value in key.items()
-                    if field not in ('_type', '_default')
-                }
-                if '_default' in key:
-                    fields['_default'] = key['_default']
-
-                if isinstance(type_key, Node):
-                    base = post_access(type_key, fields)
-                elif isinstance(type_key, dict):
-                    import ipdb; ipdb.set_trace()
-                    base = self.resolve(type_key, fields)
-                elif isinstance(type_key, str):
-                    import ipdb; ipdb.set_trace()
-                else:
-                    import ipdb; ipdb.set_trace()
-                return base
+                return self.access_type(key)
 
             else:
                 result = {}
@@ -541,6 +529,7 @@ def test_array(core):
     rendered = core.render(array_schema)
 
 def test_infer(core):
+    import ipdb; ipdb.set_trace()
     default_node = core.default(node_schema)
     node_inferred = core.infer(default_node)
     assert check(node_inferred, default_node)
@@ -555,6 +544,7 @@ def test_render(core):
     node_render = core.render(node_schema)
     assert node_render == render(node_type)
 
+    import ipdb; ipdb.set_trace()
     edge_type = core.access(edge_schema)
     edge_render = core.render(edge_type)
 
@@ -725,7 +715,8 @@ def test_infer_edge(core):
                 'n': ['A'],
                 'x': ['E']},
             'outputs': {
-                'z': ['F', 'f', '_ff']}}}
+                'z': ['F', 'f', 'ff']}}}
+
     edge_schema = core.infer(edge_state)
 
 def test_traverse(core):
@@ -875,7 +866,17 @@ def test_unify(core):
         'A': 'float',
         'B': 'enum[one,two,three]',
         'D': 'string{hello}',
-        'units': 'map[number]'}
+        'units': 'map[number]',
+        'inner': {
+            'edge': {
+                '_type': 'edge',
+                '_inputs': {
+                    'n': 'float',
+                    'x': {
+                        'xx': 'string',
+                        'xy': 'boolean'}},
+                '_outputs': {
+                    'z': 'string'}}}}
 
     state = {
         'C': {
@@ -887,14 +888,6 @@ def test_unify(core):
 
         'inner': {
             'edge': {
-                '_type': 'edge',
-                '_inputs': {
-                    'n': 'float',
-                    'x': {
-                        'xx': 'string',
-                        'xy': 'boolean'}},
-                '_outputs': {
-                    'z': 'string'},
                 'inputs': {
                     'n': ['..', 'A'],
                     'x': {
