@@ -4,13 +4,13 @@ Bigraph-Schema Operation & Visitor
 
 This module provides the primary front door for bigraph-schema:
 
-- **SchemaOperation**: A registry-backed operation that parses and normalizes
+- **Core**: A registry-backed operation that parses and normalizes
   schema representations (strings, dicts, lists) into dataclass nodes
   (see `schema.py`), and exposes the core operations: `infer`, `render`,
   `default`, `resolve`, `check`, `serialize`, `deserialize`, `merge`,
   `jump`, `traverse`, `bind`, `apply`.
 
-- **SchemaVisitor**: A `parsimonious` visitor that lowers parsed bigraph
+- **CoreVisitor**: A `parsimonious` visitor that lowers parsed bigraph
   expressions into node structures (e.g., `Union(_options=...)`,
   `Tuple(_values=...)`, typed mappings, and defaults).
 
@@ -99,10 +99,10 @@ def schema_keys(schema):
     return keys
 
 
-class SchemaVisitor(NodeVisitor):
+class CoreVisitor(NodeVisitor):
     """Visitor that converts parsed bigraph expressions into schema node structures.
 
-    Operates within a `SchemaOperation` context, mapping grammar constructs
+    Operates within a `Core` context, mapping grammar constructs
     (unions, merges, type parameters, and defaults) into dataclass-based nodes.
     Handles normalization of nested expressions (e.g. `tuple[int,float]`,
     `edge[a:int|b:string]`, `(x:y|z:w)`) into instances of `Union`, `Tuple`,
@@ -110,7 +110,7 @@ class SchemaVisitor(NodeVisitor):
     """
 
     def __init__(self, operation):
-        """Initialize with the active `SchemaOperation`."""
+        """Initialize with the active `Core`."""
         self.operation = operation
 
     def visit_expression(self, node, visit):
@@ -207,7 +207,7 @@ class SchemaVisitor(NodeVisitor):
         return {'node': node, 'visit': visit}
 
 
-class SchemaOperation:
+class Core:
     """Bigraph-schema operation: registry, parsing, normalization, and ops.
 
     - Maintains a registry mapping type keys to node constructors (see `BASE_TYPES`).
@@ -224,7 +224,7 @@ class SchemaOperation:
         """Initialize operation with a base type registry (e.g., `BASE_TYPES`)."""
         self.registry = {}
         self.register_types(types)
-        self.parse_visitor = SchemaVisitor(self)
+        self.parse_visitor = CoreVisitor(self)
 
     def register_type(self, key, data):
         """Register a single type key; deep-merge if it already exists."""
@@ -401,7 +401,7 @@ class SchemaOperation:
 
 @pytest.fixture
 def core():
-    return SchemaOperation(
+    return Core(
         BASE_TYPES)
 
 default_a = 11.111
@@ -1041,7 +1041,7 @@ def test_apply(core):
 
 
 if __name__ == '__main__':
-    core = SchemaOperation(
+    core = Core(
         BASE_TYPES)
 
     test_infer(core)

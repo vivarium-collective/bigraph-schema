@@ -1,6 +1,6 @@
 DOCTEST_FILES=bigraph_schema/type_system.py
 TESTS=bigraph_schema/tests.py
-RUNTIME=bigraph_schema/runtime.py
+RUNTIME=bigraph_schema/core.py
 PY=PYTHONPATH=`pwd` uv run
 
 
@@ -18,5 +18,5 @@ doctest:
 debug:
 	${PY} python3 -i ${TESTS}
 
-debug-rt:
+core:
 	${PY} python3 -i ${RUNTIME}
