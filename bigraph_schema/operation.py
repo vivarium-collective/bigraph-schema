@@ -1,10 +1,10 @@
 """
-Bigraph-Schema Runtime & Visitor
+Bigraph-Schema Operation & Visitor
 ================================
 
 This module provides the primary front door for bigraph-schema:
 
-- **SchemaRuntime**: A registry-backed runtime that parses and normalizes
+- **SchemaOperation**: A registry-backed operation that parses and normalizes
   schema representations (strings, dicts, lists) into dataclass nodes
   (see `schema.py`), and exposes the core operations: `infer`, `render`,
   `default`, `resolve`, `check`, `serialize`, `deserialize`, `merge`,
@@ -113,16 +113,16 @@ def post_access(node, parameters):
 class SchemaVisitor(NodeVisitor):
     """Visitor that converts parsed bigraph expressions into schema node structures.
 
-    Operates within a `SchemaRuntime` context, mapping grammar constructs
+    Operates within a `SchemaOperation` context, mapping grammar constructs
     (unions, merges, type parameters, and defaults) into dataclass-based nodes.
     Handles normalization of nested expressions (e.g. `tuple[int,float]`,
     `edge[a:int|b:string]`, `(x:y|z:w)`) into instances of `Union`, `Tuple`,
     or structured dicts.
     """
 
-    def __init__(self, runtime):
-        """Initialize with the active `SchemaRuntime`."""
-        self.runtime = runtime
+    def __init__(self, operation):
+        """Initialize with the active `SchemaOperation`."""
+        self.operation = operation
 
     def visit_expression(self, node, visit):
         """Top-level entry; returns first child."""
@@ -199,8 +199,8 @@ class SchemaVisitor(NodeVisitor):
         return node.text
 
     def visit_symbol(self, node, visit):
-        """Resolve bare symbol names via the runtime registry or parse visitor."""
-        return self.runtime.access(node.text)
+        """Resolve bare symbol names via the operation registry or parse visitor."""
+        return self.operation.access(node.text)
 
     def visit_nothing(self, node, visit):
         """Handle empty productions (e.g., trailing commas)."""
@@ -211,8 +211,8 @@ class SchemaVisitor(NodeVisitor):
         return {'node': node, 'visit': visit}
 
 
-class SchemaRuntime:
-    """Bigraph-schema runtime: registry, parsing, normalization, and ops.
+class SchemaOperation:
+    """Bigraph-schema operation: registry, parsing, normalization, and ops.
 
     - Maintains a registry mapping type keys to node constructors (see `BASE_TYPES`).
     - Normalizes schema representations (strings, dicts, lists) into dataclass nodes
@@ -225,7 +225,7 @@ class SchemaRuntime:
     """
 
     def __init__(self, types):
-        """Initialize runtime with a base type registry (e.g., `BASE_TYPES`)."""
+        """Initialize operation with a base type registry (e.g., `BASE_TYPES`)."""
         self.registry = {}
         self.register_types(types)
         self.parse_visitor = SchemaVisitor(self)
@@ -238,7 +238,7 @@ class SchemaRuntime:
             self.registry[key] = data
 
     def register_types(self, types):
-        """Bulk register multiple type keys into the runtime registry."""
+        """Bulk register multiple type keys into the operation registry."""
         for key, data in types.items():
             self.register_type(key, data)
 
@@ -275,10 +275,12 @@ class SchemaRuntime:
 
         elif isinstance(key, str):
             if key not in self.registry:
-                try:
-                    return visit_expression(key, self.parse_visitor)
-                except Exception:
-                    return key  # fallback if not a schema expression
+                return visit_expression(key, self.parse_visitor)
+                # try:
+                #     return visit_expression(key, self.parse_visitor)
+                # except Exception as e:
+                #     import ipdb; ipdb.set_trace()
+                #     return key  # fallback if not a schema expression
             else:
                 return self.registry[key]()
 
@@ -411,7 +413,7 @@ class SchemaRuntime:
 
 @pytest.fixture
 def core():
-    return SchemaRuntime(
+    return SchemaOperation(
         BASE_TYPES)
 
 default_a = 11.111
@@ -1046,7 +1048,7 @@ def test_apply(core):
 
 
 if __name__ == '__main__':
-    core = SchemaRuntime(
+    core = SchemaOperation(
         BASE_TYPES)
 
     test_infer(core)

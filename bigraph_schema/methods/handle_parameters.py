@@ -73,7 +73,7 @@ def handle_parameters(schema: Array, parameters):
     schema._shape = tuple([
         int(value)
         for value in shape])
-    schema._data = dtype(parameters[1])
+    schema._data = np.dtype(parameters[1])
 
     return schema
 
