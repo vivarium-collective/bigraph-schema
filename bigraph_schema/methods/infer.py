@@ -35,7 +35,6 @@ from bigraph_schema.schema import (
 
 
 from bigraph_schema.methods.serialize import serialize
-from bigraph_schema.methods.handle_parameters import assign_parameters, schema_keys
 
 MISSING_TYPES = {}
 

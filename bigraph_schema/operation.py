@@ -70,7 +70,7 @@ from bigraph_schema.schema import (
 from bigraph_schema.registry import deep_merge
 from bigraph_schema.parse import visit_expression
 from bigraph_schema.methods import (
-    assign_parameters,
+    reify_schema,
     handle_parameters,
     infer,
     render,
@@ -273,7 +273,7 @@ class SchemaOperation:
             for key in schema_keys(schema)[1:]:
                 if key in value:
                     parameters[key] = value[key]
-            schema = assign_parameters(core, schema, parameters)
+            schema = reify_schema(core, schema, parameters)
             return schema
 
     def access(self, key):

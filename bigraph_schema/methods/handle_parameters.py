@@ -35,11 +35,12 @@ from bigraph_schema.schema import (
 # aligning parameters takes them from positioned arguments and gives them keys
 # in a dict.
 
-# assigning parameters takes a dict of representations and turns them into schemas
+# reifying the schema takes a dict of representations and turns them into schemas
+# according to the parameters
 
 # handling parameters combines these operations to go from positioned arguments to schemas
 
-# we need aligning when parsing, but only assigning when inferring from state
+# we need aligning when parsing, but only reifying when inferring from state
 # hence the distinction here
 
 def schema_keys(schema):
@@ -103,13 +104,13 @@ def align_parameters(schema, parameters):
     raise Exception(f'unknown parameters for schema {schema}: {parameters}')
 
 @dispatch
-def assign_parameters(core, schema: Enum, parameters):
+def reify_schema(core, schema: Enum, parameters):
     if '_values' in parameters:
         schema._values = parameters['_values']
     return schema
 
 @dispatch
-def assign_parameters(core, schema: Array, parameters):
+def reify_schema(core, schema: Array, parameters):
     schema._shape = tuple([
         int(value)
         for value in parameters.get('_shape', (1,))])
@@ -120,7 +121,7 @@ def assign_parameters(core, schema: Array, parameters):
     return schema
 
 @dispatch
-def assign_parameters(core, schema: Node, parameters):
+def reify_schema(core, schema: Node, parameters):
     for key, parameter in parameters.items():
         field = getattr(schema, key)
         subkey = core.access(parameter)
@@ -130,9 +131,9 @@ def assign_parameters(core, schema: Node, parameters):
     return schema
 
 @dispatch
-def assign_parameters(core, schema, parameters):
+def reify_schema(core, schema, parameters):
     import ipdb; ipdb.set_trace()
 
 def handle_parameters(core, schema, parameters):
     align = align_parameters(schema, parameters)
-    return assign_parameters(core, schema, align)
+    return reify_schema(core, schema, align)
