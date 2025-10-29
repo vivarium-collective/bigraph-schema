@@ -32,8 +32,15 @@ from bigraph_schema.schema import (
     Edge,
 )
 
-# from bigraph_schema.methods.serialize import serialize
+# aligning parameters takes them from positioned arguments and gives them keys
+# in a dict.
 
+# assigning parameters takes a dict of representations and turns them into schemas
+
+# handling parameters combines these operations to go from positioned arguments to schemas
+
+# we need aligning when parsing, but only assigning when inferring from state
+# hence the distinction here
 
 def schema_keys(schema):
     keys = []
