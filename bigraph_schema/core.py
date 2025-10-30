@@ -1,26 +1,22 @@
 """
-Bigraph-Schema Operation & Visitor
-================================
+Bigraph-Schema Core
+===================
 
-This module provides the primary front door for bigraph-schema:
+This module defines the **Core** class — the main operational interface for
+`bigraph-schema`. Core manages the translation between *compiled*
+(dataclass-based) and *encoded* (JSON-compatible) representations of both
+**schemas** and **states**.
 
-- **Core**: A registry-backed operation that parses and normalizes
-  schema representations (strings, dicts, lists) into dataclass nodes
-  (see `schema.py`), and exposes the core operations: `infer`, `render`,
-  `default`, `resolve`, `check`, `serialize`, `deserialize`, `merge`,
-  `jump`, `traverse`, `bind`, `apply`.
+Core provides a consistent API for all major transformations:
+- `access` / `render`: parse and serialize schema definitions
+- `default` / `infer`: connect schemas to example states
+- `serialize` / `deserialize`: encode and decode state data
 
-- **CoreVisitor**: A `parsimonious` visitor that lowers parsed bigraph
-  expressions into node structures (e.g., `Union(_options=...)`,
-  `Tuple(_values=...)`, typed mappings, and defaults).
+These methods form a reversible, type-aware layer for schema construction,
+validation, and data transformation.
 
-- **Parameter/Access Hooks**:
-  - `handle_parameters(...)` applies type parameters to nodes via multiple
-    dispatch (e.g., `Array[_shape,_dtype]`, `Map[_key,_value]`, `Union[_options]`,
-    `Tuple[_values]`, `Edge[_inputs,_outputs]`).
-  - `post_access(...)` finalizes node construction after dict-based access,
-    enforcing invariants (notably `Array._shape -> tuple[int,...]` and
-    `Array._data -> numpy.dtype` for round-trip stability).
+`CoreVisitor` implements the parsing backend, converting textual bigraph
+expressions into structured schema nodes (`Union`, `Tuple`, `Array`, `Edge`, etc.).
 """
 import typing
 import numpy as np
@@ -277,12 +273,11 @@ class Core:
             return schema
 
     def access(self, key):
-        """Normalize any schema form into nodes/values.
+        """Interpret an encoded schema or object and produce a compiled node.
 
-        - Dataclass node → returned as-is.
-        - String → instantiate via registry; else parse bigraph expression.
-        - Dict with `_type` → resolve `_type`, normalize fields, then `post_access(...)`.
-        - Untyped dict/list → recursively normalized (private `_...` keys kept raw).
+        Converts strings, dicts, or lists into dataclass-based schema instances.
+        Acts as the main entry point for parsing bigraph expressions and building
+        normalized in-memory representations.
         """
         if is_dataclass(key):
             return key
@@ -312,16 +307,29 @@ class Core:
             return key
 
     def infer(self, state, path=()):
-        """Infer a schema from example `state` (see `infer.py`); sets `_default` where applicable."""
+        """Derive a schema that matches the structure of an example state.
+
+        Analyzes values to infer types, shapes, and nested relationships, generating
+        a schema node that captures the structure of the provided data.
+        """
         return infer(self, state, path=path)
 
     def render(self, schema):
-        """Render a node/schema to a JSON-serializable form (inverse of `access`)."""
+        """Produce a serializable view of a compiled schema.
+
+        Converts internal dataclass nodes into JSON-friendly dicts or strings.
+        This is the inverse of `access()`, ensuring round-trip fidelity between
+        code representations and stored schema definitions.
+        """
         found = self.access(schema)
         return render(found)
 
     def default(self, schema):
-        """Materialize default value for `schema` (`_default` → `deserialize(...)`)."""
+        """Generate a representative state that satisfies a schema.
+
+        Uses type defaults and explicit `_default` values to instantiate an example
+        state consistent with the given schema.
+        """
         found = self.access(schema)
         value = default(found)
         return deserialize(found, value)
@@ -338,20 +346,30 @@ class Core:
         return check(found, state)
 
     def serialize(self, schema, state):
-        """Encode `state` per `schema` (JSON-friendly)."""
+        """Convert a structured Python state into an encoded representation.
+
+        Encodes typed values into JSON-compatible primitives while respecting the
+        schema’s structure and constraints.
+        """
         found = self.access(schema)
         return serialize(found, state)
 
     def deserialize(self, schema, state):
-        """Decode representation into typed value per `schema`."""
+        """Convert an encoded representation back into structured Python values.
+
+        Decodes strings, numbers, and nested structures into their appropriate types,
+        guided by the provided schema.
+        """
         found = self.access(schema)
         return deserialize(found, state)
 
     def generate(self, schema, state):
-        """Compute a resolved schema and defaulted state from partial inputs.
+        """Combine schema inference, resolution, and defaulting.
 
-        Equivalent to: `resolved = resolve(infer(state), access(schema)); merged = default(resolved)`.
-        Returns `(resolved, merged)`.
+        Produces a resolved schema and a corresponding defaulted state from partial
+        inputs. Equivalent to:
+            resolve(infer(state), access(schema)) → default(...)
+        Returns a `(resolved_schema, completed_state)` pair.
         """
         found = self.access(schema)
         inferred = self.infer(state)
