@@ -1,31 +1,44 @@
-# Bigraph-schema
+# Bigraph-Schema
 
 [![PyPI version](https://img.shields.io/pypi/v/bigraph-schema.svg)](https://pypi.org/project/bigraph-schema/)
 [![Tutorial](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/bigraph-schema/notebooks/demo.html)
 
-Welcome to `bigraph-schema` – a library providing a serializable type schema for composite systems simulations. 
-This library provides the core of the broader Vivarium 2.0 project.
+`bigraph-schema` provides a serializable type schema for compositional and multiscale modeling.  
+It defines a compact, extensible language for describing hierarchical data structures — the foundation of the Vivarium 2.0 simulation framework.
 
-The goal of `bigraph-schema` is to support interoperability and extensibility across composite simulation formats, 
-facilitating integration with existing and future modeling platforms. This is achieved by establishing a 
-standardized and serializable schema for the complex, hierarchical, and multiscale nature of biological systems.
+The library offers a unified interface for representing, validating, and transforming schemas and data in structured simulations.  
+By standardizing schema definitions, it enables interoperability between models, extensibility across frameworks, and reproducibility of computational experiments.
+
+---
 
 ## Installation
 
-To install `bigraph-schema`, you can use pip:
+Install directly from PyPI:
 
 ```console
 pip install bigraph-schema
 ```
+---
 
 ## Getting Started
 
-To get started with bigraph-schema, check out our resources:
+The following resources provide guided introductions and examples:
 
-* [Type System Overview](https://vivarium-collective.github.io/bigraph-schema/notebooks/core.html): A tutorial demonstrating the functionality of bigraph-schema's type system, "core".
-* [Bigraph Schema Basics Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html): A  tutorial covering the essential aspects of the bigraph-schema library. 
-This resource will guide you through the core concepts and methods, helping you to master the basic operations.
+- [Type System Overview](https://vivarium-collective.github.io/bigraph-schema/notebooks/core.html) – Demonstrates how to use the `Core` API for schema inference, normalization, and serialization.
+
+- [Bigraph Schema Basics Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html) – Explains how to compose and visualize schema graphs using the `bigraph-schema` syntax.
+
+
+---
+
+## Related Projects
+
+- [Vivarium](https://vivarium-collective.github.io/) – a compositional framework for hybrid biological simulations.  
+- [Bigraph-Viz](https://vivarium-collective.github.io/bigraph-viz/) – visualization tools for bigraph-schema models.  
+- [Process-Bigraph](https://github.com/vivarium-collective/process-bigraph) – process composition and orchestration built on bigraph-schema.
+
+---
 
 ## License
 
-Bigraph-schema is open-source software released under the [Apache 2 License](https://github.com/vivarium-collective/bigraph-schema/blob/main/LICENSE).
+`bigraph-schema` is open-source software released under the [Apache 2.0 License](https://github.com/vivarium-collective/bigraph-schema/blob/main/LICENSE).
