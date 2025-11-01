@@ -20,3 +20,6 @@ debug:
 
 core:
 	${PY} python3 -i ${RUNTIME}
+
+bigraph:
+	${PY} python3 -i bigraph_schema/bigraph.py

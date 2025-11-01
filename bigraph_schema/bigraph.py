@@ -6,7 +6,7 @@ attempting a normalized version of the process bigraph abstraction
 import uuid
 
 def new_uuid():
-    uuid.uuid4()
+    return uuid.uuid4()
 
 
 def from_tree(tree):
@@ -221,12 +221,15 @@ class Bigraph():
         children = {}
         for k,v in target.items():
             childpath = path.copy()
-            childpath.insert(k)
+            childpath.append(k)
             children[k] = self.as_tree(path=childpath)
-        return {
+
+        result = {
                 'id': target_id,
-                'data': target_data,
-                'children': children}
+                'data': target_data}
+        if len(children) > 0:
+            result['children'] = children
+        return result
 
 
 def test_bigraph():
@@ -234,15 +237,19 @@ def test_bigraph():
     tree = bg.as_tree()
     assert tree == {
             'id': bg.id,
-            'data': bg,
-            'children': {}}
+            'data': bg}
 
     def get_children(node):
         return node.get('children') or {}
     def get_leaf(node):
         return node.get('data') or {}
     def get_id(node):
-        return node.get('id') or new_uuid()
+        if hasattr(node, 'id'):
+            return node.id
+        elif node.get('id'):
+            return node['id']
+        else:
+            return new_uuid()
 
     branch = {
             'id': 4,
@@ -269,3 +276,10 @@ def test_bigraph():
             1: {'b': 0, 'c': 3},
             2: {'d': 1},
             3: {'e': 0}}
+
+    tree = bg.as_tree()
+
+    assert tree == {
+            'id': bg.id,
+            'data': bg,
+            'children': {4: branch}}
