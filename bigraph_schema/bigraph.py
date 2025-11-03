@@ -9,9 +9,6 @@ def new_uuid():
     return uuid.uuid4()
 
 
-def from_tree(tree):
-    pass
-
 class JoinDict():
     "bidirectional mappings between two cachable types"
     def __init__(self):
@@ -143,10 +140,10 @@ class Bigraph():
     # also: how to describe open links for merges...
     def harvest_tree(self, tree, place, get_children, get_leaf, get_id):
         """
-        navigates a tree of data using get_children to find branches,
-        and get_leaf to create nodes
+        navigates `tree' of data using `get_children' to find branches,
+        `get_leaf' to create nodes, and `get_id' to find the id of a node
 
-        place should be some subtree of self.places, or a placeholder
+        `place' should be some subtree of self.places, or a placeholder
         if ingesting nodes without their place structure
         """
 
@@ -283,3 +280,11 @@ def test_bigraph():
             'id': bg.id,
             'data': bg,
             'children': {4: branch}}
+
+    bg2 = Bigraph()
+    branch2  {
+            'children': {
+                5: {'id': 5,
+                    'data': {'f': 4}},
+                5: {'id': 6,
+                    'data': {'g': 4}}}}
