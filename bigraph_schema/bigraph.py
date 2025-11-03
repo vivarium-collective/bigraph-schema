@@ -1,9 +1,23 @@
 """
 attempting a normalized version of the process bigraph abstraction
 """
+import uuid
+
+# bigraph{
+#     id: uuid
+#     nodes : mapping(id:uuid, node:object)
+#     places : tree(uuid from nodes)
+#     links : mapping(uuid from link, Link)
+#     links_nodes : many to many uuid links to nodes}
+#
+# link{
+#     id: uuid
+#     rule: callable
+#     action: callable
+#     ports: many to many port_names to node_ids
+#     schemas: mapping(port_name, schema)}
 
 # we implement a "database" of objects keyed by uuid
-import uuid
 
 def new_uuid():
     return uuid.uuid4()
@@ -100,31 +114,59 @@ def test_joindict():
     assert jd.delink(88, 'z') or True
 
 class Link():
-    def __init__(self, **kwargs):
+    def __init__(self, bigraph, **kwargs):
         """
+        creates an object with the following properties:
 
+        id - provided by kwargs or generated as a uuid, used to register
+            link to the bigraph, and register connections to nodes in the
+            bigraph
+
+        rule, action - used together to update bigraph
+
+        ports - a many to many mapping from port name to (node_id or None)
+
+        updates bigraph.links and bigraph.links_nodes as apropriate
         """
-        ## mandatory arguments
-        self.node_id = kwargs['node_id']
-        self.schema = kwargs['schema']
-
-        ## optional arguments
 
         self.id = kwargs.get('id') or new_uuid()
+
         # without a rule and action, we have a passive link
+        # self.rule takes (self, bigraph), and returns a series of
+        # 0 or more argument objects for calls to self.action
+        # expected not to mutate self or bigraph
         self.rule = kwargs.get('rule')
+        # takes (self, bigraph, arglist) and returns a result object
+        # expected to mutate self and/or bigraph
         self.action = kwargs.get('action')
 
         ## registration
-        # target takes the form (nod_id, link_id)
-        # without target, we have an "open link"
-        # we can look up the bigraph's open links via
-        # bigraph.links.get_right(None, None)
-        target = kwargs.get('target', (None, None))
-        bigraph.links[self.id] = self
-        # TODO - consider layering links_nodes so it is indexed by node_id?
-        bigraph.links_nodes.insert((self.node_id, self.id), target)
+        # the 'ports' argument key should be a list of
+        # ('name', schema, node_id), tuples describing one port of the link
+        # per item.
+        # * 'name' is any identifier, preferring a descriptive string name
+        # * schema is a schema that should match the node that gets connected
+        # * node_id should be usable to find a node on the parent bigraph, or
+        #   None
+        # ('name', schema, None) describes an open link.
 
+        raw_ports = kwargs.get('ports', [])
+        self.ports = JoinDict()
+        # mapping from port name to schema
+        self.port_schemas = {}
+        for name, schema, node_id in raw_ports:
+            self.port_schemas[name] = schema
+            node_id = node_id or None
+            self.ports.insert(name, node_id)
+            bigraph.links_nodes.insert(self.id, node_id)
+        bigraph.links[self.id] = self
+
+    def process(self, bigraph):
+        args = self.rule(self, bigraph)
+        result = []
+        for arg in args:
+            result.append(self.action(self, bigraph, arg))
+        return result
 
 class Bigraph():
     """
@@ -160,6 +202,14 @@ class Bigraph():
         self.links_nodes = JoinDict()
 
         self.id = new_uuid()
+
+    # TODO: inner vs. outer interface
+    def compose(self, interface, other, other_interface):
+        """
+        based on the links and ports described in interface, and
+        other_interface, merge the other bigraph into this one
+        """
+        pass
 
     # currently no method of importing links is implemented, but it could be
     # done via a get_links helper which expects a relative path(???)
@@ -308,7 +358,7 @@ def test_bigraph():
             'children': {4: branch}}
 
     bg2 = Bigraph()
-    branch2  {
+    branch2  = {
             'children': {
                 5: {'id': 5,
                     'data': {'f': 4}},
