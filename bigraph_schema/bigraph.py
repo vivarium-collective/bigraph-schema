@@ -99,6 +99,32 @@ def test_joindict():
     # should accept nonsense keys for delink
     assert jd.delink(88, 'z') or True
 
+class Link():
+    def __init__(self, **kwargs):
+        """
+
+        """
+        ## mandatory arguments
+        self.node_id = kwargs['node_id']
+        self.schema = kwargs['schema']
+
+        ## optional arguments
+
+        self.id = kwargs.get('id') or new_uuid()
+        # without a rule and action, we have a passive link
+        self.rule = kwargs.get('rule')
+        self.action = kwargs.get('action')
+
+        ## registration
+        # target takes the form (nod_id, link_id)
+        # without target, we have an "open link"
+        # we can look up the bigraph's open links via
+        # bigraph.links.get_right(None, None)
+        target = kwargs.get('target', (None, None))
+        bigraph.links[self.id] = self
+        # TODO - consider layering links_nodes so it is indexed by node_id?
+        bigraph.links_nodes.insert((self.node_id, self.id), target)
+
 
 class Bigraph():
     """
