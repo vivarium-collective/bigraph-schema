@@ -17,7 +17,6 @@ import uuid
 #     ports: many to many port_names to node_ids
 #     schemas: mapping(port_name, schema)}
 
-# we implement a "database" of objects keyed by uuid
 
 def new_uuid():
     return uuid.uuid4()
@@ -67,51 +66,6 @@ class JoinDict():
         result = self.right.get(item) or {}
         return list(result.keys())
 
-def test_joindict():
-    jd = JoinDict()
-    jd.insert(0, 'a')
-    jd.insert(1, 'a')
-    jd.insert(0, 'b')
-    jd.insert(2, 'b')
-
-    assert jd.get_left(0) == ['a','b']
-    assert jd.get_left(1) == ['a']
-    assert jd.get_left(2) == ['b']
-    assert jd.get_right('a') == [0,1]
-    assert jd.get_right('b') == [0,2]
-
-    jd.remove_left(1)
-
-    assert jd.get_left(0) == ['a','b']
-    assert jd.get_left(1) == []
-    assert jd.get_left(2) == ['b']
-    assert jd.get_right('a') == [0]
-    assert jd.get_right('b') == [0,2]
-
-    jd.remove_right('b')
-
-    assert jd.get_left(0) == ['a']
-    assert jd.get_left(1) == []
-    assert jd.get_left(2) == []
-    assert jd.get_right('a') == [0]
-    assert jd.get_right('b') == []
-
-    jd.insert(3, 'c')
-    jd.insert(3, 'd')
-    jd.insert(3, 'e')
-    jd.insert(4, 'd')
-    jd.delink(3, 'd')
-
-    assert jd.get_left(0) == ['a']
-    assert jd.get_right('a') == [0]
-    assert jd.get_left(3) == ['c','e']
-    assert jd.get_left(4) == ['d']
-    assert jd.get_right('c') == [3]
-    assert jd.get_right('d') == [4]
-    assert jd.get_right('e') == [3]
-
-    # should accept nonsense keys for delink
-    assert jd.delink(88, 'z') or True
 
 class Link():
     def __init__(self, bigraph, **kwargs):
@@ -126,19 +80,21 @@ class Link():
 
         ports - a many to many mapping from port name to (node_id or None)
 
+        port_schemas - mapping from port name to schema
+
         updates bigraph.links and bigraph.links_nodes as apropriate
         """
 
         self.id = kwargs.get('id') or new_uuid()
 
-        # without a rule and action, we have a passive link
-        # self.rule takes (self, bigraph), and returns a series of
-        # 0 or more argument objects for calls to self.action
-        # expected not to mutate self or bigraph
-        self.rule = kwargs.get('rule')
-        # takes (self, bigraph, arglist) and returns a result object
-        # expected to mutate self and/or bigraph
-        self.action = kwargs.get('action')
+        # self.redex takes (self, bigraph), and returns a series of
+        # 0 or more argument objects for calls to self.reaction
+        # should not mutate bigraph
+        self.redex = kwargs.get('redex')
+        # self.reaction takes (self, bigraph, arglist) and returns a result
+        # object
+        # should mutate bigraph
+        self.reaction = kwargs.get('reaction')
 
         ## registration
         # the 'ports' argument key should be a list of
@@ -161,12 +117,26 @@ class Link():
             bigraph.links_nodes.insert(self.id, node_id)
         bigraph.links[self.id] = self
 
-    def process(self, bigraph):
-        args = self.rule(self, bigraph)
+    def interface(self):
+        """
+        the interface of a link is the set of open ports (ports not connected
+        to nodes)
+        """
+        raw = self.ports.get_right(None)
         result = []
-        for arg in args:
-            result.append(self.action(self, bigraph, arg))
+        for name in raw:
+            result.append({'link_id': self.id,
+                           'name': name,
+                           'schema': self.port_schemas[name]})
         return result
+
+    def process(self, bigraph):
+        reactums = self.redex(self, bigraph)
+        result = []
+        for reactum in reactums:
+            result.append(self.reaction(self, bigraph, reactum))
+        return result
+
 
 class Bigraph():
     """
@@ -303,6 +273,53 @@ class Bigraph():
         if len(children) > 0:
             result['children'] = children
         return result
+
+
+def test_joindict():
+    jd = JoinDict()
+    jd.insert(0, 'a')
+    jd.insert(1, 'a')
+    jd.insert(0, 'b')
+    jd.insert(2, 'b')
+
+    assert jd.get_left(0) == ['a','b']
+    assert jd.get_left(1) == ['a']
+    assert jd.get_left(2) == ['b']
+    assert jd.get_right('a') == [0,1]
+    assert jd.get_right('b') == [0,2]
+
+    jd.remove_left(1)
+
+    assert jd.get_left(0) == ['a','b']
+    assert jd.get_left(1) == []
+    assert jd.get_left(2) == ['b']
+    assert jd.get_right('a') == [0]
+    assert jd.get_right('b') == [0,2]
+
+    jd.remove_right('b')
+
+    assert jd.get_left(0) == ['a']
+    assert jd.get_left(1) == []
+    assert jd.get_left(2) == []
+    assert jd.get_right('a') == [0]
+    assert jd.get_right('b') == []
+
+    jd.insert(3, 'c')
+    jd.insert(3, 'd')
+    jd.insert(3, 'e')
+    jd.insert(4, 'd')
+    jd.delink(3, 'd')
+
+    assert jd.get_left(0) == ['a']
+    assert jd.get_right('a') == [0]
+    assert jd.get_left(3) == ['c','e']
+    assert jd.get_left(4) == ['d']
+    assert jd.get_right('c') == [3]
+    assert jd.get_right('d') == [4]
+    assert jd.get_right('e') == [3]
+
+    # should accept nonsense keys for delink
+    assert jd.delink(88, 'z') or True
 
 
 def test_bigraph():
