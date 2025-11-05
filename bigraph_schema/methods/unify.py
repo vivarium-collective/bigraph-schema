@@ -119,16 +119,31 @@ def unify(core, schema: Tuple, state, path):
 
     return schema, tuple(result), merges
 
+def state_keys(state):
+    return {
+        key: value
+        for key, value in state.items()
+        if not key.startswith('_')}
+
+@dispatch
+def unify(core, schema: Enum, state, path):
+    if isinstance(state, dict):
+        state = state_keys(state)
+
+    if not state:
+        state = default(schema)
+
+    return schema, state, []
+    
 @dispatch
 def unify(core, schema: Atom, state, path):
-    if state is None:
-        resolve_schema = schema
-        state = default(resolve_schema)
-    else:
-        infer_schema, merges = core.infer_merges(state)
-        resolve_schema = resolve(schema, infer_schema)
+    if isinstance(state, dict):
+        state = state_keys(state)
 
-    return resolve_schema, state, merges
+    if not state:
+        state = default(schema)
+
+    return schema, state, []
         
 @dispatch
 def unify(core, schema: NPRandom, state, path):
@@ -221,63 +236,6 @@ def default_wires(schema):
     return {
         key: [key]
         for key in schema}
-
-# def unify_path(core, schema, path, context):
-#     outer_path = convert_path(context['edge_path'])
-#     subpath = tuple(outer_path) + tuple(convert_path(path))
-#     subcontext = dict(context, **{
-#         'path': outer_path,
-#         'subpath': subpath})
-
-#     subschema, substate = traverse(
-#         context['schema'],
-#         context['state'],
-#         subpath[:-1],
-#         subcontext)
-
-#     import ipdb; ipdb.set_trace()
-
-#     target_schema, target_state = jump(
-#         subschema,
-#         substate,
-#         subpath[-1],
-#         subcontext)
-
-#     resolved = resolve(target_schema, schema)
-#     if target_state is None:
-#         target_state = default(target_schema)
-#     substate = bind(subschema, substate, subpath[-1], target_state)
-
-#     return context
-
-
-# def unify_wires(core, schema, wires, context):
-#     import ipdb; ipdb.set_trace()
-
-#     if isinstance(wires, list):
-#         return unify_path(
-#             core,
-#             schema,
-#             wires,
-#             context)
-
-#     else:
-#         for key, subschema in schema.items():
-#             subpath = []
-#             if 'subpath' in context:
-#                 subpath = context['subpath'] or subpath
-#             subcontext = dict(context, **{
-#                 'subpath': subpath + [key]})
-
-#             if key in wires:
-#                 context = unify_wires(
-#                     core,
-#                     subschema,
-#                     wires[key],
-#                     subcontext)
-
-#     return context
-
 
 def port_merges(port_schema, wires, path):
     if isinstance(wires, (list, tuple)):

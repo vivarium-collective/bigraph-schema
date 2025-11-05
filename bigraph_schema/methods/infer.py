@@ -139,26 +139,15 @@ def infer(core, value: set, path: tuple = ()):
 @dispatch
 def infer(core, value: dict, path: tuple = ()):
     if '_type' in value:
-        if value['_type'] == 'edge':
-            import ipdb; ipdb.set_trace()
-
         schema = core.access_type(value)
-        clean_value = {
-            key: subvalue
-            for key, subvalue in value.items()
-            if not key.startswith('_')}
-        schema, state, merges = unify(core, schema, clean_value, path)
+        # clean_value = {
+        #     key: subvalue
+        #     for key, subvalue in value.items()
+        #     if not key.startswith('_')} or core.default(schema)
+        # schema, state, merges = unify(core, schema, clean_value, path)
 
+        schema, state, merges = unify(core, schema, value, path)
         return set_default(schema, state), merges
-
-        # for key in schema.__dataclass_fields__:
-        #     if not key.startswith('_'):
-        #         field = getattr(schema, key)
-        #         subkey = core.infer(value[key], path=path+(key,))
-        #         resolved = core.resolve(field, subkey)
-        #         setattr(schema, key, resolved)
-
-        # return set_default(schema, value)
 
     elif '_default' in value:
         return infer(core, value['_default'])
