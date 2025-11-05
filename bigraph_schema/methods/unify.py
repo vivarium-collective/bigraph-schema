@@ -251,6 +251,9 @@ def unify_wires(core, schema, wires, context):
 def unify(core, schema: Edge, state, context):
     import ipdb; ipdb.set_trace()
 
+    # TODO: instead build the unified part of the tree then
+    #   resolve and merge it
+
     for port in ['inputs', 'outputs']:
         port_schema = getattr(schema, f'_{port}')
         if port not in state:
