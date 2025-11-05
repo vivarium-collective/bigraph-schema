@@ -121,6 +121,11 @@ def reify_schema(core, schema: Array, parameters):
     return schema
 
 @dispatch
+def reify_schema(core, schema: Union, parameters):
+    return replace(schema, **parameters)
+
+
+@dispatch
 def reify_schema(core, schema: Node, parameters):
     for key, parameter in parameters.items():
         field = getattr(schema, key)
