@@ -284,13 +284,6 @@ def unify(core, schema: Edge, state, path):
 
         merges += submerges
 
-        # context = dict(context, **{
-        #     'ports_key': port,
-        #     'edge_path': context['path'][:-1],
-        #     f'_{port}': port_schema})
-
-        # context = unify_wires(core, port_schema, state[port], context)
-
     return schema, state, merges
 
 @dispatch

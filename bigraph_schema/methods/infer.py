@@ -140,13 +140,14 @@ def infer(core, value: set, path: tuple = ()):
 def infer(core, value: dict, path: tuple = ()):
     if '_type' in value:
         schema = core.access_type(value)
-        # clean_value = {
-        #     key: subvalue
-        #     for key, subvalue in value.items()
-        #     if not key.startswith('_')} or core.default(schema)
-        # schema, state, merges = unify(core, schema, clean_value, path)
 
-        schema, state, merges = unify(core, schema, value, path)
+        # potential infinite recursion?
+        schema, state, merges = unify(
+            core,
+            schema,
+            value,
+            path)
+
         return set_default(schema, state), merges
 
     elif '_default' in value:
