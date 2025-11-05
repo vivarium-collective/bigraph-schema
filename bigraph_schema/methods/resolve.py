@@ -213,6 +213,11 @@ def resolve(current: Node, update: dict):
 
 
 @dispatch
+def resolve(current: list, update: list):
+    return tuple(update)
+
+
+@dispatch
 def resolve(current, update):
     
     if current is None:

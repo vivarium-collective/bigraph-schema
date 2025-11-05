@@ -119,9 +119,12 @@ def serialize(schema: Tree, state):
     if check(schema._leaf, state):
         return serialize(schema._leaf, state)
     else:
-        return {
-            key: serialize(schema, branch)
-            for key, branch in state.items()}
+        try:
+            return {
+                key: serialize(schema, branch)
+                for key, branch in state.items()}
+        except Exception as e:
+            import ipdb; ipdb.set_trace()
 
 @dispatch
 def serialize(schema: dict, state):
