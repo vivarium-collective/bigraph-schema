@@ -32,148 +32,179 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Edge,
+    nest_schema,
     convert_path,
-    walk_path,
 )
 
-from bigraph_schema.methods import default, check, resolve, jump, traverse, bind
+from bigraph_schema.methods.default import default
+from bigraph_schema.methods.check import check
+from bigraph_schema.methods.resolve import resolve
+
+
+
+def walk(path, to):
+    return tuple(path) + (to,)
 
 
 @dispatch
-def unify(core, schema: Empty, state, context):
-    schema = infer(core, state)
-    return schema, state
+def unify(core, schema: Empty, state, path):
+    schema, merges = core.infer_merges(state, path=path)
+    return schema, state, []
 
 @dispatch
-def unify(core, schema: None, state, context):
-    schema = infer(core, state)
-    return schema, state
+def unify(core, schema: None, state, path):
+    schema, merges = core.infer_merges(state, path=path)
+    return schema, state, merges
 
 @dispatch
-def unify(core, schema: Maybe, state, context):
+def unify(core, schema: Maybe, state, path):
     if state is None:
-        return schema, state
+        return schema, state, []
     else:
-        subcontext = walk_path(context, '_value')
-        schema._value, result = unify(core, schema._value, state, subcontext)
-        return schema, result
+        schema._value, result, merges = unify(
+            core,
+            schema._value,
+            state,
+            path)
+        return schema, result, merges
 
 @dispatch
-def unify(core, schema: Wrap, state, context):
-    schema._value, result = unify(core, schema._value, state, context)
-    return schema, result
+def unify(core, schema: Wrap, state, path):
+    schema._value, result, merges = unify(
+        core,
+        schema._value,
+        state,
+        path)
+    return schema, result, merges
 
 @dispatch
-def unify(core, schema: Union, state, context):
+def unify(core, schema: Union, state, path):
     for option in schema._options:
         if check(option, state):
-            subcontext = walk_path(context, '_options')
-            _, inner = unify(core, option, state, subcontext)
-            return schema, inner
+            _, inner, merges = unify(
+                core,
+                option,
+                state,
+                path)
+            return schema, inner, merges
 
     initial = default(schema)
-    return schema, initial
+    return schema, initial, merges
 
 @dispatch
-def unify(core, schema: Tuple, state, context):
+def unify(core, schema: Tuple, state, path):
     state = state or []
     result = []
+    merges = []
 
     for index, value in enumerate(schema._values):
         if index >= len(state):
             result[index] = default(value)
         else:
-            schema._values[index], result[index] = unify(
+            schema._values[index], result[index], submerges = unify(
                 core,
                 value,
                 state[index],
-                walk_path(context, index))
+                walk(path, index))
+            merges += submerges
 
     schema_len = len(schema._values)
     for index, over in enumerate(state[schema_len:]):
         overindex = schema_len + index
         result[overindex] = over
-        schema._values[overindex] = core.infer(result[overindex])
+        schema._values[overindex], submerges = core.infer_merges(
+            result[overindex],
+            walk(path, index))
+        merges += submerges
 
-    return schema, tuple(result)
+    return schema, tuple(result), merges
 
 @dispatch
-def unify(core, schema: Atom, state, context):
+def unify(core, schema: Atom, state, path):
     if state is None:
         resolve_schema = schema
+        state = default(resolve_schema)
     else:
-        infer_schema = core.infer(state)
+        infer_schema, merges = core.infer_merges(state)
         resolve_schema = resolve(schema, infer_schema)
 
-    return resolve_schema, default(resolve_schema)
+    return resolve_schema, state, merges
         
 @dispatch
-def unify(core, schema: NPRandom, state, context):
-    return schema, state
+def unify(core, schema: NPRandom, state, path):
+    return schema, state, []
 
 @dispatch
-def unify(core, schema: List, state, context):
+def unify(core, schema: List, state, path):
     result = []
     state = state or []
+    merges = []
 
     for index, element in enumerate(state):
-        schema._element, result[index] = unify(
+        schema._element, result[index], submerges = unify(
             core,
             schema._element,
             element,
-            walk_path(context, index))
+            walk(path, index))
+        merges += submerges
 
-    return schema, result
+    return schema, result, merges
 
 @dispatch
-def unify(core, schema: Map, state, context):
+def unify(core, schema: Map, state, path):
     value_schema = schema._value
+    merges = []
     if state and isinstance(state, dict):
         result = {}
         for key, value in state.items():
             try:
-                value_schema, result[key] = unify(
+                value_schema, result[key], submerges = unify(
                     core,
                     value_schema,
                     value,
-                    walk_path(context, key))
+                    walk(path, key))
+                merges += submerges
 
             except Exception as e:
                 # schemas did not unify which means we need to
                 # make this a generic struct instead of a map
-                return unify(core, {}, state, context)
+                return unify(core, {}, state, path)
 
         schema._value = value_schema
-        return schema, result
+        return schema, result, merges
     else:
-        return schema, default(schema)
+        return schema, default(schema), merges
 
 @dispatch
-def unify(core, schema: Tree, state, context):
+def unify(core, schema: Tree, state, path):
     leaf_schema = schema._leaf
+    merges = []
     if check(leaf_schema, state):
-        return unify(core, leaf_schema, state, context)
+        return unify(core, leaf_schema, state, path)
 
     elif state and isinstance(state, dict):
         for key, value in state.items():
             try:
-                leaf_schema, result[key] = unify(
+                subschema, result[key], submerges = unify(
                     core,
-                    leaf_schema,
+                    schema,
                     value,
-                    walk_path(context, key))
+                    walk(path, key))
+                merges += submerges
             except Exception as e:
                 # schemas did not unify which means we need to
                 # make this a generic struct instead of a tree
-                return unify(core, {}, state, context)
+                return unify(core, {}, state, path)
+
+        return schema, result, merges
 
     else:
-        return schema, default(schema)
+        return schema, default(schema), merges
 
 @dispatch
-def unify(core, schema: Array, state, context):
+def unify(core, schema: Array, state, path):
     if state is None:
-        return schema, default(schema)
+        return schema, default(schema), []
 
     if not schema._shape:
         schema._shape = state.shape
@@ -183,7 +214,7 @@ def unify(core, schema: Array, state, context):
     if not schema._data:
         schema._data = state.dtype
 
-    return schema, state
+    return schema, state, []
 
 
 def default_wires(schema):
@@ -191,117 +222,162 @@ def default_wires(schema):
         key: [key]
         for key in schema}
 
-def unify_path(core, schema, path, context):
-    outer_path = convert_path(context['edge_path'])
-    subpath = tuple(outer_path) + tuple(convert_path(path))
-    subcontext = dict(context, **{
-        'path': outer_path,
-        'subpath': subpath})
+# def unify_path(core, schema, path, context):
+#     outer_path = convert_path(context['edge_path'])
+#     subpath = tuple(outer_path) + tuple(convert_path(path))
+#     subcontext = dict(context, **{
+#         'path': outer_path,
+#         'subpath': subpath})
 
-    subschema, substate = traverse(
-        context['schema'],
-        context['state'],
-        subpath[:-1],
-        subcontext)
+#     subschema, substate = traverse(
+#         context['schema'],
+#         context['state'],
+#         subpath[:-1],
+#         subcontext)
 
-    import ipdb; ipdb.set_trace()
+#     import ipdb; ipdb.set_trace()
 
-    target_schema, target_state = jump(
-        subschema,
-        substate,
-        subpath[-1],
-        subcontext)
+#     target_schema, target_state = jump(
+#         subschema,
+#         substate,
+#         subpath[-1],
+#         subcontext)
 
-    resolved = resolve(target_schema, schema)
-    if target_state is None:
-        target_state = default(target_schema)
-    substate = bind(subschema, substate, subpath[-1], target_state)
+#     resolved = resolve(target_schema, schema)
+#     if target_state is None:
+#         target_state = default(target_schema)
+#     substate = bind(subschema, substate, subpath[-1], target_state)
 
-    return context
+#     return context
 
 
-def unify_wires(core, schema, wires, context):
-    import ipdb; ipdb.set_trace()
+# def unify_wires(core, schema, wires, context):
+#     import ipdb; ipdb.set_trace()
 
-    if isinstance(wires, list):
-        return unify_path(
-            core,
-            schema,
-            wires,
-            context)
+#     if isinstance(wires, list):
+#         return unify_path(
+#             core,
+#             schema,
+#             wires,
+#             context)
 
+#     else:
+#         for key, subschema in schema.items():
+#             subpath = []
+#             if 'subpath' in context:
+#                 subpath = context['subpath'] or subpath
+#             subcontext = dict(context, **{
+#                 'subpath': subpath + [key]})
+
+#             if key in wires:
+#                 context = unify_wires(
+#                     core,
+#                     subschema,
+#                     wires[key],
+#                     subcontext)
+
+#     return context
+
+
+def port_merges(port_schema, wires, path):
+    if isinstance(wires, (list, tuple)):
+        subpath = path[:-1] + tuple(wires)
+        submerges = nest_schema(
+            port_schema,
+            subpath)
+        return [submerges]
     else:
-        for key, subschema in schema.items():
-            subpath = []
-            if 'subpath' in context:
-                subpath = context['subpath'] or subpath
-            subcontext = dict(context, **{
-                'subpath': subpath + [key]})
+        merges = []
+        for key, subwires in wires.items():
+            down = port_schema[key]
+            submerges = port_merges(
+                down,
+                subwires,
+                path)
+            merges += submerges
 
-            if key in wires:
-                context = unify_wires(
-                    core,
-                    subschema,
-                    wires[key],
-                    subcontext)
+        return merges
 
-    return context
 
 @dispatch
-def unify(core, schema: Edge, state, context):
-    import ipdb; ipdb.set_trace()
-
+def unify(core, schema: Edge, state, path):
     # TODO: instead build the unified part of the tree then
     #   resolve and merge it
 
+    merges = []
+
     for port in ['inputs', 'outputs']:
-        port_schema = getattr(schema, f'_{port}')
+        port_key = f'_{port}'
+        port_schema = getattr(schema, port_key)
+
+        if port_key in state:
+            state_schema = core.access(state[port_key])
+            port_schema = core.resolve(
+                port_schema,
+                state[port_key])
+
         if port not in state:
             state[port] = default_wires(port_schema)
 
-        context = dict(context, **{
-            'ports_key': port,
-            'edge_path': context['path'][:-1],
-            f'_{port}': port_schema})
+        submerges = port_merges(
+            port_schema,
+            state[port],
+            path)
 
-        context = unify_wires(core, port_schema, state[port], context)
+        merges += submerges
 
-    return schema, state
+        # context = dict(context, **{
+        #     'ports_key': port,
+        #     'edge_path': context['path'][:-1],
+        #     f'_{port}': port_schema})
+
+        # context = unify_wires(core, port_schema, state[port], context)
+
+    return schema, state, merges
 
 @dispatch
-def unify(core, schema: Node, state, context):
+def unify(core, schema: Node, state, path):
+    merges = []
     if state is None:
-        return schema, default(schema)
+        return schema, default(schema), merges
 
     elif isinstance(state, dict):
         result = {}
         for key in schema.__dataclass_fields__:
             if key in state:
                 if not key.startswith('_'):
-                    subschema, result[key] = unify(
+                    subschema, result[key], submerges = unify(
                         core,
                         getattr(schema, key),
                         state[key],
-                        walk_path(context, key))
+                        walk(path, key))
+                    merges += submerges
+
                     setattr(schema, key, subschema)
             else:
                 result[key] = default(
                     getattr(schema, key))
+
         for key in state:
             if key not in result:
-                subschema = core.infer(state[key])
+                subschema, submerges = core.infer_merges(
+                    state[key],
+                    walk(path, key))
+                merges += submerges
+
                 setattr(schema, key, subschema)
 
-        return schema, result
+        return schema, result, merges
 
     else:
         for key in schema.__dataclass_fields__:
             if hasattr(state, key) and not key.startswith('_'):
-                subschema, substate = unify(
+                subschema, substate, submerges = unify(
                     core,
                     getattr(schema, key),
                     getattr(state, key),
-                    walk_path(context, key))
+                    walk(path, key))
+                merges += submerges
                 setattr(schema, key, subschema)
                 setattr(state, key, substate)
             else:
@@ -309,36 +385,43 @@ def unify(core, schema: Node, state, context):
                     getattr(schema, key))
                 setattr(state, key, substate)
 
-        return schema, result
+        return schema, result, merges
 
 @dispatch
-def unify(core, schema: dict, state, context):
-    if not schema:
-        return core.infer(state), state
+def unify(core, schema: dict, state, path):
+    merges = []
 
-    if not state:
-        return schema, default(schema)
+    if not schema:
+        schema, merges = core.infer_merges(state, path)
+        return schema, state, merges
+
+    elif not state:
+        return schema, default(schema), merges
 
     elif isinstance(state, dict):
         result = {}
         
         for key in state:
             if key not in schema:
-                schema[key] = core.infer(state[key])
+                schema[key], submerges = core.infer_merges(
+                    state[key],
+                    walk(path, key))
+                merges += submerges
 
         for key, subschema in schema.items():
             if key in state:
                 if not key.startswith('_'):
-                    schema[key], result[key] = unify(
+                    schema[key], result[key], submerges = unify(
                         core,
                         subschema,
                         state[key],
-                        walk_path(context, key))
+                        walk(path, key))
+                    merges += submerges
             else:
                 result[key] = default(
                     subschema)
 
-        return schema, result
+        return schema, result, merges
 
     else:
         raise Exception(f'could not unify state as struct schema:\n{state}\n{schema}')

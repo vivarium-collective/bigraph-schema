@@ -143,11 +143,35 @@ def merge(schema: Atom, current, update):
 
 
 @dispatch
+def merge(schema: Wires, current, update):
+    return update
+
+
+@dispatch
+def merge(schema: Edge, current, update):
+    if not current:
+        return update
+    if not update:
+        return current
+
+    result = {}
+    for key in schema.__dataclass_fields__:
+        if not key.startswith('_'):
+            down = getattr(schema, key)
+            result[key] = merge(
+                down,
+                current.get(key),
+                update.get(key))
+
+    return result
+
+
+@dispatch
 def merge(schema: Node, current, update):
     if isinstance(current, dict) and isinstance(update, dict):
         down = {}
         for key in schema.__dataclass_fields__:
-            down[key] = schema.getattr(key)
+            down[key] = getattr(schema, key)
         return merge(down, current, update)
     else:
         result = merge(
@@ -162,8 +186,17 @@ def merge(schema: Node, current, update):
 
 
 @dispatch
+def merge(schema, current, update):
+    return update
+
+
+@dispatch
 def merge(schema: dict, current, update):
     result = {}
+    if not current:
+        return update
+    if not update:
+        return current
 
     for key in schema.keys() | current.keys() | update.keys():
         if key in schema:
@@ -176,8 +209,11 @@ def merge(schema: dict, current, update):
         else:
             result[key] = current[key]
 
-        if key in schema and result[key] is None:
+        if key in schema and schema[key] and result[key] is None:
             result[key] = default(
                 schema[key])
+
+        if result[key] is None:
+            del result[key]
 
     return result

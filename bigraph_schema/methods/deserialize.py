@@ -182,6 +182,7 @@ def deserialize(schema: Node, encode):
 
 @dispatch
 def deserialize(schema: dict, encode):
+    # use access_type and fix for edges (!)
     if isinstance(encode, str):
         try:
             encode = literal_eval(encode)

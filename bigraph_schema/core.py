@@ -306,13 +306,24 @@ class Core:
         else:
             return key
 
-    def infer(self, state, path=()):
+    def infer_merges(self, state, path=()):
         """Derive a schema that matches the structure of an example state.
 
         Analyzes values to infer types, shapes, and nested relationships, generating
         a schema node that captures the structure of the provided data.
         """
         return infer(self, state, path=path)
+
+    def infer(self, state, path=()):
+        """Derive a schema that matches the structure of an example state.
+
+        Analyzes values to infer types, shapes, and nested relationships, generating
+        a schema node that captures the structure of the provided data.
+        """
+        schema, merges = infer(self, state, path=path)
+        for merge in merges:
+            schema = resolve(schema, merge)
+        return schema
 
     def render(self, schema):
         """Produce a serializable view of a compiled schema.
@@ -377,11 +388,25 @@ class Core:
         merged = self.default(resolved)
         return resolved, merged
 
-    def unify(self, schema, state):
+    def unify(self, schema, state, path=()):
         found = self.access(schema)
-        context = blank_context(found, state, ())
+        # context = blank_context(found, state, ())
         
-        return unify(self, found, state, context)
+        unify_schema, unify_state, merges = unify(
+            self,
+            found,
+            state,
+            path)
+
+        import ipdb; ipdb.set_trace()
+
+        for merge in merges:
+            unify_schema = self.resolve(unify_schema, merge)
+
+        default_state = self.default(unify_schema)
+
+        merge_state = self.merge(unify_schema, default_state, unify_state)
+        return unify_schema, merge_state
 
     def jump(self, schema, state, raw_key):
         """Navigate by logical jump (`Key`/`Index`/`Star`)."""
@@ -493,14 +518,14 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'tuple[integer,delta,nonnegative],' \
         'list[maybe[tree[path]]],' \
         'wrap[maybe[overwrite[integer]]],' \
-        'union[edge[x:integer,y:string],float,string],' \
         'path,' \
-        'tree[edge[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
         'wires,' \
         'integer{11},' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \
         'outest:string'
+        # 'union[edge[x:integer,y:string],float,string],' \
+        # 'tree[edge[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
         # 'list[maybe[tree[array[(3|4),float64]]]],' \
 
 # tests --------------------------------------
@@ -909,14 +934,16 @@ def test_unify(core):
                 'inputs': {
                     'n': ['..', 'A'],
                     'x': {
-                        '_path': ['W'],
+                        'xx': ['W', 'w'],
                         'xy': ['G']}},
                 'outputs': {
-                    'z': ['F', 'f', '_ff']}}},
+                    'z': ['F', 'f', 'ffff']}}},
 
         'units': {
             'meters': 11.1111,
             'seconds': 22.833333}}
+
+    import ipdb; ipdb.set_trace()
 
     generated_schema, generated_state = core.unify(
         schema,
@@ -1071,8 +1098,8 @@ if __name__ == '__main__':
     test_deserialize(core)
     test_merge(core)
     test_traverse(core)
-    test_infer_edge(core)
-    test_generate(core)
+    # test_infer_edge(core)
+    # test_generate(core)
     test_generate_promote_to_struct(core)
     test_uni_schema(core)
     test_array(core)

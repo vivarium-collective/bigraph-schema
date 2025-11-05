@@ -178,6 +178,17 @@ def resolve_path(path):
 
     return resolve
 
+def nest(schema, path):
+    if len(path) == 0:
+        return schema
+    else:
+        return {
+            path[0]: nest(schema, path[1:])}
+
+def nest_schema(schema, path):
+    subpath = resolve_path(path)
+    return nest(schema, subpath)
+
 def convert_path(path):
     resolved = resolve_path(path)
     return [

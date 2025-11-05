@@ -35,6 +35,7 @@ from bigraph_schema.schema import (
 
 
 from bigraph_schema.methods.serialize import serialize
+from bigraph_schema.methods.unify import unify
 
 MISSING_TYPES = {}
 
@@ -42,6 +43,9 @@ MISSING_TYPES = {}
 def set_default(schema, value):
     if value is not None:
         serialized = serialize(schema, value)
+        if isinstance(serialized, dict) and '_default' in serialized:
+            serialized = serialized['_default']
+
         if isinstance(schema, Node):
             schema = replace(schema, _default=serialized)
         elif isinstance(schema, dict):
@@ -55,12 +59,12 @@ def infer(core,
                   np.dtypes.Int32DType | np.dtypes.Int64DType),
           path: tuple = ()):
     schema = Integer()
-    return set_default(schema, value)
+    return set_default(schema, value), []
 
 @dispatch
 def infer(core, value: bool, path: tuple = ()):
     schema = Boolean()
-    return set_default(schema, value)
+    return set_default(schema, value), []
 
 @dispatch
 def infer(core,
@@ -68,12 +72,12 @@ def infer(core,
                   np.dtypes.Float32DType | np.dtypes.Float64DType),
           path: tuple = ()):
     schema = Float()
-    return set_default(schema, value)
+    return set_default(schema, value), []
 
 @dispatch
 def infer(core, value: str, path: tuple = ()):
     schema = String()
-    return set_default(schema, value)
+    return set_default(schema, value), []
 
 @dispatch
 def infer(core, value: np.ndarray, path: tuple = ()):
@@ -81,20 +85,21 @@ def infer(core, value: np.ndarray, path: tuple = ()):
         _shape=value.shape,
         _data=value.dtype) # Dtype(_fields=value.dtype))
 
-    return set_default(schema, value)
+    return set_default(schema, value), []
 
 @dispatch
 def infer(core, value: RandomState, path: tuple = ()):
     state = value.get_state()
-    data = core.infer(state)
+    data, merges = infer(core, state)
     schema = NPRandom(state=data)
 
-    return set_default(schema, value)
+    return set_default(schema, value), merges
 
 @dispatch
 def infer(core, value: list, path: tuple = ()):
+    merges = []
     if len(value) > 0:
-        element = infer(
+        element, merges = infer(
             core,
             value[0],
             path+('_element',))
@@ -102,25 +107,27 @@ def infer(core, value: list, path: tuple = ()):
         element = Node()
     
     schema = List(_element=element)
-    return set_default(schema, value)
+    return set_default(schema, value), merges
 
 @dispatch
 def infer(core, value: tuple, path: tuple = ()):
     result = []
+    merges = []
     for index, item in enumerate(value):
         if isinstance(item, np.str_):
             result.append(item)
         else:
-            inner = infer(core, item, path+(index,))
+            inner, submerges = infer(core, item, path+(index,))
+            merges += submerges
             result.append(inner)
 
     schema = Tuple(_values=result)
-    return set_default(schema, value)    
+    return set_default(schema, value), merges
 
 @dispatch
 def infer(core, value: NoneType, path: tuple = ()):
     schema = Maybe(_value=Node())
-    return set_default(schema, value)    
+    return set_default(schema, value), []
 
 @dispatch
 def infer(core, value: set, path: tuple = ()):
@@ -136,15 +143,22 @@ def infer(core, value: dict, path: tuple = ()):
             import ipdb; ipdb.set_trace()
 
         schema = core.access_type(value)
+        clean_value = {
+            key: subvalue
+            for key, subvalue in value.items()
+            if not key.startswith('_')}
+        schema, state, merges = unify(core, schema, clean_value, path)
 
-        for key in schema.__dataclass_fields__:
-            if not key.startswith('_'):
-                field = getattr(schema, key)
-                subkey = core.infer(value[key], path=path+(key,))
-                resolved = core.resolve(field, subkey)
-                setattr(schema, key, resolved)
+        return set_default(schema, state), merges
 
-        return set_default(schema, value)
+        # for key in schema.__dataclass_fields__:
+        #     if not key.startswith('_'):
+        #         field = getattr(schema, key)
+        #         subkey = core.infer(value[key], path=path+(key,))
+        #         resolved = core.resolve(field, subkey)
+        #         setattr(schema, key, resolved)
+
+        # return set_default(schema, value)
 
     elif '_default' in value:
         return infer(core, value['_default'])
@@ -152,11 +166,13 @@ def infer(core, value: dict, path: tuple = ()):
     else:
         subvalues = {}
         distinct_subvalues = []
+        merges = []
         for key, subvalue in value.items():
-            subvalues[key] = infer(
+            subvalues[key], submerges = infer(
                 core,
                 subvalue,
                 path+(key,))
+            merges += submerges
 
             if len(distinct_subvalues) < 2 and subvalues[key] not in distinct_subvalues:
                 distinct_subvalues.append(
@@ -165,10 +181,10 @@ def infer(core, value: dict, path: tuple = ()):
         if len(distinct_subvalues) == 1:
             map_value = distinct_subvalues[0]
             schema = Map(_value=map_value)
-            return set_default(schema, value)
+            return set_default(schema, value), merges
         else:
             # return Place(_default=value, _subnodes=subvalues)
-            return subvalues
+            return subvalues, merges
 
 @dispatch
 def infer(core, value: object, path: tuple = ()):
@@ -177,13 +193,16 @@ def infer(core, value: object, path: tuple = ()):
     value_keys = value.__dict__.keys()
     value_schema = {}
 
+    merges = []
+
     for key in value_keys:
         if not key.startswith('_'):
             try:
-                value_schema[key] = infer(
+                value_schema[key], submerges = infer(
                     core,
                     getattr(value, key),
                     path + (key,))
+                merges += submerges
 
             except Exception as e:
                 traceback.print_exc()
@@ -197,5 +216,5 @@ def infer(core, value: object, path: tuple = ()):
 
                 value_schema[key] = Node()
 
-    return value_schema
+    return value_schema, merges
 
