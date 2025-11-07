@@ -63,7 +63,7 @@ from bigraph_schema.schema import (
     Index,
 )
 
-from bigraph_schema.registry import deep_merge
+from bigraph_schema.registry import deep_merge, set_star_path
 from bigraph_schema.parse import visit_expression
 from bigraph_schema.methods import (
     reify_schema,
@@ -431,6 +431,9 @@ class Core:
         return merge(found, state, merge_state)
 
     def view_ports(self, schema, state, path, ports_schema, wires):
+        if isinstance(wires, str):
+            wires = [wires]
+
         if isinstance(wires, (list, tuple)):
             _, result = self.traverse(schema, state, list(path) + list(wires))
 
@@ -470,6 +473,64 @@ class Core:
             wires)
 
         return view
+
+    def project_ports(self, ports_schema, wires, path, view):
+        result = {}
+
+        if isinstance(wires, str):
+            wires = [wires]
+
+        if isinstance(wires, (list, tuple)):
+            destination = resolve_path(list(path) + list(wires))
+            result = set_star_path(
+                result,
+                destination,
+                view)
+
+        elif isinstance(wires, dict):
+            if isinstance(view, list):
+                result = [
+                    self.project_ports(ports_schema, wires, path, state)
+                    for state in view]
+            else:
+                branches = []
+                for key in wires.keys():
+                    subports, subview = self.jump(ports_schema, view, key)
+                    projection = self.project_ports(
+                        subports,
+                        wires[key],
+                        path,
+                        subview)
+
+                    if projection is not None:
+                        branches.append(projection)
+
+                branches = [
+                    branch
+                    for branch in branches
+                    if branch is not None]
+
+                result = {}
+                for branch in branches:
+                    deep_merge(result, branch)
+        else:
+            raise Exception(
+                f'inverting state\n  {view}\naccording to ports schema\n  {ports_schema}\nbut wires are not recognized\n  {wires}')
+
+        return result
+
+    def project(self, schema, state, edge_path, view, ports_key='outputs'):
+        found = self.access(schema)
+        edge_schema, edge_state = self.traverse(schema, state, edge_path)
+        ports_schema = getattr(edge_schema, f'_{ports_key}')
+        wires = edge_state.get(ports_key) or {}
+        project = self.project_ports(
+            ports_schema,
+            wires,
+            edge_path[:-1],
+            view)
+
+        return project
 
     def apply(self, schema, state, update):
         """Apply a schema-aware update/patch; provides minimal context."""
@@ -971,6 +1032,7 @@ def test_unify(core):
         'concentrations': {
             'glucose': 0.5353533},
 
+
         'inner': {
             'edge': {
                 'inputs': {
@@ -985,7 +1047,6 @@ def test_unify(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    import ipdb; ipdb.set_trace()
     generated_schema, generated_state = core.unify(
         schema,
         state)
@@ -1009,7 +1070,14 @@ def test_unify(core):
         generated_state,
         ['inner', 'edge'])
 
-    import ipdb; ipdb.set_trace()
+    edge_project = core.project(
+        generated_schema,
+        generated_state,
+        ['inner', 'edge'],
+        edge_view,
+        ports_key='inputs')
+
+    assert edge_project['A'] == generated_state['A']
 
 
 def test_generate_coverage(core):
