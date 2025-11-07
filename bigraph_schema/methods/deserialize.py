@@ -154,6 +154,7 @@ def deserialize(schema: Array, encode):
 
     return state
 
+
 @dispatch
 def deserialize(schema: Node, encode):
     if isinstance(encode, str):

@@ -429,6 +429,47 @@ class Core:
         found = self.access(schema)
         return merge(found, state, merge_state)
 
+    def view_ports(self, schema, state, path, ports_schema, wires):
+        if isinstance(wires, (list, tuple)):
+            _, result = self.traverse(schema, state, list(path) + list(wires))
+
+        elif isinstance(wires, dict):
+            result = {}
+            for port_key, subport in wires.items():
+                subschema, subwires = self.jump(
+                    schema,
+                    wires,
+                    port_key)
+
+                inner_view = self.view_ports(
+                    schema,
+                    state,
+                    path,
+                    subschema,
+                    subwires)
+
+                if inner_view is not None:
+                    result[port_key] = inner_view
+
+        else:
+            raise Exception(f'trying to view state at path {path} with these ports:\n{ports_schema}\nbut not sure what these wires are:\n{wires}')
+
+        return result
+
+    def view(self, schema, state, edge_path, ports_key='inputs'):
+        found = self.access(schema)
+        edge_schema, edge_state = self.traverse(schema, state, edge_path)
+        ports_schema = getattr(edge_schema, f'_{ports_key}')
+        wires = edge_state.get(ports_key) or {}
+        view = self.view_ports(
+            schema,
+            state,
+            edge_path[:-1],
+            ports_schema,
+            wires)
+
+        return view
+
     def apply(self, schema, state, update):
         """Apply a schema-aware update/patch; provides minimal context."""
         found = self.access(schema)
@@ -875,22 +916,23 @@ def test_generate(core):
         'edge': {
             '_type': 'edge',
             '_inputs': {
-                'n': 'float',
-                'x': 'string'},
+                'n': 'float{5.5}',
+                'x': 'string{what}'},
             '_outputs': {
-                'z': 'string'},
+                'z': 'string{world}'},
             'inputs': {
                 'n': ['A'],
                 'x': ['E']},
             'outputs': {
-                'z': ['F', 'f', '_ff']}},
+                'z': ['F', 'f', 'ff']}},
 
         'units': {
             'meters': 11.1111,
             'seconds': 22.833333}}
 
+    import ipdb; ipdb.set_trace()
     generated_schema, generated_state = core.unify(schema, state)
-    assert generated_state['A'] == 0.0
+    assert generated_state['A'] == 5.5
     assert generated_state['B'] == 'one'
     assert generated_state['C'] == 'y'
     assert generated_state['units']['seconds'] == 22.833333
@@ -911,12 +953,12 @@ def test_unify(core):
             'edge': {
                 '_type': 'edge',
                 '_inputs': {
-                    'n': 'float',
+                    'n': 'float{3.333}',
                     'x': {
-                        'xx': 'string',
-                        'xy': 'boolean'}},
+                        'xx': 'string{what}',
+                        'xy': 'boolean{true}'}},
                 '_outputs': {
-                    'z': 'string'}}}}
+                    'z': 'string{world}'}}}}
 
     state = {
         'C': {
@@ -957,6 +999,13 @@ def test_unify(core):
     deserialized = core.deserialize(generated_schema, serialized)
 
     # assert generated_state == deserialized
+
+    edge_view = core.view(
+        generated_schema,
+        generated_state,
+        ['inner', 'edge'])
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_generate_coverage(core):

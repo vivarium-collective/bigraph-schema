@@ -129,3 +129,5 @@ class Edge:
             'inputs': self.inputs(),
             'outputs': self.outputs()
         }
+
+
