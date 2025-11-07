@@ -400,9 +400,10 @@ class Core:
         for merge in merges:
             unify_schema = self.resolve(unify_schema, merge)
         default_state = self.default(unify_schema)
-        merge_state = self.merge(unify_schema, default_state, unify_state)
-
-        return unify_schema, merge_state
+        return unify_schema, default_state
+        
+        # merge_state = self.merge(unify_schema, default_state, unify_state)
+        # return unify_schema, merge_state
 
     def jump(self, schema, state, raw_key):
         """Navigate by logical jump (`Key`/`Index`/`Star`)."""
@@ -930,13 +931,15 @@ def test_generate(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    import ipdb; ipdb.set_trace()
     generated_schema, generated_state = core.unify(schema, state)
     assert generated_state['A'] == 5.5
     assert generated_state['B'] == 'one'
     assert generated_state['C'] == 'y'
     assert generated_state['units']['seconds'] == 22.833333
     assert not hasattr(generated_schema['units'], 'meters')
+
+    view = core.view(generated_schema, generated_state, ['edge'])
+    assert view['n'] == 5.5
 
     rendered = core.render(generated_schema)
     # assert generated_state == \
@@ -982,11 +985,12 @@ def test_unify(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
+    import ipdb; ipdb.set_trace()
     generated_schema, generated_state = core.unify(
         schema,
         state)
 
-    assert generated_state['A'] == 0.0
+    assert generated_state['A'] == 3.333
     assert generated_state['B'] == 'one'
     assert generated_state['C'] == 'y'
     assert generated_state['units']['seconds'] == 22.833333

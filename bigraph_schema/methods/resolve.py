@@ -211,6 +211,15 @@ def resolve(current: Node, update: dict):
     else:
         return current
 
+# @dispatch
+# def resolve(current: dict, update: Node):
+#     fields = set(update.__dataclass_fields__)
+#     keys = set(current.keys())
+
+#     for key in keys.intersect(fields):
+#         getattr(update, key)
+    
+    
 
 @dispatch
 def resolve(current: list, update: list):
@@ -225,6 +234,7 @@ def resolve(current, update):
     elif update is None:
         return current
     else:
+        import ipdb; ipdb.set_trace()
         raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')
 
 

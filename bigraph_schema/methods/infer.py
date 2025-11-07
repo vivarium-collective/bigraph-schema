@@ -168,7 +168,7 @@ def infer(core, value: dict, path: tuple = ()):
                 distinct_subvalues.append(
                     subvalues[key])
 
-        if len(distinct_subvalues) == 1:
+        if len(distinct_subvalues) == 1 and len(subvalues) > 1:
             map_value = distinct_subvalues[0]
             schema = Map(_value=map_value)
             return set_default(schema, value), merges

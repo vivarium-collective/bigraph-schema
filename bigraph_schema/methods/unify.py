@@ -259,9 +259,6 @@ def port_merges(port_schema, wires, path):
 
 @dispatch
 def unify(core, schema: Edge, state, path):
-    # TODO: instead build the unified part of the tree then
-    #   resolve and merge it
-
     merges = []
 
     for port in ['inputs', 'outputs']:
@@ -276,6 +273,8 @@ def unify(core, schema: Edge, state, path):
 
         if port not in state:
             state[port] = default_wires(port_schema)
+        else:
+            getattr(schema, port)._default = state[port]
 
         submerges = port_merges(
             port_schema,
@@ -373,34 +372,13 @@ def unify(core, schema: dict, state, path):
                     result_schema[key] = schema[key]
             else:
                 result_schema[key] = infer_schema
-                result_state[key] = state[key]
+                result_state[key] = default(infer_schema)
 
         schema_only = list(set(schema.keys()).difference(set(state.keys())))
         for schema_key in schema_only:
             result_schema[schema_key] = schema[schema_key]
             result_state[schema_key] = default(
                 schema[schema_key])
-            
-
-
-        #     if key not in schema:
-        #         result_schema[key], submerges = core.infer_merges(
-        #             state[key],
-        #             walk(path, key))
-        #         merges += submerges
-        
-        # for key, subschema in schema.items():
-        #     if key in state:
-        #         if not key.startswith('_'):
-        #             result_schema[key], result_state[key], submerges = unify(
-        #                 core,
-        #                 subschema,
-        #                 state[key],
-        #                 walk(path, key))
-        #             merges += submerges
-        #     else:
-        #         result_state[key] = default(
-        #             subschema)
 
         return result_schema, result_state, merges
 

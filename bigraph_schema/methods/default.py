@@ -141,8 +141,8 @@ def default_wires(schema, path=None):
 @dispatch
 def default(schema: Edge):
     return {
-        'inputs': default_wires(schema._inputs),
-        'outputs': default_wires(schema._outputs)}
+        'inputs': default(schema.inputs) or default_wires(schema._inputs),
+        'outputs': default(schema.outputs) or default_wires(schema._outputs)}
 
 @dispatch
 def default(schema: dict):
