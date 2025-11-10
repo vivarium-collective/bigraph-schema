@@ -123,18 +123,25 @@ class Link():
             bigraph.links_nodes.insert(self.id, node_id)
         bigraph.links[self.id] = self
 
-    def interface(self):
+    def outer_face(self):
         """
-        the interface of a link is the set of open ports (ports not connected
-        to nodes)
+        the outer interface of a link is the set of open righthand ports (out
+        bound ports not connected to nodes)
         """
         raw = self.ports.get_right(None)
-        result = []
+        result = {}
         for name in raw:
-            result.append({'link_id': self.id,
-                           'name': name,
-                           'schema': self.port_schemas[name]})
+            result[name] = {'link_id': self.id,
+                            'name': name,
+                            'schema': self.port_schemas[name]}
         return result
+
+    def inner_face(self):
+        """
+        the inner interface of a link is the set of open lefthand ports (in
+        bound ports not connected to nodes)
+        """
+        pass
 
     def process(self, bigraph):
         reactums = self.redex(self, bigraph)
@@ -178,6 +185,27 @@ class Bigraph():
         self.links_nodes = JoinDict()
 
         self.id = new_uuid()
+
+    def outer_face(self):
+        """
+        the outer face is the set of links that join right to None
+        """
+        outer = self.links_nodes.right[None]
+        result = {}
+        for link in outer.keys():
+            result[link] = self.links[link].outer_face()
+        return result
+
+    def inner_face(self):
+        """
+        the inner face is the set of links that join left to None
+        """
+        inner = self.links_nodes.left[None]
+        result = []
+        for link in inner.keys():
+            result.append(self.links[link].inner_face())
+        return result
+
 
     # TODO: inner vs. outer interface
     # this will need to use the Links class defined above
@@ -398,6 +426,10 @@ def test_link():
     pass
 
 def test_link_bigraph():
+    """
+    based on example of linking bigraphs in chapter 1 of the milner book,
+    F composed with H should result in G
+    """
     F = Bigraph()
     F.harvest_tree(
             # TODO - should the bigraph id be on the root?
@@ -419,8 +451,9 @@ def test_link_bigraph():
         harvest_tree_helpers['get_id'])
 
 
-    x = Link(F,
-             id='x',
+    x_outer = \
+            Link(F,
+             id='x outer',
              ports=[('v1_port', '*', 'v1'),
                     ('x_port', '*', None)])
     e1 = Link(F,
@@ -432,7 +465,82 @@ def test_link_bigraph():
               ports=[('v3_port', '*', 'v3'),
                      ('v4_port', '*', 'v4'),
                      ('v5_port', '*', 'v5')])
-    y = Link(F,
-             id='y',
+    y_outer = \
+            Link(F,
+             id='y outer',
              ports=[('v4_port', '*','v4'),
                     ('y_port', '*', None)])
+
+    assert F.outer_face() == {
+            'x outer': {
+                'x_port': {
+                    'link_id': 'x outer',
+                    'name': 'x_port',
+                    'schema': '*'}},
+            'y outer': {
+                'y_port': {
+                    'link_id': 'y outer',
+                    'name': 'y_port',
+                    'schema': '*'}}}
+
+    G = Bigraph()
+    G.harvest_tree(
+            {'id': G.id,
+             'data': G,
+             'children': {
+                 'v0': {'id': 'v0',
+                        'data': {},
+                        'children': {
+                            'v1': {'id': 'v1',
+                                   'data': {}},
+                            'v2': {'id': 'v2',
+                                   'data': {},
+                                   'children': {
+                                       'v3': {'id': 'v3',
+                                              'data': {}}}}}}},
+                 'v4': {'id': 'v4',
+                        'data': {},
+                        'children': {
+                            'v5': {'id': 'v5',
+                                   'data': {}}}}},
+                G.places,
+                harvest_tree_helpers['get_children'],
+                harvest_tree_helpers['get_leaf'],
+                harvest_tree_helpers['get_id'])
+
+    e0 = Link(G,
+              id='e0',
+              ports=[('v1_port', '*', 'v1'),
+                     ('v0_port', '*', 'v0'),
+                     ('v4_port', '*', 'v4')])
+    e1 = Link(G,
+              id='e1',
+              ports=[('v1_port', '*', 'v1'),
+                     ('v3_port', '*', 'v3')])
+    e2 = Link(G,
+              id='e2',
+              ports=[('v3_port', '*', 'v3'),
+                     ('v4_port', '*', 'v4'),
+                     ('v5_port', '*', 'v5')])
+
+    H = Bigraph()
+    H.harvest_tree(
+            {'id': H.id,
+             'data': H,
+             'children': {
+                 'v0': {
+                     'id': 'v0',
+                     'data': {},
+                     'children': {
+                         'v2': {
+                             'id': 'v2',
+                             'data': {}}}}}},
+             H.places,
+             harvest_tree_helpers['get_children'],
+             harvest_tree_helpers['get_leaf'],
+             harvest_tree_helpers['get_id'])
+
+    # x_inner = \
+    #        Link(H,
+    #             id='x inner',
+    #             ports=[(None, '*', 'x_port')]
