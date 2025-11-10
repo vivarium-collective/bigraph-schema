@@ -23,7 +23,9 @@ def new_uuid():
 
 
 class JoinDict():
-    "bidirectional mappings between two cachable types"
+    """
+    many to many mapping between two cachable types
+    """
     def __init__(self):
         self.left = {}
         self.right = {}
@@ -66,6 +68,10 @@ class JoinDict():
         result = self.right.get(item) or {}
         return list(result.keys())
 
+    def update(self, other):
+        self.left.update(other.left)
+        self.right.update(other.right)
+
 
 class Link():
     def __init__(self, bigraph, **kwargs):
@@ -76,7 +82,7 @@ class Link():
             link to the bigraph, and register connections to nodes in the
             bigraph
 
-        rule, action - used together to update bigraph
+        redex, reaction - used together to update bigraph
 
         ports - a many to many mapping from port name to (node_id or None)
 
@@ -174,6 +180,7 @@ class Bigraph():
         self.id = new_uuid()
 
     # TODO: inner vs. outer interface
+    # this will need to use the Links class defined above
     def compose(self, interface, other, other_interface):
         """
         based on the links and ports described in interface, and
@@ -198,7 +205,7 @@ class Bigraph():
         place[uid] = {}
 
         leaf = get_leaf(tree)
-        if leaf:
+        if leaf != None:
             self.nodes[uid] = leaf
         for k,v in get_children(tree).items():
             new_ids = self.harvest_tree(v, place[uid],
@@ -322,6 +329,20 @@ def test_joindict():
     assert jd.delink(88, 'z') or True
 
 
+def get_id(node):
+    if hasattr(node, 'id'):
+        return node.id
+    elif node.get('id'):
+        return node['id']
+    else:
+        return new_uuid()
+# harvest_tree test helpers
+harvest_tree_helpers = {
+        'get_children': lambda node: node.get('children') or {},
+        'get_leaf': lambda node: node.get('data') or {},
+        'get_id': get_id}
+del get_id
+
 def test_bigraph():
     bg = Bigraph()
     tree = bg.as_tree()
@@ -329,17 +350,6 @@ def test_bigraph():
             'id': bg.id,
             'data': bg}
 
-    def get_children(node):
-        return node.get('children') or {}
-    def get_leaf(node):
-        return node.get('data') or {}
-    def get_id(node):
-        if hasattr(node, 'id'):
-            return node.id
-        elif node.get('id'):
-            return node['id']
-        else:
-            return new_uuid()
 
     branch = {
             'id': 4,
@@ -354,7 +364,9 @@ def test_bigraph():
                     'data': {'e': 0}}}}
 
     harvested = bg.harvest_tree(branch, bg.places, \
-            get_children, get_leaf, get_id)
+            harvest_tree_helpers['get_children'],
+            harvest_tree_helpers['get_leaf'],
+            harvest_tree_helpers['get_id'])
 
     harvested.sort()
     assert harvested == [1,2,3,4]
@@ -381,3 +393,46 @@ def test_bigraph():
                     'data': {'f': 4}},
                 5: {'id': 6,
                     'data': {'g': 4}}}}
+
+def test_link():
+    pass
+
+def test_link_bigraph():
+    F = Bigraph()
+    F.harvest_tree(
+            # TODO - should the bigraph id be on the root?
+            # should ids for root nodes be valid without the
+            # 'children' tag at the top level?
+            {'id': F.id,
+             'data': F,
+             'children': {
+                 'v1': {'id': 'v1', 'data': {}},
+                 'v3': {'id': 'v3', 'data': {}},
+                 'v4': {'id': 'v4',
+                        'data': {},
+                        'children': {
+                            'v5': {'id': 'v5',
+                                   'data': {}}}}}},
+        F.places,
+        harvest_tree_helpers['get_children'],
+        harvest_tree_helpers['get_leaf'],
+        harvest_tree_helpers['get_id'])
+
+
+    x = Link(F,
+             id='x',
+             ports=[('v1_port', '*', 'v1'),
+                    ('x_port', '*', None)])
+    e1 = Link(F,
+              id='e1',
+              ports=[('v1_port', '*', 'v1'),
+                     ('v3_port', '*', 'v3')])
+    e2 = Link(F,
+              id='e2',
+              ports=[('v3_port', '*', 'v3'),
+                     ('v4_port', '*', 'v4'),
+                     ('v5_port', '*', 'v5')])
+    y = Link(F,
+             id='y',
+             ports=[('v4_port', '*','v4'),
+                    ('y_port', '*', None)])
