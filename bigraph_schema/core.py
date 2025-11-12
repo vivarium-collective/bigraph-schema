@@ -401,9 +401,6 @@ class Core:
             unify_schema = self.resolve(unify_schema, merge)
         default_state = self.default(unify_schema)
         return unify_schema, default_state
-        
-        # merge_state = self.merge(unify_schema, default_state, unify_state)
-        # return unify_schema, merge_state
 
     def jump(self, schema, state, raw_key):
         """Navigate by logical jump (`Key`/`Index`/`Star`)."""
@@ -475,6 +472,8 @@ class Core:
         return view
 
     def project_ports(self, ports_schema, wires, path, view):
+        import ipdb; ipdb.set_trace()
+
         result = {}
 
         if isinstance(wires, str):
@@ -496,19 +495,14 @@ class Core:
                 branches = []
                 for key in wires.keys():
                     subports, subview = self.jump(ports_schema, view, key)
-                    projection = self.project_ports(
+                    subschema, substate = self.project_ports(
                         subports,
                         wires[key],
                         path,
                         subview)
 
-                    if projection is not None:
-                        branches.append(projection)
-
-                branches = [
-                    branch
-                    for branch in branches
-                    if branch is not None]
+                    if substate is not None:
+                        branches.append((subschema, substate))
 
                 result = {}
                 for branch in branches:
@@ -517,20 +511,20 @@ class Core:
             raise Exception(
                 f'inverting state\n  {view}\naccording to ports schema\n  {ports_schema}\nbut wires are not recognized\n  {wires}')
 
-        return result
+        return project_schema, result
 
     def project(self, schema, state, edge_path, view, ports_key='outputs'):
         found = self.access(schema)
         edge_schema, edge_state = self.traverse(schema, state, edge_path)
         ports_schema = getattr(edge_schema, f'_{ports_key}')
         wires = edge_state.get(ports_key) or {}
-        project = self.project_ports(
+        project_schema, project_state = self.project_ports(
             ports_schema,
             wires,
             edge_path[:-1],
             view)
 
-        return project
+        return project_schema, project_state
 
     def apply(self, schema, state, update):
         """Apply a schema-aware update/patch; provides minimal context."""
@@ -1069,6 +1063,8 @@ def test_unify(core):
         generated_schema,
         generated_state,
         ['inner', 'edge'])
+
+    import ipdb; ipdb.set_trace()
 
     edge_project = core.project(
         generated_schema,
