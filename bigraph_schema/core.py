@@ -39,6 +39,9 @@ from bigraph_schema.schema import (
     Union,
     Tuple,
     Boolean,
+    Or,
+    And,
+    Xor,
     Number,
     Integer,
     Float,
@@ -539,11 +542,10 @@ class Core:
 
         return project_schema, project_state
 
-    def apply(self, schema, state, update):
+    def apply(self, schema, state, update, path=()):
         """Apply a schema-aware update/patch; provides minimal context."""
         found = self.access(schema)
-        context = {schema: found, state: state, path: ()}
-        return apply(schema, state, update, context)
+        return apply(found, state, update, path)
 
 
 # test data ----------------------------
@@ -1077,6 +1079,8 @@ def test_unify(core):
         generated_state,
         ['inner', 'edge'])
 
+    import ipdb; ipdb.set_trace()
+
     project_schema, project_state = core.project(
         generated_schema,
         generated_state,
@@ -1084,9 +1088,17 @@ def test_unify(core):
         edge_view,
         ports_key='inputs')
 
+    assert project_state['A'] == generated_state['A']
+
     import ipdb; ipdb.set_trace()
 
-    assert project_state['A'] == generated_state['A']
+    project_schema['inner']['G'] = Xor()
+    # project_state['inner']['G'] = False
+    applied_state, merges = core.apply(project_schema, generated_state, project_state)
+
+    assert applied_state['inner']['G'] == False
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_generate_coverage(core):

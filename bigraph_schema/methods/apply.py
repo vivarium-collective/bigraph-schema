@@ -7,6 +7,9 @@ from bigraph_schema.schema import (
     Union,
     Tuple,
     Boolean,
+    Or,
+    And,
+    Xor,
     Number,
     Integer,
     Float,
@@ -47,7 +50,7 @@ def apply(schema: Wrap, state, update, path):
 
 @dispatch
 def apply(schema: Overwrite, state, update, path):
-    return update
+    return update, []
 
 
 @dispatch
@@ -162,10 +165,58 @@ def apply(schema: Tree, state, update, path):
 
 @dispatch
 def apply(schema: Atom, state, update, path):
-    return state + update
+    return state + update, []
+
+
+@dispatch
+def apply(schema: Boolean, state, update, path):
+    return update, []
+
+
+@dispatch
+def apply(schema: Or, state, update, path):
+    return state or update, []
+
+
+@dispatch
+def apply(schema: And, state, update, path):
+    return state and update, []
+
+
+@dispatch
+def apply(schema: Xor, state, update, path):
+    return (state or update) and not (state and update), []
+
+
+@dispatch
+def apply(schema: dict, state, update, path):
+    merges = []
+    result = {}
+    for key, subschema in schema.items():
+        result[key], submerges = apply(
+            subschema,
+            state.get(key),
+            update.get(key),
+            path+(key,))
+        merges += submerges
+    return result, merges
 
 
 @dispatch
 def apply(schema: Node, state, update, path):
     merges = []
-    return update, merges
+    if isinstance(state, dict) and isinstance(update, dict):
+        result = {}
+        for key in schema.__dataclass_fields__:
+            subschema = getattr(schema, key)
+            result[key], submerges = apply(
+                subschema,
+                state.get(key),
+                update.get(key),
+                path+(key,))
+            merges += submerges
+
+    else:
+        result = update
+
+    return result, merges

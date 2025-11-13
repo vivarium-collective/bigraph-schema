@@ -36,6 +36,18 @@ class Boolean(Atom):
     pass
 
 @dataclass(kw_only=True)
+class Or(Boolean):
+    _default: bool = False
+
+@dataclass(kw_only=True)
+class And(Boolean):
+    _default: bool = True
+
+@dataclass(kw_only=True)
+class Xor(Boolean):
+    _default: bool = False
+
+@dataclass(kw_only=True)
 class Number(Atom):
     pass
 
