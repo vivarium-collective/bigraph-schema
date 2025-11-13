@@ -67,24 +67,25 @@ def generalize(current: Node, update: Empty):
 @dispatch
 def generalize(current: Wrap, update: Wrap):
     value = generalize(current._value, update._value)
-    if type(current) == type(update):
-        return type(current)(_value=value)
-    elif issubclass(current_type, update_type):
-        return generalize_subclass(current, update)
-    elif issubclass(update_type, current_type):
-        return generalize_subclass(update, current)
-    else:
-        return update
+    return value
+    # if type(current) == type(update):
+    #     return type(current)(_value=value)
+    # elif issubclass(current_type, update_type):
+    #     return generalize_subclass(current, update)
+    # elif issubclass(update_type, current_type):
+    #     return generalize_subclass(update, current)
+    # else:
+    #     return update
 
 @dispatch
 def generalize(current: Wrap, update: Node):
     value = generalize(current._value, update)
-    return type(current)(_value=value)
+    return value
 
 @dispatch
 def generalize(current: Node, update: Wrap):
     value = generalize(current, update._value)
-    return type(update)(_value=value)
+    return value
 
 @dispatch
 def generalize(current: Node, update: Node):

@@ -1031,6 +1031,7 @@ def test_unify(core):
                 '_type': 'edge',
                 '_inputs': {
                     'n': 'float{3.333}',
+                    'v': 'overwrite[string]',
                     'x': {
                         'xx': 'string{what}',
                         'xy': 'xor'}},
@@ -1045,11 +1046,11 @@ def test_unify(core):
         'concentrations': {
             'glucose': 0.5353533},
 
-
         'inner': {
             'edge': {
                 'inputs': {
                     'n': ['..', 'A'],
+                    'v': ['..', 'D'],
                     'x': {
                         'xx': ['W', 'w'],
                         'xy': ['G']}},
@@ -1083,8 +1084,6 @@ def test_unify(core):
         generated_state,
         ['inner', 'edge'])
 
-    import ipdb; ipdb.set_trace()
-
     project_schema, project_state = core.project(
         generated_schema,
         generated_state,
@@ -1094,15 +1093,12 @@ def test_unify(core):
 
     assert project_state['A'] == generated_state['A']
 
-    import ipdb; ipdb.set_trace()
-
     # project_schema['inner']['G'] = Xor()
-    # project_state['inner']['G'] = False
+    project_state['D'] = 'OVER'
     applied_state, merges = core.apply(project_schema, generated_state, project_state)
 
     assert applied_state['inner']['G'] == False
-
-    import ipdb; ipdb.set_trace()
+    assert applied_state['D'] == 'OVER'
 
 
 def test_generate_coverage(core):
