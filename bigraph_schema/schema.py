@@ -220,7 +220,6 @@ def walk_path(context, to, subpath=None):
         'path': context['path'] + (to,),
         'subpath': subpath}
 
-
 BASE_TYPES = {
     'node': Node,
     'atom': Atom,
@@ -228,6 +227,9 @@ BASE_TYPES = {
     'union': Union,
     'tuple': Tuple,
     'boolean': Boolean,
+    'or': Or,
+    'and': And,
+    'xor': Xor,
     'number': Number,
     'integer': Integer,
     'float': Float,

@@ -1,6 +1,8 @@
 from plum import dispatch
 import numpy as np
 
+from dataclasses import replace, dataclass
+
 from bigraph_schema.schema import (
     Node,
     Atom,
@@ -217,3 +219,24 @@ def merge(schema: dict, current, update):
             del result[key]
 
     return result
+
+def merge_update(schema, current, update):
+    current_state = default(current)
+    update_state = default(update)
+    state = current_state
+
+    if update_state:
+        if current_state:
+            state = merge(schema, current_state, update_state)
+        else:
+            state = update_state
+
+    if isinstance(schema, Node):
+        schema = replace(schema, _default=state)
+    elif isinstance(schema, dict):
+        schema['_default'] = state
+    else:
+        raise Exception(f'do not recognize schema: {schema}')
+    return schema
+
+

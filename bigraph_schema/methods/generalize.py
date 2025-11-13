@@ -36,154 +36,160 @@ from bigraph_schema.methods.default import default
 from bigraph_schema.methods.merge import merge, merge_update
 
 
-def resolve_subclass(subclass, superclass):
+def generalize_subclass(subclass, superclass):
     result = {}
-    for key in subclass.__dataclass_fields__:    
+    for key in superclass.__dataclass_fields__:    
         if key == '_default':
-            result[key] = subclass._default or superclass._default
+            result[key] = superclass._default or subclass._default
         else:
             subattr = getattr(subclass, key)
-            if hasattr(superclass, key) and not key.startswith('_'):
+            if not key.startswith('_'):
                 superattr = getattr(superclass, key)
                 try:
-                    outcome = resolve(subattr, superattr)
+                    outcome = generalize(subattr, superattr)
                 except Exception as e:
-                    raise Exception(f'\ncannot resolve subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
+                    raise Exception(f'\ncannot generalize subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
                 result[key] = outcome
             else:
                 result[key] = subattr
-    resolved = type(subclass)(**result)
-    return resolved
+    generalized = type(superclass)(**result)
+    return generalized
 
 
 @dispatch
-def resolve(current: Empty, update: Node):
+def generalize(current: Empty, update: Node):
     return update
 
 @dispatch
-def resolve(current: Node, update: Empty):
+def generalize(current: Node, update: Empty):
     return current
 
 @dispatch
-def resolve(current: Wrap, update: Wrap):
+def generalize(current: Wrap, update: Wrap):
+    value = generalize(current._value, update._value)
     if type(current) == type(update):
-        value = resolve(current._value, update._value)
         return type(current)(_value=value)
+    elif issubclass(current_type, update_type):
+        return generalize_subclass(current, update)
+    elif issubclass(update_type, current_type):
+        return generalize_subclass(update, current)
+    else:
+        return update
 
 @dispatch
-def resolve(current: Wrap, update: Node):
-    value = resolve(current._value, update)
+def generalize(current: Wrap, update: Node):
+    value = generalize(current._value, update)
     return type(current)(_value=value)
 
 @dispatch
-def resolve(current: Node, update: Wrap):
-    value = resolve(current, update._value)
+def generalize(current: Node, update: Wrap):
+    value = generalize(current, update._value)
     return type(update)(_value=value)
 
 @dispatch
-def resolve(current: Node, update: Node):
+def generalize(current: Node, update: Node):
     current_type = type(current)
     update_type = type(update)
     if current_type == update_type or issubclass(current_type, update_type):
-        return resolve_subclass(current, update)
+        return generalize_subclass(current, update)
     elif issubclass(update_type, current_type):
-        return resolve_subclass(update, current)
+        return generalize_subclass(update, current)
     else:
-        raise Exception(f'\ncannot resolve types:\n{current}\n{update}\n')
+        raise Exception(f'\ncannot generalize types:\n{current}\n{update}\n')
 
 @dispatch
-def resolve(current: Map, update: dict):
+def generalize(current: Map, update: dict):
     result = current._value
     try:
         for key, value in update.items():
-            result = resolve(result, value)
-        resolved = replace(current, _value=result)
+            result = generalize(result, value)
+        generalized = replace(current, _value=result)
 
     except:
         # upgrade from map to struct schema
         map_default = default(current)
-        resolved = {
+        generalized = {
             key: current._value
             for key in map_default}
-        resolved.update(update)
+        generalized.update(update)
 
-    schema = merge_update(resolved, current, update)
+    schema = merge_update(generalized, current, update)
     return schema
 
 @dispatch
-def resolve(current: dict, update: Map):
+def generalize(current: dict, update: Map):
     result = update._value
     for key, value in current.items():
-        result = resolve(result, value)
+        result = generalize(result, value)
     result = replace(result, _default=update._value._default)
-    resolved = replace(update, _value=result)
+    generalized = replace(update, _value=result)
 
-    schema = merge_update(resolved, current, update)
+    schema = merge_update(generalized, current, update)
     return schema
 
 @dispatch
-def resolve(current: Tree, update: Map):
+def generalize(current: Tree, update: Map):
     value = current._leaf
     leaf = update._value
-    update_leaf = resolve(leaf, value)
+    update_leaf = generalize(leaf, value)
     result = copy.copy(current)
-    resolved = replace(result, _leaf=update_leaf)
+    generalized = replace(result, _leaf=update_leaf)
 
-    schema = merge_update(resolved, current, update)
+    schema = merge_update(generalized, current, update)
     return schema
 
 @dispatch
-def resolve(current: Tree, update: Tree):
+def generalize(current: Tree, update: Tree):
     current_leaf = current._leaf
     update_leaf = update._leaf
-    resolved = resolve(current_leaf, update_leaf)
-    result = replace(current, _leaf=resolved)
+    generalized = generalize(current_leaf, update_leaf)
+    result = replace(current, _leaf=generalized)
 
     schema = merge_update(result, current, update)
     return schema
 
 @dispatch
-def resolve(current: Tree, update: Node):
+def generalize(current: Tree, update: Node):
     leaf = current._leaf
     try:
-        resolved = resolve(leaf, update)
+        generalized = generalize(leaf, update)
     except:
         raise(f'update schema is neither a tree or a leaf:\n{current}\n{update}')
 
-    replace(current, _leaf=resolved)
+    replace(current, _leaf=generalized)
     return current
 
 @dispatch
-def resolve(current: Tree, update: dict):
+def generalize(current: Tree, update: dict):
     result = copy.copy(current)
     leaf = current._leaf
     for key, value in update.items():
         try:
-            leaf = resolve(leaf, value)
+            leaf = generalize(leaf, value)
         except:
-            result = resolve(result, value)
-    resolved = replace(result, _leaf=leaf)
+            result = generalize(result, value)
+    generalized = replace(result, _leaf=leaf)
 
-    schema = merge_update(resolved, current, update)
+    schema = merge_update(generalized, current, update)
     return schema
 
 @dispatch
-def resolve(current: dict, update: dict):
+def generalize(current: dict, update: dict):
     result = {}
     all_keys = set(current.keys()).union(set(update.keys()))
     for key in all_keys:
         try:
-            value = resolve(
+            value = generalize(
                 current.get(key),
                 update.get(key))
         except Exception as e:
-            raise Exception(f'\ncannot resolve subtypes for key \'{key}\':\n{current}\n{update}\n\n  due to\n{e}')
+            raise Exception(f'\ncannot generalize subtypes for key \'{key}\':\n{current}\n{update}\n\n  due to\n{e}')
 
         result[key] = value
     return result
 
 @dispatch
-def resolve(current: Node, update: dict):
+def generalize(current: Node, update: dict):
     fields = set(current.__dataclass_fields__)
     keys = set(update.keys())
 
@@ -193,7 +199,7 @@ def resolve(current: Node, update: dict):
         return current
 
 # @dispatch
-# def resolve(current: dict, update: Node):
+# def generalize(current: dict, update: Node):
 #     fields = set(update.__dataclass_fields__)
 #     keys = set(current.keys())
 
@@ -203,12 +209,12 @@ def resolve(current: Node, update: dict):
     
 
 @dispatch
-def resolve(current: list, update: list):
+def generalize(current: list, update: list):
     return tuple(update)
 
 
 @dispatch
-def resolve(current, update):
+def generalize(current, update):
     
     if current is None:
         return update
@@ -216,6 +222,6 @@ def resolve(current, update):
         return current
     else:
         import ipdb; ipdb.set_trace()
-        raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')
+        raise Exception(f'\ncannot generalize types, not schemas:\n{current}\n{update}\n')
 
 

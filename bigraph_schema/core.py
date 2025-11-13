@@ -75,6 +75,7 @@ from bigraph_schema.methods import (
     render,
     default,
     resolve,
+    generalize,
     check,
     serialize,
     deserialize,
@@ -83,11 +84,7 @@ from bigraph_schema.methods import (
     traverse,
     bind,
     unify,
-
     apply)
-
-# view
-# project
 
 
 def schema_keys(schema):
@@ -354,6 +351,12 @@ class Core:
         update = self.access(update_schema)
         return resolve(current, update)
 
+    def generalize(self, current_schema, update_schema):
+        """Unify two schemas under node semantics (e.g., Map/Tree/Edge field-wise resolution)."""
+        current = self.access(current_schema)
+        update = self.access(update_schema)
+        return generalize(current, update)
+
     def check(self, schema, state):
         """Validate `state` against `schema`."""
         found = self.access(schema)
@@ -401,7 +404,7 @@ class Core:
             path)
 
         for merge in merges:
-            unify_schema = self.resolve(unify_schema, merge)
+            unify_schema = self.generalize(unify_schema, merge)
         default_state = self.default(unify_schema)
         return unify_schema, default_state
 
@@ -1023,13 +1026,14 @@ def test_unify(core):
         'D': 'string{hello}',
         'units': 'map[number]',
         'inner': {
+            'G': 'boolean{true}',
             'edge': {
                 '_type': 'edge',
                 '_inputs': {
                     'n': 'float{3.333}',
                     'x': {
                         'xx': 'string{what}',
-                        'xy': 'boolean{true}'}},
+                        'xy': 'xor'}},
                 '_outputs': {
                     'z': 'string{world}'}}}}
 
@@ -1092,7 +1096,7 @@ def test_unify(core):
 
     import ipdb; ipdb.set_trace()
 
-    project_schema['inner']['G'] = Xor()
+    # project_schema['inner']['G'] = Xor()
     # project_state['inner']['G'] = False
     applied_state, merges = core.apply(project_schema, generated_state, project_state)
 
