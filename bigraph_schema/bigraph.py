@@ -6,16 +6,22 @@ import uuid
 # bigraph{
 #     id: uuid
 #     nodes : mapping(id:uuid, node:object)
-#     places : tree(uuid from nodes)
+#     places: mapping from id to Place
 #     links : mapping(uuid from link, Link)
 #     links_nodes : many to many uuid links to nodes}
 #
 # link{
 #     id: uuid
-#     rule: callable
-#     action: callable
-#     ports: many to many port_names to node_ids
+#     redex: callable
+#     reactum: callable
+#     inner: many to many port_names to node_ids
+#     outer: many to many port_names to node_ids
 #     schemas: mapping(port_name, schema)}
+#
+# place{
+#    id: uuid
+#    inner: list of (place_id or None)
+#    outer: single value of (place_id or None)}
 
 
 def new_uuid():
@@ -84,7 +90,7 @@ class Link():
 
         redex, reaction - used together to update bigraph
 
-        ports - a many to many mapping from port name to (node_id or None)
+        inner, outer - many to many mappings from port name to (node_id or None)
 
         port_schemas - mapping from port name to schema
 
@@ -103,7 +109,7 @@ class Link():
         self.reaction = kwargs.get('reaction')
 
         ## registration
-        # the 'ports' argument key should be a list of
+        # the 'inner' and 'outer' argument keys should each be a list of
         # ('name', schema, node_id), tuples describing one port of the link
         # per item.
         # * 'name' is any identifier, preferring a descriptive string name
@@ -112,14 +118,21 @@ class Link():
         #   None
         # ('name', schema, None) describes an open link.
 
-        raw_ports = kwargs.get('ports', [])
-        self.ports = JoinDict()
+        inner_ports = kwargs.get('inner', [])
+        outer_ports = kwargs.get('outer', [])
+        self.inner = JoinDict()
+        self.outer = JoinDict()
         # mapping from port name to schema
         self.port_schemas = {}
-        for name, schema, node_id in raw_ports:
+        for name, schema, node_id in inner_ports:
             self.port_schemas[name] = schema
             node_id = node_id or None
-            self.ports.insert(name, node_id)
+            self.inner.insert(name, node_id)
+            bigraph.links_nodes.insert(self.id, node_id)
+        for name, schema, node_id in outer_ports:
+            self.port_schemas[name] = schema
+            node_id = node_id or None
+            self.outer.insert(name, node_id)
             bigraph.links_nodes.insert(self.id, node_id)
         bigraph.links[self.id] = self
 
@@ -128,12 +141,12 @@ class Link():
         the outer interface of a link is the set of open righthand ports (out
         bound ports not connected to nodes)
         """
-        raw = self.ports.get_right(None)
+        raw = self.outer.get_right(None)
         result = {}
         for name in raw:
             result[name] = {'link_id': self.id,
                             'name': name,
-                            'schema': self.port_schemas[name]}
+                            'schema': self.port_schemas.get(name)}
         return result
 
     def inner_face(self):
@@ -141,7 +154,13 @@ class Link():
         the inner interface of a link is the set of open lefthand ports (in
         bound ports not connected to nodes)
         """
-        pass
+        raw = self.inner.get_right(None)
+        result = {}
+        for name in raw:
+            result[name] = {'link_id': self.id,
+                            'name': name,
+                            'schema': self.port_schemas.get(name)}
+        return result
 
     def process(self, bigraph):
         reactums = self.redex(self, bigraph)
@@ -150,6 +169,18 @@ class Link():
             result.append(self.reaction(self, bigraph, reactum))
         return result
 
+
+class Place();
+    """
+    defines a place in terms of parent (outer) and list of child (inner) nodes
+    within a tree, a value of None in either position indicates an interface
+    """
+    def __init__(self, inner=None, outer=None):
+        self.id = new_uuid()
+        # list of place_id or None
+        self.inner = inner or []
+        # single value of place_id or None
+        self.outer = outer
 
 class Bigraph():
     """
@@ -170,7 +201,7 @@ class Bigraph():
         # mapping from node_id to node
         self.nodes = {}
 
-        # tree of uuid
+        # mapping from node_id to Place
         self.places = {}
 
         # mapping from link_id to link (might not be needed) if links hold no
@@ -186,29 +217,36 @@ class Bigraph():
 
         self.id = new_uuid()
 
+    # TODO - places becomes a list of entries similar to the current link
+    # generation
+    # if outer or inner are None, they are an interface
+    # {'id': ...,
+    #  'inner': ...,
+    #  'outer': ...}
+
     def outer_face(self):
         """
         the outer face is the set of links that join right to None
         """
         outer = self.links_nodes.right[None]
         result = {}
+        result['links'] = {}
         for link in outer.keys():
-            result[link] = self.links[link].outer_face()
+            result['links'][link] = self.links[link].outer_face()
+
+        result['places'] = {}
+        for uid,place in self.places.items():
+            if place.outer == None:
+                result['places'][uid] = place
         return result
 
     def inner_face(self):
         """
         the inner face is the set of links that join left to None
         """
-        inner = self.links_nodes.left[None]
-        result = []
-        for link in inner.keys():
-            result.append(self.links[link].inner_face())
-        return result
+        pass
 
 
-    # TODO: inner vs. outer interface
-    # this will need to use the Links class defined above
     def compose(self, interface, other, other_interface):
         """
         based on the links and ports described in interface, and
@@ -219,7 +257,7 @@ class Bigraph():
     # currently no method of importing links is implemented, but it could be
     # done via a get_links helper which expects a relative path(???)
     # also: how to describe open links for merges...
-    def harvest_tree(self, tree, place, get_children, get_leaf, get_id):
+    def harvest_tree(self, tree, parent_id, get_children, get_leaf, get_id):
         """
         navigates `tree' of data using `get_children' to find branches,
         `get_leaf' to create nodes, and `get_id' to find the id of a node
@@ -230,81 +268,36 @@ class Bigraph():
 
         uid = get_id(tree)
         nodes = [uid]
-        place[uid] = {}
+        # TODO - this has to be totally different now that places is
+        # normalized into adjacency form
+        place = Place(inner=None, outer=parent_id)
+        self.places[parent_id].inner.append(uid)
+        self.places[uid] = place
 
         leaf = get_leaf(tree)
         if leaf != None:
             self.nodes[uid] = leaf
         for k,v in get_children(tree).items():
-            new_ids = self.harvest_tree(v, place[uid],
-                                        get_children, get_leaf, get_id)
+            new_ids = self.harvest_tree(v, uid, get_children, get_leaf, get_id)
             nodes.extend(new_ids)
         return nodes
 
-    def graft(self, other, path):
-        """
-        merges other bigraph into self, nested at `path' into self.places
-        """
-        self.nodes.update(other.nodes)
-        self.links.update(other.links)
-        self.links_nodes.upate(other.links_nodes)
 
-        visit = self.places
-        for k in path:
-            if not visit.get(k):
-                visit[k] = {}
-            visit = visit[k]
-        visit[other.id] = other.places
-
-    # creates a new places such that current places are found
-    # below path
-    def reparent(self, path):
-        """
-        creates a nesting around self.places based on `path'
-        """
-        path = path.copy()
-        # walk from innermost step to outermost
-        # TODO we can walk inward instead of reversing the list
-        path.reverse()
-
-        result = self.places
-        for step in path:
-            payload = result
-            result = {step: payload}
-
-        self.places = result
-
-
-    def as_tree(self, path=None):
+    def as_tree(self, root):
         """
         returns a tree of {'id': uid, 'children': tree, 'data': {}}
-        based on self.places starting from `path' spec
+        based on self.places starting from `root` as root node
         """
-        path = path or []
 
-        target = self.places
-        for node_id in path:
-            step = target[node_id]
-            target = step
-
-        target_id = None
-        target_data = None
-        if len(path) > 0:
-            target_id = path[-1]
-            target_data = self.nodes.get(target_id)
-        else:
-            target_id = self.id
-            target_data = self
+        # TODO - maybe support picking all outer faces / roots at once
+        # as a default?
+        root_node = places[root]
 
         children = {}
-        for k,v in target.items():
-            childpath = path.copy()
-            childpath.append(k)
-            children[k] = self.as_tree(path=childpath)
+        for k in root_node.inner():
+            children[k] = self.as_tree(k)
 
-        result = {
-                'id': target_id,
-                'data': target_data}
+        result = {'id': root_node.id}
         if len(children) > 0:
             result['children'] = children
         return result
@@ -454,21 +447,21 @@ def test_link_bigraph():
     x_outer = \
             Link(F,
              id='x outer',
-             ports=[('v1_port', '*', 'v1'),
+             outer=[('v1_port', '*', 'v1'),
                     ('x_port', '*', None)])
     e1 = Link(F,
               id='e1',
-              ports=[('v1_port', '*', 'v1'),
+              outer=[('v1_port', '*', 'v1'),
                      ('v3_port', '*', 'v3')])
     e2 = Link(F,
               id='e2',
-              ports=[('v3_port', '*', 'v3'),
+              outer=[('v3_port', '*', 'v3'),
                      ('v4_port', '*', 'v4'),
                      ('v5_port', '*', 'v5')])
     y_outer = \
             Link(F,
              id='y outer',
-             ports=[('v4_port', '*','v4'),
+             outer=[('v4_port', '*','v4'),
                     ('y_port', '*', None)])
 
     assert F.outer_face() == {
@@ -483,6 +476,7 @@ def test_link_bigraph():
                     'name': 'y_port',
                     'schema': '*'}}}
 
+    import ipdb; ipdb.set_trace()
     G = Bigraph()
     G.harvest_tree(
             {'id': G.id,
@@ -510,23 +504,26 @@ def test_link_bigraph():
 
     e0 = Link(G,
               id='e0',
-              ports=[('v1_port', '*', 'v1'),
+              outer=[('v1_port', '*', 'v1'),
                      ('v0_port', '*', 'v0'),
                      ('v4_port', '*', 'v4')])
     e1 = Link(G,
               id='e1',
-              ports=[('v1_port', '*', 'v1'),
+              outer=[('v1_port', '*', 'v1'),
                      ('v3_port', '*', 'v3')])
     e2 = Link(G,
               id='e2',
-              ports=[('v3_port', '*', 'v3'),
+              outer=[('v3_port', '*', 'v3'),
                      ('v4_port', '*', 'v4'),
                      ('v5_port', '*', 'v5')])
 
-    H = Bigraph()
+    H = Bigraph(nodes=...,
+                links=...,
+                places=[{'parent': None, 'id': 'v0' ...}])
     H.harvest_tree(
             {'id': H.id,
              'data': H,
+             'face': 'inner',
              'children': {
                  'v0': {
                      'id': 'v0',
@@ -540,6 +537,15 @@ def test_link_bigraph():
              harvest_tree_helpers['get_leaf'],
              harvest_tree_helpers['get_id'])
 
+    # TODO - how to represent an open inner link?
+    # currently a link is a pair of a node id and port name.
+    # we need extra information to describe outer vs. inner links
+    # one option: allow both node ids and port ids on both sides of the join,
+    # and treat the left side as the "inner" one. this requires differentiating
+    # via some tag or type difference.
+    #
+    # alternatively instead of None designating an open link, we could use two
+    # values, one designating an inner link and the other an outer link
     # x_inner = \
     #        Link(H,
     #             id='x inner',
