@@ -109,6 +109,7 @@ def set_star_path(tree, path, value, top=None, cursor=()):
     """
     Set a value at a wildcard (`*`) path, filling in multiple keys.
     """
+
     if tree is None:
         tree = {}
     if top is None:
@@ -123,10 +124,12 @@ def set_star_path(tree, path, value, top=None, cursor=()):
         if len(cursor) == 0:
             raise Exception(f'trying to travel above the top of the tree: {path}')
         return set_star_path(top, cursor[:-1], value)
+
     elif head == '*':
         for key in value:
             tree[key] = set_star_path({}, tail, value[key], cursor=(key,))
         return top
+
     else:
         if len(tail) == 0:
             tree[head] = value
@@ -135,6 +138,7 @@ def set_star_path(tree, path, value, top=None, cursor=()):
                 tree[head] = {}
             set_star_path(tree[head], tail, value, top=top, cursor=cursor + (head,))
         return top
+
 
 def transform_path(tree, path, transform):
     """

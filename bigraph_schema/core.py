@@ -472,17 +472,22 @@ class Core:
         return view
 
     def project_ports(self, ports_schema, wires, path, view):
-        import ipdb; ipdb.set_trace()
-
-        result = {}
+        project_schema = {}
+        project_state = {}
 
         if isinstance(wires, str):
             wires = [wires]
 
         if isinstance(wires, (list, tuple)):
             destination = resolve_path(list(path) + list(wires))
-            result = set_star_path(
-                result,
+
+            project_schema = set_star_path(
+                project_schema,
+                destination,
+                ports_schema)
+
+            project_state = set_star_path(
+                project_state,
                 destination,
                 view)
 
@@ -491,27 +496,35 @@ class Core:
                 result = [
                     self.project_ports(ports_schema, wires, path, state)
                     for state in view]
+                project_schema = Tuple(_values=[
+                    item[0]
+                    for item in result])
+                project_state = [
+                    item[1]
+                    for item in result]
             else:
                 branches = []
-                for key in wires.keys():
+                for key, subwires in wires.items():
                     subports, subview = self.jump(ports_schema, view, key)
                     subschema, substate = self.project_ports(
                         subports,
-                        wires[key],
+                        subwires,
                         path,
                         subview)
 
                     if substate is not None:
                         branches.append((subschema, substate))
 
-                result = {}
-                for branch in branches:
-                    deep_merge(result, branch)
+                project_schema = Node()
+                project_state = {}
+                for branch_schema, branch_state in branches:
+                    project_schema = resolve(project_schema, branch_schema)
+                    deep_merge(project_state, branch_state)
         else:
             raise Exception(
                 f'inverting state\n  {view}\naccording to ports schema\n  {ports_schema}\nbut wires are not recognized\n  {wires}')
 
-        return project_schema, result
+        return project_schema, project_state
 
     def project(self, schema, state, edge_path, view, ports_key='outputs'):
         found = self.access(schema)
@@ -1064,16 +1077,16 @@ def test_unify(core):
         generated_state,
         ['inner', 'edge'])
 
-    import ipdb; ipdb.set_trace()
-
-    edge_project = core.project(
+    project_schema, project_state = core.project(
         generated_schema,
         generated_state,
         ['inner', 'edge'],
         edge_view,
         ports_key='inputs')
 
-    assert edge_project['A'] == generated_state['A']
+    import ipdb; ipdb.set_trace()
+
+    assert project_state['A'] == generated_state['A']
 
 
 def test_generate_coverage(core):
