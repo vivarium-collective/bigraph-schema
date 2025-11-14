@@ -170,17 +170,46 @@ class Link():
         return result
 
 
-class Place();
+class Place():
     """
     defines a place in terms of parent (outer) and list of child (inner) nodes
     within a tree, a value of None in either position indicates an interface
     """
     def __init__(self, inner=None, outer=None):
-        self.id = new_uuid()
         # list of place_id or None
         self.inner = inner or []
         # single value of place_id or None
         self.outer = outer
+
+    def __repr__(self):
+        return f'Place(inner={self.inner}, outer={self.outer})'
+
+    def as_tree(places):
+        roots = Place.get_roots(places)
+
+        result = {}
+        for root in roots:
+            result[root] = Place.build_tree(places, root)
+
+        return result
+
+    def get_roots(places):
+        roots = []
+        for node_id,place in places.items():
+            if place.outer == None:
+                roots.append(node_id)
+        return roots
+
+    def build_tree(places, root):
+        children = places[root].inner or []
+        result = {}
+        for child_id in children:
+            child = places[child_id]
+            if child.inner == None:
+                result[child_id] = None
+            else:
+                result[child_id] = Place.build_tree(places, child_id)
+        return result
 
 class Bigraph():
     """
@@ -206,8 +235,6 @@ class Bigraph():
 
         # mapping from link_id to link (might not be needed) if links hold no
         # data
-        # weird idea: this could be where schemas belong, or could need its own
-        # unified / resolved schema for the link itself
         self.links = {}
 
         # bidirectional mapping from link_id to node_id
@@ -217,21 +244,15 @@ class Bigraph():
 
         self.id = new_uuid()
 
-    # TODO - places becomes a list of entries similar to the current link
-    # generation
-    # if outer or inner are None, they are an interface
-    # {'id': ...,
-    #  'inner': ...,
-    #  'outer': ...}
 
     def outer_face(self):
         """
         the outer face is the set of links that join right to None
         """
-        outer = self.links_nodes.right[None]
+        open_links = self.links_nodes.right[None]
         result = {}
         result['links'] = {}
-        for link in outer.keys():
+        for link in open_links.keys():
             result['links'][link] = self.links[link].outer_face()
 
         result['places'] = {}
@@ -244,7 +265,17 @@ class Bigraph():
         """
         the inner face is the set of links that join left to None
         """
-        pass
+        open_links = self.links_nodes.right[None]
+        result = {}
+        result['links'] = {}
+        for link in open_links.keys():
+            result['links'][link] = self.links[link].inner_face()
+
+        result['places'] = {}
+        for uid,place in self.places.items():
+            if place.inner == None:
+                result['places'][uid] = place
+        return result
 
 
     def compose(self, interface, other, other_interface):
@@ -254,10 +285,8 @@ class Bigraph():
         """
         pass
 
-    # currently no method of importing links is implemented, but it could be
-    # done via a get_links helper which expects a relative path(???)
-    # also: how to describe open links for merges...
-    def harvest_tree(self, tree, parent_id, get_children, get_leaf, get_id):
+
+    def harvest_tree(self, tree, parent_id, tree_ops):
         """
         navigates `tree' of data using `get_children' to find branches,
         `get_leaf' to create nodes, and `get_id' to find the id of a node
@@ -266,40 +295,39 @@ class Bigraph():
         if ingesting nodes without their place structure
         """
 
-        uid = get_id(tree)
+        uid = tree_ops.get_id(tree)
         nodes = [uid]
-        # TODO - this has to be totally different now that places is
-        # normalized into adjacency form
         place = Place(inner=None, outer=parent_id)
-        self.places[parent_id].inner.append(uid)
         self.places[uid] = place
+        if parent_id:
+            self.places[parent_id].inner.append(uid)
 
-        leaf = get_leaf(tree)
+        leaf = tree_ops.get_leaf(tree)
         if leaf != None:
             self.nodes[uid] = leaf
-        for k,v in get_children(tree).items():
-            new_ids = self.harvest_tree(v, uid, get_children, get_leaf, get_id)
+        for k,v in tree_ops.get_children(tree).items():
+            new_ids = self.harvest_tree(v, uid, tree_ops)
             nodes.extend(new_ids)
         return nodes
 
 
-    def as_tree(self, root):
+    def as_tree(self, roots=None):
         """
         returns a tree of {'id': uid, 'children': tree, 'data': {}}
-        based on self.places starting from `root` as root node
+        based on root node ids in self.places
         """
 
-        # TODO - maybe support picking all outer faces / roots at once
-        # as a default?
-        root_node = places[root]
+        roots = roots or Place.get_roots(self.places)
 
-        children = {}
-        for k in root_node.inner():
-            children[k] = self.as_tree(k)
-
-        result = {'id': root_node.id}
-        if len(children) > 0:
-            result['children'] = children
+        result = {}
+        for node_id in roots:
+            result[node_id] = {'id': node_id}
+            node = self.nodes[node_id]
+            if node:
+                result[node_id]['data'] = node
+            place = self.places[node_id]
+            if place.inner:
+                result[node_id]['children'] = self.as_tree(place.inner)
         return result
 
 
@@ -350,27 +378,23 @@ def test_joindict():
     assert jd.delink(88, 'z') or True
 
 
-def get_id(node):
-    if hasattr(node, 'id'):
-        return node.id
-    elif node.get('id'):
-        return node['id']
-    else:
-        return new_uuid()
-# harvest_tree test helpers
-harvest_tree_helpers = {
-        'get_children': lambda node: node.get('children') or {},
-        'get_leaf': lambda node: node.get('data') or {},
-        'get_id': get_id}
-del get_id
+class HarvestTestHelper():
+    def get_id(self, node):
+        if hasattr(node, 'id'):
+            return node.id
+        elif node.get('id'):
+            return node['id']
+        else:
+            return new_uuid()
+
+    def get_children(self, node):
+        return node.get('children') or {}
+
+    def get_leaf(self, node):
+        return node.get('data') or {}
 
 def test_bigraph():
     bg = Bigraph()
-    tree = bg.as_tree()
-    assert tree == {
-            'id': bg.id,
-            'data': bg}
-
 
     branch = {
             'id': 4,
@@ -384,14 +408,11 @@ def test_bigraph():
                 3: {'id': 3,
                     'data': {'e': 0}}}}
 
-    harvested = bg.harvest_tree(branch, bg.places, \
-            harvest_tree_helpers['get_children'],
-            harvest_tree_helpers['get_leaf'],
-            harvest_tree_helpers['get_id'])
-
+    harvested = bg.harvest_tree(branch, None, HarvestTestHelper())
     harvested.sort()
+
     assert harvested == [1,2,3,4]
-    assert bg.places == {
+    assert Place.as_tree(bg.places) == {
             4: {1: {2: {}},
                 3: {}}}
     assert bg.nodes == {
@@ -402,10 +423,8 @@ def test_bigraph():
 
     tree = bg.as_tree()
 
-    assert tree == {
-            'id': bg.id,
-            'data': bg,
-            'children': {4: branch}}
+    import ipdb; ipdb.set_trace()
+    assert tree == {4: branch}
 
     bg2 = Bigraph()
     branch2  = {
@@ -439,9 +458,7 @@ def test_link_bigraph():
                             'v5': {'id': 'v5',
                                    'data': {}}}}}},
         F.places,
-        harvest_tree_helpers['get_children'],
-        harvest_tree_helpers['get_leaf'],
-        harvest_tree_helpers['get_id'])
+        HarvestTestHelper())
 
 
     x_outer = \
@@ -498,9 +515,7 @@ def test_link_bigraph():
                             'v5': {'id': 'v5',
                                    'data': {}}}}},
                 G.places,
-                harvest_tree_helpers['get_children'],
-                harvest_tree_helpers['get_leaf'],
-                harvest_tree_helpers['get_id'])
+                HarvestTestHelper())
 
     e0 = Link(G,
               id='e0',
@@ -517,25 +532,23 @@ def test_link_bigraph():
                      ('v4_port', '*', 'v4'),
                      ('v5_port', '*', 'v5')])
 
-    H = Bigraph(nodes=...,
-                links=...,
-                places=[{'parent': None, 'id': 'v0' ...}])
-    H.harvest_tree(
-            {'id': H.id,
-             'data': H,
-             'face': 'inner',
-             'children': {
-                 'v0': {
-                     'id': 'v0',
-                     'data': {},
-                     'children': {
-                         'v2': {
-                             'id': 'v2',
-                             'data': {}}}}}},
-             H.places,
-             harvest_tree_helpers['get_children'],
-             harvest_tree_helpers['get_leaf'],
-             harvest_tree_helpers['get_id'])
+#    H = Bigraph(nodes=...,
+#                links=...,
+#                places=[{'parent': None, 'id': 'v0' ...}])
+#    H.harvest_tree(
+#            {'id': H.id,
+#             'data': H,
+#             'face': 'inner',
+#             'children': {
+#                 'v0': {
+#                     'id': 'v0',
+#                     'data': {},
+#                     'children': {
+#                         'v2': {
+#                             'id': 'v2',
+#                             'data': {}}}}}},
+#             H.places,
+#             HarvestTestHelper())
 
     # TODO - how to represent an open inner link?
     # currently a link is a pair of a node id and port name.
