@@ -553,17 +553,3 @@ def test_link_bigraph():
 #                             'data': {}}}}}},
 #             H.places,
 #             HarvestTestHelper())
-
-    # TODO - how to represent an open inner link?
-    # currently a link is a pair of a node id and port name.
-    # we need extra information to describe outer vs. inner links
-    # one option: allow both node ids and port ids on both sides of the join,
-    # and treat the left side as the "inner" one. this requires differentiating
-    # via some tag or type difference.
-    #
-    # alternatively instead of None designating an open link, we could use two
-    # values, one designating an inner link and the other an outer link
-    # x_inner = \
-    #        Link(H,
-    #             id='x inner',
-    #             ports=[(None, '*', 'x_port')]
