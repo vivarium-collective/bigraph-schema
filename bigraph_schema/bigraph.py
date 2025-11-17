@@ -184,6 +184,9 @@ class Place():
     def __repr__(self):
         return f'Place(inner={self.inner}, outer={self.outer})'
 
+    def __eq__(self, other):
+        return self.inner == other.inner and self.outer == other.outer
+
     def as_tree(places):
         roots = Place.get_roots(places)
 
@@ -288,8 +291,10 @@ class Bigraph():
 
     def harvest_tree(self, tree, parent_id, tree_ops):
         """
-        navigates `tree' of data using `get_children' to find branches,
-        `get_leaf' to create nodes, and `get_id' to find the id of a node
+        navigates `tree' of data using tree_ops:
+        `get_children' to find branches,
+        `get_leaf' to create nodes,
+        and `get_id' to find the id of a node
 
         `place' should be some subtree of self.places, or a placeholder
         if ingesting nodes without their place structure
@@ -298,7 +303,8 @@ class Bigraph():
         uid = tree_ops.get_id(tree)
         nodes = [uid]
         place = Place(inner=None, outer=parent_id)
-        self.places[uid] = place
+        if uid != None:
+            self.places[uid] = place
         if parent_id:
             self.places[parent_id].inner.append(uid)
 
@@ -385,13 +391,13 @@ class HarvestTestHelper():
         elif node.get('id'):
             return node['id']
         else:
-            return new_uuid()
+            return None
 
     def get_children(self, node):
         return node.get('children') or {}
 
     def get_leaf(self, node):
-        return node.get('data') or {}
+        return node.get('data')
 
 def test_bigraph():
     bg = Bigraph()
@@ -423,7 +429,6 @@ def test_bigraph():
 
     tree = bg.as_tree()
 
-    import ipdb; ipdb.set_trace()
     assert tree == {4: branch}
 
     bg2 = Bigraph()
@@ -443,22 +448,18 @@ def test_link_bigraph():
     F composed with H should result in G
     """
     F = Bigraph()
-    F.harvest_tree(
-            # TODO - should the bigraph id be on the root?
-            # should ids for root nodes be valid without the
-            # 'children' tag at the top level?
-            {'id': F.id,
-             'data': F,
-             'children': {
-                 'v1': {'id': 'v1', 'data': {}},
-                 'v3': {'id': 'v3', 'data': {}},
-                 'v4': {'id': 'v4',
-                        'data': {},
-                        'children': {
-                            'v5': {'id': 'v5',
-                                   'data': {}}}}}},
-        F.places,
-        HarvestTestHelper())
+    f_tree = {
+            'id': None,
+            'children': {
+                'v1': {'id': 'v1', 'data': {}},
+                'v3': {'id': 'v3', 'data': {}},
+                'v4': {'id': 'v4',
+                       'data': {},
+                       'children': {
+                           'v5': {'id': 'v5',
+                                  'data': {}}}}}}
+
+    F.harvest_tree( f_tree, None, HarvestTestHelper())
 
 
     x_outer = \
@@ -482,40 +483,43 @@ def test_link_bigraph():
                     ('y_port', '*', None)])
 
     assert F.outer_face() == {
-            'x outer': {
-                'x_port': {
-                    'link_id': 'x outer',
-                    'name': 'x_port',
-                    'schema': '*'}},
-            'y outer': {
-                'y_port': {
-                    'link_id': 'y outer',
-                    'name': 'y_port',
-                    'schema': '*'}}}
+            'links': {
+                'x outer': {
+                    'x_port': {
+                        'link_id': 'x outer',
+                        'name': 'x_port',
+                        'schema': '*'}},
+                'y outer': {
+                    'y_port': {
+                        'link_id': 'y outer',
+                        'name': 'y_port',
+                        'schema': '*'}}},
+            'places': {
+                'v1': Place(inner=[], outer=None),
+                'v3': Place(inner=[], outer=None),
+                'v4': Place(inner=['v5'], outer=None)}}
 
-    import ipdb; ipdb.set_trace()
     G = Bigraph()
-    G.harvest_tree(
-            {'id': G.id,
-             'data': G,
-             'children': {
-                 'v0': {'id': 'v0',
-                        'data': {},
-                        'children': {
-                            'v1': {'id': 'v1',
-                                   'data': {}},
-                            'v2': {'id': 'v2',
-                                   'data': {},
-                                   'children': {
-                                       'v3': {'id': 'v3',
-                                              'data': {}}}}}}},
-                 'v4': {'id': 'v4',
-                        'data': {},
-                        'children': {
-                            'v5': {'id': 'v5',
-                                   'data': {}}}}},
-                G.places,
-                HarvestTestHelper())
+    g_tree = {
+            'id': None,
+            'children': {
+                'v0': {'id': 'v0',
+                       'data': {},
+                       'children': {
+                           'v1': {'id': 'v1',
+                                  'data': {}},
+                           'v2': {'id': 'v2',
+                                  'data': {},
+                                  'children': {
+                                      'v3': {'id': 'v3',
+                                             'data': {}}}}}},
+                'v4': {'id': 'v4',
+                       'data': {},
+                       'children': {
+                           'v5': {'id': 'v5',
+                                  'data': {}}}}}}
+
+    G.harvest_tree(g_tree, None, HarvestTestHelper())
 
     e0 = Link(G,
               id='e0',
