@@ -29,7 +29,7 @@ from bigraph_schema.schema import (
     Path,
     Wires,
     Schema,
-    Edge,
+    Link,
 )
 
 # aligning parameters takes them from positioned arguments and gives them keys
@@ -84,7 +84,7 @@ def align_parameters(schema: Array, parameters):
         '_data': parameters[1]}
 
 @dispatch
-def align_parameters(schema: Edge, parameters):
+def align_parameters(schema: Link, parameters):
     align = {
         '_inputs': parameters[0],
         '_outputs': parameters[1]}
@@ -123,6 +123,15 @@ def reify_schema(core, schema: Array, parameters):
 @dispatch
 def reify_schema(core, schema: Union, parameters):
     return replace(schema, **parameters)
+
+
+@dispatch
+def reify_schema(core, schema: Link, parameters):
+    return replace(schema, **{
+        '_inputs': core.access(
+            parameters.get('_inputs')),
+        '_outputs': core.access(
+            parameters.get('_outputs'))})
 
 
 @dispatch

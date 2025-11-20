@@ -31,7 +31,7 @@ from bigraph_schema.schema import (
     Path,
     Wires,
     Schema,
-    Edge,
+    Link,
     nest_schema,
     convert_path,
 )
@@ -258,7 +258,7 @@ def port_merges(port_schema, wires, path):
 
 
 @dispatch
-def unify(core, schema: Edge, state, path):
+def unify(core, schema: Link, state, path):
     merges = []
 
     for port in ['inputs', 'outputs']:
@@ -270,6 +270,8 @@ def unify(core, schema: Edge, state, path):
             port_schema = core.resolve(
                 port_schema,
                 state[port_key])
+
+            state[port_key] = port_schema
 
         if port not in state:
             state[port] = default_wires(port_schema)

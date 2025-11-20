@@ -24,8 +24,10 @@ from bigraph_schema.schema import (
     Key,
     Path,
     Wires,
+    Protocol,
+    LocalProtocol,
     Schema,
-    Edge,
+    Link,
 )
 
 
@@ -139,8 +141,18 @@ def default_wires(schema, path=None):
 
 
 @dispatch
-def default(schema: Edge):
+def default(schema: Protocol):
+    if schema._default is not None:
+        return schema._default
+    else:
+        return {
+            'protocol': 'local',
+            'data': 'edge'}
+
+@dispatch
+def default(schema: Link):
     return {
+        'address': default(schema.address) or 'local:edge',
         'inputs': default(schema.inputs) or default_wires(schema._inputs),
         'outputs': default(schema.outputs) or default_wires(schema._outputs)}
 

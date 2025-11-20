@@ -28,7 +28,7 @@ from bigraph_schema.schema import (
     Path,
     Wires,
     Schema,
-    Edge,
+    Link,
 )
 
 from bigraph_schema.methods.check import check
@@ -150,7 +150,7 @@ def merge(schema: Wires, current, update):
 
 
 @dispatch
-def merge(schema: Edge, current, update):
+def merge(schema: Link, current, update):
     if not current:
         return update
     if not update:

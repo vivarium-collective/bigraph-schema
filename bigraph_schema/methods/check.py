@@ -26,7 +26,7 @@ from bigraph_schema.schema import (
     Path,
     Wires,
     Schema,
-    Edge,
+    Link,
 )
 
 
@@ -131,7 +131,9 @@ def check(schema: Map, state):
         # them all to tell if they pass the check?
         # - this seems expensive?
         all_keys = all([
-            check(schema._key, deserialize(key))
+            # TODO: if deserialize needs core this will fail
+            #   does that matter?
+            check(schema._key, deserialize(None, schema._key, key))
             for key in state.keys()])
 
         return all_keys and all_values

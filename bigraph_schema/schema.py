@@ -126,7 +126,18 @@ class Schema(Tree):
     _leaf: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
-class Edge(Node):
+class Protocol(Node):
+    protocol: String = field(default_factory=String)
+    data: Node = field(default_factory=Node)
+
+@dataclass(kw_only=True)
+class LocalProtocol(Protocol):
+    data: String = field(default_factory=String)
+
+@dataclass(kw_only=True)
+class Link(Node):
+    address: Protocol = field(default_factory=Protocol)
+    config: Node = field(default_factory=Node)
     _inputs: dict = field(default_factory=dict)
     _outputs: dict = field(default_factory=dict)
     inputs: Wires = field(default_factory=Wires)
@@ -250,8 +261,10 @@ BASE_TYPES = {
     # 'jump': Jump,
     # 'wire': Wire,
     'wires': Wires,
+    'protocol': Protocol,
+    'local': LocalProtocol,
     'schema': Schema,
-    'edge': Edge}
+    'link': Link}
 
 
 

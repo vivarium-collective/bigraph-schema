@@ -28,7 +28,7 @@ from bigraph_schema.schema import (
     Path,
     Wires,
     Schema,
-    Edge,
+    Link,
 )
 
 
@@ -199,6 +199,11 @@ def apply(schema: dict, state, update, path):
             update.get(key),
             path+(key,))
         merges += submerges
+
+    state_keys = list(set(state.keys()).difference(set(schema.keys())))
+    for key in state_keys:
+        result[key] = state[key]
+
     return result, merges
 
 

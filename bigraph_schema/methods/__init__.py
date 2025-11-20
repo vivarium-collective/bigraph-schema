@@ -1,10 +1,9 @@
 from bigraph_schema.methods.infer import infer, set_default
-from bigraph_schema.methods.render import render, wrap_default
 from bigraph_schema.methods.default import default
 from bigraph_schema.methods.resolve import resolve
 from bigraph_schema.methods.generalize import generalize
 from bigraph_schema.methods.check import check
-from bigraph_schema.methods.serialize import serialize
+from bigraph_schema.methods.serialize import serialize, render, wrap_default
 from bigraph_schema.methods.deserialize import deserialize
 from bigraph_schema.methods.merge import merge, merge_update
 from bigraph_schema.methods.jump import jump, traverse

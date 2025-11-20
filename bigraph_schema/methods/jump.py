@@ -26,7 +26,7 @@ from bigraph_schema.schema import (
     Path,
     Wires,
     Schema,
-    Edge,
+    Link,
     Star,
     Index,
     Jump,
@@ -237,7 +237,7 @@ def jump(schema: Atom, state, to, context):
 
 
 @dispatch
-def jump(schema: Edge, state, to: Key, context):
+def jump(schema: Link, state, to: Key, context):
     key = to._value
     if key in ['inputs', 'outputs']:
         if not key in state:
@@ -247,7 +247,7 @@ def jump(schema: Edge, state, to: Key, context):
         wires_schema = getattr(schema, key)
         subcontext = dict(context, **{
             'ports_key': key,
-            'edge_path': context['path'][:-1],
+            'link_path': context['path'][:-1],
             f'_{key}': puts_schema})
 
         return traverse(
@@ -268,7 +268,7 @@ def jump(schema: Wires, state, to: Key, context):
 
     substate = state[key]
     if isinstance(substate, list):
-        outer_path = context['edge_path'][:-1]
+        outer_path = context['link_path'][:-1]
         subpath = tuple(convert_path(substate)) + tuple(context['subpath'])
         target_path = outer_path + subpath
         subcontext = dict(context, **{

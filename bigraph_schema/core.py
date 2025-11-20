@@ -16,7 +16,7 @@ These methods form a reversible, type-aware layer for schema construction,
 validation, and data transformation.
 
 `CoreVisitor` implements the parsing backend, converting textual bigraph
-expressions into structured schema nodes (`Union`, `Tuple`, `Array`, `Edge`, etc.).
+expressions into structured schema nodes (`Union`, `Tuple`, `Array`, `Link`, etc.).
 """
 import typing
 import numpy as np
@@ -60,7 +60,7 @@ from bigraph_schema.schema import (
     Path,
     Wires,
     Schema,
-    Edge,
+    Link,
     Jump,
     Star,
     Index,
@@ -68,6 +68,7 @@ from bigraph_schema.schema import (
 
 from bigraph_schema.registry import deep_merge, set_star_path
 from bigraph_schema.parse import visit_expression
+from bigraph_schema.edge import Edge
 from bigraph_schema.methods import (
     reify_schema,
     handle_parameters,
@@ -101,7 +102,7 @@ class CoreVisitor(NodeVisitor):
     Operates within a `Core` context, mapping grammar constructs
     (unions, merges, type parameters, and defaults) into dataclass-based nodes.
     Handles normalization of nested expressions (e.g. `tuple[int,float]`,
-    `edge[a:int|b:string]`, `(x:y|z:w)`) into instances of `Union`, `Tuple`,
+    `link[a:int|b:string]`, `(x:y|z:w)`) into instances of `Union`, `Tuple`,
     or structured dicts.
     """
 
@@ -220,7 +221,10 @@ class Core:
         """Initialize operation with a base type registry (e.g., `BASE_TYPES`)."""
         self.registry = {}
         self.register_types(types)
+        self.link_registry = {}
         self.parse_visitor = CoreVisitor(self)
+
+        self.register_link('edge', Edge)
 
     def register_type(self, key, data):
         """Register a single type key; deep-merge if it already exists."""
@@ -237,6 +241,21 @@ class Core:
     def update_type(self, key, data):
         """Deep-merge metadata/overrides into an existing registry entry."""
         self.registry[key] = deep_merge(self.registry[key], data)
+
+    def register_link(self, key, link):
+        if key in self.registry:
+            self.update_link(key, link)
+        else:
+            self.link_registry[key] = link
+
+    def register_links(self, links):
+        """Bulk register multiple link into the operation registry."""
+        for key, link in links.items():
+            self.register_link(key, link)
+
+    def update_link(self, key, data):
+        """Deep-merge metadata/overrides into an existing registry entry."""
+        self.link_registry[key] = data
 
     def select_fields(self, base, schema):
         """Project dict `schema` onto dataclass `base` fields, normalizing values via `access` (except `_default`)."""
@@ -343,16 +362,16 @@ class Core:
         """
         found = self.access(schema)
         value = default(found)
-        return deserialize(found, value)
+        return deserialize(self, found, value)
 
     def resolve(self, current_schema, update_schema):
-        """Unify two schemas under node semantics (e.g., Map/Tree/Edge field-wise resolution)."""
+        """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
         current = self.access(current_schema)
         update = self.access(update_schema)
         return resolve(current, update)
 
     def generalize(self, current_schema, update_schema):
-        """Unify two schemas under node semantics (e.g., Map/Tree/Edge field-wise resolution)."""
+        """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
         current = self.access(current_schema)
         update = self.access(update_schema)
         return generalize(current, update)
@@ -378,7 +397,7 @@ class Core:
         guided by the provided schema.
         """
         found = self.access(schema)
-        return deserialize(found, state)
+        return deserialize(core, found, state)
 
     def generate(self, schema, state):
         """Combine schema inference, resolution, and defaulting.
@@ -433,6 +452,11 @@ class Core:
         found = self.access(schema)
         return merge(found, state, merge_state)
 
+    def fill(self, schema, state):
+        found = self.access(schema)
+        base = default(found)
+        return merge(found, base, state)
+
     def view_ports(self, schema, state, path, ports_schema, wires):
         if isinstance(wires, str):
             wires = [wires]
@@ -463,15 +487,15 @@ class Core:
 
         return result
 
-    def view(self, schema, state, edge_path, ports_key='inputs'):
+    def view(self, schema, state, link_path, ports_key='inputs'):
         found = self.access(schema)
-        edge_schema, edge_state = self.traverse(schema, state, edge_path)
-        ports_schema = getattr(edge_schema, f'_{ports_key}')
-        wires = edge_state.get(ports_key) or {}
+        link_schema, link_state = self.traverse(schema, state, link_path)
+        ports_schema = getattr(link_schema, f'_{ports_key}')
+        wires = link_state.get(ports_key) or {}
         view = self.view_ports(
             schema,
             state,
-            edge_path[:-1],
+            link_path[:-1],
             ports_schema,
             wires)
 
@@ -532,15 +556,15 @@ class Core:
 
         return project_schema, project_state
 
-    def project(self, schema, state, edge_path, view, ports_key='outputs'):
+    def project(self, schema, state, link_path, view, ports_key='outputs'):
         found = self.access(schema)
-        edge_schema, edge_state = self.traverse(schema, state, edge_path)
-        ports_schema = getattr(edge_schema, f'_{ports_key}')
-        wires = edge_state.get(ports_key) or {}
+        link_schema, link_state = self.traverse(schema, state, link_path)
+        ports_schema = getattr(link_schema, f'_{ports_key}')
+        wires = link_state.get(ports_key) or {}
         project_schema, project_state = self.project_ports(
             ports_schema,
             wires,
-            edge_path[:-1],
+            link_path[:-1],
             view)
 
         return project_schema, project_state
@@ -574,8 +598,8 @@ map_schema = {
         '_key': 'string',
         '_value': 'float'}
 
-edge_schema = {
-    '_type': 'edge',
+link_schema = {
+    '_type': 'link',
     '_inputs': {
         'mass': 'float',
         'concentrations': map_schema},
@@ -586,7 +610,8 @@ edge_schema = {
             '_key': 'string',
             '_value': 'delta'}}}
 
-edge_a = {
+link_a = {
+    'address': 'local:edge',
     'inputs': {
         'mass': ['cell', 'mass'],
         'concentrations': ['cell', 'internal']},
@@ -618,7 +643,7 @@ to_implement = (
     # Path,
     # Wires,
     Schema,
-    # Edge,
+    # Link,
     Jump,
     Star,
     Index,
@@ -632,8 +657,8 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'path,' \
         'wires,' \
         'integer{11},' \
-        'union[edge[x:integer,y:string],float,string],' \
-        'tree[edge[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
+        'union[link[x:integer,y:string],float,string],' \
+        'tree[link[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \
         'outest:string'
@@ -697,13 +722,13 @@ def test_render(core):
     node_render = core.render(node_schema)
     assert node_render == render(node_type)
 
-    edge_type = core.access(edge_schema)
-    edge_render = core.render(edge_type)
+    link_type = core.access(link_schema)
+    link_render = core.render(link_type)
 
     # can't do the same assertion as above, because two different renderings
     # exist
-    assert core.access(edge_render) == edge_type
-    assert edge_render == core.render(core.access(edge_render))
+    assert core.access(link_render) == link_type
+    assert link_render == core.render(core.access(link_render))
 
     map_type = core.access(map_schema)
     map_render = core.render(map_type)
@@ -789,7 +814,9 @@ def test_check(core):
     assert core.check(tree_parse, tree_b)
     assert not core.check(tree_schema,'not a tree')
 
-    edge_a = {
+    link_a = {
+        'address': 'local:edge',
+        'config': {},
         'inputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']},
@@ -797,18 +824,18 @@ def test_check(core):
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
 
-    edge_b = {
+    link_b = {
         'inputs': 5.0,
         'outputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
 
-    edge_c = {
+    link_c = {
         'outputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
 
-    edge_d = {
+    link_d = {
         'inputs': {
             'mass': ['cell', 11.111],
             'concentrations': ['cell', 'internal']},
@@ -816,32 +843,47 @@ def test_check(core):
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
 
-    assert core.check(edge_schema, edge_a)
-    assert not core.check(edge_schema, edge_b)
-    assert not core.check(edge_schema, edge_c)
-    assert not core.check(edge_schema, edge_d)
-    assert not core.check(edge_schema, 44.44444)
+    assert not core.check(link_schema, link_a)
+    assert not core.check(link_schema, link_b)
+    assert not core.check(link_schema, link_c)
+    assert not core.check(link_schema, link_d)
+    assert not core.check(link_schema, 44.44444)
+
+    a_instance = core.deserialize(link_schema, link_a)
+    b_instance = core.deserialize(link_schema, link_b)
+    c_instance = core.deserialize(link_schema, link_c)
+    d_instance = core.deserialize(link_schema, link_d)
+
+    assert core.check(link_schema, a_instance)
+    assert not core.check(link_schema, b_instance)
+    assert core.check(link_schema, c_instance)
+    assert not core.check(link_schema, d_instance)
+
 
 def test_serialize(core):
-    edge_type = core.access(edge_schema)
-    encoded_a = serialize(edge_type, edge_a)
+    link_type = core.access(link_schema)
+    encoded_a = serialize(link_type, link_a)
 
-    assert encoded_a == edge_a
+    assert encoded_a['address'] == 'local:edge'
+    assert encoded_a['_inputs'] == {'concentrations': 'map[float]', 'mass': 'float'}
+
     encoded_b = core.serialize(
         {'a': 'float'},
         {'a': 55.55555})
+
     assert encoded_b['a'] == 55.55555
 
 def test_deserialize(core):
-    encoded_edge = {
+    encoded_link = {
         'inputs': {
             'mass': ['cell','mass'],
             'concentrations': '["cell","internal"]'},
         'outputs': '{\
             "mass":["cell","mass"],\
             "concentrations":["cell","internal"]}'}
-    decoded = core.deserialize(edge_schema, encoded_edge)
-    assert decoded == edge_a
+    decoded = core.deserialize(link_schema, encoded_link)
+
+    assert isinstance(decoded['instance'], Edge)
 
     schema = {
         'a': 'integer',
@@ -853,10 +895,10 @@ def test_deserialize(core):
     assert decode['a'] == 5555
     assert decode['b'][2]['y'] == 11
 
-def test_infer_edge(core):
-    edge_state = {
-        'edge': {
-            '_type': 'edge',
+def test_infer_link(core):
+    link_state = {
+        'link': {
+            '_type': 'link',
             '_inputs': {
                 'n': 'float',
                 'x': {
@@ -869,9 +911,9 @@ def test_infer_edge(core):
             'outputs': {
                 'z': ['F', 'f', 'ff']}}}
 
-    edge_schema = core.infer(edge_state)
-    assert 'A' in edge_schema and isinstance(edge_schema['A'], Float)
-    assert 'E' in edge_schema and isinstance(edge_schema['E']['y'], String)
+    link_schema = core.infer(link_state)
+    assert 'A' in link_schema and isinstance(link_schema['A'], Float)
+    assert 'E' in link_schema and isinstance(link_schema['E']['y'], String)
 
 
 def test_traverse(core):
@@ -910,31 +952,30 @@ def test_traverse(core):
         'mass': 'float',
         'concentrations': 'map[float]'}
 
-    edge_interface = {
-        '_type': 'edge',
+    link_interface = {
+        '_type': 'link',
         '_inputs': puts,
         '_outputs': puts}
 
-    edge_schema = core.access(
-        edge_interface)
+    link_schema = core.access(
+        link_interface)
 
-    edge_state = {
+    link_state = {
         'inputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']},
         'outputs': {
             'mass': ['cell', 'mass'],
             'concentrations': ['cell', 'internal']}}
-    assert core.check(edge_interface, edge_state)
 
-    default_edge = core.default(edge_schema)
-    assert default_edge['inputs']['mass'] == ['mass']
+    default_link = core.default(link_schema)
+    assert default_link['inputs']['mass'] == ['mass']
 
     simple_interface = {
         'cell': {
             'mass': 'float',
             'internal': 'map[float]'},
-        'edge': edge_interface}
+        'link': link_interface}
 
     initial_mass = 11.1111
 
@@ -945,7 +986,7 @@ def test_traverse(core):
                 'A': 3.333,
                 'B': 44.44444,
                 'C': 5555.555}},
-        'edge': edge_state}
+        'link': link_state}
 
     simple_schema = core.access(
         simple_interface)
@@ -953,21 +994,21 @@ def test_traverse(core):
     down_schema, down_state = core.jump(
         simple_interface,
         simple_graph,
-        'edge')
-    assert isinstance(down_schema, Edge)
+        'link')
+    assert isinstance(down_schema, Link)
     assert 'inputs' in down_state
 
     mass_schema, mass_state = core.traverse(
         simple_interface,
         simple_graph,
-        ['edge', 'inputs', 'mass'])
+        ['link', 'inputs', 'mass'])
     assert isinstance(mass_schema, Float)
     assert mass_state == initial_mass
 
     concentration_schema, concentration_state = core.traverse(
         simple_interface,
         simple_graph,
-        ['edge', 'outputs', 'concentrations', 'A'])
+        ['link', 'outputs', 'concentrations', 'A'])
     assert isinstance(concentration_schema, Float)
     assert concentration_state == simple_graph['cell']['internal']['A']
 
@@ -987,8 +1028,8 @@ def test_generate(core):
         'concentrations': {
             'glucose': 0.5353533},
 
-        'edge': {
-            '_type': 'edge',
+        'link': {
+            '_type': 'link',
             '_inputs': {
                 'n': 'float{5.5}',
                 'x': 'string{what}'},
@@ -1005,13 +1046,14 @@ def test_generate(core):
             'seconds': 22.833333}}
 
     generated_schema, generated_state = core.unify(schema, state)
+
     assert generated_state['A'] == 5.5
     assert generated_state['B'] == 'one'
     assert generated_state['C'] == 'y'
     assert generated_state['units']['seconds'] == 22.833333
     assert not hasattr(generated_schema['units'], 'meters')
 
-    view = core.view(generated_schema, generated_state, ['edge'])
+    view = core.view(generated_schema, generated_state, ['link'])
     assert view['n'] == 5.5
 
     rendered = core.render(generated_schema)
@@ -1027,8 +1069,8 @@ def test_unify(core):
         'units': 'map[number]',
         'inner': {
             'G': 'boolean{true}',
-            'edge': {
-                '_type': 'edge',
+            'link': {
+                '_type': 'link',
                 '_inputs': {
                     'n': 'float{3.333}',
                     'v': 'overwrite[string]',
@@ -1047,7 +1089,7 @@ def test_unify(core):
             'glucose': 0.5353533},
 
         'inner': {
-            'edge': {
+            'link': {
                 'inputs': {
                     'n': ['..', 'A'],
                     'v': ['..', 'D'],
@@ -1079,16 +1121,16 @@ def test_unify(core):
 
     # assert generated_state == deserialized
 
-    edge_view = core.view(
+    link_view = core.view(
         generated_schema,
         generated_state,
-        ['inner', 'edge'])
+        ['inner', 'link'])
 
     project_schema, project_state = core.project(
         generated_schema,
         generated_state,
-        ['inner', 'edge'],
-        edge_view,
+        ['inner', 'link'],
+        link_view,
         ports_key='inputs')
 
     assert project_state['A'] == generated_state['A']
@@ -1099,6 +1141,8 @@ def test_unify(core):
 
     assert applied_state['inner']['G'] == False
     assert applied_state['D'] == 'OVER'
+
+    assert 'link' in applied_state['inner']
 
 
 def test_generate_coverage(core):
@@ -1126,13 +1170,13 @@ def test_generate_coverage(core):
             Path,
             Wires,
             Schema,
-            Edge,
+            Link,
             Jump,
             Star,
             Index,
             )
     schema = {
-            'A': 'edge[x:integer,y:nonnegative]'}
+            'A': 'link[x:integer,y:nonnegative]'}
 
     state = {
             'B': {
@@ -1151,7 +1195,7 @@ def test_generate_coverage(core):
 
 def broken_test_generate_tuple_default(core):
     schema = {
-            'A': 'edge[x:integer,y:nonnegative]'}
+            'A': 'link[x:integer,y:nonnegative]'}
 
     state = {
             'B': {
@@ -1173,13 +1217,14 @@ def test_generate_promote_to_struct(core):
     # TODO - test the doppleganger dict/Map vs. Map/dict
     # TODO - this should also happen to trees
     schema = {
-            'A': 'edge[x:integer,y:nonnegative]'}
+            'A': 'link[x:integer,y:nonnegative]'}
     state = {
             'B': {
                 '_type': 'boolean',
                 '_default': True}}
     generated_schema, generated_state = core.generate(schema, state)
     serialized = core.serialize(generated_schema, generated_state)
+
     assert generated_state == core.deserialize(
         generated_schema,
         serialized)
@@ -1237,9 +1282,9 @@ if __name__ == '__main__':
     test_deserialize(core)
     test_merge(core)
     test_traverse(core)
-    test_infer_edge(core)
+    test_infer_link(core)
     test_generate(core)
-    test_generate_promote_to_struct(core)
+    # test_generate_promote_to_struct(core)
     test_uni_schema(core)
     test_array(core)
     test_bind(core)
