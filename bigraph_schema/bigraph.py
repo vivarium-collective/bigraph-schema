@@ -1,3 +1,5 @@
+from pprint import pformat as pf
+
 """
 attempting a normalized version of the process bigraph abstraction
 """
@@ -136,6 +138,9 @@ class Link():
             bigraph.links_nodes.insert(self.id, node_id)
         bigraph.links[self.id] = self
 
+    def __repr__(self):
+        return f'Link(port_schemas={self.port_schemas})'
+
     def outer_face(self):
         """
         the outer interface of a link is the set of open righthand ports (out
@@ -187,6 +192,7 @@ class Place():
     def __eq__(self, other):
         return self.inner == other.inner and self.outer == other.outer
 
+    # from here down is ops on a collection of places
     def as_tree(places):
         roots = Place.get_roots(places)
 
@@ -246,6 +252,12 @@ class Bigraph():
         self.links_nodes = JoinDict()
 
         self.id = new_uuid()
+
+    def __repr__(self):
+        return f'Bigraph(id={self.id},\n' \
+                f' nodes={pf(self.nodes)},\n' \
+                f' places={pf(self.places)},\n' \
+                f' links={pf(self.links)})'
 
 
     def outer_face(self):
@@ -553,3 +565,8 @@ def test_link_bigraph():
 #                             'data': {}}}}}},
 #             H.places,
 #             HarvestTestHelper())
+
+# TODO
+# - nodes are used for structural information
+# - place normalized to one parent and one child
+# - current Place is actually place-edge index of a node (similar to nodes_links)
