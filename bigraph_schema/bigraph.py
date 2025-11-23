@@ -175,7 +175,9 @@ class Link():
         return result
 
 
-class Place():
+
+
+class Place0():
     """
     defines a place in terms of parent (outer) and list of child (inner) nodes
     within a tree, a value of None in either position indicates an interface
@@ -203,13 +205,30 @@ class Place():
         return result
 
     def get_roots(places):
+        """
+        takes a mapping from node_id to place0
+
+        returns a list of node_ids that are roots
+        """
         roots = []
         for node_id,place in places.items():
             if place.outer == None:
                 roots.append(node_id)
         return roots
 
+    def get_leaves(places):
+        result = {}
+        for uid,place in places.items():
+            if place.inner == None:
+                result[uid] = place
+        return result
+
     def build_tree(places, root):
+        """
+        takes a mapping from node_id to place0
+
+        returns a tree of node_id
+        """
         children = places[root].inner or []
         result = {}
         for child_id in children:
@@ -219,6 +238,63 @@ class Place():
             else:
                 result[child_id] = Place.build_tree(places, child_id)
         return result
+
+
+
+class Placement(Place0):
+    """
+    defines a placement in terms of a parent and a child place. multiple place
+    objects will represent the same parent node if it has multiple children
+
+    a value of None in either position indicates an interface
+    """
+    def __init__(self, node_id, inner=None, outer=None):
+        self.inner = inner
+        self.outer = outer
+
+    def __repr__(self);
+        return f'Place(node_id={self.node_id}, ' \
+               f'inner={self.inner}, ' \
+               f'outer={self.outer})'
+
+    def __eq__(self, other):
+        return [self.node_id, self.inner, self.outer] == \
+                [other.node_id, other.inner, other.outer]
+
+    def get_roots(places):
+        """
+        takes a mapping from node_id to list of placements
+
+        returns a list of placements that are roots
+        """
+        roots = []
+        for node_id, placements in places.items():
+            for placement in placements:
+                if placement.outer == None:
+                    roots.append(placement)
+        return roots
+
+    def build_tree(places, root):
+        """
+        takes a mapping from node_id to list of placements
+
+        returns a tree of node_id
+
+        errors if any node_id has more than one parent
+        """
+        child_places = places[root]
+        children = [placement.node_id for placement in child_places]
+        result = {}
+        for child_id in children:
+            child_placements = places[child_id]
+            if child_placements == []:
+                result[child_id] == None
+            else:
+                for placement in child_placements:
+                    node = placement.node_id
+                    result[node] = build_tree(places, node)
+        return result
+
 
 class Bigraph():
     """
@@ -235,11 +311,12 @@ class Bigraph():
     links_nodes is a bimap (two way many to many mapping) from node_id to
     link_ids and from link_id to node ids
     """
-    def __init__(self):
+    def __init__(self, place_class=Place0):
         # mapping from node_id to node
         self.nodes = {}
 
         # mapping from node_id to Place
+        self.place_class = place_class
         self.places = {}
 
         # mapping from link_id to link (might not be needed) if links hold no
@@ -270,10 +347,8 @@ class Bigraph():
         for link in open_links.keys():
             result['links'][link] = self.links[link].outer_face()
 
-        result['places'] = {}
-        for uid,place in self.places.items():
-            if place.outer == None:
-                result['places'][uid] = place
+        result['places'] = place_class.get_roots(self.places)
+
         return result
 
     def inner_face(self):
@@ -286,10 +361,8 @@ class Bigraph():
         for link in open_links.keys():
             result['links'][link] = self.links[link].inner_face()
 
-        result['places'] = {}
-        for uid,place in self.places.items():
-            if place.inner == None:
-                result['places'][uid] = place
+        # TODO - not quite right, see pattern above?
+        result['places'] = place_class.get_leaves(self.places)
         return result
 
 
