@@ -25,4 +25,4 @@ bigraph:
 	${PY} python3 -i bigraph_schema/bigraph.py
 
 test-bg:
-	${PY} pytest bigraph_schema/bigraph.py
+	${PY} pytest -vv bigraph_schema/bigraph.py

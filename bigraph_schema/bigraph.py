@@ -182,25 +182,25 @@ class Place0():
     defines a place in terms of parent (outer) and list of child (inner) nodes
     within a tree, a value of None in either position indicates an interface
     """
-    def __init__(self, inner=None, outer=None):
+    def __init__(self, node_id, inner=None, outer=None):
         # list of place_id or None
         self.inner = inner or []
         # single value of place_id or None
         self.outer = outer
 
     def __repr__(self):
-        return f'Place(inner={self.inner}, outer={self.outer})'
+        return f'Place0({node_id}, inner={self.inner}, outer={self.outer})'
 
     def __eq__(self, other):
         return self.inner == other.inner and self.outer == other.outer
 
     # from here down is ops on a collection of places
     def as_tree(places):
-        roots = Place.get_roots(places)
+        roots = Place0.get_roots(places)
 
         result = {}
         for root in roots:
-            result[root] = Place.build_tree(places, root)
+            result[root] = Place0.build_tree(places, root)
 
         return result
 
@@ -236,7 +236,7 @@ class Place0():
             if child.inner == None:
                 result[child_id] = None
             else:
-                result[child_id] = Place.build_tree(places, child_id)
+                result[child_id] = Place0.build_tree(places, child_id)
         return result
 
 
@@ -252,7 +252,7 @@ class Placement(Place0):
         self.inner = inner
         self.outer = outer
 
-    def __repr__(self);
+    def __repr__(self):
         return f'Place(node_id={self.node_id}, ' \
                f'inner={self.inner}, ' \
                f'outer={self.outer})'
@@ -347,7 +347,10 @@ class Bigraph():
         for link in open_links.keys():
             result['links'][link] = self.links[link].outer_face()
 
-        result['places'] = place_class.get_roots(self.places)
+        open_places = self.place_class.get_roots(self.places)
+        result['places'] = {}
+        for place in open_places:
+            result['places'][place] = self.places[place]
 
         return result
 
@@ -362,7 +365,7 @@ class Bigraph():
             result['links'][link] = self.links[link].inner_face()
 
         # TODO - not quite right, see pattern above?
-        result['places'] = place_class.get_leaves(self.places)
+        result['places'] = self.place_class.get_leaves(self.places)
         return result
 
 
@@ -387,7 +390,7 @@ class Bigraph():
 
         uid = tree_ops.get_id(tree)
         nodes = [uid]
-        place = Place(inner=None, outer=parent_id)
+        place = self.place_class(uid, inner=None, outer=parent_id)
         if uid != None:
             self.places[uid] = place
         if parent_id:
@@ -408,7 +411,7 @@ class Bigraph():
         based on root node ids in self.places
         """
 
-        roots = roots or Place.get_roots(self.places)
+        roots = roots or self.place_class.get_roots(self.places)
 
         result = {}
         for node_id in roots:
@@ -503,7 +506,7 @@ def test_bigraph():
     harvested.sort()
 
     assert harvested == [1,2,3,4]
-    assert Place.as_tree(bg.places) == {
+    assert bg.place_class.as_tree(bg.places) == {
             4: {1: {2: {}},
                 3: {}}}
     assert bg.nodes == {
@@ -580,9 +583,9 @@ def test_link_bigraph():
                         'name': 'y_port',
                         'schema': '*'}}},
             'places': {
-                'v1': Place(inner=[], outer=None),
-                'v3': Place(inner=[], outer=None),
-                'v4': Place(inner=['v5'], outer=None)}}
+                'v1': F.place_class('v1', inner=[], outer=None),
+                'v3': F.place_class('v3', inner=[], outer=None),
+                'v4': F.place_class('v4', inner=['v5'], outer=None)}}
 
     G = Bigraph()
     g_tree = {
