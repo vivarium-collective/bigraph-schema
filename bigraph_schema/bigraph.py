@@ -8,7 +8,7 @@ import uuid
 # bigraph{
 #     id: uuid
 #     nodes : mapping(id:uuid, node:object)
-#     places: mapping from id to Place
+#     places: object representing a tree structure of nodes
 #     links : mapping(uuid from link, Link)
 #     links_nodes : many to many uuid links to nodes}
 #
@@ -175,73 +175,158 @@ class Link():
         return result
 
 
-
-
-class Place0():
+class Place():
     """
     defines a place in terms of parent (outer) and list of child (inner) nodes
     within a tree, a value of None in either position indicates an interface
     """
     def __init__(self, node_id, inner=None, outer=None):
+        self.node_id = node_id
         # list of place_id or None
         self.inner = inner or []
         # single value of place_id or None
         self.outer = outer
 
     def __repr__(self):
-        return f'Place0({node_id}, inner={self.inner}, outer={self.outer})'
+        return f'Place({node_id}, inner={self.inner}, outer={self.outer})'
 
     def __eq__(self, other):
         return self.inner == other.inner and self.outer == other.outer
 
-    # from here down is ops on a collection of places
-    def as_tree(places):
-        roots = Place0.get_roots(places)
+class Places():
+    def as_tree(self):
+        roots = self.get_roots()
 
         result = {}
         for root in roots:
-            result[root] = Place0.build_tree(places, root)
+            result[root] = self.build_tree(root)
 
         return result
 
-    def get_roots(places):
+    def add_branch(self, parent, child):
+        pass
+    def get_branches(self, node_id):
+        pass
+    def get_place(self, place_id):
+        pass
+    def insert(self, place):
+        pass
+    def get_roots(self):
+        pass
+    def get_leaves(self):
+        pass
+    def build_tree(self, root):
         """
-        takes a mapping from node_id to place0
+        returns a tree of node_id down from root
+        """
+        pass
 
-        returns a list of node_ids that are roots
-        """
+class PlacePlaces(Places):
+    def __init__(self):
+        self.db = {}
+
+    def insert(self, place):
+        self.db[place.node_id] = place
+
+    def add_branch(self, parent, child):
+        existing_child = self.db.get(child)
+        if not existing_child:
+            self.insert(Place(child, outer=parent))
+        existing_parent = self.db.get(parent)
+        if not existing_parent:
+            existing_parent = Place(parent, inner=[child])
+            self.insert(existing_parent)
+        if not child in existing_parent.inner:
+            existing_parent.inner.append(child)
+
+    def get_branches(self, node_id):
+        return self.db[node_id].inner
+
+    def get_place(self, node_id):
+        return self.db.get(node_id)
+
+    def get_roots(self):
         roots = []
-        for node_id,place in places.items():
+        for node_id,place in self.db.items():
             if place.outer == None:
                 roots.append(node_id)
         return roots
 
-    def get_leaves(places):
+    def get_leaves(self):
         result = {}
-        for uid,place in places.items():
+        for uid,place in self.db.items():
             if place.inner == None:
                 result[uid] = place
         return result
 
-    def build_tree(places, root):
-        """
-        takes a mapping from node_id to place0
-
-        returns a tree of node_id
-        """
-        children = places[root].inner or []
+    def build_tree(self, root):
+        children = self.db[root].inner or []
         result = {}
         for child_id in children:
-            child = places[child_id]
+            child = self.db[child_id]
             if child.inner == None:
                 result[child_id] = None
             else:
-                result[child_id] = Place0.build_tree(places, child_id)
+                result[child_id] = self.build_tree(child_id)
         return result
 
 
+class PlacementPlaces(Places):
+    def __init__(self):
+        self.placements = {}
+        self.placements_nodes = JoinDict()
 
-class Placement(Place0):
+    def insert(self, placement):
+        self.placements[placement.id] = placement
+        self.placements_nodes.insert(placement.id, placement.node_id)
+
+    def add_branch(self, parent_node, child_node):
+        parent_placements = self.get_place(parent_node)
+        for place_id in parent_placements:
+            if self.placements[place_id].inner == child_node:
+                return
+        self.insert(Placement(child_node, outer=parent_node))
+
+    def get_place(self, node_id):
+        return self.placements_nodes.get_right(node_id)
+
+    def get_branches(self, node_id):
+        return self.get_place(node_id)
+
+    def __get_node(self, placement_id):
+        nodes = self.placements_nodes.get_left(placement_id)
+        assert len(nodes) <= 1, \
+                f"placements must have 0 or 1 node, got: {nodes}"
+        if nodes == []:
+            return None
+        else:
+            return nodes[0]
+
+    def get_roots(self):
+        roots = []
+        for placement_id,placement in self.placements():
+            if placement.outer == None:
+                roots.append(self.__get_node(placment_id))
+        return roots
+
+    def get_leaves(self):
+        result = {}
+        for placement_id,placement in self.placements():
+            if placement.inner == None:
+                result[self.__get_node(placment_id)] = placement
+        return result
+
+    def build_tree(self, root):
+        branches = self.placements_nodes.get_right(root)
+        result = {}
+        for branch in branches:
+            if branch.inner == None:
+                result[branch.node_id] = None
+            else:
+                resut[branch.node_id] = self.build_tree(branch.node_id)
+        return result
+
+class Placement(Place):
     """
     defines a placement in terms of a parent and a child place. multiple place
     objects will represent the same parent node if it has multiple children
@@ -249,6 +334,7 @@ class Placement(Place0):
     a value of None in either position indicates an interface
     """
     def __init__(self, node_id, inner=None, outer=None):
+
         self.inner = inner
         self.outer = outer
 
@@ -311,13 +397,15 @@ class Bigraph():
     links_nodes is a bimap (two way many to many mapping) from node_id to
     link_ids and from link_id to node ids
     """
-    def __init__(self, place_class=Place0):
+    def __init__(self, place_class=Place, places_class=PlacePlaces):
         # mapping from node_id to node
         self.nodes = {}
 
-        # mapping from node_id to Place
+        # TODO - maybe we only need the constructor of the place class?
         self.place_class = place_class
-        self.places = {}
+        # we abstract the implementation of the place tree structure
+        # TODO - like with the place_class, maybe we only need the constructor?
+        self.places = places_class()
 
         # mapping from link_id to link (might not be needed) if links hold no
         # data
@@ -347,10 +435,10 @@ class Bigraph():
         for link in open_links.keys():
             result['links'][link] = self.links[link].outer_face()
 
-        open_places = self.place_class.get_roots(self.places)
+        open_places = self.places.get_roots()
         result['places'] = {}
-        for place in open_places:
-            result['places'][place] = self.places[place]
+        for node_id in open_places:
+            result['places'][node_id] = self.places.get_place(node_id)
 
         return result
 
@@ -364,8 +452,7 @@ class Bigraph():
         for link in open_links.keys():
             result['links'][link] = self.links[link].inner_face()
 
-        # TODO - not quite right, see pattern above?
-        result['places'] = self.place_class.get_leaves(self.places)
+        result['places'] = self.places.get_leaves()
         return result
 
 
@@ -392,9 +479,9 @@ class Bigraph():
         nodes = [uid]
         place = self.place_class(uid, inner=None, outer=parent_id)
         if uid != None:
-            self.places[uid] = place
+            self.places.insert(place)
         if parent_id:
-            self.places[parent_id].inner.append(uid)
+            self.places.add_branch(parent_id, uid)
 
         leaf = tree_ops.get_leaf(tree)
         if leaf != None:
@@ -411,7 +498,7 @@ class Bigraph():
         based on root node ids in self.places
         """
 
-        roots = roots or self.place_class.get_roots(self.places)
+        roots = roots or self.places.get_roots()
 
         result = {}
         for node_id in roots:
@@ -419,9 +506,9 @@ class Bigraph():
             node = self.nodes[node_id]
             if node:
                 result[node_id]['data'] = node
-            place = self.places[node_id]
-            if place.inner:
-                result[node_id]['children'] = self.as_tree(place.inner)
+            inner = self.places.get_branches(node_id)
+            if inner:
+                result[node_id]['children'] = self.as_tree(inner)
         return result
 
 
@@ -506,7 +593,7 @@ def test_bigraph():
     harvested.sort()
 
     assert harvested == [1,2,3,4]
-    assert bg.place_class.as_tree(bg.places) == {
+    assert bg.places.as_tree() == {
             4: {1: {2: {}},
                 3: {}}}
     assert bg.nodes == {
