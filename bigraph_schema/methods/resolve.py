@@ -222,6 +222,16 @@ def resolve(current: Node, update: dict):
     else:
         return current
 
+@dispatch
+def resolve(current: dict, update: Node):
+    fields = set(update.__dataclass_fields__)
+    keys = set(current.keys())
+
+    if len(keys.difference(fields)) > 0:
+        return update
+    else:
+        return current
+
 # @dispatch
 # def resolve(current: dict, update: Node):
 #     fields = set(update.__dataclass_fields__)

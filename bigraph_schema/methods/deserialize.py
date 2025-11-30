@@ -172,7 +172,10 @@ def deserialize(core, schema: Tree, encode, path=()):
     decode = {}
 
     if isinstance(encode, str):
-        encode = literal_eval(encode)
+        try:
+            encode = literal_eval(encode)
+        except:
+            pass
 
     leaf_schema, leaf_state, merges = deserialize(core, schema._leaf, encode)
     if leaf_state is not None:
