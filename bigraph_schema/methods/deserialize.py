@@ -260,6 +260,10 @@ def deserialize_link(core, schema: Link, encode, path=()):
     protocol = address.get('protocol', 'local')
     protocol_schema = core.access(protocol)
     edge_class = load_protocol(core, protocol_schema, address['data'])
+
+    if edge_class is None:
+        import ipdb; ipdb.set_trace()
+
     config_schema = edge_class.config_schema
     encode_config = encode.get('config', {})
     _, decode_config = core.deserialize(config_schema, encode_config)

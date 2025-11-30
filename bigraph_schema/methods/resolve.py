@@ -199,6 +199,20 @@ def resolve(current: Link, update: dict):
     return schema
 
 @dispatch
+def resolve(current: dict, update: Link):
+    schema = update
+    for key in ['_inputs', '_outputs']:
+        if key in current:
+            subupdate = current[key]
+            attr = getattr(schema, key)
+            subresolve = resolve(attr, subupdate)
+            schema = replace(schema, **{key: subresolve})
+        # else:
+        #     schema = replace(schema, **{key: subupdate})
+
+    return schema
+
+@dispatch
 def resolve(current: Node, update: dict):
     fields = set(current.__dataclass_fields__)
     keys = set(update.keys())

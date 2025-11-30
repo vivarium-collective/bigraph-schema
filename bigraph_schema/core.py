@@ -310,7 +310,20 @@ class Core:
             if key not in self.registry:
                 return visit_expression(key, self.parse_visitor)
             else:
-                return self.registry[key]()
+                entry = self.registry[key]
+                if callable(entry):
+                    return entry()
+                elif isinstance(entry, dict):
+                    if '_inherit' in entry:
+                        inherit_key = entry['_inherit']
+                        beyond_inherit = {
+                            key: value
+                            for key, value in entry.items()
+                            if key != '_inherit'}
+                        inherit = self.access(inherit_key)
+                        return replace(inherit, **beyond_inherit)
+                    else:
+                        return self.access(entry)
 
         elif isinstance(key, dict):
             if '_type' in key:

@@ -125,7 +125,7 @@ def apply(schema: Map, state, update, path):
         for add_key, add_value in update['_add']:
             result[add_key] = add_value
 
-    for key, value in result:
+    for key, value in result.items():
         if key in update:
             result[key], submerges = apply(
                 schema._value,
