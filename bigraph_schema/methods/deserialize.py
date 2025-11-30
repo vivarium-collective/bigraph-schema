@@ -176,8 +176,7 @@ def load_protocol(core, protocol, data):
     raise Exception(f'value is not a protocol: {protocol}')
 
 
-@dispatch
-def deserialize(core, schema: Link, encode):
+def deserialize_link(core, schema: Link, encode):
     address = encode.get('address', 'local:edge')
     if isinstance(address, str):
         if ':' not in address:
@@ -213,6 +212,11 @@ def deserialize(core, schema: Link, encode):
         'instance': edge_instance,
         'inputs': deserialize(core, schema.inputs, encode.get('inputs', {})),
         'outputs': deserialize(core, schema.outputs, encode.get('outputs', {}))}
+
+
+@dispatch
+def deserialize(core, schema: Link, encode):
+    return deserialize_link(core, schema, encode)
 
 
 @dispatch

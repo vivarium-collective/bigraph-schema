@@ -148,7 +148,7 @@ def resolve(current: Tree, update: Node):
     try:
         resolved = resolve(leaf, update)
     except:
-        raise(f'update schema is neither a tree or a leaf:\n{current}\n{update}')
+        raise Exception(f'update schema is neither a tree or a leaf:\n{current}\n{update}')
 
     replace(current, _leaf=resolved)
     return current
@@ -181,6 +181,22 @@ def resolve(current: dict, update: dict):
 
         result[key] = value
     return result
+
+
+
+@dispatch
+def resolve(current: Link, update: dict):
+    schema = current
+    for key in ['_inputs', '_outputs']:
+        if key in update:
+            subupdate = update[key]
+            attr = getattr(schema, key)
+            subresolve = resolve(attr, subupdate)
+            schema = replace(schema, **{key: subresolve})
+        # else:
+        #     schema = replace(schema, **{key: subupdate})
+
+    return schema
 
 @dispatch
 def resolve(current: Node, update: dict):

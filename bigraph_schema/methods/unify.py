@@ -285,6 +285,10 @@ def unify(core, schema: Link, state, path):
 
         merges += submerges
 
+    for key, value in state.items():
+        if not key.startswith('_') and hasattr(schema, key):
+            getattr(schema, key)._default = value
+
     return schema, state, merges
 
 @dispatch

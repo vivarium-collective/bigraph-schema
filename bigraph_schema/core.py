@@ -275,7 +275,7 @@ class Core:
 
     def access_type(self, value):
         if isinstance(value, dict) and '_type' in value:
-            schema = core.access(value['_type'])
+            schema = self.access(value['_type'])
 
             default_value = None
             if '_default' in value:
@@ -288,7 +288,7 @@ class Core:
             for key in schema_keys(schema)[1:]:
                 if key in value:
                     parameters[key] = value[key]
-            schema = reify_schema(core, schema, parameters)
+            schema = reify_schema(self, schema, parameters)
             return schema
 
     def access(self, key):
@@ -298,6 +298,11 @@ class Core:
         Acts as the main entry point for parsing bigraph expressions and building
         normalized in-memory representations.
         """
+
+        # TODO: consider other terms for this?
+        #   * compile
+        #   * parse
+
         if is_dataclass(key):
             return key
 
@@ -377,9 +382,15 @@ class Core:
         return generalize(current, update)
 
     def check(self, schema, state):
-        """Validate `state` against `schema`."""
+        """Check that the `state` fits the `schema`."""
         found = self.access(schema)
         return check(found, state)
+
+    def validate(self, schema, state):
+        """Raise an exception if the state does not match the schema,
+        which describes why"""
+
+        pass
 
     def serialize(self, schema, state):
         """Convert a structured Python state into an encoded representation.
@@ -413,6 +424,12 @@ class Core:
         merged = self.default(resolved)
         return resolved, merged
 
+    def handle_merges(self, schema, merges):
+        for merge in merges:
+            schema = self.generalize(schema, merge)
+
+        return schema
+
     def unify(self, schema, state, path=()):
         found = self.access(schema)
         
@@ -422,9 +439,9 @@ class Core:
             state,
             path)
 
-        for merge in merges:
-            unify_schema = self.generalize(unify_schema, merge)
+        unify_schema = self.handle_merges(unify_schema, merges)
         default_state = self.default(unify_schema)
+
         return unify_schema, default_state
 
     def jump(self, schema, state, raw_key):
@@ -454,7 +471,7 @@ class Core:
 
     def fill(self, schema, state):
         found = self.access(schema)
-        base = default(found)
+        base = self.default(found)
         return merge(found, base, state)
 
     def view_ports(self, schema, state, path, ports_schema, wires):
@@ -568,6 +585,47 @@ class Core:
             view)
 
         return project_schema, project_state
+
+    def combine(self, schema, state, update_schema, update_state):
+        resolved = self.resolve(schema, update_schema)
+        merged = self.merge(resolved, state, update_state)
+        return resolved, merged
+
+    def link_state(self, link, path):
+        result_schema = {}
+        result_state = {}
+
+        instance = link.get('instance')
+
+        if instance is not None:
+            initial_state = instance.initial_state()
+
+            for ports_key in ['inputs', 'outputs']:
+                ports_schema = link.get(f'_{ports_key}', {})
+                wires = link.get(ports_key, {})
+                project_schema, project_state = self.project_ports(ports_schema, wires, path[:-1], initial_state)
+                result_schema, result_state = self.combine(
+                    result_schema, result_state,
+                    project_schema, project_state)
+
+        return result_schema, result_state
+
+    def wire_schema(self, schema, state, wires, path=None):
+        outcome = {}
+        path = path or []
+
+        if isinstance(wires, dict):
+            for key, subwires in wires.items():
+                outcome[key] = self.wire_schema(
+                    schema,
+                    state,
+                    wires[key],
+                    path)
+
+        else:
+            outcome, _ = self.traverse(schema, state, path + wires)
+
+        return outcome
 
     def apply(self, schema, state, update, path=()):
         """Apply a schema-aware update/patch; provides minimal context."""
@@ -1062,6 +1120,12 @@ def test_generate(core):
     #                          core.serialize(generated_schema, generated_state))
 
 def test_unify(core):
+    default_hello = 'string{hello}'
+
+    default_hello = {
+        '_type': 'string',
+        '_default': 'hello'}
+
     schema = {
         'A': 'float',
         'B': 'enum[one,two,three]',
