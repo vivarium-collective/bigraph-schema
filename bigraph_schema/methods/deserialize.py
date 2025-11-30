@@ -261,7 +261,10 @@ def deserialize_link(core, schema: Link, encode, path=()):
     protocol_schema = core.access(protocol)
     edge_class = load_protocol(core, protocol_schema, address['data'])
     config_schema = edge_class.config_schema
-    config = core.fill(config_schema, encode.get('config', {}))
+    encode_config = encode.get('config', {})
+    _, decode_config = core.deserialize(config_schema, encode_config)
+    config = core.fill(config_schema, decode_config)
+
     if not core.check(config_schema, config):
         raise Exception(f'config {config} provided to {address} does not match the config_schema {config_schema}')
     edge_instance = edge_class(config, core)
@@ -281,13 +284,12 @@ def deserialize_link(core, schema: Link, encode, path=()):
             port_schema = core.resolve(
                 port_schema,
                 encode[port_key])
-
-            decode[port_key] = port_schema
         else:
-            decode[port_key] = core.resolve(
+            port_schema = core.resolve(
                 port_schema,
                 interface[port])
 
+        decode[port_key] = port_schema
         if port not in encode or encode[port] is None:
             decode[port] = default_wires(port_schema)
         else:
@@ -299,6 +301,9 @@ def deserialize_link(core, schema: Link, encode, path=()):
             else:
                 decode[port] = wires_state
             merges += submerges
+
+        if port_schema is None:
+            import ipdb; ipdb.set_trace()
 
         submerges = port_merges(
             port_schema,
@@ -389,7 +394,7 @@ def deserialize(core, schema: dict, encode, path=()):
         if result_state:
             return result_schema, result_state, merges
 
-    return schema, None, []
+    return schema, encode, []
             
     
 

@@ -411,7 +411,7 @@ class Core:
         """
         found = self.access(schema)
         decode_schema, decode_state, merges = deserialize(
-            core,
+            self,
             found,
             state,
             path=path)
@@ -656,10 +656,10 @@ class Core:
 
 # test data ----------------------------
 
-@pytest.fixture
-def core():
-    return Core(
-        BASE_TYPES)
+# @pytest.fixture
+# def core():
+#     return Core(
+#         BASE_TYPES)
 
 default_a = 11.111
 # represents a hash where keys a and b are required with types specified

@@ -39,7 +39,7 @@ from bigraph_schema.schema import (
 from bigraph_schema.methods.default import default
 from bigraph_schema.methods.check import check
 from bigraph_schema.methods.resolve import resolve
-from bigraph_schema.methods.deserialize import port_merges, default_wires
+from bigraph_schema.methods.deserialize import deserialize, port_merges, default_wires
 
 
 
@@ -235,37 +235,39 @@ def unify(core, schema: Array, state, path):
 
 @dispatch
 def unify(core, schema: Link, state, path):
-    merges = []
+    return deserialize(core, schema, state, path)
 
-    for port in ['inputs', 'outputs']:
-        port_key = f'_{port}'
-        port_schema = getattr(schema, port_key)
+    # merges = []
 
-        if port_key in state:
-            state_schema = core.access(state[port_key])
-            port_schema = core.resolve(
-                port_schema,
-                state[port_key])
+    # for port in ['inputs', 'outputs']:
+    #     port_key = f'_{port}'
+    #     port_schema = getattr(schema, port_key)
 
-            state[port_key] = port_schema
+    #     if port_key in state:
+    #         state_schema = core.access(state[port_key])
+    #         port_schema = core.resolve(
+    #             port_schema,
+    #             state[port_key])
 
-        if port not in state:
-            state[port] = default_wires(port_schema)
-        else:
-            getattr(schema, port)._default = state[port]
+    #         state[port_key] = port_schema
 
-        submerges = port_merges(
-            port_schema,
-            state[port],
-            path)
+    #     if port not in state:
+    #         state[port] = default_wires(port_schema)
+    #     else:
+    #         getattr(schema, port)._default = state[port]
 
-        merges += submerges
+    #     submerges = port_merges(
+    #         port_schema,
+    #         state[port],
+    #         path)
 
-    for key, value in state.items():
-        if not key.startswith('_') and hasattr(schema, key):
-            getattr(schema, key)._default = value
+    #     merges += submerges
 
-    return schema, state, merges
+    # for key, value in state.items():
+    #     if not key.startswith('_') and hasattr(schema, key):
+    #         getattr(schema, key)._default = value
+
+    # return schema, state, merges
 
 @dispatch
 def unify(core, schema: Node, state, path):
