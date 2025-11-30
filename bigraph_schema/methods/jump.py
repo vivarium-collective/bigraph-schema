@@ -236,8 +236,7 @@ def jump(schema: Atom, state, to, context):
         return schema, state
 
 
-@dispatch
-def jump(schema: Link, state, to: Key, context):
+def jump_link(schema: Link, state, to: Key, context):
     key = to._value
     if key in ['inputs', 'outputs']:
         if not key in state:
@@ -255,9 +254,22 @@ def jump(schema: Link, state, to: Key, context):
             state[key],
             context['subpath'],
             subcontext)
+
+    elif hasattr(schema, key):
+        subschema = getattr(schema, key)
+        return traverse(
+            subschema,
+            state.get(key),
+            context['subpath'],
+            context)
+
     else:
         return jump(Node(), state, to, context)
 
+
+@dispatch
+def jump(schema: Link, state, to: Key, context):
+    return jump_link(schema, state, to, context)
 
 @dispatch
 def jump(schema: Wires, state, to: Key, context):

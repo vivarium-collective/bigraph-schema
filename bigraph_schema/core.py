@@ -663,8 +663,11 @@ class Core:
 
     def apply(self, schema, state, update, path=()):
         """Apply a schema-aware update/patch; provides minimal context."""
-        found = self.access(schema)
-        return apply(found, state, update, path)
+        if update:
+            found = self.access(schema)
+            return apply(found, state, update, path)
+        else:
+            return state, []
 
 
 # test data ----------------------------
