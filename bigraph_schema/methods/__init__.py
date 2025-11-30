@@ -1,5 +1,5 @@
 from bigraph_schema.methods.infer import infer, set_default
-from bigraph_schema.methods.default import default
+from bigraph_schema.methods.default import default, default_link
 from bigraph_schema.methods.resolve import resolve
 from bigraph_schema.methods.generalize import generalize
 from bigraph_schema.methods.check import check

@@ -174,6 +174,9 @@ def generalize(current: Tree, update: dict):
     schema = merge_update(generalized, current, update)
     return schema
 
+
+
+
 @dispatch
 def generalize(current: dict, update: dict):
     result = {}
@@ -212,6 +215,30 @@ def generalize(current: Node, update: dict):
 @dispatch
 def generalize(current: list, update: list):
     return tuple(update)
+
+
+@dispatch
+def generalize(current: String, update: Node):
+    if current._default:
+        update._default = current._default
+    return update
+
+@dispatch
+def generalize(current: String, update: Wrap):
+    return generalize(current, update._value)
+
+@dispatch
+def generalize(current: String, update: String):
+    if update._default or not current._default:
+        return update
+    else:
+        return current
+
+@dispatch
+def generalize(current: Node, update: String):
+    if update._default:
+        current._default = update._default
+    return current
 
 
 @dispatch

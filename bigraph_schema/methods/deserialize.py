@@ -290,6 +290,8 @@ def deserialize_link(core, schema: Link, encode, path=()):
                 interface[port])
 
         decode[port_key] = port_schema
+        schema = replace(schema, **{port_key: port_schema})
+
         if port not in encode or encode[port] is None:
             decode[port] = default_wires(port_schema)
         else:

@@ -149,12 +149,21 @@ def default(schema: Protocol):
             'protocol': 'local',
             'data': 'edge'}
 
+def default_link(schema: Link):
+    if schema._default: 
+        return schema._default
+    else:
+        return {
+            'address': default(schema.address) or 'local:edge',
+            'config': default(schema.config) or {},
+            '_inputs': schema._inputs,
+            '_outputs': schema._outputs,
+            'inputs': default(schema.inputs) or default_wires(schema._inputs),
+            'outputs': default(schema.outputs) or default_wires(schema._outputs)}
+
 @dispatch
 def default(schema: Link):
-    return {
-        'address': default(schema.address) or 'local:edge',
-        'inputs': default(schema.inputs) or default_wires(schema._inputs),
-        'outputs': default(schema.outputs) or default_wires(schema._outputs)}
+    return default_link(schema)
 
 @dispatch
 def default(schema: dict):

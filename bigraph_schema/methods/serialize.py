@@ -433,7 +433,7 @@ def serialize(schema: Link, state):
     if instance is None:
         config_schema = {}
     else:
-        config_schema = instance.config_schema
+        config_schema = instance.core.access(instance.config_schema)
 
     config = serialize(config_schema, unconfig)
     inputs = serialize(schema.inputs, state.get('inputs'))
