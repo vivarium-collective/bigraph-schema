@@ -39,6 +39,7 @@ from bigraph_schema.schema import (
 from bigraph_schema.methods.default import default
 from bigraph_schema.methods.check import check
 from bigraph_schema.methods.resolve import resolve
+from bigraph_schema.methods.deserialize import port_merges, default_wires
 
 
 
@@ -230,31 +231,6 @@ def unify(core, schema: Array, state, path):
         schema._data = state.dtype
 
     return schema, state, []
-
-
-def default_wires(schema):
-    return {
-        key: [key]
-        for key in schema}
-
-def port_merges(port_schema, wires, path):
-    if isinstance(wires, (list, tuple)):
-        subpath = path[:-1] + tuple(wires)
-        submerges = nest_schema(
-            port_schema,
-            subpath)
-        return [submerges]
-    else:
-        merges = []
-        for key, subwires in wires.items():
-            down = port_schema[key]
-            submerges = port_merges(
-                down,
-                subwires,
-                path)
-            merges += submerges
-
-        return merges
 
 
 @dispatch

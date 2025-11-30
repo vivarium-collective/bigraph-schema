@@ -90,6 +90,8 @@ def merge(schema: Map, current, update):
     result = {}
     if current is None:
         return update
+    elif update is None:
+        return current
     else:
         for key in current.keys() | update.keys():
             if key in update:

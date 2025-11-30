@@ -2,6 +2,7 @@ from ast import literal_eval
 from plum import dispatch
 import numpy as np
 from numpy.random.mtrand import RandomState
+from dataclasses import replace
 
 from bigraph_schema.protocols import local_lookup
 from bigraph_schema.utilities import NONE_SYMBOL
@@ -34,120 +35,164 @@ from bigraph_schema.schema import (
     LocalProtocol,
     Schema,
     Link,
+    nest_schema,
 )
 
 
 @dispatch
-def deserialize(core, schema: Empty, encode):
-    return None
+def deserialize(core, schema: Empty, encode, path=()):
+    return schema, None, []
 
 @dispatch
-def deserialize(core, schema: Maybe, encode):
+def deserialize(core, schema: Maybe, encode, path=()):
     if encode is not None and encode != NONE_SYMBOL:
         return deserialize(core, schema._value, encode)
 
 @dispatch
-def deserialize(core, schema: Wrap, encode):
+def deserialize(core, schema: Wrap, encode, path=()):
     return deserialize(core, schema._value, encode)
 
 @dispatch
-def deserialize(core, schema: Union, encode):
+def deserialize(core, schema: Union, encode, path=()):
     for option in schema._options:
-        decode = deserialize(core, option, encode)
-        if decode is not None:
-            return decode
+        decode_schema, decode_state, merges = deserialize(core, option, encode)
+        if decode_state is not None:
+            return decode_schema, decode_state, merges
+    return schema, None, []
 
 @dispatch
-def deserialize(core, schema: Tuple, encode):
+def deserialize(core, schema: Tuple, encode, path=()):
+    merges = []
+
     if isinstance(encode, str):
         encode = literal_eval(encode)
 
     if isinstance(encode, (list, tuple)):
-        return tuple([
-            deserialize(core, value, code)
-            for value, code in zip(
-                schema._values, encode)])
+        subvalues = []
+        subtuple = []
+        for value, code, index in zip(schema._values, encode, range(len(encode))):
+            subvalue, subcode, submerges = deserialize(core, value, code, path+(index,))
+            subvalues.append(subvalue)
+            subtuple.append(subcode)
+            merges += submerges
+
+        result_schema = replace(schema, **{'_values': subvalues})
+        result_state = tuple(subtuple)
+
+        return result_schema, result_state, merges
+
+    else:
+        return schema, None, []
 
 @dispatch
-def deserialize(core, schema: Boolean, encode):
+def deserialize(core, schema: Boolean, encode, path=()):
     if encode == 'true':
-        return True
+        return schema, True, []
     elif encode == 'false':
-        return False
+        return schema, False, []
+    else:
+        return schema, None, []
         
 @dispatch
-def deserialize(core, schema: Integer, encode):
+def deserialize(core, schema: Integer, encode, path=()):
     try:
         result = int(encode)
-        return result
+        return schema, result, []
     except Exception:
-        pass
+        return schema, None, []
 
 @dispatch
-def deserialize(core, schema: Float, encode):
+def deserialize(core, schema: Float, encode, path=()):
     try:
         result = float(encode)
-        return result
+        return schema, result, []
     except Exception:
-        pass
+        return schema, None, []
 
 @dispatch
-def deserialize(core, schema: NPRandom, encode):
+def deserialize(core, schema: NPRandom, encode, path=()):
     if isinstance(encode, RandomState):
-        return encode
+        return schema, encode, []
     else:
         state = deserialize(core, schema.state, encode)
         random = RandomState()
         random.set_state(state)
 
-        return random
+        return schema, random, []
 
 @dispatch
-def deserialize(core, schema: String, encode):
-    return encode
+def deserialize(core, schema: String, encode, path=()):
+    return schema, encode, []
 
 @dispatch
-def deserialize(core, schema: List, encode):
+def deserialize(core, schema: List, encode, path=()):
+    decode = []
+    merges = []
+
     if isinstance(encode, str):
         encode = literal_eval(encode)
 
     if isinstance(encode, (list, tuple)):
-        return [
-            deserialize(core, schema._element, element)
-            for element in encode]
+        for index, element in enumerate(encode):
+            subschema, substate, submerges = deserialize(core, schema._element, element, path+(index,))
+            element_schema = core.resolve(schema._element, subschema)
+            schema = replace(schema, **{'_element': element_schema})
+            decode.append(substate)
+            merges += submerges
+
+        return schema, decode, merges
+
+    else:
+        return schema, None, []
 
 @dispatch
-def deserialize(core, schema: Map, encode):
+def deserialize(core, schema: Map, encode, path=()):
     if isinstance(encode, str):
         encode = literal_eval(encode)
 
     if isinstance(encode, dict):
-        result = {
-            key: deserialize(core, schema._value, value)
-            for key, value in encode.items()}
+        decode = {}
+        merges = []
 
-        if not isinstance(schema._key, String):
-            result = [(deserialize(core, schema._key, key), value)
-                for key, value in encode.items()]
+        for key, value in encode.items():
+            subschema, substate, submerges = deserialize(core, schema._value, value, path+(key,))
+            value_schema = core.resolve(schema._value, subschema)
+            schema = replace(schema, **{
+                '_value': value_schema})
+            decode[key] = substate
+            merges += submerges
 
-        return result
+        return schema, decode, merges
+
+    else:
+        return schema, None, []
 
 @dispatch
-def deserialize(core, schema: Tree, encode):
+def deserialize(core, schema: Tree, encode, path=()):
+    decode = {}
+
     if isinstance(encode, str):
         encode = literal_eval(encode)
 
-    leaf_code = deserialize(core, schema._leaf, encode)
-    if leaf_code is not None:
-        return leaf_code
-    elif isinstance(encode, dict):
-        return {
-            key: deserialize(core, schema, value)
-            for key, value in encode.items()}
+    leaf_schema, leaf_state, merges = deserialize(core, schema._leaf, encode)
+    if leaf_state is not None:
+        return leaf_schema, leaf_state, merges
 
+    elif isinstance(encode, dict):
+        decode = {}
+        for key, value in encode.items():
+            subschema, substate, submerges = deserialize(core, schema, value, path+(key,))
+            schema = core.resolve(schema, subschema)
+            decode[key] = substate
+            merges += submerges
+
+        return schema, decode, merges
+
+    else:
+        return schema, None, []
 
 @dispatch
-def deserialize(core, schema: Array, encode):
+def deserialize(core, schema: Array, encode, path=()):
     state = np.array(
         encode,
         dtype=schema._data)
@@ -155,7 +200,7 @@ def deserialize(core, schema: Array, encode):
     if state.shape != schema._shape:
         state.reshape(schema._shape)
 
-    return state
+    return schema, state, []
 
 
 @dispatch
@@ -176,7 +221,33 @@ def load_protocol(core, protocol, data):
     raise Exception(f'value is not a protocol: {protocol}')
 
 
-def deserialize_link(core, schema: Link, encode):
+def port_merges(port_schema, wires, path):
+    if isinstance(wires, (list, tuple)):
+        subpath = path[:-1] + tuple(wires)
+        submerges = nest_schema(
+            port_schema,
+            subpath)
+        return [submerges]
+    else:
+        merges = []
+        for key, subwires in wires.items():
+            down = port_schema[key]
+            submerges = port_merges(
+                down,
+                subwires,
+                path)
+            merges += submerges
+
+        return merges
+
+
+def default_wires(schema):
+    return {
+        key: [key]
+        for key in schema}
+
+
+def deserialize_link(core, schema: Link, encode, path=()):
     address = encode.get('address', 'local:edge')
     if isinstance(address, str):
         if ':' not in address:
@@ -196,77 +267,129 @@ def deserialize_link(core, schema: Link, encode):
     edge_instance = edge_class(config, core)
     interface = edge_instance.interface()
 
-    inputs_schema = core.resolve(
-        schema._inputs,
-        interface['inputs'])
-
-    outputs_schema = core.resolve(
-        schema._outputs,
-        interface['outputs'])
-
-    return {
+    decode = {
         'address': address,
         'config': config,
-        '_inputs': inputs_schema,
-        '_outputs': outputs_schema,
-        'instance': edge_instance,
-        'inputs': deserialize(core, schema.inputs, encode.get('inputs', {})),
-        'outputs': deserialize(core, schema.outputs, encode.get('outputs', {}))}
+        'instance': edge_instance}
+    merges = []
 
+    for port in ['inputs', 'outputs']:
+        port_key = f'_{port}'
+        port_schema = getattr(schema, port_key)
+
+        if port_key in encode:
+            port_schema = core.resolve(
+                port_schema,
+                encode[port_key])
+
+            decode[port_key] = port_schema
+        else:
+            decode[port_key] = core.resolve(
+                port_schema,
+                interface[port])
+
+        if port not in encode or encode[port] is None:
+            decode[port] = default_wires(port_schema)
+        else:
+            subschema = getattr(schema, port)
+            subschema._default = encode[port]
+            wires_schema, wires_state, submerges = deserialize(core, subschema, encode[port], path+(port,))
+            if wires_state is None:
+                decode[port] = default_wires(port_schema)
+            else:
+                decode[port] = wires_state
+            merges += submerges
+
+        submerges = port_merges(
+            port_schema,
+            decode[port],
+            path)
+
+        merges += submerges
+
+    for key, value in encode.items():
+        if not key.startswith('_') and hasattr(schema, key):
+            getattr(schema, key)._default = value
+
+    return schema, decode, merges
 
 @dispatch
-def deserialize(core, schema: Link, encode):
-    return deserialize_link(core, schema, encode)
-
+def deserialize(core, schema: Link, encode, path=()):
+    return deserialize_link(core, schema, encode, path=path)
 
 @dispatch
-def deserialize(core, schema: Node, encode):
+def deserialize(core, schema: Node, encode, path=()):
     if isinstance(encode, str):
         try:
             encode = literal_eval(encode)
         except Exception as e:
-            return encode
+            return schema, encode, []
 
     result = {}
+    merges = []
+
     if isinstance(encode, dict):
         for key in schema.__dataclass_fields__:
             if key in encode:
-                result[key] = deserialize(core, 
-                    getattr(schema, key),
-                    encode.get(key))
-        return result
-    else:
-        for key in schema.__dataclass_fields__:
-            if hasattr(encode, key):
-                result[key] = deserialize(core, 
-                    getattr(schema, key),
-                    getattr(encode, key))
+                attr = getattr(schema, key)
+                subschema, substate, submerges = deserialize(
+                    core,
+                    attr,
+                    encode.get(key),
+                    path+(key,))
+                schema = replace(schema, **{
+                    key: core.resolve(attr, subschema)})
+                result[key] = substate
+                merges += submerges
+
+    # else:
+    #     for key in schema.__dataclass_fields__:
+    #         if hasattr(encode, key):
+    #             attr = getattr(schema, key)
+    #             subschema, substate, submerges = deserialize(
+    #                 core,
+    #                 attr,
+    #                 getattr(encode, key))
+    #             schema = replace(schema, **{
+    #                 key: core.resolve(attr, subschema)})
+    #             result[key] = substate
+    #             merges += submerges
 
     if result:
-        return result
+        return schema, result, merges
+    else:
+        return schema, None, []
 
 @dispatch
-def deserialize(core, schema: dict, encode):
-    # use access_type and fix for links (!)
+def deserialize(core, schema: dict, encode, path=()):
     if isinstance(encode, str):
         try:
             encode = literal_eval(encode)
         except Exception as e:
-            return encode
+            return schema, encode, []
+
+    result_schema = {}
+    result_state = {}
+    merges = []
 
     if isinstance(encode, dict):
-        result = {}
-        
         for key, subschema in schema.items():
             if key in encode:
-                outcome = deserialize(
+                outcome_schema, outcome_state, submerges = deserialize(
                     core, 
                     subschema,
-                    encode[key])
+                    encode[key],
+                    path+(key,))
 
-                if outcome is not None:
-                    result[key] = outcome
+                if outcome_state is not None:
+                    result_schema[key] = core.resolve(subschema, outcome_schema)
+                    result_state[key] = outcome_state
+                    merges += submerges
 
-        if result:
-            return result
+        if result_state:
+            return result_schema, result_state, merges
+
+    return schema, None, []
+            
+    
 

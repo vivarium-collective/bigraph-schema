@@ -35,6 +35,7 @@ from bigraph_schema.schema import (
 
 
 from bigraph_schema.methods.serialize import serialize
+from bigraph_schema.methods.deserialize import deserialize
 from bigraph_schema.methods.unify import unify
 
 MISSING_TYPES = {}
@@ -140,13 +141,8 @@ def infer(core, value: set, path: tuple = ()):
 def infer(core, value: dict, path: tuple = ()):
     if '_type' in value:
         schema = core.access_type(value)
-
-        # potential infinite recursion?
-        schema, state, merges = unify(
-            core,
-            schema,
-            value,
-            path)
+        schema, state, merges = deserialize(
+            core, schema, value, path=path)
 
         return set_default(schema, state), merges
 
