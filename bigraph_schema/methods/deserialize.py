@@ -294,7 +294,7 @@ def deserialize_link(core, schema: Link, encode, path=()):
 
     if not core.check(config_schema, config):
         raise Exception(f'config {config} provided to {address} does not match the config_schema {config_schema}')
-    edge_instance = edge_class(config, core)
+    edge_instance = encode.get('instance', edge_class(config, core))
     interface = edge_instance.interface()
 
     decode = {
@@ -319,6 +319,9 @@ def deserialize_link(core, schema: Link, encode, path=()):
         decode[port_key] = port_schema
         schema = replace(schema, **{port_key: port_schema})
 
+        if port_schema is None:
+            continue
+
         if port not in encode or encode[port] is None:
             decode[port] = default_wires(port_schema)
         else:
@@ -340,6 +343,15 @@ def deserialize_link(core, schema: Link, encode, path=()):
             path)
 
         merges += submerges
+
+    # if 'shared' in encode and encode['shared'] is not None:
+    #     decode['shared'] = {}
+    #     for shared_name, shared_state in encode['shared'].items():
+    #         link_schema, link_state, submerges = deserialize_link(core, schema, shared_state, path+('shared',))
+    #         merges += submerges
+
+    #         link_state['instance'].register_shared(edge_instance)
+    #         decode['shared'][shared_name] = link_state
 
     for key, value in encode.items():
         if not key.startswith('_') and hasattr(schema, key):
@@ -419,8 +431,10 @@ def deserialize(core, schema: dict, encode, path=()):
                     result_state[key] = outcome_state
                     merges += submerges
             else:
-                result_schema[key], result_state[key] = core.default(
-                    subschema)
+                result_schema[key], result_state[key], submerges = core.default_merges(
+                    subschema,
+                    path=path+(key,))
+                merges += submerges
 
         for key in set(encode.keys()).difference(set(schema.keys())):
             if not key.startswith('_'):

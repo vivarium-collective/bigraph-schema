@@ -35,6 +35,7 @@ from bigraph_schema.schema import (
     convert_jump,
     convert_path,
     blank_context,
+    nest,
     Node,
     Union,
     Tuple,
@@ -377,12 +378,17 @@ class Core:
         found = self.access(schema)
         return render(found)
 
-    def default(self, schema, path=()):
+    def default_merges(self, schema, path=()):
         """Generate a representative state that satisfies a schema.
 
         Uses type defaults and explicit `_default` values to instantiate an example
         state consistent with the given schema.
         """
+        found = self.access(schema)
+        value = default(found)
+        return deserialize(self, found, value, path=path)
+
+    def default(self, schema, path=()):
         found = self.access(schema)
         value = default(found)
         return self.deserialize(found, value, path=path)
@@ -426,6 +432,7 @@ class Core:
         guided by the provided schema.
         """
         found = self.access(schema)
+
         decode_schema, decode_state, merges = deserialize(
             self,
             found,
@@ -629,7 +636,11 @@ class Core:
     def combine(self, schema, state, update_schema, update_state):
         resolved = self.resolve(schema, update_schema)
         merged = self.merge(resolved, state, update_state)
-        return resolved, merged
+        decode_schema, decode_state = self.deserialize(resolved, merged)
+
+        return decode_schema, decode_state
+
+        # return resolved, merged
 
     def link_state(self, link, path):
         result_schema = {}
