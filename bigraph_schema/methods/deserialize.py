@@ -426,11 +426,12 @@ def deserialize(core, schema: dict, encode, path=()):
             if not key.startswith('_'):
                 result_schema[key], result_state[key], submerges = deserialize(
                     core, None, encode[key], path+(key,))
+                merges += submerges
 
         if result_state:
             return result_schema, result_state, merges
 
-    return schema, encode, []
+    return schema, encode, merges
             
     
 

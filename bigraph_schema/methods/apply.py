@@ -190,8 +190,12 @@ def apply(schema: Xor, state, update, path):
 
 @dispatch
 def apply(schema: dict, state, update, path):
+    if update is None:
+        return state, []
+
     merges = []
     result = {}
+
     for key, subschema in schema.items():
         result[key], submerges = apply(
             subschema,
