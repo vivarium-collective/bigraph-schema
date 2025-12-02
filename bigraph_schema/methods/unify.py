@@ -49,12 +49,12 @@ def walk(path, to):
 
 @dispatch
 def unify(core, schema: Empty, state, path):
-    schema, merges = core.infer_merges(state, path=path)
-    return schema, state, []
+    schema, result, merges = core.deserialize(schema, state, path=path)
+    return schema, result, []
 
 @dispatch
 def unify(core, schema: None, state, path):
-    schema, merges = core.infer_merges(state, path=path)
+    schema, result, merges = core.deserialize(schema, state, path=path)
     return schema, state, merges
 
 @dispatch

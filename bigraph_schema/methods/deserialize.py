@@ -38,6 +38,8 @@ from bigraph_schema.schema import (
     nest_schema,
 )
 
+from bigraph_schema.methods.default import default
+
 
 @dispatch
 def deserialize(core, schema: Empty, encode, path=()):
@@ -84,9 +86,17 @@ def deserialize(core, schema: Tuple, encode, path=()):
     else:
         return schema, None, []
 
+
+def deserialize_default(core, schema, encode: dict, path=()):
+    default_state = encode.get('_default', default(schema))
+    return deserialize(core, schema, default_state, path=path)
+
+
 @dispatch
 def deserialize(core, schema: Boolean, encode, path=()):
-    if encode == 'true':
+    if isinstance(encode, dict):
+        return deserialize_default(core, schema, encode, path=path)
+    elif encode == 'true':
         return schema, True, []
     elif encode == 'false':
         return schema, False, []
@@ -95,6 +105,9 @@ def deserialize(core, schema: Boolean, encode, path=()):
         
 @dispatch
 def deserialize(core, schema: Integer, encode, path=()):
+    if isinstance(encode, dict):
+        return deserialize_default(core, schema, encode, path=path)
+
     try:
         result = int(encode)
         return schema, result, []
@@ -103,11 +116,21 @@ def deserialize(core, schema: Integer, encode, path=()):
 
 @dispatch
 def deserialize(core, schema: Float, encode, path=()):
+    if isinstance(encode, dict):
+        return deserialize_default(core, schema, encode, path=path)
+
     try:
         result = float(encode)
         return schema, result, []
     except Exception:
         return schema, None, []
+
+@dispatch
+def deserialize(core, schema: String, encode, path=()):
+    if isinstance(encode, dict):
+        return deserialize_default(core, schema, encode, path=path)
+
+    return schema, encode, []
 
 @dispatch
 def deserialize(core, schema: NPRandom, encode, path=()):
@@ -119,10 +142,6 @@ def deserialize(core, schema: NPRandom, encode, path=()):
         random.set_state(state)
 
         return schema, random, []
-
-@dispatch
-def deserialize(core, schema: String, encode, path=()):
-    return schema, encode, []
 
 @dispatch
 def deserialize(core, schema: List, encode, path=()):
@@ -153,6 +172,7 @@ def deserialize(core, schema: Map, encode, path=()):
     if isinstance(encode, dict):
         decode = {}
         merges = []
+        schema = replace(schema, **{'_default': encode})
 
         for key, value in encode.items():
             subschema, substate, submerges = deserialize(core, schema._value, value, path+(key,))
@@ -265,7 +285,7 @@ def deserialize_link(core, schema: Link, encode, path=()):
     edge_class = load_protocol(core, protocol_schema, address['data'])
 
     if edge_class is None:
-        import ipdb; ipdb.set_trace()
+        raise Exception(f'no link found at address: {address}')
 
     config_schema = edge_class.config_schema
     encode_config = encode.get('config', {})
@@ -356,23 +376,22 @@ def deserialize(core, schema: Node, encode, path=()):
                 result[key] = substate
                 merges += submerges
 
-    # else:
-    #     for key in schema.__dataclass_fields__:
-    #         if hasattr(encode, key):
-    #             attr = getattr(schema, key)
-    #             subschema, substate, submerges = deserialize(
-    #                 core,
-    #                 attr,
-    #                 getattr(encode, key))
-    #             schema = replace(schema, **{
-    #                 key: core.resolve(attr, subschema)})
-    #             result[key] = substate
-    #             merges += submerges
-
     if result:
         return schema, result, merges
     else:
-        return schema, None, []
+        return schema, encode, []
+
+@dispatch
+def deserialize(core, schema: None, encode, path=()):
+    if isinstance(encode, dict) and '_type' in encode:
+        schema = core.access_type(encode)
+        result_schema, result_state, merges = deserialize(
+            core, schema, encode, path=path)
+
+        return result_schema, result_state, merges
+    else:
+        infer_schema, merges = core.infer_merges(encode)
+        return infer_schema, encode, merges
 
 @dispatch
 def deserialize(core, schema: dict, encode, path=()):
@@ -390,7 +409,7 @@ def deserialize(core, schema: dict, encode, path=()):
         for key, subschema in schema.items():
             if key in encode:
                 outcome_schema, outcome_state, submerges = deserialize(
-                    core, 
+                    core,
                     subschema,
                     encode[key],
                     path+(key,))
@@ -399,6 +418,14 @@ def deserialize(core, schema: dict, encode, path=()):
                     result_schema[key] = core.resolve(subschema, outcome_schema)
                     result_state[key] = outcome_state
                     merges += submerges
+            else:
+                result_schema[key], result_state[key] = core.default(
+                    subschema)
+
+        for key in set(encode.keys()).difference(set(schema.keys())):
+            if not key.startswith('_'):
+                result_schema[key], result_state[key], submerges = deserialize(
+                    core, None, encode[key], path+(key,))
 
         if result_state:
             return result_schema, result_state, merges

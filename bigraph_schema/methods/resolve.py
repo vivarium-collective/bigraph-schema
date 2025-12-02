@@ -84,10 +84,22 @@ def resolve(current: Node, update: Wrap):
 def resolve(current: Node, update: Node):
     current_type = type(current)
     update_type = type(update)
+
     if current_type == update_type or issubclass(current_type, update_type):
         return resolve_subclass(current, update)
+
     elif issubclass(update_type, current_type):
         return resolve_subclass(update, current)
+
+    elif isinstance(update, String):
+        default_value = update_type._default
+        if default_value:
+            return replace(
+                current,
+                **{'_default': default_value})
+        else:
+            return current
+
     else:
         raise Exception(f'\ncannot resolve types:\n{current}\n{update}\n')
 
@@ -231,6 +243,31 @@ def resolve(current: dict, update: Node):
         return update
     else:
         return current
+
+# @dispatch
+# def resolve(current: String, update: Node):
+#     if current._default:
+#         update._default = current._default
+#     return update
+
+# @dispatch
+# def resolve(current: String, update: Wrap):
+#     return resolve(current, update._value)
+
+# @dispatch
+# def resolve(current: String, update: String):
+#     if update._default or not current._default:
+#         return update
+#     else:
+#         return current
+
+# @dispatch
+# def resolve(current: Node, update: String):
+#     # import ipdb; ipdb.set_trace()
+#     if update._default:
+#         current = replace(current, **{'_default': update._default})
+#     return current
+
 
 # @dispatch
 # def resolve(current: dict, update: Node):

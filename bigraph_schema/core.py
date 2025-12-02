@@ -282,7 +282,8 @@ class Core:
                 default_value = value['_default']
             elif isinstance(schema, Node) and schema._default is not None:
                 default_value = schema._default
-            schema._default = default_value
+
+            schema = replace(schema, **{'_default': default_value})
 
             parameters = {}
             for key in schema_keys(schema)[1:]:
@@ -431,7 +432,7 @@ class Core:
 
         if merges:
             merge_schema = self.handle_merges(merges)
-            decode_schema = self.resolve(decode_schema, merge_schema)
+            decode_schema = self.generalize(decode_schema, merge_schema)
             merge_state = self.fill(merge_schema, decode_state)
         else:
             merge_state = decode_state
@@ -503,10 +504,13 @@ class Core:
         found = self.access(schema)
         return merge(found, state, merge_state)
 
-    def fill(self, schema, state):
+    def fill(self, schema, state, overwrite=False):
         found = self.access(schema)
         base_schema, base_state = self.default(found)
-        return merge(base_schema, base_state, state)
+        if overwrite:
+            return merge(base_schema, state, base_state)
+        else:
+            return merge(base_schema, base_state, state)
 
     def view_ports(self, schema, state, path, ports_schema, wires):
         if isinstance(wires, str):
@@ -1248,6 +1252,12 @@ def test_unify(core):
     assert applied_state['D'] == 'OVER'
 
     assert 'link' in applied_state['inner']
+
+    import ipdb; ipdb.set_trace()
+
+    deschema, destate = core.deserialize(schema, state)
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_generate_coverage(core):

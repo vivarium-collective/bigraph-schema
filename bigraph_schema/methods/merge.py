@@ -136,9 +136,9 @@ def merge(schema: Tree, current, update):
 @dispatch
 def merge(schema: Atom, current, update):
     result = None
-    if update is not None:
+    if update and update is not None:
         result = update
-    elif current is not None:
+    elif current and current is not None:
         result = current
     else:
         result = default(schema)
