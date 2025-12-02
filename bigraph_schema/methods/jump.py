@@ -152,9 +152,11 @@ def jump(schema: Map, state, to: Index, context):
 
 @dispatch
 def jump(schema: Map, state, to: Key, context):
+    state = state or {}
+
     return traverse(
         schema._value,
-        state[to._value],
+        state.get(to._value),
         context['subpath'],
         context)
 
@@ -341,18 +343,19 @@ def jump(schema: Node, state, to, context):
 
 @dispatch
 def jump(schema: dict, state, to: Key, context):
+    state = state or {}
     key = to._value
+
     if key in schema:
-        if key in state:
-            return traverse(
-                schema[key],
-                state[key],
-                context['subpath'],
-                context)
-        else:
-            return schema[key], None
+        return traverse(
+            schema[key],
+            state.get(key),
+            context['subpath'],
+            context)
+
     elif key in state:
         return None, state[key]
+
     else:
         return Empty(), None
 

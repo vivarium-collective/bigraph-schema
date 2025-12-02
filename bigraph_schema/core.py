@@ -283,7 +283,9 @@ class Core:
             elif isinstance(schema, Node) and schema._default is not None:
                 default_value = schema._default
 
-            schema = replace(schema, **{'_default': default_value})
+            schema = replace(
+                schema,
+                **{'_default': default_value})
 
             parameters = {}
             for key in schema_keys(schema)[1:]:
