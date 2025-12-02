@@ -226,12 +226,16 @@ def deserialize(core, schema: Array, encode, path=()):
     return schema, state, []
 
 
-@dispatch
-def load_protocol(core, protocol: LocalProtocol, data):
+def load_local_protocol(core, protocol, data):
     if isinstance(data, str):
         return local_lookup(core, data)
     else:
         raise Exception(f'address must be str, not {data}')
+
+
+@dispatch
+def load_protocol(core, protocol: LocalProtocol, data):
+    return load_local_protocol(core, protocol, data)
 
 
 @dispatch
