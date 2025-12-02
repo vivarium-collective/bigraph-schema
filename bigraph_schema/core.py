@@ -1266,11 +1266,7 @@ def test_unify(core):
 
     assert 'link' in applied_state['inner']
 
-    import ipdb; ipdb.set_trace()
-
     deschema, destate = core.deserialize(schema, state)
-
-    import ipdb; ipdb.set_trace()
 
 
 def test_generate_coverage(core):
