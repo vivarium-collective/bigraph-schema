@@ -119,7 +119,8 @@ def apply(schema: Map, state, update, path):
 
     if '_remove' in update:
         for remove_key in update['_remove']:
-            del result[remove_key]
+            if remove_key in result:
+                del result[remove_key]
 
     if '_add' in update:
         for add_key, add_value in update['_add']:
