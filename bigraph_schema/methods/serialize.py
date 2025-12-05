@@ -425,6 +425,10 @@ def serialize(schema: Array, state):
     raise Exception(f'serializing array:\n  {schema}\nbut state is not an array?\n  {state}')
 
 @dispatch
+def serialize(schema: Schema, state):
+    return render(state)
+
+@dispatch
 def serialize(schema: Link, state):
     address = serialize(schema.address, state.get('address'))
     instance = state.get('instance')
@@ -435,7 +439,7 @@ def serialize(schema: Link, state):
     else:
         config_schema = instance.core.access(instance.config_schema)
 
-    config = serialize(config_schema, unconfig)
+    # config = serialize(config_schema, unconfig)
     inputs = serialize(schema.inputs, state.get('inputs'))
     outputs = serialize(schema.outputs, state.get('outputs'))
     _inputs = resolve(schema._inputs, state.get('_inputs'))
@@ -443,7 +447,7 @@ def serialize(schema: Link, state):
 
     return {
         'address': address,
-        'config': config,
+        'config': unconfig,
         '_inputs': render(_inputs),
         '_outputs': render(_outputs),
         'inputs': inputs,
