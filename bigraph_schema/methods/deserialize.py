@@ -94,7 +94,10 @@ def deserialize_default(core, schema, encode: dict, path=()):
 
 @dispatch
 def deserialize(core, schema: Boolean, encode, path=()):
-    if isinstance(encode, dict):
+    if encode is None:
+        schema, state = core.default(schema, path=path)
+        return schema, state, []
+    elif isinstance(encode, dict):
         return deserialize_default(core, schema, encode, path=path)
     elif encode == 'true':
         return schema, True, []
@@ -105,6 +108,9 @@ def deserialize(core, schema: Boolean, encode, path=()):
         
 @dispatch
 def deserialize(core, schema: Integer, encode, path=()):
+    if encode is None:
+        schema, state = core.default(schema, path=path)
+        return schema, state, []
     if isinstance(encode, dict):
         return deserialize_default(core, schema, encode, path=path)
 
@@ -116,14 +122,17 @@ def deserialize(core, schema: Integer, encode, path=()):
 
 @dispatch
 def deserialize(core, schema: Float, encode, path=()):
-    if isinstance(encode, dict):
+    if encode is None:
+        schema, state = core.default(schema, path=path)
+        return schema, state, []
+    elif isinstance(encode, dict):
         return deserialize_default(core, schema, encode, path=path)
-
-    try:
-        result = float(encode)
-        return schema, result, []
-    except Exception:
-        return schema, None, []
+    else:
+        try:
+            result = float(encode)
+            return schema, result, []
+        except Exception:
+            return schema, None, []
 
 @dispatch
 def deserialize(core, schema: String, encode, path=()):
@@ -406,7 +415,8 @@ def deserialize(core, schema: None, encode, path=()):
 
         return result_schema, result_state, merges
     else:
-        infer_schema, merges = core.infer_merges(encode)
+        infer_schema, merges = core.infer_merges(
+            encode, path=path)
         return infer_schema, encode, merges
 
 @dispatch
