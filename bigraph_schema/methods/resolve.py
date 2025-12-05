@@ -43,15 +43,20 @@ def resolve_subclass(subclass, superclass):
             result[key] = subclass._default or superclass._default
         else:
             subattr = getattr(subclass, key)
-            if hasattr(superclass, key) and not key.startswith('_'):
+            if hasattr(superclass, key): # and not key.startswith('_'):
                 superattr = getattr(superclass, key)
-                try:
-                    outcome = resolve(subattr, superattr)
-                except Exception as e:
-                    raise Exception(f'\ncannot resolve subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
-                result[key] = outcome
+                if isinstance(superattr, (Node, dict)):
+                    try:
+                        outcome = resolve(subattr, superattr)
+                    except Exception as e:
+                        raise Exception(f'\ncannot resolve subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
+
+                    result[key] = outcome
+                else:
+                    result[key] = subattr
             else:
                 result[key] = subattr
+
     resolved = type(subclass)(**result)
     return resolved
 
