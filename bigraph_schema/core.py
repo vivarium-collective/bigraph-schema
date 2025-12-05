@@ -603,6 +603,9 @@ class Core:
                 branches = []
                 for key, subwires in wires.items():
                     subports, subview = self.jump(ports_schema, view, key)
+                    if subview is None:
+                        continue
+
                     subschema, substate = self.project_ports(
                         subports,
                         subwires,
@@ -616,7 +619,8 @@ class Core:
                 project_state = {}
                 for branch_schema, branch_state in branches:
                     project_schema = resolve(project_schema, branch_schema)
-                    deep_merge(project_state, branch_state)
+                    project_state = self.merge(project_schema, project_state, branch_state)
+
         else:
             raise Exception(
                 f'inverting state\n  {view}\naccording to ports schema\n  {ports_schema}\nbut wires are not recognized\n  {wires}')
