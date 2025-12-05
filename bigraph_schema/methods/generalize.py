@@ -117,13 +117,23 @@ def generalize(current: Map, update: dict):
     schema = merge_update(generalized, current, update)
     return schema
 
+
 @dispatch
 def generalize(current: dict, update: Map):
     result = update._value
-    for key, value in current.items():
-        result = generalize(result, value)
-    result = replace(result, _default=update._value._default)
-    generalized = replace(update, _value=result)
+
+    try:
+        for key, value in current.items():
+            result = generalize(result, value)
+        generalized = replace(update, _value=result)
+
+    except:
+        # upgrade from map to struct schema
+        map_default = default(update)
+        generalized = {
+            key: update._value
+            for key in map_default}
+        current.update(generalized)
 
     schema = merge_update(generalized, current, update)
     return schema
@@ -249,7 +259,6 @@ def generalize(current, update):
     elif update is None:
         return current
     else:
-        import ipdb; ipdb.set_trace()
         raise Exception(f'\ncannot generalize types, not schemas:\n{current}\n{update}\n')
 
 

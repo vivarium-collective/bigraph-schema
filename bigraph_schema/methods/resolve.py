@@ -125,10 +125,19 @@ def resolve(current: Map, update: dict):
 @dispatch
 def resolve(current: dict, update: Map):
     result = update._value
-    for key, value in current.items():
-        result = resolve(result, value)
-    result = replace(result, _default=update._value._default)
-    resolved = replace(update, _value=result)
+
+    try:
+        for key, value in current.items():
+            result = resolve(result, value)
+        resolved = replace(update, _value=result)
+
+    except:
+        # upgrade from map to struct schema
+        map_default = default(update)
+        resolved = {
+            key: update._value
+            for key in map_default}
+        current.update(resolved)
 
     schema = merge_update(resolved, current, update)
     return schema

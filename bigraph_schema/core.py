@@ -312,7 +312,10 @@ class Core:
 
         elif isinstance(key, str):
             if key not in self.registry:
-                return visit_expression(key, self.parse_visitor)
+                try:
+                    return visit_expression(key, self.parse_visitor)
+                except Exception as e:
+                    import ipdb; ipdb.set_trace()
             else:
                 entry = self.registry[key]
                 if callable(entry):
