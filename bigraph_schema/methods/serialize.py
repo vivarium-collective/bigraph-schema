@@ -59,46 +59,46 @@ def wrap_default(schema, result):
     return result
 
 @dispatch
-def render(schema: Empty):
+def render(schema: Empty, defaults=False):
     return 'empty'
 
 @dispatch
-def render(schema: Maybe):
-    value = render(schema._value)
+def render(schema: Maybe, defaults=False):
+    value = render(schema._value, defaults=defaults)
     if isinstance(value, str):
         result = f'maybe[{value}]'
     else:
         result = {
             '_type': 'maybe',
             '_value': value}
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Overwrite):
-    value = render(schema._value)
+def render(schema: Overwrite, defaults=False):
+    value = render(schema._value, defaults=defaults)
     if isinstance(value, str):
         result = f'overwrite[{value}]'
     else:
         result = {
             '_type': 'overwrite',
             '_value': value}
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Wrap):
-    value = render(schema._value)
+def render(schema: Wrap, defaults=False):
+    value = render(schema._value, defaults=defaults)
     if isinstance(value, str):
         result = f'wrap[{value}]'
     else:
         result = {
             '_type': 'wrap',
             '_value': value}
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Union):
+def render(schema: Union, defaults=False):
     options = [
-        render(option)
+        render(option, defaults=defaults)
         for option in schema._options]
     if all([isinstance(option,str) for option in options]):
         result = '~'.join(options)
@@ -106,12 +106,12 @@ def render(schema: Union):
         result = {
             '_type': 'union',
             '_options': options}
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Tuple):
+def render(schema: Tuple, defaults=False):
     values = [
-        render(value)
+        render(value, defaults=defaults)
         for value in schema._values]
     if all([isinstance(value, str) for value in values]):
         join = ','.join(values)
@@ -120,64 +120,65 @@ def render(schema: Tuple):
         result = {
             '_type': 'tuple',
             '_values': values}
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Boolean):
+def render(schema: Boolean, defaults=False):
     result = 'boolean'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Integer):
+def render(schema: Integer, defaults=False):
     result = 'integer'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Delta):
+def render(schema: Delta, defaults=False):
     result = 'delta'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Nonnegative):
+def render(schema: Nonnegative, defaults=False):
     result = 'nonnegative'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Float):
+def render(schema: Float, defaults=False):
     result = 'float'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Number):
+def render(schema: Number, defaults=False):
     result = 'number'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: String):
+def render(schema: String, defaults=False):
     result = 'string'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Enum):
+def render(schema: Enum, defaults=False):
     values = ','.join(schema._values)
     result = f'enum[{values}]'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: List):
-    element = render(schema._element)
+def render(schema: List, defaults=False):
+    element = render(schema._element, defaults=defaults)
     if isinstance(element, str):
         result = f'list[{element}]'
     else:
         result = {
             '_type': 'list',
             '_element': element}
-    return wrap_default(schema, result)
+
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Map):
-    key = render(schema._key)
-    value = render(schema._value)
+def render(schema: Map, defaults=False):
+    key = render(schema._key, defaults=defaults)
+    value = render(schema._value, defaults=defaults)
 
     if isinstance(key, str) and isinstance(value,str):
         if key == 'string':
@@ -190,23 +191,24 @@ def render(schema: Map):
             '_key': key,
             '_value': value}
 
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Tree):
-    leaf = render(schema._leaf)
+def render(schema: Tree, defaults=False):
+    leaf = render(schema._leaf, defaults=defaults)
     if isinstance(leaf, str):
         result = f'tree[{leaf}]'
     else:
         result = {'_type': 'tree', '_leaf': leaf}
-    return wrap_default(schema, result)
+
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: NPRandom):
+def render(schema: NPRandom, defaults=False):
     result = {
         '_type': 'random_state',
-        'state': render(schema.state)}
-    return wrap_default(schema, result)
+        'state': render(schema.state, defaults=defaults)}
+    return wrap_default(schema, result) if defaults else result
 
 # @dispatch
 # def render(schema: Dtype):
@@ -215,61 +217,61 @@ def render(schema: NPRandom):
     # return wrap_default(schema, result)
 
 @dispatch
-def render(schema: Array):
+def render(schema: Array, defaults=False):
     shape = '|'.join([str(value) for value in schema._shape])
     data = nf.dtype_to_descr(schema._data)
     result = {'_type': 'array', '_shape': shape, '_data': data}
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Key):
+def render(schema: Key, defaults=False):
     result = 'key'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Path):
+def render(schema: Path, defaults=False):
     result = 'path'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Wires):
+def render(schema: Wires, defaults=False):
     result = 'wires'
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: Link):
+def render(schema: Link, defaults=False):
     intermediate = {
         '_type': 'link',
-        '_inputs': render(schema._inputs),
-        '_outputs': render(schema._outputs),
-        'inputs': render(schema.inputs),
-        'outputs': render(schema.outputs)}
+        '_inputs': render(schema._inputs, defaults=defaults),
+        '_outputs': render(schema._outputs, defaults=defaults),
+        'inputs': render(schema.inputs, defaults=defaults),
+        'outputs': render(schema.outputs, defaults=defaults)}
 
     if isinstance(intermediate['_inputs'], str) and isinstance(intermediate['_outputs'], str):
         result = f'link[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
     else:
         result = intermediate
 
-    return wrap_default(schema, result)
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
-def render(schema: dict):
+def render(schema: dict, defaults=False):
     if '_type' in schema:
         return schema
     else:
         parts = {}
         for key, value in schema.items():
-            subrender = render(value)
+            subrender = render(value, defaults=defaults)
             parts[key] = subrender
 
-        return wrap_default(schema, parts)
+        return wrap_default(schema, parts) if defaults else parts
 
 @dispatch
-def render(schema: np.str_):
+def render(schema: np.str_, defaults=False):
     return str(schema)
 
 @dispatch
-def render(schema: Node):
+def render(schema: Node, defaults=False):
     subrender = {}
 
     for key in schema.__dataclass_fields__:
@@ -277,16 +279,16 @@ def render(schema: Node):
         if key == '_default':
             subrender[key] = serialize(schema, value)
         else:
-            subrender[key] = render(value)
+            subrender[key] = render(value, defaults=defaults)
 
-    return wrap_default(schema, subrender)
+    return wrap_default(schema, subrender) if defaults else subrender
 
 @dispatch
-def render(schema: str):
+def render(schema: str, defaults=False):
     return schema
 
 @dispatch
-def render(schema):
+def render(schema, defaults=False):
     import ipdb; ipdb.set_trace()
 
     return schema

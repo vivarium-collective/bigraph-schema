@@ -371,7 +371,7 @@ class Core:
         #     schema = resolve(schema, merge)
         # return schema
 
-    def render(self, schema):
+    def render(self, schema, defaults=False):
         """Produce a serializable view of a compiled schema.
 
         Converts internal dataclass nodes into JSON-friendly dicts or strings.
@@ -379,7 +379,7 @@ class Core:
         code representations and stored schema definitions.
         """
         found = self.access(schema)
-        return render(found)
+        return render(found, defaults=defaults)
 
     def default_merges(self, schema, path=()):
         """Generate a representative state that satisfies a schema.
@@ -789,10 +789,10 @@ def do_round_trip(core, schema):
     # generate a schema object from string expression
     type_ = core.access(schema)
     # generate a json object representing schema
-    reified = core.render(type_)
+    reified = core.render(type_, defaults=True)
     # finally, create another schema object
     round_trip = core.access(reified)
-    final = core.render(round_trip)
+    final = core.render(round_trip, defaults=True)
 
     return type_, reified, round_trip, final
 
@@ -839,35 +839,35 @@ def test_infer(core):
 # render is the inverse of access
 def test_render(core):
     node_type = core.access(node_schema)
-    node_render = core.render(node_schema)
-    assert node_render == render(node_type)
+    node_render = core.render(node_schema, defaults=True)
+    assert node_render == render(node_type, defaults=True)
 
     link_type = core.access(link_schema)
-    link_render = core.render(link_type)
+    link_render = core.render(link_type, defaults=True)
 
     # can't do the same assertion as above, because two different renderings
     # exist
     assert core.access(link_render) == link_type
-    assert link_render == core.render(core.access(link_render))
+    assert link_render == core.render(core.access(link_render), defaults=True)
 
     map_type = core.access(map_schema)
-    map_render = core.render(map_type)
+    map_render = core.render(map_type, defaults=True)
     assert core.access(map_render) == core.access(map_schema)
     # fixed point is found
-    assert map_render == core.render(core.access(map_render))
+    assert map_render == core.render(core.access(map_render), defaults=True)
 
 def test_uni_schema(core):
     uni_type = core.access(uni_schema)
     assert not isinstance(uni_type, str)
 
-    uni_render = core.render(uni_type)
+    uni_render = core.render(uni_type, defaults=True)
     round_trip = core.access(uni_render)
 
     def idx(a, b, n):
         return a['outer']._values[n], b['outer']._values[n]
 
     # assert round_trip == uni_type
-    assert uni_render == core.render(core.access(uni_type))
+    assert uni_render == core.render(core.access(uni_type), defaults=True)
 
 def test_default(core):
     node_type = core.access(node_schema)
@@ -890,7 +890,7 @@ def test_resolve(core):
     node_resolve = core.resolve(
         {'a': 'delta', 'b': 'node'},
         node_schema)
-    rendered_a = render(node_resolve)['a']
+    rendered_a = render(node_resolve, defaults=True)['a']
     assert rendered_a['_type'] == 'delta'
     assert core.access(rendered_a)._default == node_schema['a']['_default']
 
@@ -1179,7 +1179,7 @@ def test_generate(core):
     view = core.view(generated_schema, generated_state, ['link'])
     assert view['n'] == 5.5
 
-    rendered = core.render(generated_schema)
+    rendered = core.render(generated_schema, defaults=True)
     # assert generated_state == \
     #         core.deserialize(generated_schema,
     #                          core.serialize(generated_schema, generated_state))
@@ -1243,7 +1243,7 @@ def test_unify(core):
 
     assert not hasattr(generated_schema['units'], 'meters')
 
-    rendered = core.render(generated_schema)
+    rendered = core.render(generated_schema, defaults=True)
 
     serialized = core.serialize(generated_schema, generated_state)
     deserialized = core.deserialize(generated_schema, serialized)
@@ -1274,6 +1274,8 @@ def test_unify(core):
     assert 'link' in applied_state['inner']
 
     deschema, destate = core.deserialize(schema, state)
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_generate_coverage(core):
