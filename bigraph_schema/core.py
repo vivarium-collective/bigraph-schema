@@ -242,7 +242,8 @@ class Core:
 
     def update_type(self, key, data):
         """Deep-merge metadata/overrides into an existing registry entry."""
-        self.registry[key] = deep_merge(self.registry[key], data)
+        if self.registry[key] != data:
+            self.registry[key] = self.resolve(self.registry[key], data)
 
     def register_link(self, key, link):
         if key in self.registry:
@@ -351,6 +352,30 @@ class Core:
         elif isinstance(key, dict):
             if '_type' in key:
                 return self.access_type(key)
+
+            # elif '_inherit' in key:
+            #     inherit_key = key['_inherit']
+            #     beyond_inherit = {
+            #         k: value
+            #         for k, value in key.items()
+            #         if k != '_inherit'}
+            #     if isinstance(inherit_key, list):
+            #         inherit = self.access(inherit_key[0])
+            #         for subinherit in inherit_key[1:]:
+            #             inherit = self.resolve(
+            #                 inherit,
+            #                 subinherit)
+            #     else:
+            #         inherit = self.access(inherit_key)
+
+            #     if isinstance(inherit, Node):
+            #         return replace(inherit, **beyond_inherit)
+            #     elif isinstance(inherit, dict):
+            #         result = inherit | beyond_inherit
+            #         return result
+
+            #     else:
+            #         import ipdb; ipdb.set_trace()
 
             else:
                 result = {}
