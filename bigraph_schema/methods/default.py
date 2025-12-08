@@ -165,6 +165,9 @@ def default_link(schema: Link):
 def default(schema: Link):
     return default_link(schema)
 
+def is_schema_key(key):
+    return isinstance(key, str) and key.startswith('_')
+
 @dispatch
 def default(schema: dict):
     if '_default' in schema: 
@@ -172,7 +175,7 @@ def default(schema: dict):
     else:
         result = {}
         for key in schema:
-            if not key.startswith('_'):
+            if not is_schema_key(key):
                 if schema[key] is None:
                     import ipdb; ipdb.set_trace()
                 inner = default(
@@ -188,7 +191,7 @@ def default(schema: Node):
     else:
         result = {}
         for key in schema.__dataclass_fields__:
-            if not key.startswith('_'):
+            if not is_schema_key(key):
                 inner = default(
                     getattr(schema, key))
                 result[key] = inner

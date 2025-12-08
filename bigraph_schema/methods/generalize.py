@@ -212,6 +212,16 @@ def generalize(current: Node, update: dict):
     else:
         return current
 
+@dispatch
+def generalize(current: dict, update: Node):
+    fields = set(update.__dataclass_fields__)
+    keys = set(current.keys())
+
+    if len(keys.difference(fields)) > 0:
+        return current
+    else:
+        return update
+
 # @dispatch
 # def generalize(current: dict, update: Node):
 #     fields = set(update.__dataclass_fields__)
@@ -253,10 +263,9 @@ def generalize(current: Node, update: String):
 
 @dispatch
 def generalize(current, update):
-    
-    if current is None:
+    if current is None or not current:
         return update
-    elif update is None:
+    elif update is None or not update:
         return current
     else:
         raise Exception(f'\ncannot generalize types, not schemas:\n{current}\n{update}\n')

@@ -82,7 +82,12 @@ def merge(schema: Tuple, current, update):
 
 @dispatch
 def merge(schema: List, current, update):
-    return current + update
+    if current is None:
+        return update
+    if update is None:
+        return current
+    else:
+        return current + update
 
 
 @dispatch
@@ -194,12 +199,33 @@ def merge(schema, current, update):
     return update
 
 
+def is_empty(value):
+    if isinstance(value, np.ndarray):
+        return False
+    else:
+        return not value
+
+
+def tuplify_dict(d):
+    if isinstance(d, dict):
+        tulip = []
+        for key, value in d.items():
+            tulip.append((
+                key,
+                tuplify_dict(value)))
+    else:
+        return d
+
+
 @dispatch
 def merge(schema: dict, current, update):
     result = {}
-    if not current:
+    if is_empty(current):
         return update
-    if not update:
+    if is_empty(update):
+        return current
+
+    if not isinstance(update, dict):
         return current
 
     for key in schema.keys() | current.keys() | update.keys():

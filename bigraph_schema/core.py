@@ -233,7 +233,7 @@ class Core:
         if key in self.registry:
             self.update_type(key, data)
         else:
-            self.registry[key] = data
+            self.registry[key] = self.access(data)
 
     def register_types(self, types):
         """Bulk register multiple type keys into the operation registry."""
@@ -295,6 +295,9 @@ class Core:
             elif isinstance(schema, Node) and schema._default is not None:
                 default_value = schema._default
 
+            if not isinstance(schema, Node):
+                import ipdb; ipdb.set_trace()
+
             schema = replace(
                 schema,
                 **{'_default': default_value})
@@ -331,6 +334,8 @@ class Core:
                 entry = self.registry[key]
                 if callable(entry):
                     return entry()
+                elif isinstance(entry, Node):
+                    return entry
                 elif isinstance(entry, dict):
                     if '_inherit' in entry:
                         inherit_key = entry['_inherit']
@@ -399,6 +404,9 @@ class Core:
         state consistent with the given schema.
         """
         found = self.access(schema)
+        if not found:
+            import ipdb; ipdb.set_trace()
+
         value = default(found)
         return deserialize(self, found, value, path=path)
 

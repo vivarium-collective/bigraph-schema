@@ -49,6 +49,8 @@ def deserialize(core, schema: Empty, encode, path=()):
 def deserialize(core, schema: Maybe, encode, path=()):
     if encode is not None and encode != NONE_SYMBOL:
         return deserialize(core, schema._value, encode)
+    else:
+        return schema, encode, []
 
 @dispatch
 def deserialize(core, schema: Wrap, encode, path=()):
@@ -257,7 +259,7 @@ def load_protocol(core, protocol, data):
     raise Exception(f'value is not a protocol: {protocol}')
 
 
-def port_merges(port_schema, wires, path):
+def port_merges(core, port_schema, wires, path):
     if isinstance(wires, (list, tuple)):
         subpath = path[:-1] + tuple(wires)
         submerges = nest_schema(
@@ -267,9 +269,16 @@ def port_merges(port_schema, wires, path):
     else:
         merges = []
         for key, subwires in wires.items():
-            down = port_schema[key]
+            down_schema, _ = core.jump(
+                port_schema,
+                {},
+                key)
+
+            # down = port_schema[key]
+
             submerges = port_merges(
-                down,
+                core,
+                down_schema,
                 subwires,
                 path)
             merges += submerges
@@ -351,6 +360,7 @@ def deserialize_link(core, schema: Link, encode, path=()):
             import ipdb; ipdb.set_trace()
 
         submerges = port_merges(
+            core,
             port_schema,
             decode[port],
             path)
@@ -367,8 +377,14 @@ def deserialize_link(core, schema: Link, encode, path=()):
     #         decode['shared'][shared_name] = link_state
 
     for key, value in encode.items():
-        if not key.startswith('_') and hasattr(schema, key):
-            getattr(schema, key)._default = value
+        if not key.startswith('_'):
+            if hasattr(schema, key):
+                getattr(schema, key)._default = value
+            else:
+                attr, decode[key], submerges = deserialize(
+                    core, {}, value, path+(key,))
+                setattr(schema, key, attr)
+                merges += submerges
 
     return schema, decode, merges
 
@@ -433,6 +449,9 @@ def deserialize(core, schema: dict, encode, path=()):
 
     if isinstance(encode, dict):
         for key, subschema in schema.items():
+            if subschema is None:
+                import ipdb; ipdb.set_trace()
+
             if key in encode:
                 outcome_schema, outcome_state, submerges = deserialize(
                     core,

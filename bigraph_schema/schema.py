@@ -111,7 +111,7 @@ class Array(Node):
 
 @dataclass(kw_only=True)
 class Path(List):
-    _element: Node = field(default_factory=String)
+    _element: Node = field(default_factory=Node)
 
 # @dataclass(kw_only=True)
 # class Wire(Union):

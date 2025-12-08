@@ -377,6 +377,10 @@ def serialize(schema: Tree, state):
     if check(schema._leaf, state):
         return serialize(schema._leaf, state)
     else:
+        # return {
+        #     key: serialize(schema, branch)
+        #     for key, branch in state.items()}
+
         try:
             return {
                 key: serialize(schema, branch)
