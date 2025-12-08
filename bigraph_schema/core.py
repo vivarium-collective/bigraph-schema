@@ -223,6 +223,7 @@ class Core:
         self.registry = {}
         self.register_types(types)
         self.link_registry = {}
+        self.method_registry = {}
         self.parse_visitor = CoreVisitor(self)
 
         self.register_link('edge', Edge)
@@ -257,6 +258,16 @@ class Core:
     def update_link(self, key, data):
         """Deep-merge metadata/overrides into an existing registry entry."""
         self.link_registry[key] = data
+
+    def register_method(self, key, data):
+        self.method_registry[key] = data
+
+    def call_method(self, key, *args, **kwargs):
+        method = self.method_registry.get(key)
+        if method is None:
+            raise Exception(f'no method {key} in the method registry')
+
+        return method(self, *args, **kwargs)
 
     def select_fields(self, base, schema):
         """Project dict `schema` onto dataclass `base` fields, normalizing values via `access` (except `_default`)."""
