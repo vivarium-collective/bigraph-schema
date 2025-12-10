@@ -43,7 +43,7 @@ from bigraph_schema.methods.default import default
 
 @dispatch
 def deserialize(core, schema: Empty, encode, path=()):
-    return schema, None, []
+    return schema, encode, []
 
 @dispatch
 def deserialize(core, schema: Maybe, encode, path=()):
@@ -107,7 +107,7 @@ def deserialize(core, schema: Boolean, encode, path=()):
     elif encode == 'false':
         return schema, False, []
     else:
-        return schema, None, []
+        return schema, encode, []
         
 @dispatch
 def deserialize(core, schema: Integer, encode, path=()):
