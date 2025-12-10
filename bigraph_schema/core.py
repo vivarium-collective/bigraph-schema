@@ -18,6 +18,7 @@ validation, and data transformation.
 `CoreVisitor` implements the parsing backend, converting textual bigraph
 expressions into structured schema nodes (`Union`, `Tuple`, `Array`, `Link`, etc.).
 """
+import copy
 import typing
 import numpy as np
 from numpy import dtype
@@ -229,10 +230,11 @@ class Core:
 
     def register_type(self, key, data):
         """Register a single type key; deep-merge if it already exists."""
+        found = self.access(data)
         if key in self.registry:
-            self.update_type(key, data)
+            self.update_type(key, found)
         else:
-            self.registry[key] = self.access(data)
+            self.registry[key] = found
 
     def register_types(self, types):
         """Bulk register multiple type keys into the operation registry."""
@@ -352,37 +354,33 @@ class Core:
             if '_type' in key:
                 return self.access_type(key)
 
-            # elif '_inherit' in key:
-            #     inherit_key = key['_inherit']
-            #     beyond_inherit = {
-            #         k: value
-            #         for k, value in key.items()
-            #         if k != '_inherit'}
-            #     if isinstance(inherit_key, list):
-            #         inherit = self.access(inherit_key[0])
-            #         for subinherit in inherit_key[1:]:
-            #             inherit = self.resolve(
-            #                 inherit,
-            #                 subinherit)
-            #     else:
-            #         inherit = self.access(inherit_key)
-
-            #     if isinstance(inherit, Node):
-            #         return replace(inherit, **beyond_inherit)
-            #     elif isinstance(inherit, dict):
-            #         result = inherit | beyond_inherit
-            #         return result
-
-            #     else:
-            #         import ipdb; ipdb.set_trace()
-
             else:
                 result = {}
-                for subkey in key:
-                    if isinstance(subkey, str):
-                        result[subkey] = key[subkey] if subkey.startswith('_') else self.access(key[subkey])
+                if '_inherit' in key:
+                    inherit = key['_inherit']
+                    if not isinstance(inherit, list):
+                        inherit = [inherit]
+                    for ancestor in inherit:
+                        found = self.access(ancestor)
+                        if not result:
+                            result = found
+                        else:
+                            result = self.resolve(result, found)
+
+                for subkey, subitem in key.items():
+                    subitem = subitem if subkey.startswith('_') else self.access(subitem)
+                    if isinstance(result, Node):
+                        if hasattr(result, subkey):
+                            result = replace(result, **{subkey: subitem})
+                        else:
+                            setattr(result, subkey, subitem)
+                    elif isinstance(result, list):
+                        import ipdb; ipdb.set_trace()
+                    elif isinstance(result, str):
+                        import ipdb; ipdb.set_trace()
                     else:
-                        result[subkey] = key[subkey]
+                        result[subkey] = subitem 
+
                 return result
 
         elif isinstance(key, list):
