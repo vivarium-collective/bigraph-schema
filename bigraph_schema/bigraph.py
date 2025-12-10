@@ -20,10 +20,16 @@ import uuid
 #     outer: many to many port_names to node_ids
 #     schemas: mapping(port_name, schema)}
 #
+# one of:
 # place{
 #    id: uuid
 #    inner: list of (place_id or None)
 #    outer: single value of (place_id or None)}
+# or
+# placement{
+#   id: uuid
+#   inner: place_id or None
+#   outer: place_id or None
 
 
 def new_uuid():
@@ -223,6 +229,7 @@ class Places():
 
 class PlacePlaces(Places):
     def __init__(self):
+        # index of node to place
         self.db = {}
 
     def insert(self, place):
@@ -243,7 +250,10 @@ class PlacePlaces(Places):
         return self.db[node_id].inner
 
     def get_place(self, node_id):
-        return self.db.get(node_id)
+        place = self.db.get(node_id)
+        return {'node': place.node_id,
+                'inner': place.inner,
+                'outer': place.outer}
 
     def get_roots(self):
         roots = []
@@ -276,22 +286,45 @@ class PlacementPlaces(Places):
         self.placements = {}
         self.placements_nodes = JoinDict()
 
+    def __repr__(self):
+        return f'PlacementPlaces(placements={self.placements})'
+
     def insert(self, placement):
         self.placements[placement.id] = placement
         self.placements_nodes.insert(placement.id, placement.node_id)
 
     def add_branch(self, parent_node, child_node):
-        parent_placements = self.get_place(parent_node)
-        for place_id in parent_placements:
-            if self.placements[place_id].inner == child_node:
+        """
+        parent_node, child_node: have type node_id
+        """
+        child_placements = self.placements_nodes.get_right(child_node)
+        for place_id in child_placements:
+            if self.placements[place_id].outer == parent_node:
                 return
         self.insert(Placement(child_node, outer=parent_node))
 
     def get_place(self, node_id):
-        return self.placements_nodes.get_right(node_id)
+        placement_ids = self.placements_nodes.get_right(node_id)
+        result = {'node_id': node_id, 'inner': []}
+        for placement_id in placement_ids:
+            placement = self.placements.get(placement_id)
+            if placement.outer and placement.outer != node_id:
+                if result.get('outer'):
+                    raise RuntimeError("multiple parent nodes in tree", {
+                                           'node_id': node_id,
+                                           'a': result['outer'],
+                                           'b': placement.outer})
+                result['outer'] = placement.outer
+            if placement.outer == node_id:
+                result['inner'].append(placment.inner)
+        result['outer'] = result.get('outer') or None
+        return result
 
     def get_branches(self, node_id):
-        return self.get_place(node_id)
+        # returns a list of uuids
+        placements = self.placements_nodes.get_right(node_id)
+        result = [self.placements[placement] for placement in placements]
+        return result
 
     def __get_node(self, placement_id):
         nodes = self.placements_nodes.get_left(placement_id)
@@ -304,9 +337,9 @@ class PlacementPlaces(Places):
 
     def get_roots(self):
         roots = []
-        for placement_id,placement in self.placements():
+        for placement_id,placement in self.placements.items():
             if placement.outer == None:
-                roots.append(self.__get_node(placment_id))
+                roots.append(self.__get_node(placement_id))
         return roots
 
     def get_leaves(self):
@@ -326,20 +359,20 @@ class PlacementPlaces(Places):
                 resut[branch.node_id] = self.build_tree(branch.node_id)
         return result
 
-class Placement(Place):
+class Placement():
     """
     defines a placement in terms of a parent and a child place. multiple place
     objects will represent the same parent node if it has multiple children
 
     a value of None in either position indicates an interface
     """
-    def __init__(self, node_id, inner=None, outer=None):
-
-        self.inner = inner
+    def __init__(self, node_id, uid=None, inner=None, outer=None):
+        self.id = uid or new_uuid()
+        self.node_id = node_id
         self.outer = outer
 
     def __repr__(self):
-        return f'Place(node_id={self.node_id}, ' \
+        return f'Placement(node_id={self.node_id}, ' \
                f'inner={self.inner}, ' \
                f'outer={self.outer})'
 
@@ -347,39 +380,39 @@ class Placement(Place):
         return [self.node_id, self.inner, self.outer] == \
                 [other.node_id, other.inner, other.outer]
 
-    def get_roots(places):
-        """
-        takes a mapping from node_id to list of placements
-
-        returns a list of placements that are roots
-        """
-        roots = []
-        for node_id, placements in places.items():
-            for placement in placements:
-                if placement.outer == None:
-                    roots.append(placement)
-        return roots
-
-    def build_tree(places, root):
-        """
-        takes a mapping from node_id to list of placements
-
-        returns a tree of node_id
-
-        errors if any node_id has more than one parent
-        """
-        child_places = places[root]
-        children = [placement.node_id for placement in child_places]
-        result = {}
-        for child_id in children:
-            child_placements = places[child_id]
-            if child_placements == []:
-                result[child_id] == None
-            else:
-                for placement in child_placements:
-                    node = placement.node_id
-                    result[node] = build_tree(places, node)
-        return result
+#    def get_roots(places):
+#        """
+#        takes a mapping from node_id to list of placements
+#
+#        returns a list of placements that are roots
+#        """
+#        roots = []
+#        for node_id, placements in places.items():
+#            for placement in placements:
+#                if placement.outer == None:
+#                    roots.append(placement)
+#        return roots
+#
+#    def build_tree(places, root):
+#        """
+#        takes a mapping from node_id to list of placements
+#
+#        returns a tree of node_id
+#
+#        errors if any node_id has more than one parent
+#        """
+#        child_places = places[root]
+#        children = [placement.node_id for placement in child_places]
+#        result = {}
+#        for child_id in children:
+#            child_placements = places[child_id]
+#            if child_placements == []:
+#                result[child_id] == None
+#            else:
+#                for placement in child_placements:
+#                    node = placement.node_id
+#                    result[node] = build_tree(places, node)
+#        return result
 
 
 class Bigraph():
@@ -397,7 +430,7 @@ class Bigraph():
     links_nodes is a bimap (two way many to many mapping) from node_id to
     link_ids and from link_id to node ids
     """
-    def __init__(self, place_class=Place, places_class=PlacePlaces):
+    def __init__(self, place_class=Placement, places_class=PlacementPlaces):
         # mapping from node_id to node
         self.nodes = {}
 
@@ -480,8 +513,8 @@ class Bigraph():
         place = self.place_class(uid, inner=None, outer=parent_id)
         if uid != None:
             self.places.insert(place)
-        if parent_id:
-            self.places.add_branch(parent_id, uid)
+        # if parent_id:
+        #    self.places.add_branch(parent_id, uid)
 
         leaf = tree_ops.get_leaf(tree)
         if leaf != None:
@@ -634,7 +667,7 @@ def test_link_bigraph():
                            'v5': {'id': 'v5',
                                   'data': {}}}}}}
 
-    F.harvest_tree( f_tree, None, HarvestTestHelper())
+    F.harvest_tree(f_tree, None, HarvestTestHelper())
 
 
     x_outer = \
@@ -657,7 +690,7 @@ def test_link_bigraph():
              outer=[('v4_port', '*','v4'),
                     ('y_port', '*', None)])
 
-    assert F.outer_face() == {
+    F_outer = {
             'links': {
                 'x outer': {
                     'x_port': {
@@ -670,9 +703,13 @@ def test_link_bigraph():
                         'name': 'y_port',
                         'schema': '*'}}},
             'places': {
-                'v1': F.place_class('v1', inner=[], outer=None),
-                'v3': F.place_class('v3', inner=[], outer=None),
-                'v4': F.place_class('v4', inner=['v5'], outer=None)}}
+                'v1': {'node_id': 'v1', 'inner': [], 'outer': None},
+                'v3': {'node_id': 'v3', 'inner': [], 'outer': None},
+                'v4': {'node_id': 'v4', 'inner': ['v5'], 'outer': None}}}
+
+    F_outer_calculated = F.outer_face()
+    import ipdb; ipdb.set_trace()
+    assert F_outer_calculated == F_outer
 
     G = Bigraph()
     g_tree = {
