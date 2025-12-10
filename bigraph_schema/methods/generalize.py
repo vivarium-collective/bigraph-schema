@@ -36,7 +36,11 @@ from bigraph_schema.methods.default import default
 from bigraph_schema.methods.merge import merge, merge_update
 
 
+NODE_INSTANCE = Node()
+
 def generalize_subclass(subclass, superclass):
+    if superclass == NODE_INSTANCE:
+        return subclass
     result = {}
     for key in superclass.__dataclass_fields__:    
         if key == '_default':

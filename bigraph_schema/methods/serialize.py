@@ -467,6 +467,8 @@ def serialize(schema: Node, state):
                         state[key])
 
         return result
+    elif state is None:
+        return None
     else:
         return str(state)
 
