@@ -294,6 +294,9 @@ def default_wires(schema):
 
 
 def deserialize_link(core, schema: Link, encode, path=()):
+    if 'instance' in encode:
+        return schema, encode, []
+
     address = encode.get('address', 'local:edge')
     if isinstance(address, str):
         if ':' not in address:

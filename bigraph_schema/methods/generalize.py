@@ -260,6 +260,9 @@ def generalize(current: Node, update: String):
         current._default = update._default
     return current
 
+@dispatch
+def generalize(current: Empty, update: Empty):
+    return update
 
 @dispatch
 def generalize(current, update):
