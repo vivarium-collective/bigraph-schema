@@ -1,4 +1,5 @@
 from ast import literal_eval
+from pprint import pformat as pf
 from plum import dispatch
 import numpy as np
 from numpy.random.mtrand import RandomState
@@ -38,6 +39,8 @@ from bigraph_schema.schema import (
     nest_schema,
 )
 
+
+from bigraph_schema.methods.serialize import render
 from bigraph_schema.methods.default import default
 
 
@@ -319,7 +322,8 @@ def deserialize_link(core, schema: Link, encode, path=()):
     config = core.fill(config_schema, decode_config)
 
     if not core.check(config_schema, config):
-        raise Exception(f'config {config} provided to {address} does not match the config_schema {config_schema}')
+        validation = core.validate(config_schema, config)
+        raise Exception(f'config provided to {address} does not match the config_schema!\n\nconfig_schema:{pf(render(config_schema))}\n\nconfig:{pf(config)}\n\n{pf(validation)}')
     edge_instance = encode.get('instance', edge_class(config, core))
     interface = edge_instance.interface()
 

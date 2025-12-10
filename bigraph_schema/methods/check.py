@@ -200,7 +200,8 @@ def check(schema: Node, state):
 def check(schema: dict, state):
     for key, subschema in schema.items():
         if key not in state:
-            return False
+            continue
+            # return False
         elif not check(subschema, state[key]):
             return False
 

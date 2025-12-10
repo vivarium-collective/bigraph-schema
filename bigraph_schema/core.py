@@ -80,6 +80,7 @@ from bigraph_schema.methods import (
     resolve,
     generalize,
     check,
+    validate,
     serialize,
     deserialize,
     merge,
@@ -440,15 +441,14 @@ class Core:
         return generalize(current, update)
 
     def check(self, schema, state):
-        """Check that the `state` fits the `schema`."""
+        """Returns True if the `state` fits the `schema`."""
         found = self.access(schema)
         return check(found, state)
 
     def validate(self, schema, state):
-        """Raise an exception if the state does not match the schema,
-        which describes why"""
-
-        pass
+        """Returns a nested description of how the state does not match the schema"""
+        found = self.access(schema)
+        return validate(self, found, state)
 
     def serialize(self, schema, state):
         """Convert a structured Python state into an encoded representation.

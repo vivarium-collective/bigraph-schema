@@ -3,6 +3,7 @@ from bigraph_schema.methods.default import default, default_link
 from bigraph_schema.methods.resolve import resolve
 from bigraph_schema.methods.generalize import generalize
 from bigraph_schema.methods.check import check
+from bigraph_schema.methods.validate import validate
 from bigraph_schema.methods.serialize import serialize, render, wrap_default
 from bigraph_schema.methods.deserialize import deserialize, deserialize_link, load_protocol, load_local_protocol
 from bigraph_schema.methods.merge import merge, merge_update
