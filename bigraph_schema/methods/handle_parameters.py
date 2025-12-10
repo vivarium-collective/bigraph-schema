@@ -111,6 +111,9 @@ def reify_schema(core, schema: Enum, parameters):
 
 @dispatch
 def reify_schema(core, schema: Array, parameters):
+    if '|' in parameters.get('_shape', ''):
+        import ipdb; ipdb.set_trace()
+
     schema._shape = tuple([
         int(value)
         for value in parameters.get('_shape', (1,))])

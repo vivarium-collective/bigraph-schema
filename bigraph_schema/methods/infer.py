@@ -36,7 +36,6 @@ from bigraph_schema.schema import (
 
 from bigraph_schema.methods.serialize import serialize
 from bigraph_schema.methods.deserialize import deserialize
-from bigraph_schema.methods.unify import unify
 
 MISSING_TYPES = {}
 

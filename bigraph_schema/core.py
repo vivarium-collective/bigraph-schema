@@ -84,8 +84,6 @@ from bigraph_schema.methods import (
     merge,
     jump,
     traverse,
-    bind,
-    unify,
     apply)
 
 
@@ -134,6 +132,7 @@ class CoreVisitor(NodeVisitor):
         else:
             try:
                 values = tuple([int(x) for x in nodes])
+
                 return values
             except Exception as e:
                 return Tuple(_values=nodes)
@@ -495,21 +494,6 @@ class Core:
 
         return decode_schema, merge_state
 
-    def generate(self, schema, state):
-        """Combine schema inference, resolution, and defaulting.
-
-        Produces a resolved schema and a corresponding defaulted state from partial
-        inputs. Equivalent to:
-            resolve(infer(state), access(schema)) → default(...)
-        Returns a `(resolved_schema, completed_state)` pair.
-        """
-        found = self.access(schema)
-        inferred = self.infer(state)
-        resolved = self.resolve(inferred, found)
-        merge_schema, merge_state = self.default(resolved)
-
-        return merge_schema, merge_state
-
     def handle_merges(self, merges):
         if len(merges) == 0:
             return None
@@ -519,21 +503,6 @@ class Core:
                 schema = self.generalize(schema, merge)
 
             return schema
-
-    def unify(self, schema, state, path=()):
-        found = self.access(schema)
-        
-        unify_schema, unify_state, merges = unify(
-            self,
-            found,
-            state,
-            path)
-
-        unify_schema = self.handle_merges(
-            [unify_schema] + merges)
-        default_schema, default_state = self.default(unify_schema)
-
-        return default_schema, default_state
 
     def jump(self, schema, state, raw_key):
         """Navigate by logical jump (`Key`/`Index`/`Star`)."""
@@ -783,35 +752,6 @@ link_a = {
         'concentrations': ['cell', 'internal']}}
 
 # tracking datatypes that should be in the unischema
-to_implement = (
-    Node,
-    # Union,
-    # Tuple,
-    # Boolean,
-    Number,
-    # Integer,
-    # Float,
-    # Delta,
-    # Nonnegative,
-    # String,
-    # Enum,
-    # Wrap,
-    # Maybe,
-    # Overwrite,
-    # List,
-    # Map,
-    # Tree,
-    # Array,
-    Key,
-    # Path,
-    # Wires,
-    Schema,
-    # Link,
-    Jump,
-    Star,
-    Index,
-)
-
 uni_schema = 'outer:tuple[tuple[boolean],' \
         'enum[a,b,c],' \
         'tuple[integer,delta,nonnegative],' \
@@ -824,8 +764,18 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'tree[link[x:(y:float|z:boolean)|y:integer,oo:maybe[string]]],' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \
-        'outest:string'
-        # 'list[maybe[tree[array[(3|4),float64]]]],' \
+        'outest:string|' \
+        'list_array:list[maybe[tree[array[(6|7),float64]]]]'
+
+
+list_array_schema = 'a:float|list_array:list[maybe[tree[array[(3|4),float64]]]]'
+
+
+def test_list_array_schema(core):
+    schema = core.access(list_array_schema)
+
+    import ipdb; ipdb.set_trace()
+
 
 # tests --------------------------------------
 
@@ -1212,7 +1162,8 @@ def test_generate(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    generated_schema, generated_state = core.unify(schema, state)
+    generated_schema, generated_state = core.deserialize(schema, state)
+    # generated_schema, generated_state = core.unify(schema, state)
 
     assert generated_state['A'] == 5.5
     assert generated_state['B'] == 'one'
@@ -1276,7 +1227,7 @@ def test_unify(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    generated_schema, generated_state = core.unify(
+    generated_schema, generated_state = core.deserialize(
         schema,
         state)
 
@@ -1308,7 +1259,6 @@ def test_unify(core):
 
     assert project_state['A'] == generated_state['A']
 
-    # project_schema['inner']['G'] = Xor()
     project_state['D'] = 'OVER'
     applied_state, merges = core.apply(project_schema, generated_state, project_state)
 
@@ -1316,10 +1266,6 @@ def test_unify(core):
     assert applied_state['D'] == 'OVER'
 
     assert 'link' in applied_state['inner']
-
-    deschema, destate = core.deserialize(schema, state)
-
-    import ipdb; ipdb.set_trace()
 
 
 def test_generate_coverage(core):
@@ -1463,6 +1409,7 @@ if __name__ == '__main__':
     test_generate(core)
     # test_generate_promote_to_struct(core)
     test_uni_schema(core)
+    test_list_array_schema(core)
     test_array(core)
     test_bind(core)
 

@@ -210,17 +210,11 @@ def render(schema: NPRandom, defaults=False):
         'state': render(schema.state, defaults=defaults)}
     return wrap_default(schema, result) if defaults else result
 
-# @dispatch
-# def render(schema: Dtype):
-    # fields = render(schema._fields)
-    # result = {'_type': 'dtype', '_fields': fields}
-    # return wrap_default(schema, result)
-
 @dispatch
 def render(schema: Array, defaults=False):
     shape = '|'.join([str(value) for value in schema._shape])
     data = nf.dtype_to_descr(schema._data)
-    result = {'_type': 'array', '_shape': shape, '_data': data}
+    result = f'array[{shape},{data}]'
     return wrap_default(schema, result) if defaults else result
 
 @dispatch
