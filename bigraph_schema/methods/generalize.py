@@ -33,6 +33,7 @@ from bigraph_schema.schema import (
 
 
 from bigraph_schema.methods.default import default
+from bigraph_schema.methods.resolve import resolve
 from bigraph_schema.methods.merge import merge, merge_update
 
 
@@ -114,9 +115,30 @@ def generalize(current: Node, update: Node):
     else:
         raise Exception(f'\ncannot generalize types:\n{current}\n{update}\n')
 
+
+def generalize_node_dict(current: Node, update: dict):
+    fields = set(current.__dataclass_fields__)
+    keys = set(update.keys())
+
+    if len(keys.difference(fields)) > 0:
+        return update
+    else:
+        return current
+
+
+@dispatch
+def generalize(current: Array, update: dict):
+    for key in update:
+        if not (isinstance(key, int) and key < current._shape[0]):
+            return generalize_node_dict(current, update)
+
+    return current
+
+
 @dispatch
 def generalize(current: Map, update: dict):
     result = current._value
+
     try:
         for key, value in update.items():
             result = generalize(result, value)
@@ -201,8 +223,6 @@ def generalize(current: Tree, update: dict):
     return schema
 
 
-
-
 @dispatch
 def generalize(current: dict, update: dict):
     result = {}
@@ -218,15 +238,11 @@ def generalize(current: dict, update: dict):
         result[key] = value
     return result
 
+
 @dispatch
 def generalize(current: Node, update: dict):
-    fields = set(current.__dataclass_fields__)
-    keys = set(update.keys())
+    return generalize_node_dict(current, update)
 
-    if len(keys.difference(fields)) > 0:
-        return update
-    else:
-        return current
 
 @dispatch
 def generalize(current: dict, update: Node):

@@ -258,6 +258,9 @@ def render(schema: dict, defaults=False):
             subrender = render(value, defaults=defaults)
             parts[key] = subrender
 
+        if not defaults:
+            parts = render_associated(parts)
+
         return wrap_default(schema, parts) if defaults else parts
 
 @dispatch
@@ -274,6 +277,9 @@ def render(schema: Node, defaults=False):
             subrender[key] = serialize(schema, value)
         else:
             subrender[key] = render(value, defaults=defaults)
+
+        if not defaults:
+            subrender = render_associated(subrender)
 
     return wrap_default(schema, subrender) if defaults else subrender
 
@@ -440,8 +446,8 @@ def serialize(schema: Link, state):
         config_schema = instance.core.access(instance.config_schema)
 
     # config = serialize(config_schema, unconfig)
-    inputs = serialize(schema.inputs, state.get('inputs'))
-    outputs = serialize(schema.outputs, state.get('outputs'))
+    # inputs = serialize(schema.inputs, state.get('inputs'))
+    # outputs = serialize(schema.outputs, state.get('outputs'))
     _inputs = resolve(schema._inputs, state.get('_inputs'))
     _outputs = resolve(schema._outputs, state.get('_outputs'))
 
@@ -449,9 +455,9 @@ def serialize(schema: Link, state):
         'address': address,
         'config': unconfig,
         '_inputs': render(_inputs),
-        '_outputs': render(_outputs),
-        'inputs': inputs,
-        'outputs': outputs}
+        '_outputs': render(_outputs)}
+        # 'inputs': inputs,
+        # 'outputs': outputs}
 
 
 @dispatch

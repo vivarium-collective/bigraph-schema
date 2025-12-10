@@ -190,12 +190,15 @@ def deserialize(core, schema: Map, encode, path=()):
         schema = replace(schema, **{'_default': encode})
 
         for key, value in encode.items():
-            subschema, substate, submerges = deserialize(core, schema._value, value, path+(key,))
-            value_schema = core.resolve(schema._value, subschema)
-            schema = replace(schema, **{
-                '_value': value_schema})
-            decode[key] = substate
-            merges += submerges
+            if key.startswith('_'):
+                continue
+            else:
+                subschema, substate, submerges = deserialize(core, schema._value, value, path+(key,))
+                value_schema = core.resolve(schema._value, subschema)
+                schema = replace(schema, **{
+                    '_value': value_schema})
+                decode[key] = substate
+                merges += submerges
 
         return schema, decode, merges
 
@@ -229,8 +232,21 @@ def deserialize(core, schema: Tree, encode, path=()):
     else:
         return schema, None, []
 
+def dict_values(d):
+    result = []
+    for key, value in d.items():
+        if isinstance(value, dict):
+            value = dict_values(value)
+        result.append(value)
+    return result
+
 @dispatch
 def deserialize(core, schema: Array, encode, path=()):
+    if isinstance(encode, np.ndarray):
+        return schema, encode, []
+    elif isinstance(encode, dict):
+        encode = dict_values(encode)
+
     state = np.array(
         encode,
         dtype=schema._data)

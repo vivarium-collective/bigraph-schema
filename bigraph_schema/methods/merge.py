@@ -101,10 +101,11 @@ def merge(schema: Map, current, update):
         for key in current.keys() | update.keys():
             if key in update:
                 if key in current:
-                    result[key] = merge(
-                        schema._value,
-                        current[key],
-                        update[key])
+                    if not key.startswith('_'):
+                        result[key] = merge(
+                            schema._value,
+                            current[key],
+                            update[key])
                 else:
                     result[key] = update[key]
             else:
@@ -228,6 +229,9 @@ def merge(schema: dict, current, update):
     if not isinstance(update, dict):
         return current
 
+    if isinstance(current, np.ndarray):
+        import ipdb; ipdb.set_trace()
+
     for key in schema.keys() | current.keys() | update.keys():
         if key in schema:
             result[key] = merge(
@@ -240,8 +244,11 @@ def merge(schema: dict, current, update):
             result[key] = current[key]
 
         if key in schema and schema[key] and result[key] is None:
-            result[key] = default(
-                schema[key])
+            if key.startswith('_'):
+                result[key] = schema[key]
+            else:
+                result[key] = default(
+                    schema[key])
 
         if result[key] is None:
             del result[key]

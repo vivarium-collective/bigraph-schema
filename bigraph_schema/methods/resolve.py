@@ -265,6 +265,12 @@ def resolve(current: dict, update: Node):
 #     return update
 
 # @dispatch
+# def resolve(current: Node, update: String):
+#     if update._default:
+#         current._default = update._default
+#     return current
+
+# @dispatch
 # def resolve(current: String, update: Wrap):
 #     return resolve(current, update._value)
 

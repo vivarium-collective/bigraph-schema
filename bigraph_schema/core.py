@@ -76,12 +76,12 @@ from bigraph_schema.methods import (
     reify_schema,
     handle_parameters,
     infer,
-    render,
     default,
     resolve,
     generalize,
     check,
     validate,
+    render,
     serialize,
     deserialize,
     merge,
@@ -479,6 +479,7 @@ class Core:
 
         if merges:
             merge_schema = self.handle_merges(merges)
+            # decode_schema = self.resolve(decode_schema, merge_schema)
             decode_schema = self.generalize(decode_schema, merge_schema)
             merge_state = self.fill(merge_schema, decode_state)
         else:
@@ -972,7 +973,7 @@ def test_serialize(core):
     encoded_a = serialize(link_type, link_a)
 
     assert encoded_a['address'] == 'local:edge'
-    assert encoded_a['_inputs'] == {'concentrations': 'map[float]', 'mass': 'float'}
+    assert encoded_a['_inputs'] == 'mass:float|concentrations:map[float]'
 
     encoded_b = core.serialize(
         {'a': 'float'},
