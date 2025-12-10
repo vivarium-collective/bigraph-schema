@@ -311,6 +311,20 @@ class Core:
             schema = reify_schema(self, schema, parameters)
             return schema
 
+    def resolve_inherit(self, key):
+        result = {}
+        if '_inherit' in key:
+            inherit = key['_inherit']
+            if not isinstance(inherit, list):
+                inherit = [inherit]
+            for ancestor in inherit:
+                found = self.access(ancestor)
+                if not result:
+                    result = found
+                else:
+                    result = self.resolve(result, found)
+        return result
+
     def access(self, key):
         """Interpret an encoded schema or object and produce a compiled node.
 
@@ -339,45 +353,23 @@ class Core:
                 elif isinstance(entry, Node):
                     return entry
                 elif isinstance(entry, dict):
-                    if '_inherit' in entry:
-                        inherit_key = entry['_inherit']
-                        beyond_inherit = {
-                            key: value
-                            for key, value in entry.items()
-                            if key != '_inherit'}
-                        inherit = self.access(inherit_key)
-                        return replace(inherit, **beyond_inherit)
-                    else:
-                        return self.access(entry)
+                    return self.access(entry)
 
         elif isinstance(key, dict):
             if '_type' in key:
                 return self.access_type(key)
 
             else:
-                result = {}
-                if '_inherit' in key:
-                    inherit = key['_inherit']
-                    if not isinstance(inherit, list):
-                        inherit = [inherit]
-                    for ancestor in inherit:
-                        found = self.access(ancestor)
-                        if not result:
-                            result = found
-                        else:
-                            result = self.resolve(result, found)
+                result = self.resolve_inherit(key)
 
                 for subkey, subitem in key.items():
-                    subitem = subitem if subkey.startswith('_') else self.access(subitem)
+                    if isinstance(subkey, str):
+                        subitem = subitem if subkey.startswith('_') else self.access(subitem)
                     if isinstance(result, Node):
                         if hasattr(result, subkey):
                             result = replace(result, **{subkey: subitem})
                         else:
                             setattr(result, subkey, subitem)
-                    elif isinstance(result, list):
-                        import ipdb; ipdb.set_trace()
-                    elif isinstance(result, str):
-                        import ipdb; ipdb.set_trace()
                     else:
                         result[subkey] = subitem 
 
