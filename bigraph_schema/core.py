@@ -1327,10 +1327,9 @@ def test_generate_tuple_default(core):
                 '_type': 'tuple[number,number]',
                 '_default': (0,0)}}
 
-    import ipdb; ipdb.set_trace()
-
     generated_schema, generated_state = core.deserialize(schema, state)
     assert generated_state['C'] == (0,0)
+    assert generated_state['B'] == True
 
 
 def test_generate_promote_to_struct(core):
