@@ -428,8 +428,6 @@ class Core:
         state consistent with the given schema.
         """
         found = self.access(schema)
-        if not found:
-            import ipdb; ipdb.set_trace()
 
         value = default(found)
         return deserialize(self, found, value, path=path)
@@ -531,11 +529,14 @@ class Core:
 
     def fill(self, schema, state, overwrite=False):
         found = self.access(schema)
-        base_schema, base_state = self.default(found)
+        base_schema, base_state, merges = self.default_merges(found)
+        merge_schema = self.handle_merges(merges)
+        resolve_schema = resolve(base_schema, merge_schema)
+
         if overwrite:
-            return merge(base_schema, state, base_state)
+            return merge(resolve_schema, state, base_state)
         else:
-            return merge(base_schema, base_state, state)
+            return merge(resolve_schema, base_state, state)
 
     def view_ports(self, schema, state, path, ports_schema, wires):
         if isinstance(wires, str):
@@ -773,8 +774,6 @@ list_array_schema = 'a:float|list_array:list[maybe[tree[array[(3|4),float64]]]]'
 
 def test_list_array_schema(core):
     schema = core.access(list_array_schema)
-
-    import ipdb; ipdb.set_trace()
 
 
 # tests --------------------------------------
@@ -1316,7 +1315,7 @@ def test_generate_coverage(core):
                              core.serialize(generated_schema, generated_state))
 
 
-def broken_test_generate_tuple_default(core):
+def test_generate_tuple_default(core):
     schema = {
             'A': 'link[x:integer,y:nonnegative]'}
 
@@ -1328,7 +1327,7 @@ def broken_test_generate_tuple_default(core):
                 '_type': 'tuple[number,number]',
                 '_default': (0,0)}}
 
-    generated_schema, generated_state = core.generate(schema, state)
+    generated_schema, generated_state = core.deserialize(schema, state)
     assert generated_state['C'] == (0,0)
 
 
@@ -1420,3 +1419,4 @@ if __name__ == '__main__':
     test_apply(core)
     test_unify(core)
 
+    test_generate_tuple_default(core)

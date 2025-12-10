@@ -86,7 +86,8 @@ def deserialize(core, schema: Tuple, encode, path=()):
         return result_schema, result_state, merges
 
     else:
-        return schema, None, []
+        default_schema, default_state, merges = core.default_merges(schema, path=path)
+        return default_schema, default_state, merges
 
 
 def deserialize_default(core, schema, encode: dict, path=()):
