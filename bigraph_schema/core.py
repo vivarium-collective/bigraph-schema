@@ -20,6 +20,7 @@ expressions into structured schema nodes (`Union`, `Tuple`, `Array`, `Link`, etc
 """
 import copy
 import typing
+from pprint import pformat as pf
 import numpy as np
 from numpy import dtype
 import numpy.lib.format as nf
@@ -445,10 +446,13 @@ class Core:
         found = self.access(schema)
         return check(found, state)
 
-    def validate(self, schema, state):
+    def validate(self, schema, state, message=None):
         """Returns a nested description of how the state does not match the schema"""
         found = self.access(schema)
-        return validate(self, found, state)
+        validation = validate(self, found, state)
+        if validation:
+            message = f'state failed schema validation:\\nschema: {pf(render(schema))}\n\nstate: {pf(state)}'
+            raise Exception(f'{message}: {validation}')
 
     def serialize(self, schema, state):
         """Convert a structured Python state into an encoded representation.

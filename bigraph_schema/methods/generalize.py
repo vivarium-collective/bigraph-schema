@@ -57,6 +57,18 @@ def generalize_subclass(subclass, superclass):
 
 
 @dispatch
+def generalize(current: Integer, update: Float):
+    if not update._default:
+        update._default = current._default
+    return update
+
+@dispatch
+def generalize(current: Float, update: Integer):
+    if not current._default:
+        current._default = update._default
+    return current
+
+@dispatch
 def generalize(current: Empty, update: Node):
     return update
 

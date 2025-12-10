@@ -54,8 +54,9 @@ def validate(core, schema: Wrap, state):
 @dispatch
 def validate(core, schema: Union, state):
     for option in schema._options:
-        if check(option, state):
-            return
+        result = validate(core, option, state)
+        if not result:
+            return result
 
     return f'Union values did not match state:\n\n{pf(render(schema))}\n\n{pf(state)}\n\n'
 
@@ -73,7 +74,7 @@ def validate(core, schema: Tuple, state):
 
     elif len(schema._values) == len(state):
         results = filter_nones([
-            check(subschema, value)
+            validate(core, subschema, value)
             for subschema, value in zip(schema._values, state)])
 
         if results:

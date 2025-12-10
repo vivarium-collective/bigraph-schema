@@ -321,9 +321,10 @@ def deserialize_link(core, schema: Link, encode, path=()):
     _, decode_config = core.deserialize(config_schema, encode_config)
     config = core.fill(config_schema, decode_config)
 
-    if not core.check(config_schema, config):
-        validation = core.validate(config_schema, config)
-        raise Exception(f'config provided to {address} does not match the config_schema!\n\nconfig_schema:{pf(render(config_schema))}\n\nconfig:{pf(config)}\n\n{pf(validation)}')
+    # validate the config against the config_schema
+    message = f'config provided to {address} does not match the config_schema!\n\nconfig_schema: {pf(render(config_schema))}\n\nconfig: {pf(config)}\n\n'
+    core.validate(config_schema, config, message)
+
     edge_instance = encode.get('instance', edge_class(config, core))
     interface = edge_instance.interface()
 
