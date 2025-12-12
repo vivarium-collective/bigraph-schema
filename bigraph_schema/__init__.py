@@ -9,6 +9,6 @@ from bigraph_schema.protocols import local_lookup_module
 from bigraph_schema.type_functions import FUNCTION_TYPE, METHOD_TYPE, type_schema_keys, resolve_path
 
 from bigraph_schema.schema import BASE_TYPES
-from bigraph_schema.core import Core
+from bigraph_schema.core import Core, allocate_core
 
 import bigraph_schema.methods
