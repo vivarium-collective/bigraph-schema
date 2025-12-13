@@ -1,6 +1,4 @@
 from pprint import pformat as pf
-from bigraph_schema.bigraph.basis import Joindict
-from bigraph_schema.bigraph.placement import PlacementPlaces
 
 """
 attempting a normalized version of the process bigraph abstraction
@@ -36,6 +34,57 @@ import uuid
 
 def new_uuid():
     return uuid.uuid4()
+
+
+class JoinDict():
+    """
+    many to many mapping between two cachable types
+    """
+    def __init__(self):
+        self.left = {}
+        self.right = {}
+
+    def _insert_pair(self, place, a, b):
+        if not place.get(a):
+            place[a] = {}
+        place[a][b] = True
+
+    def insert(self, left, right):
+        self._insert_pair(self.left, left, right)
+        self._insert_pair(self.right, right, left)
+
+    def _purge_token(self, a, b, token):
+        for token_b in a[token].keys():
+            b[token_b].pop(token, None)
+        a.pop(token, None)
+
+    def remove_left(self, left):
+        self._purge_token(self.left, self.right, left)
+
+    def remove_right(self, right):
+        self._purge_token(self.right, self.left, right)
+
+    def delink(self, left, right):
+        try:
+            self.right[right].pop(left)
+        except KeyError:
+            pass
+        try:
+            self.left[left].pop(right)
+        except KeyError:
+            pass
+
+    def get_left(self, item):
+        result = self.left.get(item) or {}
+        return list(result.keys())
+
+    def get_right(self, item):
+        result = self.right.get(item) or {}
+        return list(result.keys())
+
+    def update(self, other):
+        self.left.update(other.left)
+        self.right.update(other.right)
 
 
 class Link():
@@ -132,6 +181,53 @@ class Link():
         return result
 
 
+class Places():
+    def __init__(self):
+        self.places = JoinDict()
+
+    def insert(self, pair):
+        [outer, inner] = pair
+        self.places.insert(outer, inner)
+
+    def add_branch(self, parent, child):
+        self.insert((parent, child))
+
+    def get_place(self, node_id):
+        [parent] = self.places.get_right(node_id)
+        children = self.places.get_left(node_id)
+        return {'node_id': node_id, 'outer': parent, 'inner': children}
+
+    def get_branches(self, node_id):
+        return self.places.get_left(node_id)
+
+    def get_roots(self):
+        return self.places.get_left(None)
+
+    def get_leaves(self):
+        return self.places.get_right(None)
+
+    def build_tree(self, root):
+        """
+        returns a tree of node_id down from root
+        """
+        branches = self.places.get_left(root)
+        # this case indicates a port
+        if branches == [None]:
+            return None
+        result = {}
+        for branch in branches:
+            result[branch] = self.build_tree(branch)
+        return result
+
+    def as_tree(self):
+        roots = self.get_roots()
+
+        result = {}
+        for root in roots:
+            result[root] = self.build_tree(root)
+
+        return result
+
 
 class Bigraph():
     """
@@ -148,15 +244,11 @@ class Bigraph():
     links_nodes is a bimap (two way many to many mapping) from node_id to
     link_ids and from link_id to node ids
     """
-    def __init__(self, place_class=Placement, places_class=PlacementPlaces):
+    def __init__(self, bigraph_id=None):
         # mapping from node_id to node
         self.nodes = {}
 
-        # TODO - maybe we only need the constructor of the place class?
-        self.place_class = place_class
-        # we abstract the implementation of the place tree structure
-        # TODO - like with the place_class, maybe we only need the constructor?
-        self.places = places_class()
+        self.places = Places()
 
         # mapping from link_id to link (might not be needed) if links hold no
         # data
@@ -167,14 +259,13 @@ class Bigraph():
         # links_nodes.right maps node_id to link_ids
         self.links_nodes = JoinDict()
 
-        self.id = new_uuid()
+        self.id = bigraph_id or new_uuid()
 
     def __repr__(self):
         return f'Bigraph(id={self.id},\n' \
                 f' nodes={pf(self.nodes)},\n' \
                 f' places={pf(self.places)},\n' \
                 f' links={pf(self.links)})'
-
 
     def outer_face(self):
         """
@@ -226,19 +317,17 @@ class Bigraph():
         if ingesting nodes without their place structure
         """
 
-        uid = tree_ops.get_id(tree)
-        nodes = [uid]
-        place = self.place_class(uid, inner=None, outer=parent_id)
-        if uid != None:
+        node_id = tree_ops.get_id(tree)
+        nodes = [node_id]
+        place = (parent_id, node_id)
+        if node_id != None:
             self.places.insert(place)
-        # if parent_id:
-        #    self.places.add_branch(parent_id, uid)
 
         leaf = tree_ops.get_leaf(tree)
         if leaf != None:
-            self.nodes[uid] = leaf
+            self.nodes[node_id] = leaf
         for k,v in tree_ops.get_children(tree).items():
-            new_ids = self.harvest_tree(v, uid, tree_ops)
+            new_ids = self.harvest_tree(v, node_id, tree_ops)
             nodes.extend(new_ids)
         return nodes
 
@@ -426,7 +515,6 @@ def test_link_bigraph():
                 'v4': {'node_id': 'v4', 'inner': ['v5'], 'outer': None}}}
 
     F_outer_calculated = F.outer_face()
-    import ipdb; ipdb.set_trace()
     assert F_outer_calculated == F_outer
 
     G = Bigraph()
