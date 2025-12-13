@@ -6,30 +6,23 @@ attempting a normalized version of the process bigraph abstraction
 import uuid
 
 # bigraph{
-#     id: uuid
+#     id: uid (set by constructor or UUID)
 #     nodes : mapping(id:uuid, node:object)
 #     places: object representing a tree structure of nodes
-#     links : mapping(uuid from link, Link)
-#     links_nodes : many to many uuid links to nodes}
+#     links : mapping(uid from link, Link)
+#     links_nodes : many to many uid links to nodes}
+#
+# placement{
+#   inner: node_id or None
+#   outer: node_id or None
 #
 # link{
-#     id: uuid
+#     id: uid (set by constructor or UUID)
 #     redex: callable
 #     reactum: callable
 #     inner: many to many port_names to node_ids
 #     outer: many to many port_names to node_ids
 #     schemas: mapping(port_name, schema)}
-#
-# one of:
-# place{
-#    id: uuid
-#    inner: list of (place_id or None)
-#    outer: single value of (place_id or None)}
-# or
-# placement{
-#   id: uuid
-#   inner: place_id or None
-#   outer: place_id or None
 
 
 def new_uuid():
@@ -117,9 +110,9 @@ class Link():
         self.reaction = kwargs.get('reaction')
 
         ## registration
-        # the 'inner' and 'outer' argument keys should each be a list of
-        # ('name', schema, node_id), tuples describing one port of the link
-        # per item.
+        # * the 'inner' and 'outer' argument keys should each be a list of
+        #   ('name', schema, node_id), tuples describing one port of the link
+        #   per item.
         # * 'name' is any identifier, preferring a descriptive string name
         # * schema is a schema that should match the node that gets connected
         # * node_id should be usable to find a node on the parent bigraph, or
@@ -250,8 +243,6 @@ class Bigraph():
 
         self.places = Places()
 
-        # mapping from link_id to link (might not be needed) if links hold no
-        # data
         self.links = {}
 
         # bidirectional mapping from link_id to node_id
@@ -572,7 +563,3 @@ def test_link_bigraph():
 #             H.places,
 #             HarvestTestHelper())
 
-# TODO
-# - nodes are used for structural information
-# - place normalized to one parent and one child
-# - current Place is actually place-edge index of a node (similar to nodes_links)
