@@ -1,0 +1,1 @@
+from bigraph_schema.package.discover import discover_packages

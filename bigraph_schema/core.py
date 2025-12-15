@@ -18,6 +18,7 @@ validation, and data transformation.
 `CoreVisitor` implements the parsing backend, converting textual bigraph
 expressions into structured schema nodes (`Union`, `Tuple`, `Array`, `Link`, etc.).
 """
+
 import copy
 import typing
 from pprint import pformat as pf
@@ -88,6 +89,8 @@ from bigraph_schema.methods import (
     jump,
     traverse,
     apply)
+
+from bigraph_schema.package import discover_packages
 
 
 def schema_keys(schema):
@@ -701,6 +704,13 @@ class Core:
             return apply(found, state, update, path)
         else:
             return state, []
+
+
+def allocate_core():
+    core = Core(BASE_TYPES)
+    core = discover_packages(core)
+
+    return core
 
 
 # test data ----------------------------
@@ -1388,8 +1398,7 @@ def test_apply(core):
 
 
 if __name__ == '__main__':
-    core = Core(
-        BASE_TYPES)
+    core = allocate_core()
 
     test_infer(core)
     test_render(core)
