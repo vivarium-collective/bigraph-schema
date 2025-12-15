@@ -351,6 +351,7 @@ class Core:
                     return visit_expression(key, self.parse_visitor)
                 except Exception as e:
                     import ipdb; ipdb.set_trace()
+                    raise e
             else:
                 entry = self.registry[key]
                 if callable(entry):
@@ -817,6 +818,50 @@ def test_problem_schema_2(core):
     assert round_trip == problem_type
 
 def test_array(core):
+    basic = 'array[(5|6),float]'
+    basic_default = core.default(basic)
+
+    basic_link = {
+        '_type': 'edge',
+        '_inputs': {
+            'x': 'float',
+            'y': 'array[(6),float]'},
+        '_outputs': {
+            'z': 'float',
+            'w': 'array[(5),float]'},
+        'inputs': {
+            'x': ['array', 4, 3],
+            'y': ['array', 2]},
+        'outputs': {
+            'z': ['array', 5, 5],
+            'w': ['array', '*', 1]}}
+
+    basic_initial = {
+        'link': basic_link,
+        'array': basic}
+
+    basic_schema, basic_state = core.deserialize(
+        {},
+        basic_initial)
+
+    view = core.view(
+        basic_schema,
+        basic_state,
+        ('link',))
+
+    project_schema, project_state = core.project(
+        basic_schema,
+        basic_state,
+        ('link',),
+        {'z': 5555.5, 'w': np.array([1., 2., 3., 4., 5.])})
+
+    applied_state, applied_merges = core.apply(
+        project_schema,
+        basic_state,
+        project_state)
+
+    import ipdb; ipdb.set_trace()
+
     complex_spec = [('name', np.str_, 16),
                     ('grades', np.float64, (2,))]
     complex_dtype = dtype(complex_spec)
