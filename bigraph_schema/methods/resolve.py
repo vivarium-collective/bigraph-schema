@@ -438,9 +438,9 @@ def resolve(current: dict, update: Node, path=None):
     keys = set(current.keys())
 
     if len(keys.difference(fields)) > 0:
-        return update
-    else:
         return current
+    else:
+        return update
 
 # @dispatch
 # def resolve(current: String, update: Node):
