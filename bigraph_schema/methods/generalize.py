@@ -130,7 +130,8 @@ def generalize_node_dict(current: Node, update: dict):
 def generalize(current: Array, update: dict):
     for key in update:
         if not (isinstance(key, int) and key < current._shape[0]):
-            return generalize_node_dict(current, update)
+            if key != '*':
+                return generalize_node_dict(current, update)
 
     return current
 

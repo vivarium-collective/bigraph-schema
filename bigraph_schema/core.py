@@ -401,11 +401,9 @@ class Core:
         a schema node that captures the structure of the provided data.
         """
         schema, merges = infer(self, state, path=path)
-        merge_schema = self.handle_merges([schema] + merges)
+        merge_schema = self.resolve_merges([schema] + merges)
+
         return merge_schema
-        # for merge in merges:
-        #     schema = resolve(schema, merge)
-        # return schema
 
     def render(self, schema, defaults=False):
         """Produce a serializable view of a compiled schema.
@@ -437,7 +435,11 @@ class Core:
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
         current = self.access(current_schema)
         update = self.access(update_schema)
-        return resolve(current, update)
+
+        if current == update:
+            return current
+        else:
+            return resolve(current, update)
 
     def generalize(self, current_schema, update_schema):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
@@ -482,7 +484,8 @@ class Core:
             path=path)
 
         if merges:
-            merge_schema = self.handle_merges(merges)
+            merge_schema = self.generalize_merges(merges)
+            # merge_schema = self.generalize_merges(merges[0], merges[1:])
             # decode_schema = self.resolve(decode_schema, merge_schema)
             decode_schema = self.generalize(decode_schema, merge_schema)
             merge_state = self.fill(merge_schema, decode_state)
@@ -491,13 +494,32 @@ class Core:
 
         return decode_schema, merge_state
 
-    def handle_merges(self, merges):
+    # def generalize_merges(self, schema, merges):
+    #     if len(merges) == 0:
+    #         return schema
+    #     else:
+    #         for merge_path, merge_schema in merges:
+    #             schema = self.generalize(schema, merge)
+
+    #         return schema
+
+    def generalize_merges(self, merges):
         if len(merges) == 0:
             return None
         else:
             schema = merges[0]
             for merge in merges[1:]:
                 schema = self.generalize(schema, merge)
+
+            return schema
+
+    def resolve_merges(self, merges):
+        if len(merges) == 0:
+            return None
+        else:
+            schema = merges[0]
+            for merge in merges[1:]:
+                schema = self.resolve(schema, merge)
 
             return schema
 
@@ -529,7 +551,7 @@ class Core:
     def fill(self, schema, state, overwrite=False):
         found = self.access(schema)
         base_schema, base_state, merges = self.default_merges(found)
-        merge_schema = self.handle_merges(merges)
+        merge_schema = self.resolve_merges(merges)
         resolve_schema = resolve(base_schema, merge_schema)
 
         if overwrite:
@@ -822,7 +844,7 @@ def test_array(core):
     basic_default = core.default(basic)
 
     basic_link = {
-        '_type': 'edge',
+        '_type': 'link',
         '_inputs': {
             'x': 'float',
             'y': 'array[(6),float]'},
@@ -837,11 +859,12 @@ def test_array(core):
             'w': ['array', '*', 1]}}
 
     basic_initial = {
-        'link': basic_link,
-        'array': basic}
+        'link': basic_link}
+
+    import ipdb; ipdb.set_trace()
 
     basic_schema, basic_state = core.deserialize(
-        {},
+        {'array': basic},
         basic_initial)
 
     view = core.view(
@@ -860,14 +883,15 @@ def test_array(core):
         basic_state,
         project_state)
 
-    import ipdb; ipdb.set_trace()
-
     complex_spec = [('name', np.str_, 16),
                     ('grades', np.float64, (2,))]
     complex_dtype = dtype(complex_spec)
     array = np.zeros((3,4), dtype=complex_dtype)
     array_schema = core.infer(array)
     rendered = core.render(array_schema)
+
+    import ipdb; ipdb.set_trace()
+
 
 def test_infer(core):
     default_schema, default_state = core.default(node_schema)
@@ -1459,7 +1483,6 @@ if __name__ == '__main__':
     # test_generate_promote_to_struct(core)
     test_uni_schema(core)
     test_list_array_schema(core)
-    test_array(core)
     test_bind(core)
 
     test_problem_schema_1(core)
@@ -1470,3 +1493,4 @@ if __name__ == '__main__':
     test_unify(core)
 
     test_generate_tuple_default(core)
+    test_array(core)

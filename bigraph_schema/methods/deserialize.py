@@ -188,17 +188,21 @@ def deserialize(core, schema: Map, encode, path=()):
         decode = {}
         merges = []
         schema = replace(schema, **{'_default': encode})
+        value_schemas = []
 
         for key, value in encode.items():
             if key.startswith('_'):
                 continue
             else:
                 subschema, substate, submerges = deserialize(core, schema._value, value, path+(key,))
-                value_schema = core.resolve(schema._value, subschema)
-                schema = replace(schema, **{
-                    '_value': value_schema})
+                value_schemas.append(subschema)
                 decode[key] = substate
                 merges += submerges
+
+        if value_schemas:
+            value_schema = core.resolve_merges([schema._value] + value_schemas)
+            schema = replace(schema, **{
+                '_value': value_schema})
 
         return schema, decode, merges
 
@@ -282,10 +286,11 @@ def load_protocol(core, protocol, data):
 def port_merges(core, port_schema, wires, path):
     if isinstance(wires, (list, tuple)):
         subpath = path[:-1] + tuple(wires)
-        submerges = nest_schema(
-            port_schema,
-            subpath)
-        return [submerges]
+        # return [(subpath, port_schema)]
+
+        submerge = nest_schema(port_schema, subpath)
+        return [submerge]
+
     else:
         merges = []
         for key, subwires in wires.items():
@@ -293,8 +298,6 @@ def port_merges(core, port_schema, wires, path):
                 port_schema,
                 {},
                 key)
-
-            # down = port_schema[key]
 
             submerges = port_merges(
                 core,

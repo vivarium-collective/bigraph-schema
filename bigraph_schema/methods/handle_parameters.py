@@ -118,8 +118,10 @@ def reify_schema(core, schema: Array, parameters):
         int(value)
         for value in parameters.get('_shape', (1,))])
 
-    schema._data = nf.descr_to_dtype(
-        parameters.get('_data', 'float64'))
+    data = parameters.get('_data', 'float64')
+    if isinstance(data, Node):
+        data = core.render(data)
+    schema._data = nf.descr_to_dtype(data)
 
     return schema
 
