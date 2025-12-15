@@ -103,7 +103,8 @@ def resolve(current: Node, update: Node, path=None):
         if hasattr(current, head):
             down_current = getattr(current, head)
         down_resolve = resolve(down_current, update, path[1:])
-        return replace(current, **{head: down_resolve})
+        setattr(current, head, down_resolve)
+        return current
 
     current_type = type(current)
     update_type = type(update)
@@ -326,10 +327,10 @@ def resolve(current: Array, update: Array, path=None):
     new_shape = [
         max(current_shape, update_shape)
         for current_shape, update_shape in zip(current._shape, update._shape)]
-    if len(current_shape) > len(update_shape):
-        new_shape += current_shape[len(update_shape):]
-    if len(update_shape) > len(current_shape):
-        new_shape += update_shape[len(current_shape):]
+    if len(current._shape) > len(update._shape):
+        new_shape += current._shape[len(update._shape):]
+    if len(update._shape) > len(current._shape):
+        new_shape += update._shape[len(current._shape):]
     return replace(current, **{'_shape': new_shape})
 
 
