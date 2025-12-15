@@ -1,6 +1,8 @@
 from plum import dispatch
 import numpy as np
 
+from dataclasses import replace, dataclass
+
 from bigraph_schema.schema import (
     Node,
     Atom,
@@ -321,6 +323,20 @@ def jump(schema: Node, state, to: Star, context):
             raise Exception(f'traverse: no key "{key}" in state {state} at path {context["path"]}')
 
     return value_schema, values
+
+
+@dispatch
+def jump(schema: Array, state, to: Jump, context):
+    index = to._value
+    if isinstance(index, int) and index < schema._shape[0]:
+        subschema = replace(schema, **{'_shape': schema._shape[1:]})
+        return traverse(
+            subschema,
+            state[index],
+            context['subpath'],
+            context)
+    else:
+        raise Exception(f'traverse: no index {index} in array state {state} at path {context["path"]}')
 
 
 @dispatch

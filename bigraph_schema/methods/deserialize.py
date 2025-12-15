@@ -36,7 +36,6 @@ from bigraph_schema.schema import (
     LocalProtocol,
     Schema,
     Link,
-    nest_schema,
 )
 
 
@@ -200,7 +199,10 @@ def deserialize(core, schema: Map, encode, path=()):
                 merges += submerges
 
         if value_schemas:
-            value_schema = core.resolve_merges([schema._value] + value_schemas)
+            value_schema = core.resolve_schemas(
+                value_schemas)
+            value_schema = core.resolve(schema._value, value_schema)
+
             schema = replace(schema, **{
                 '_value': value_schema})
 
@@ -286,10 +288,7 @@ def load_protocol(core, protocol, data):
 def port_merges(core, port_schema, wires, path):
     if isinstance(wires, (list, tuple)):
         subpath = path[:-1] + tuple(wires)
-        # return [(subpath, port_schema)]
-
-        submerge = nest_schema(port_schema, subpath)
-        return [submerge]
+        return [(subpath, port_schema)]
 
     else:
         merges = []

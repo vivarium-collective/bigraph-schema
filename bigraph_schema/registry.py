@@ -14,7 +14,8 @@ import collections
 import traceback
 import functools
 import numpy as np
-import pytest
+from dataclasses import replace, dataclass
+
 from pprint import pformat as pf
 
 from bigraph_schema.protocols import local_lookup_module, function_module
@@ -126,9 +127,24 @@ def set_star_path(tree, path, value, top=None, cursor=()):
         return set_star_path(top, cursor[:-1], value)
 
     elif head == '*':
-        for key in value:
-            tree[key] = set_star_path({}, tail, value[key], cursor=(key,))
-        return top
+        if hasattr(value, '_shape'):
+            if len(value._shape) == 1:
+                return top
+            for index in range(value._shape[0]):
+                tree[index] = set_star_path({}, tail, replace(value, **{'_shape': value._shape[1:]}), top=top, cursor=(index,))
+            return tree
+
+        elif isinstance(value, np.ndarray):
+            tree = tree or np.zeros(value.shape)
+            for index in range(value.shape[0]):
+                subvalue = set_star_path(tree[index], tail, value[index], top=top, cursor=(index,))
+                tree[index] = subvalue
+            return tree
+
+        else:
+            for key in value:
+                tree[key] = set_star_path({}, tail, value[key], cursor=(key,))
+            return tree
 
     else:
         if len(tail) == 0:

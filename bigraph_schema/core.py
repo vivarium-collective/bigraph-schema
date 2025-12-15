@@ -38,7 +38,6 @@ from bigraph_schema.schema import (
     convert_jump,
     convert_path,
     blank_context,
-    nest,
     Node,
     Union,
     Tuple,
@@ -401,7 +400,7 @@ class Core:
         a schema node that captures the structure of the provided data.
         """
         schema, merges = infer(self, state, path=path)
-        merge_schema = self.resolve_merges([schema] + merges)
+        merge_schema = self.resolve_merges(schema, merges)
 
         return merge_schema
 
@@ -431,7 +430,7 @@ class Core:
         value = default(found)
         return self.deserialize(found, value, path=path)
 
-    def resolve(self, current_schema, update_schema):
+    def resolve(self, current_schema, update_schema, path=None):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
         current = self.access(current_schema)
         update = self.access(update_schema)
@@ -439,7 +438,7 @@ class Core:
         if current == update:
             return current
         else:
-            return resolve(current, update)
+            return resolve(current, update, path=path)
 
     def generalize(self, current_schema, update_schema):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
@@ -484,9 +483,7 @@ class Core:
             path=path)
 
         if merges:
-            merge_schema = self.generalize_merges(merges)
-            # merge_schema = self.generalize_merges(merges[0], merges[1:])
-            # decode_schema = self.resolve(decode_schema, merge_schema)
+            merge_schema = self.resolve_merges({}, merges)
             decode_schema = self.generalize(decode_schema, merge_schema)
             merge_state = self.fill(merge_schema, decode_state)
         else:
@@ -494,33 +491,57 @@ class Core:
 
         return decode_schema, merge_state
 
-    # def generalize_merges(self, schema, merges):
-    #     if len(merges) == 0:
-    #         return schema
-    #     else:
-    #         for merge_path, merge_schema in merges:
-    #             schema = self.generalize(schema, merge)
+    def nest(self, schema, path, subschema):
+        schema = schema or {}
 
-    #         return schema
+        if len(path) == 0:
+            return self.resolve(schema, subschema)
 
-    def generalize_merges(self, merges):
-        if len(merges) == 0:
-            return None
         else:
-            schema = merges[0]
-            for merge in merges[1:]:
-                schema = self.generalize(schema, merge)
-
+            head = path[0]
+            if not isinstance(schema, dict):
+                import ipdb; ipdb.set_trace()
+            schema[head] = self.nest(
+                schema.get(head, {}),
+                path[1:],
+                subschema)
             return schema
 
-    def resolve_merges(self, merges):
-        if len(merges) == 0:
-            return None
-        else:
-            schema = merges[0]
-            for merge in merges[1:]:
-                schema = self.resolve(schema, merge)
+    def nest_schema(self, schema, path, subschema):
+        subpath = resolve_path(path)
+        return self.nest(schema, subpath, subschema)
 
+    def generalize_merges(self, schema, merges):
+        if len(merges) > 0:
+            merge_schema = {}
+            for path, subschema in merges:
+                merge_schema = self.nest_schema(
+                    merge_schema,
+                    path,
+                    subschema)
+
+            schema = self.generalize(schema, merge_schema)
+
+        return schema
+
+    def resolve_merges(self, schema, merges):
+        if len(merges) > 0:
+            merge_schema = {}
+            for path, subschema in merges:
+                merge_schema = self.resolve(
+                    merge_schema,
+                    subschema,
+                    resolve_path(path))
+
+            schema = self.resolve(schema, merge_schema)
+
+        return schema
+
+    def resolve_schemas(self, schemas):
+        if len(schemas) > 0:
+            schema = schemas[0]
+            for subschema in schemas[1:]:
+                schema = self.resolve(schema, subschema)
             return schema
 
     def jump(self, schema, state, raw_key):
@@ -551,13 +572,12 @@ class Core:
     def fill(self, schema, state, overwrite=False):
         found = self.access(schema)
         base_schema, base_state, merges = self.default_merges(found)
-        merge_schema = self.resolve_merges(merges)
-        resolve_schema = resolve(base_schema, merge_schema)
+        merge_schema = self.resolve_merges(base_schema, merges)
 
         if overwrite:
-            return merge(resolve_schema, state, base_state)
+            return merge(merge_schema, state, base_state)
         else:
-            return merge(resolve_schema, base_state, state)
+            return merge(merge_schema, base_state, state)
 
     def view_ports(self, schema, state, path, ports_schema, wires):
         if isinstance(wires, str):
@@ -570,7 +590,7 @@ class Core:
             result = {}
             for port_key, subport in wires.items():
                 subschema, subwires = self.jump(
-                    schema,
+                    ports_schema,
                     wires,
                     port_key)
 
@@ -612,6 +632,9 @@ class Core:
 
         if isinstance(wires, (list, tuple)):
             destination = resolve_path(list(path) + list(wires))
+
+            if '*' in wires:
+                import ipdb; ipdb.set_trace()
 
             project_schema = set_star_path(
                 project_schema,
@@ -855,13 +878,13 @@ def test_array(core):
             'x': ['array', 4, 3],
             'y': ['array', 2]},
         'outputs': {
-            'z': ['array', 5, 5],
-            'w': ['array', '*', 1]}}
+            'z': ['array', 1, 5]}}
+        # 'outputs': {
+        #     'z': ['array', 5, 5],
+        #     'w': ['array', '*']}}
 
     basic_initial = {
         'link': basic_link}
-
-    import ipdb; ipdb.set_trace()
 
     basic_schema, basic_state = core.deserialize(
         {'array': basic},
@@ -871,6 +894,8 @@ def test_array(core):
         basic_schema,
         basic_state,
         ('link',))
+
+    import ipdb; ipdb.set_trace()
 
     project_schema, project_state = core.project(
         basic_schema,

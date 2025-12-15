@@ -190,6 +190,17 @@ def apply(schema: Xor, state, update, path):
 
 
 @dispatch
+def apply(schema: dict, state: np.ndarray, update, path):
+    merges = []
+    for key, subschema in schema.items():
+        if key in update:
+            substate = update[key]
+            state[key], submerges = apply(subschema, state[key], substate, path+(key,))
+            merges += submerges
+    return state, merges
+                
+
+@dispatch
 def apply(schema: dict, state, update, path):
     if update is None:
         return state, []

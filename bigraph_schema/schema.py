@@ -201,16 +201,29 @@ def resolve_path(path):
 
     return resolve
 
-def nest(schema, path):
-    if len(path) == 0:
-        return schema
-    else:
-        return {
-            path[0]: nest(schema, path[1:])}
+def deep_merge(dct, merge_dct):
+    """
+    Deep merge `merge_dct` into `dct`, modifying `dct` in-place.
 
-def nest_schema(schema, path):
-    subpath = resolve_path(path)
-    return nest(schema, subpath)
+    Nested dictionaries are recursively merged.
+    """
+    if dct is None:
+        dct = {}
+    if merge_dct is None:
+        merge_dct = {}
+    if not isinstance(merge_dct, dict):
+        return merge_dct
+
+    for k, v in merge_dct.items():
+        if (k in dct and isinstance(dct[k], dict)
+                and isinstance(v, collections.abc.Mapping)):
+            deep_merge(dct[k], v)
+        else:
+            dct[k] = v
+    return dct
+
+def is_empty(value):
+    return value is None or value == {} or value == []
 
 def convert_path(path):
     resolved = resolve_path(path)
