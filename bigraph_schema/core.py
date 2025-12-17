@@ -895,6 +895,7 @@ def test_array(core):
             'y': ['array', 2]},
         'outputs': {
             'z': ['array', 1, 5],
+            # 'z': ['array', 0],
             'w': ['array', '*', 3]}}
 
     basic_initial = {

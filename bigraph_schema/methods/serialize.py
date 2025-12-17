@@ -212,6 +212,11 @@ def render(schema: NPRandom, defaults=False):
 
 
 @dispatch
+def render(schema: np.dtype, defaults=False):
+    dtype = dtype_schema(schema)
+    return render(dtype, defaults=defaults)
+
+@dispatch
 def render(schema: Array, defaults=False):
     shape = '|'.join([str(value) for value in schema._shape])
     data_schema = dtype_schema(schema._data)
