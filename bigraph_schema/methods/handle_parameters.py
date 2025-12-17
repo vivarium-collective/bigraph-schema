@@ -13,6 +13,7 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
     NPRandom,
@@ -30,6 +31,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    schema_dtype,
 )
 
 # aligning parameters takes them from positioned arguments and gives them keys
@@ -118,10 +120,16 @@ def reify_schema(core, schema: Array, parameters):
         int(value)
         for value in parameters.get('_shape', (1,))])
 
-    data = parameters.get('_data', 'float64')
-    if isinstance(data, Node):
-        data = core.render(data)
-    schema._data = nf.descr_to_dtype(data)
+    data = parameters.get('_data', 'float')
+    data_schema = core.access(data)
+    # if isinstance(data, Node):
+    #     data = core.render(data)
+    # schema._data = nf.descr_to_dtype(data)
+    dtype = schema_dtype(data)
+    if isinstance(dtype, Array):
+        schema = replace(schema, **{'_shape': schema._shape + dtype._shape})
+    else:
+        schema._data = dtype
 
     return schema
 

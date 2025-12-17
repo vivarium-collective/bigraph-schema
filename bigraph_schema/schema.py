@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typing
 import numpy as np
+import numpy.lib.format as nf
 
 from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
@@ -57,6 +58,10 @@ class Integer(Number):
 
 @dataclass(kw_only=True)
 class Float(Number):
+    pass
+
+@dataclass(kw_only=True)
+class Complex(Float):
     pass
 
 @dataclass(kw_only=True)
@@ -243,6 +248,86 @@ def walk_path(context, to, subpath=None):
         **context,
         'path': context['path'] + (to,),
         'subpath': subpath}
+
+def dtype_schema(dtype: np.dtype):
+    data = nf.dtype_to_descr(dtype)
+    if isinstance(data, str):
+        if 'f' in data or 'd' in data:
+            return Float()
+        elif 'U' in data:
+            return String()
+        elif 'i' in data or 'b' in data or 'h' in data:
+            return Integer()
+        elif 'F' in data or 'D' in data:
+            return Complex()
+    elif isinstance(data, list):
+        result = {}
+        for group in data:
+            key = group[0]
+            subschema = dtype_schema(group[1])
+            if len(group) > 2:
+                shape = group[2]
+                subschema = Array(_shape=shape, _data=subschema)
+            result[key] = subschema
+
+        return result
+    else:
+        raise Exception('do not know how to interpret dtype as schema:\n\n{dtype}\n\n')
+    
+
+@dispatch
+def schema_dtype(schema: Complex):
+    return np.dtype('complex128')
+
+@dispatch
+def schema_dtype(schema: Float):
+    return np.dtype('float64')
+
+@dispatch
+def schema_dtype(schema: Integer):
+    return np.dtype('int32')
+
+@dispatch
+def schema_dtype(schema: Boolean):
+    return np.dtype('bool')
+
+@dispatch
+def schema_dtype(schema: String):
+    return np.dtype('unicode')
+
+@dispatch
+def schema_dtype(schema: str):
+    return np.dtype(schema)
+
+@dispatch
+def schema_dtype(schema: list):
+    return np.dtype(schema)
+
+@dispatch
+def schema_dtype(schema: dict):
+    result = []
+    if not schema:
+        return None
+
+    for key, value in schema.items():
+        subschema = schema_dtype(value)
+        subresult = (key, subschema)
+        if isinstance(subschema, Array):
+            subshape = subschema._shape
+            subresult = subresult + (subshape,)
+
+        result.append(subresult)
+
+    if all([isinstance(key, int) for key in schema.keys()]):
+        shape = max(schema.keys())
+        return Array(_shape=(shape,), _data=result[0][1])
+    else:
+        return np.dtype(result)
+
+@dispatch
+def schema_dtype(schema):
+    raise Exception(f'schema dtype not implemented for:\n\n{schema}\n\n')
+    
 
 BASE_TYPES = {
     'node': Node,

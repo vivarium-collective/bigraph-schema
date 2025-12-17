@@ -140,6 +140,11 @@ def merge(schema: Tree, current, update):
 
 
 @dispatch
+def merge(schema: Array, current, update):
+    # TODO: more sophisticated merge for arrays?
+    return update
+
+@dispatch
 def merge(schema: Atom, current, update):
     result = None
     if update and update is not None:

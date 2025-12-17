@@ -1,7 +1,6 @@
 from plum import dispatch
 import numpy as np
 from numpy.random.mtrand import RandomState
-import numpy.lib.format as nf
 
 from bigraph_schema.utilities import NONE_SYMBOL
 
@@ -32,6 +31,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    dtype_schema,
 )
 
 from bigraph_schema.methods.check import check
@@ -210,10 +210,15 @@ def render(schema: NPRandom, defaults=False):
         'state': render(schema.state, defaults=defaults)}
     return wrap_default(schema, result) if defaults else result
 
+
 @dispatch
 def render(schema: Array, defaults=False):
     shape = '|'.join([str(value) for value in schema._shape])
-    data = nf.dtype_to_descr(schema._data)
+    data_schema = dtype_schema(schema._data)
+    data = render(
+        data_schema,
+        defaults=defaults)
+
     result = f'array[{shape},{data}]'
     return wrap_default(schema, result) if defaults else result
 

@@ -636,10 +636,10 @@ class Core:
             if '*' in wires:
                 import ipdb; ipdb.set_trace()
 
-            project_schema = set_star_path(
+            project_schema = core.resolve(
                 project_schema,
-                destination,
-                ports_schema)
+                ports_schema,
+                path=destination)
 
             project_state = set_star_path(
                 project_state,
@@ -817,10 +817,10 @@ uni_schema = 'outer:tuple[tuple[boolean],' \
         'a:string|b:float,' \
         'map[a:string|c:float]]|' \
         'outest:string|' \
-        'list_array:list[maybe[tree[array[(6|7),float64]]]]'
+        'list_array:list[maybe[tree[array[(6|7),float]]]]'
 
 
-list_array_schema = 'a:float|list_array:list[maybe[tree[array[(3|4),float64]]]]'
+list_array_schema = 'a:float|list_array:list[maybe[tree[array[(3|4),float]]]]'
 
 
 def test_list_array_schema(core):
@@ -849,7 +849,7 @@ def _test_problem_schema_0(core):
 
 def test_problem_schema_1(core):
     # this round trip is broken, shape 3 vs. (3,)
-    problem_schema = 'array[3,float64]'
+    problem_schema = 'array[3,float]'
     problem_type, reified, round_trip, final = \
             do_round_trip(core, problem_schema)
     assert isinstance(round_trip._data, dtype)
@@ -857,7 +857,7 @@ def test_problem_schema_1(core):
 
 def test_problem_schema_2(core):
     # turns (3, int) into ('', '<i8')
-    problem_schema = 'array[3,int]'
+    problem_schema = 'array[3,integer]'
     problem_type, reified, round_trip, final = do_round_trip(core, problem_schema)
     assert not isinstance(problem_type, str)
     assert round_trip == problem_type
@@ -878,13 +878,17 @@ def test_array(core):
             'x': ['array', 4, 3],
             'y': ['array', 2]},
         'outputs': {
-            'z': ['array', 1, 5]}}
-        # 'outputs': {
-        #     'z': ['array', 5, 5],
-        #     'w': ['array', '*']}}
+            'z': ['array', 1, 5],
+            'w': ['array', '*', 3]}}
 
     basic_initial = {
+        'array': np.array([
+            x + (7 * y)
+            for x in range(5)
+            for y in range(6)]).reshape((5,6)),
         'link': basic_link}
+
+    import ipdb; ipdb.set_trace()
 
     basic_schema, basic_state = core.deserialize(
         {'array': basic},
@@ -895,7 +899,11 @@ def test_array(core):
         basic_state,
         ('link',))
 
-    import ipdb; ipdb.set_trace()
+    output_view = core.view(
+        basic_schema,
+        basic_state,
+        ('link',),
+        ports_key='outputs')
 
     project_schema, project_state = core.project(
         basic_schema,

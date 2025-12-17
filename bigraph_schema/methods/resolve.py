@@ -30,6 +30,8 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     is_empty,
+    dtype_schema,
+    schema_dtype,
 )
 
 
@@ -304,17 +306,38 @@ def resolve_array_path(array: Array, update, path=None):
     if path:
         head = path[0]
         subshape = array._shape[1:]
+
         if subshape:
             down_schema = replace(array, **{
                 '_shape': subshape})
-            down_resolve = resolve(down_schema, update, path[1:])
+            down_resolve = resolve(down_schema, update, path=path[1:])
             up_schema = replace(down_resolve, **{
                 '_shape': array._shape[0] + down_resolve._shape})
             return up_schema
         else:
-            # TODO:
-            #   handle array dtypes
-            return array
+            data_schema = dtype_schema(array._data)
+
+            if isinstance(update, Array):
+                if update._shape:
+                    raise Exception(f'resolving arrays but they have different dimensions:\n\n{array}\n\n{update}')
+                else:
+                    subupdate = dtype_schema(update._data)
+            elif isinstance(update, dict):
+                subupdate = update.get(head)
+            else:
+                subupdate = update
+                # raise Exception(f'resolving array with incompatible schema:\\n{array}\\n{update}')
+
+            subschema = resolve(data_schema, subupdate, path=path[1:])
+            dtype = schema_dtype(subschema)
+            if isinstance(dtype, Array):
+                up_schema = replace(array, **{
+                    '_shape': array._shape + dtype._shape})
+            else:
+                up_schema = replace(array, **{
+                    '_data': dtype})
+            
+            return up_schema
     else:
         return array
 
@@ -337,6 +360,8 @@ def resolve(current: Array, update: Array, path=None):
 @dispatch
 def resolve(current: Array, update: Node, path=None):
     if path:
+        import ipdb; ipdb.set_trace()
+
         return resolve_array_path(current, update, path=path)
 
     # TODO:
@@ -347,22 +372,76 @@ def resolve(current: Array, update: Node, path=None):
     # for key, subschema in update.items():
     #     if isinstance(key, int):
 
-@dispatch
-def resolve(current: Node, update: Array, path=None):
-    if path:
-        return resolve_array_path(update, current, path=path)
-    return update
+# @dispatch
+# def resolve(current: Node, update: Array, path=None):
+#     if path:
+#         import ipdb; ipdb.set_trace()
+
+#         return resolve_array_path(update, current, path=path)
+
+#     return update
 
 @dispatch
 def resolve(current: Array, update: dict, path=None):
     if path:
+        import ipdb; ipdb.set_trace()
+
         return resolve_array_path(current, update, path=path)
-    return current
+    else:
+        return current
+
+def resolve_dict_path(current, update, path=None):
+    if path:
+        head = path[0]
+        if head == '*':
+            if isinstance(update, Array):
+                row_shape = update._shape[0]
+                if not all([isinstance(key, int) for key in current.keys()]):
+                    raise Exception(f'trying to resolve a dict and array but the keys are not all indexes:\n\n{current}\n\n{update}')
+
+                if current:
+                    row_shape = max(row_shape, max(current.keys()) + 1)
+                subshape = update._shape[1:]
+                if subshape:
+                    subschema = replace(update, **{'_shape': subshape})
+                else:
+                    subschema = dtype_schema(update._data)
+
+                import ipdb; ipdb.set_trace()
+                for key, subcurrent in current.items():
+                    resolve_schema = resolve(subcurrent, subschema, path=path[1:])
+
+                if isinstance(resolve_schema, Array):
+                    resolve_shape = (row_shape,) + resolve_schema._shape
+                    result_schema = replace(update, **{'_shape': resolve_shape})
+                else:
+                    import ipdb; ipdb.set_trace()
+                    dtype = schema_dtype(resolve_schema)
+                    if isinstance(dtype, Array):
+                        result_schema = replace(update, **{'_shape': update._shape + dtype._shape})
+                    else:
+                        result_schema = replace(update, **{'_data': dtype})
+
+                return result_schema
+
+            # TODO: deal with other data types
+
+            # elif isinstance(update, Map):
+            #     subschema = update._value
+
+        else:
+            down_schema = current.get(head, {})
+            down_resolve = resolve(down_schema, update, path=path[1:])
+            current[head] = down_resolve
+            return current
+
+    else:
+        return update
 
 @dispatch
 def resolve(current: dict, update: Array, path=None):
     if path:
-        return resolve_array_path(update, current, path=path)
+        return resolve_dict_path(current, update, path=path)
     return update
 
 def resolve_link(link: Link, update, path=None):
@@ -425,11 +504,7 @@ def resolve(current: Node, update: dict, path=None):
 @dispatch
 def resolve(current: dict, update: Node, path=None):
     if path:
-        head = path[0]
-        down_schema = current.get(head, {})
-        down_resolve = resolve(down_schema, update, path[1:])
-        current[head] = down_resolve
-        return current
+        return resolve_dict_path(current, update, path=path)
 
     if not current:
         return update

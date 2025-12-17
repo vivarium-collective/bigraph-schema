@@ -340,6 +340,27 @@ def jump(schema: Array, state, to: Jump, context):
 
 
 @dispatch
+def jump(schema: Array, state, to: Star, context):
+    results = []
+    subschema = replace(schema, **{'_shape': schema._shape[1:]})
+    for index, row in enumerate(state):
+        result_schema, result_state = traverse(
+            subschema,
+            row,
+            context['subpath'],
+            context)
+        results.append(result_state)
+        
+    if isinstance(subschema, Array):
+        result_shape = (schema._shape[0],) + result_schema._shape
+        subschema = replace(schema, **{'_shape': result_shape})
+        return subschema, np.array(results)
+    else:
+        # TODO: handle array data of different types
+        import ipdb; ipdb.set_trace()
+
+
+@dispatch
 def jump(schema: Node, state, to: Jump, context):
     key = to._value
     if key in state:
