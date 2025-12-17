@@ -36,27 +36,31 @@ from bigraph_schema.methods.default import default
 
 
 @dispatch
-def merge(schema: Empty, current, update):
+def merge(schema: Empty, current, update, path=()):
     return None
 
 
 @dispatch
-def merge(schema: Maybe, current, update):
+def merge(schema: Maybe, current, update, path=()):
     if update is None:
         return current
     elif current is None:
         return update
     else:
-        return merge(schema._value, current, update)
+        return merge(
+            schema._value,
+            current,
+            update,
+            path=path)
 
 
 @dispatch
-def merge(schema: Wrap, current, update):
-    return merge(schema._value, current, update)
+def merge(schema: Wrap, current, update, path=()):
+    return merge(schema._value, current, update, path=path)
 
 
 @dispatch
-def merge(schema: Union, current, update):
+def merge(schema: Union, current, update, path=()):
     current_option = None
     update_option = None
     for option in schema._options:
@@ -68,30 +72,55 @@ def merge(schema: Union, current, update):
             break
 
     if current_option == update_option:
-        return merge(current_option, current, update)
+        return merge(current_option, current, update, path=path)
     else:
         return update
 
 
 @dispatch
-def merge(schema: Tuple, current, update):
-    return tuple([
-        merge(schema_value, current_value, update_value)
-        for schema_value, current_value, update_value in zip(schema._values, current, update)])
+def merge(schema: Tuple, current, update, path=()):
+    if path:
+        head = path[0]
+        if head >= len(schema._values):
+            raise Exception(f'trying to merge at path {path} but index {head} is out of range:\n\n{schema}\n\n{current}\n\n{update}\n\n')
+
+        subschema = schema._values[head]
+        field = list(current)
+        field[head] = merge(subschema, current[head], update, path[1:])
+        return tuple(field)
+
+    else:
+        return tuple([
+            merge(schema_value, current_value, update_value)
+            for schema_value, current_value, update_value, index in zip(schema._values, current, update, range(len(schema._values)))])
 
 
 @dispatch
-def merge(schema: List, current, update):
-    if current is None:
-        return update
-    if update is None:
+def merge(schema: List, current, update, path=()):
+    if path:
+        head = path[0]
+        subschema = schema._element
+        current[head] = merge(subschema, current[head], update, path[1:])
         return current
+
+    elif current is None:
+        return update
+
+    elif update is None:
+        return current
+
     else:
         return current + update
 
 
 @dispatch
-def merge(schema: Map, current, update):
+def merge(schema: Map, current, update, path=()):
+    if path:
+        head = path[0]
+        subschema = schema._value
+        current[head] = merge(subschema, current[head], update, path[1:])
+        return current
+
     result = {}
     if current is None:
         return update
@@ -115,7 +144,12 @@ def merge(schema: Map, current, update):
 
 
 @dispatch
-def merge(schema: Tree, current, update):
+def merge(schema: Tree, current, update, path=()):
+    if path:
+        head = path[0]
+        current[head] = merge(schema, current[head], update, path[1:])
+        return current
+
     current_leaf = check(schema._leaf, current)
     update_leaf = check(schema._leaf, update)
 
@@ -140,12 +174,16 @@ def merge(schema: Tree, current, update):
 
 
 @dispatch
-def merge(schema: Array, current, update):
+def merge(schema: Array, current, update, path=()):
+    if path:
+        import ipdb; ipdb.set_trace()
+
     # TODO: more sophisticated merge for arrays?
     return update
 
+
 @dispatch
-def merge(schema: Atom, current, update):
+def merge(schema: Atom, current, update, path=()):
     result = None
     if update and update is not None:
         result = update
@@ -158,12 +196,12 @@ def merge(schema: Atom, current, update):
 
 
 @dispatch
-def merge(schema: Wires, current, update):
+def merge(schema: Wires, current, update, path=()):
     return update
 
 
 @dispatch
-def merge(schema: Link, current, update):
+def merge(schema: Link, current, update, path=()):
     if not current:
         return update
     if not update:
@@ -182,12 +220,31 @@ def merge(schema: Link, current, update):
 
 
 @dispatch
-def merge(schema: Node, current, update):
-    if isinstance(current, dict) and isinstance(update, dict):
+def merge(schema: Node, current, update, path=()):
+    if path:
+        head = path[0]
+        subschema = None
+        if hasattr(schema, head):
+            subschema = getattr(schema, head)
+
+        if isinstance(current, dict):
+            substate = current.get(head)
+            current[head] = merge(subschema, substate, update, path[1:])
+            return current
+        else:
+            substate = None
+            if hasattr(current, head):
+                substate = getattr(current, head)
+            submerge = merge(subschema, substate, update, path[1:])
+            setattr(current, head, submerge)
+            return current
+
+    elif isinstance(current, dict) and isinstance(update, dict):
         down = {}
         for key in schema.__dataclass_fields__:
             down[key] = getattr(schema, key)
         return merge(down, current, update)
+
     else:
         result = merge(
             Atom(),
@@ -201,7 +258,7 @@ def merge(schema: Node, current, update):
 
 
 @dispatch
-def merge(schema, current, update):
+def merge(schema, current, update, path=()):
     return update
 
 
@@ -224,7 +281,15 @@ def tuplify_dict(d):
 
 
 @dispatch
-def merge(schema: dict, current, update):
+def merge(schema: dict, current, update, path=()):
+    if path:
+        head = path[0]
+        current = current or {}
+        subschema = schema.get(head)
+        substate = current.get(head)
+        current[head] = merge(subschema, substate, update, path[1:])
+        return current
+
     result = {}
     if is_empty(current):
         return update
@@ -260,7 +325,10 @@ def merge(schema: dict, current, update):
 
     return result
 
-def merge_update(schema, current, update):
+def merge_update(schema, current, update, path=()):
+    if path:
+        import ipdb; ipdb.set_trace()
+
     current_state = default(current)
     update_state = default(update)
     state = current_state

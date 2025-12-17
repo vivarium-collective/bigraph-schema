@@ -564,10 +564,10 @@ class Core:
         key = convert_jump(raw_key)
         return bind(found, state, key, target)
 
-    def merge(self, schema, state, merge_state):
+    def merge(self, schema, state, merge_state, path=()):
         """Schema-aware merge of `merge_state` into `state`."""
         found = self.access(schema)
-        return merge(found, state, merge_state)
+        return merge(found, state, merge_state, path=path)
 
     def fill(self, schema, state, overwrite=False):
         found = self.access(schema)
@@ -636,17 +636,21 @@ class Core:
             if '*' in wires:
                 import ipdb; ipdb.set_trace()
 
-            project_schema = core.resolve(
+            project_schema = self.resolve(
                 project_schema,
                 ports_schema,
                 path=destination)
 
-            import ipdb; ipdb.set_trace()
-
-            project_state = set_star_path(
+            project_state = self.merge(
+                project_schema,
                 project_state,
-                destination,
-                view)
+                view,
+                path=destination)
+
+            # project_state = set_star_path(
+            #     project_state,
+            #     destination,
+            #     view)
 
         elif isinstance(wires, dict):
             if isinstance(view, list):
