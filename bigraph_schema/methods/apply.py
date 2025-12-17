@@ -117,14 +117,22 @@ def apply(schema: Map, state, update, path):
     result = state.copy()
     merges = []
 
+    if update is None:
+        return state, merges
+
     if '_remove' in update:
         for remove_key in update['_remove']:
             if remove_key in result:
                 del result[remove_key]
 
     if '_add' in update:
-        for add_key, add_value in update['_add']:
-            result[add_key] = add_value
+        add_update = update['_add']
+        if isinstance(add_update, list):
+            for add_key, add_value in update['_add']:
+                result[add_key] = add_value
+        elif isinstance(add_update, dict):
+            for add_key, add_value in update['_add'].items():
+                result[add_key] = add_value
 
     for key, value in result.items():
         if key in update:
@@ -166,7 +174,12 @@ def apply(schema: Tree, state, update, path):
 
 @dispatch
 def apply(schema: Atom, state, update, path):
-    return state + update, []
+    if update is None:
+        return state, []
+    if state is None:
+        return update, []
+
+    return (state + update), []
 
 
 @dispatch
