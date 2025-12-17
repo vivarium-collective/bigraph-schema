@@ -360,8 +360,6 @@ def resolve(current: Array, update: Array, path=None):
 @dispatch
 def resolve(current: Array, update: Node, path=None):
     if path:
-        import ipdb; ipdb.set_trace()
-
         return resolve_array_path(current, update, path=path)
 
     # TODO:
@@ -384,8 +382,6 @@ def resolve(current: Array, update: Node, path=None):
 @dispatch
 def resolve(current: Array, update: dict, path=None):
     if path:
-        import ipdb; ipdb.set_trace()
-
         return resolve_array_path(current, update, path=path)
     else:
         return current
@@ -407,16 +403,20 @@ def resolve_dict_path(current, update, path=None):
                 else:
                     subschema = dtype_schema(update._data)
 
-                import ipdb; ipdb.set_trace()
+                resolve_schema = subschema
                 for key, subcurrent in current.items():
-                    resolve_schema = resolve(subcurrent, subschema, path=path[1:])
+                    merge_schema = resolve(
+                        subcurrent,
+                        subschema,
+                        path=path[1:])
+                    resolve_schema = resolve(resolve_schema, merge_schema)
 
                 if isinstance(resolve_schema, Array):
                     resolve_shape = (row_shape,) + resolve_schema._shape
                     result_schema = replace(update, **{'_shape': resolve_shape})
                 else:
-                    import ipdb; ipdb.set_trace()
                     dtype = schema_dtype(resolve_schema)
+
                     if isinstance(dtype, Array):
                         result_schema = replace(update, **{'_shape': update._shape + dtype._shape})
                     else:
@@ -429,6 +429,13 @@ def resolve_dict_path(current, update, path=None):
             # elif isinstance(update, Map):
             #     subschema = update._value
 
+        # elif isinstance(update, Array):
+        #     if isinstance(head, str):
+        #         import ipdb; ipdb.set_trace()
+        #     if head >= update._shape[0]:
+        #         update = replace(update, **{
+        #             '_shape': (head+1,) + update._shape[1:]})
+        #     return update
         else:
             down_schema = current.get(head, {})
             down_resolve = resolve(down_schema, update, path=path[1:])

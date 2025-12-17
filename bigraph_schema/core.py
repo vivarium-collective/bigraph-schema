@@ -641,6 +641,8 @@ class Core:
                 ports_schema,
                 path=destination)
 
+            import ipdb; ipdb.set_trace()
+
             project_state = set_star_path(
                 project_state,
                 destination,
@@ -888,8 +890,6 @@ def test_array(core):
             for y in range(6)]).reshape((5,6)),
         'link': basic_link}
 
-    import ipdb; ipdb.set_trace()
-
     basic_schema, basic_state = core.deserialize(
         {'array': basic},
         basic_initial)
@@ -904,6 +904,8 @@ def test_array(core):
         basic_state,
         ('link',),
         ports_key='outputs')
+
+    import ipdb; ipdb.set_trace()
 
     project_schema, project_state = core.project(
         basic_schema,
