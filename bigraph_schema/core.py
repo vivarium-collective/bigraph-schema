@@ -435,10 +435,20 @@ class Core:
         current = self.access(current_schema)
         update = self.access(update_schema)
 
-        if current == update:
-            return current
-        else:
+        if isinstance(current, np.ndarray) or isinstance(update, np.ndarray):
+            import ipdb; ipdb.set_trace()
+
+        if path:
             return resolve(current, update, path=path)
+
+        try:
+            if current == update:
+                return current
+            else:
+                return resolve(current, update)
+        except ValueError:
+            # numpy grumble grumble
+            return resolve(current, update)
 
     def generalize(self, current_schema, update_schema):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
@@ -484,7 +494,7 @@ class Core:
 
         if merges:
             merge_schema = self.resolve_merges({}, merges)
-            decode_schema = self.generalize(decode_schema, merge_schema)
+            decode_schema = self.resolve(decode_schema, merge_schema)
             merge_state = self.fill(merge_schema, decode_state)
         else:
             merge_state = decode_state

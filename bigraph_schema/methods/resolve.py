@@ -101,12 +101,17 @@ def resolve(current: Node, update: Wrap, path=None):
 def resolve(current: Node, update: Node, path=None):
     if path:
         head = path[0]
-        down_current = None
-        if hasattr(current, head):
-            down_current = getattr(current, head)
-        down_resolve = resolve(down_current, update, path[1:])
-        setattr(current, head, down_resolve)
-        return current
+        if current == Node():
+            current = {
+                head: resolve({}, update, path[1:])}
+            return current
+        else:
+            down_current = None
+            if hasattr(current, head):
+                down_current = getattr(current, head)
+            down_resolve = resolve(down_current, update, path[1:])
+            setattr(current, head, down_resolve)
+            return current
 
     current_type = type(current)
     update_type = type(update)
@@ -524,11 +529,15 @@ def resolve(current: dict, update: Node, path=None):
     else:
         return update
 
-# @dispatch
-# def resolve(current: String, update: Node):
-#     if current._default:
-#         update._default = current._default
-#     return update
+@dispatch
+def resolve(current: String, update: Wrap, path=None):
+    return replace(update, **{'_value':resolve(current, update._value, path=path)})
+
+@dispatch
+def resolve(current: String, update: Node, path=None):
+    if current._default:
+        update._default = current._default
+    return update
 
 # @dispatch
 # def resolve(current: Node, update: String):
@@ -564,6 +573,13 @@ def resolve(current: dict, update: Node, path=None):
 #         getattr(update, key)
     
     
+
+@dispatch
+def resolve(current: List, update: Tuple, path=None):
+    if not update._default and current._default:
+        update._default = tuple(current._default)
+    return update
+
 
 @dispatch
 def resolve(current: list, update: list, path=None):

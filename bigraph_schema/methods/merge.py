@@ -189,6 +189,10 @@ def merge(schema: Atom, current, update, path=()):
         result = update
     elif current and current is not None:
         result = current
+    # if update and update is not None:
+    #     result = update
+    # elif current and current is not None:
+    #     result = current
     else:
         result = default(schema)
 
@@ -246,10 +250,16 @@ def merge(schema: Node, current, update, path=()):
         return merge(down, current, update)
 
     else:
-        result = merge(
-            Atom(),
-            current,
-            update)
+        # result = merge(
+        #     Atom(),
+        #     current,
+        #     update)
+
+        result = None
+        if update is not None:
+            result = update
+        elif current is not None:
+            result = current
 
         if result is None:
             result = default(schema)
@@ -296,11 +306,10 @@ def merge(schema: dict, current, update, path=()):
     if is_empty(update):
         return current
 
-    if not isinstance(update, dict):
+    if isinstance(update, np.ndarray):
+        return update
+    elif not isinstance(update, dict):
         return current
-
-    if isinstance(current, np.ndarray):
-        import ipdb; ipdb.set_trace()
 
     for key in schema.keys() | current.keys() | update.keys():
         if key in schema:

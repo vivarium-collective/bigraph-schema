@@ -352,7 +352,7 @@ def jump(schema: Array, state, to: Star, context):
         results.append(result_state)
         
     if isinstance(subschema, Array):
-        result_shape = (schema._shape[0],) + result_schema._shape
+        result_shape = (schema._shape[0],) + tuple(result_schema._shape)
         subschema = replace(schema, **{'_shape': result_shape})
         return subschema, np.array(results)
     else:

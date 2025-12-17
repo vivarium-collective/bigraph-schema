@@ -264,7 +264,7 @@ def dtype_schema(dtype: np.dtype):
         result = {}
         for group in data:
             key = group[0]
-            subschema = dtype_schema(group[1])
+            subschema = np.dtype(group[1])
             if len(group) > 2:
                 shape = group[2]
                 subschema = Array(_shape=shape, _data=subschema)
