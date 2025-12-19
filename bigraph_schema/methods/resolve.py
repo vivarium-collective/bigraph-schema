@@ -296,7 +296,12 @@ def resolve(current: dict, update: dict, path=None):
         return current
 
     result = {}
-    all_keys = set(current.keys()).union(set(update.keys()))
+
+    all_keys = list(current.keys())
+    for key in update.keys():
+        if not key in current:
+            all_keys.append(key)
+
     for key in all_keys:
         if key in ('_inherit',):
             continue

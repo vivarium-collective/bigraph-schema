@@ -139,7 +139,6 @@ def apply(schema: Map, state, update, path):
             merges += submerges
 
     if '_remove' in update:
-        # import ipdb; ipdb.set_trace()
         for remove_key in update['_remove']:
             if remove_key in result:
                 del result[remove_key]
@@ -243,9 +242,8 @@ def apply(schema: dict, state, update, path):
             path+(key,))
         merges += submerges
 
-    state_keys = list(set(state.keys()).difference(set(schema.keys())))
-    for key in state_keys:
-        if not key in result:
+    for key in state.keys():
+        if not key in result and not key in schema:
             result[key] = state[key]
 
     return result, merges

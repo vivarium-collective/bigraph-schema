@@ -494,8 +494,8 @@ def deserialize(core, schema: dict, encode, path=()):
                     path=path+(key,))
                 merges += submerges
 
-        for key in set(encode.keys()).difference(set(schema.keys())):
-            if not key.startswith('_'):
+        for key in encode.keys():
+            if (isinstance(key, str) and not key.startswith('_')) and not key in schema:
                 result_schema[key], result_state[key], submerges = deserialize(
                     core, None, encode[key], path+(key,))
                 merges += submerges
