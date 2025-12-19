@@ -32,6 +32,10 @@ from bigraph_schema.schema import (
 
 
 @dispatch
+def default(schema: None):
+    return None
+
+@dispatch
 def default(schema: Empty):
     return None
 
@@ -176,8 +180,6 @@ def default(schema: dict):
         result = {}
         for key in schema:
             if not is_schema_key(key):
-                if schema[key] is None:
-                    import ipdb; ipdb.set_trace()
                 inner = default(
                     schema[key])
                 result[key] = inner

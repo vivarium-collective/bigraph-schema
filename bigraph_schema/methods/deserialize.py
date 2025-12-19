@@ -356,14 +356,13 @@ def deserialize_link(core, schema: Link, encode, path=()):
         port_key = f'_{port}'
         port_schema = getattr(schema, port_key)
 
-        if port_key in encode:
+        port_schema = core.resolve(
+            port_schema,
+            interface[port])
+        if port_key in encode and encode[port_key]:
             port_schema = core.resolve(
                 port_schema,
                 encode[port_key])
-        else:
-            port_schema = core.resolve(
-                port_schema,
-                interface[port])
 
         decode[port_key] = port_schema
         schema = replace(schema, **{port_key: port_schema})
@@ -376,9 +375,6 @@ def deserialize_link(core, schema: Link, encode, path=()):
         else:
             subschema = getattr(schema, port)
 
-            if isinstance(subschema, dict):
-                import ipdb; ipdb.set_trace()
-
             subschema._default = encode[port]
             wires_schema, wires_state, submerges = deserialize(core, subschema, encode[port], path+(port,))
             if wires_state is None:
@@ -386,9 +382,6 @@ def deserialize_link(core, schema: Link, encode, path=()):
             else:
                 decode[port] = wires_state
             merges += submerges
-
-        if port_schema is None:
-            import ipdb; ipdb.set_trace()
 
         submerges = port_merges(
             core,
@@ -484,9 +477,6 @@ def deserialize(core, schema: dict, encode, path=()):
 
     if isinstance(encode, dict):
         for key, subschema in schema.items():
-            if subschema is None:
-                import ipdb; ipdb.set_trace()
-
             if key in encode:
                 outcome_schema, outcome_state, submerges = deserialize(
                     core,

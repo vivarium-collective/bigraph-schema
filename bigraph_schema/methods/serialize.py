@@ -461,14 +461,23 @@ def serialize(schema: Link, state):
     _inputs = resolve(schema._inputs, state.get('_inputs'))
     _outputs = resolve(schema._outputs, state.get('_outputs'))
 
-    return {
+    encode = {
         'address': address,
         'config': unconfig,
         '_inputs': render(_inputs),
         '_outputs': render(_outputs)}
-        # 'inputs': inputs,
-        # 'outputs': outputs}
 
+    if state.get('inputs'):
+        encode['inputs'] = state.get('inputs')
+    if state.get('outputs'):
+        encode['outputs'] = state.get('outputs')
+
+    return encode
+
+
+@dispatch
+def serialize(schema: None, state: None):
+    return None
 
 @dispatch
 def serialize(schema: Node, state):

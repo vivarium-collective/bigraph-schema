@@ -74,6 +74,10 @@ def resolve_empty(empty, update, path=None):
         return update
 
 @dispatch
+def resolve(current: Empty, update: Empty, path=None):
+    return resolve_empty(current, update, path=path)
+
+@dispatch
 def resolve(current: Empty, update: Node, path=None):
     return resolve_empty(current, update, path=path)
 
