@@ -312,8 +312,6 @@ def resolve(current: dict, update: dict, path=None):
     return result
 
 
-
-
 def resolve_array_path(array: Array, update, path=None):
     if path:
         head = path[0]
@@ -324,7 +322,7 @@ def resolve_array_path(array: Array, update, path=None):
                 '_shape': subshape})
             down_resolve = resolve(down_schema, update, path=path[1:])
             up_schema = replace(down_resolve, **{
-                '_shape': (array._shape[0]) + tuple(down_resolve._shape)})
+                '_shape': (array._shape[0],) + tuple(down_resolve._shape)})
             return up_schema
         else:
             data_schema = dtype_schema(array._data)

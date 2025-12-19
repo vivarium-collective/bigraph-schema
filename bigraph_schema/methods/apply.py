@@ -120,11 +120,6 @@ def apply(schema: Map, state, update, path):
     if update is None:
         return state, merges
 
-    if '_remove' in update:
-        for remove_key in update['_remove']:
-            if remove_key in result:
-                del result[remove_key]
-
     if '_add' in update:
         add_update = update['_add']
         if isinstance(add_update, list):
@@ -142,6 +137,12 @@ def apply(schema: Map, state, update, path):
                 update[key],
                 path+(key,))
             merges += submerges
+
+    if '_remove' in update:
+        # import ipdb; ipdb.set_trace()
+        for remove_key in update['_remove']:
+            if remove_key in result:
+                del result[remove_key]
 
     return result, merges
 
@@ -244,7 +245,8 @@ def apply(schema: dict, state, update, path):
 
     state_keys = list(set(state.keys()).difference(set(schema.keys())))
     for key in state_keys:
-        result[key] = state[key]
+        if not key in result:
+            result[key] = state[key]
 
     return result, merges
 
