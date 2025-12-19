@@ -235,6 +235,9 @@ def apply(schema: dict, state, update, path):
         if key in ('_inherit',):
             continue
 
+        if key not in state:
+            continue
+
         result[key], submerges = apply(
             subschema,
             state.get(key),
