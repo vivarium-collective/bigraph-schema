@@ -183,6 +183,10 @@ def apply(schema: Atom, state, update, path):
 
 
 @dispatch
+def apply(schema: String, state, update, path):
+    return update, []
+
+@dispatch
 def apply(schema: Boolean, state, update, path):
     return update, []
 
@@ -228,6 +232,9 @@ def apply(schema: dict, state, update, path):
     result = {}
 
     for key, subschema in schema.items():
+        if key in ('_inherit',):
+            continue
+
         result[key], submerges = apply(
             subschema,
             state.get(key),
