@@ -139,7 +139,11 @@ def infer(core, value: set, path: tuple = ()):
 @dispatch
 def infer(core, value: dict, path: tuple = ()):
     if '_type' in value:
-        schema = core.access_type(value)
+        schema_keys = {
+            key: subvalue
+            for key, subvalue in value.items()
+            if key.startswith('_')}
+        schema = core.access_type(schema_keys)
         schema, state, merges = deserialize(
             core, schema, value, path=path)
 

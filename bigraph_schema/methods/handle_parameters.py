@@ -138,21 +138,37 @@ def reify_schema(core, schema: Union, parameters):
     return replace(schema, **parameters)
 
 
+def reify_schema_link(core, schema, parameters):
+    if 'address' in parameters:
+        schema.address = core.access(parameters['address'])
+    if 'config' in parameters:
+        schema.config = core.access(parameters['config'])
+    if 'inputs' in parameters:
+        schema.inputs = core.access(parameters['inputs'])
+    if 'outputs' in parameters:
+        schema.outputs = core.access(parameters['outputs'])
+    if '_inputs' in parameters:
+        schema._inputs = core.access(parameters['_inputs'])
+    if '_outputs' in parameters:
+        schema._outputs = core.access(parameters['_outputs'])
+
+    return schema
+
 @dispatch
 def reify_schema(core, schema: Link, parameters):
-    return replace(schema, **{
-        '_inputs': core.access(
-            parameters.get('_inputs')),
-        '_outputs': core.access(
-            parameters.get('_outputs'))})
-
+    return reify_schema_link(core, schema, parameters)
 
 @dispatch
 def reify_schema(core, schema: Node, parameters):
     for key, parameter in parameters.items():
-        field = getattr(schema, key)
         subkey = core.access(parameter)
-        resolve = core.resolve(field, subkey)
+
+        if hasattr(schema, key):
+            field = getattr(schema, key)
+            resolve = core.resolve(field, subkey)
+        else:
+            resolve = subkey
+
         setattr(schema, key, resolve)
 
     return schema

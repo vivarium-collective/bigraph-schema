@@ -308,10 +308,11 @@ class Core:
                 schema,
                 **{'_default': default_value})
 
-            parameters = {}
-            for key in schema_keys(schema)[1:]:
-                if key in value:
-                    parameters[key] = value[key]
+            parameters = {
+                key: subvalue
+                for key, subvalue in value.items()
+                if not key in ('_type', '_default')}
+
             schema = reify_schema(self, schema, parameters)
             return schema
 
@@ -656,11 +657,6 @@ class Core:
                 project_state,
                 view,
                 path=destination)
-
-            # project_state = set_star_path(
-            #     project_state,
-            #     destination,
-            #     view)
 
         elif isinstance(wires, dict):
             if isinstance(view, list):

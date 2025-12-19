@@ -375,6 +375,10 @@ def deserialize_link(core, schema: Link, encode, path=()):
             decode[port] = default_wires(port_schema)
         else:
             subschema = getattr(schema, port)
+
+            if isinstance(subschema, dict):
+                import ipdb; ipdb.set_trace()
+
             subschema._default = encode[port]
             wires_schema, wires_state, submerges = deserialize(core, subschema, encode[port], path+(port,))
             if wires_state is None:
@@ -452,7 +456,11 @@ def deserialize(core, schema: Node, encode, path=()):
 @dispatch
 def deserialize(core, schema: None, encode, path=()):
     if isinstance(encode, dict) and '_type' in encode:
-        schema = core.access_type(encode)
+        schema_keys = {
+            key: value
+            for key, value in encode.items()
+            if key.startswith('_')}
+        schema = core.access_type(schema_keys)
         result_schema, result_state, merges = deserialize(
             core, schema, encode, path=path)
 

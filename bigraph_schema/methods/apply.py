@@ -73,7 +73,7 @@ def apply(schema: Tuple, state, update, path):
     result = []
     for index, value in enumerate(schema._values):
         if index < len(state):
-            if index < len(update):
+            if update and index < len(update):
                 substate, submerges = apply(
                     value,
                     state[index],
@@ -203,6 +203,10 @@ def apply(schema: Xor, state, update, path):
 
 
 @dispatch
+def apply(schema: Array, state, update, path):
+    return state + update, []
+
+@dispatch
 def apply(schema: dict, state: np.ndarray, update, path):
     merges = []
     for key, subschema in schema.items():
@@ -217,6 +221,8 @@ def apply(schema: dict, state: np.ndarray, update, path):
 def apply(schema: dict, state, update, path):
     if update is None:
         return state, []
+    if state is None:
+        return update, []
 
     merges = []
     result = {}

@@ -90,6 +90,11 @@ def merge(schema: Tuple, current, update, path=()):
         return tuple(field)
 
     else:
+        if update is None:
+            return current
+        if current is None:
+            return update
+
         return tuple([
             merge(schema_value, current_value, update_value)
             for schema_value, current_value, update_value, index in zip(schema._values, current, update, range(len(schema._values)))])
@@ -179,7 +184,13 @@ def merge(schema: Array, current, update, path=()):
         import ipdb; ipdb.set_trace()
 
     # TODO: more sophisticated merge for arrays?
-    return update
+    if update is None:
+        if current is None:
+            return default(schema)
+        else:
+            return current
+    else:
+        return update
 
 
 @dispatch
@@ -319,8 +330,10 @@ def merge(schema: dict, current, update, path=()):
                 update.get(key))
         elif key in update:
             result[key] = update[key]
-        else:
+        elif key in current:
             result[key] = current[key]
+        else:
+            raise Exception('logically impossible')
 
         if key in schema and schema[key] and result[key] is None:
             if key.startswith('_'):
