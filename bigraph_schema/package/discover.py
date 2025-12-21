@@ -1,107 +1,90 @@
+import importlib
 import importlib.metadata
 import pkgutil
 import inspect
-from pprint import pprint as pp
+from typing import Dict, List, Tuple, Set, Type
 
 from bigraph_schema import Edge
 
 
-def recursive_dynamic_import(core, package_name: str) -> list[tuple[str, Edge ]]:
-    classes_to_import = []
-    adjusted_package_name: str = package_name.replace("-", "_")
+def recursive_dynamic_import(
+    core,
+    package_name: str,
+    *,
+    visited: Set[str] | None = None,
+) -> tuple[object, List[tuple[str, Type[Edge]]]]:
+    if visited is None:
+        visited = set()
+
+    adjusted = package_name.replace("-", "_")
+
+    if adjusted in visited:
+        return core, []
+    visited.add(adjusted)
 
     try:
-        module = importlib.import_module(adjusted_package_name)
-    except ModuleNotFoundError:
-        # TODO: Add code to try and find correct module name via accessing `top_level.txt`,
-        #  and getting the correct module name
-        # find top-level.txt
-        # find correct module name
-        # return recursive_dynamic_import(correct_module_name)
-        raise ModuleNotFoundError(f"Error: module `{adjusted_package_name}` not found when trying to dynamically import!")
+        module = importlib.import_module(adjusted)
+    except ModuleNotFoundError as e:
+        # e.name is the missing module name
+        # If the missing name IS the module we tried to import, then it's truly not found.
+        # Otherwise, it's a dependency import failure inside that module.
+        if getattr(e, "name", None) == adjusted:
+            raise ModuleNotFoundError(
+                f"Error: module `{adjusted}` not found when trying to dynamically import!"
+            ) from e
+        raise  # preserve the real traceback/cause
 
-    if hasattr(module, 'register_types'):
+    # Allow module to register types into core
+    if hasattr(module, "register_types"):
         core = module.register_types(core)
 
-    class_members = inspect.getmembers(module, inspect.isclass)
-    for class_name, cls in class_members:
-        if issubclass(cls, Edge):
-            classes_to_import.append((f"{package_name}.{class_name}", cls))
+    discovered: List[tuple[str, Type[Edge]]] = []
 
-    modules_to_check = pkgutil.iter_modules(module.__path__) if hasattr(module, '__path__') else []
-
-    for _module_loader, subname, isPkg in modules_to_check:
-        classes_to_import += recursive_dynamic_import(core, f"{adjusted_package_name}.{subname}")
-
-    return classes_to_import
-
-
-def import_package_modules(core, name, package):
-    import ipdb; ipdb.set_trace()
-
-
-def is_process_library(package: importlib.metadata.Distribution) -> bool:
-    if package.name == 'bigraph-schema':
-        return True
-
-    for entry in ([] if package.requires is None else package.requires):
-        if "bigraph-schema" in entry:
-            return True
-
-    return False
-
-
-def load_local_modules(core) -> list[tuple[str, Edge ]]:
-    packages = importlib.metadata.distributions()
-    processes = []
-    for package in packages:
-        if not is_process_library(package):
+    for _, cls in inspect.getmembers(module, inspect.isclass):
+        # Only classes defined in this module (not imported into it)
+        if cls.__module__ != module.__name__:
+            continue
+        if not issubclass(cls, Edge) or cls is Edge:
             continue
 
-        processes += recursive_dynamic_import(core, package.name)
- 
-    return processes
+        # Use the true module path for a stable registration key
+        fq_name = f"{cls.__module__}.{cls.__name__}"
+        discovered.append((fq_name, cls))
+
+    # Recurse into submodules if this is a package
+    if hasattr(module, "__path__"):
+        for _, subname, _ in pkgutil.iter_modules(module.__path__):
+            submod = f"{adjusted}.{subname}"
+            core, sub_discovered = recursive_dynamic_import(core, submod, visited=visited)
+            discovered.extend(sub_discovered)
+
+    return core, discovered
 
 
-def import_processes(core, name):
-    processes = {}
-    if name == 'setup':
-        return core, {}
-
-    module = importlib.import_module(name)
-
-    for attr in dir(module):
-        entry = getattr(module, attr)
-
-        if attr == 'register_types':
-            core = entry(core)
-
-        elif inspect.isclass(entry) and issubclass(entry, Edge):
-            processes[attr] = entry
-
-    return core, processes
+def is_process_library(dist: importlib.metadata.Distribution) -> bool:
+    if dist.metadata["Name"] == "bigraph-schema":
+        return True
+    reqs = dist.requires or []
+    return any("bigraph-schema" in r for r in reqs)
 
 
-def traverse_modules(core) -> list[tuple[str, Edge]]:
-    processes = {}
-    package_modules = pkgutil.walk_packages(['.'])
-
-    for _, module_name, is_package in package_modules:
-        core, imported = import_processes(core, module_name)
-        processes.update(imported)
-
+def load_local_modules(core) -> tuple[object, List[tuple[str, Type[Edge]]]]:
+    processes: List[tuple[str, Type[Edge]]] = []
+    for dist in importlib.metadata.distributions():
+        if not is_process_library(dist):
+            continue
+        core, found = recursive_dynamic_import(core, dist.metadata["Name"])
+        processes.extend(found)
     return core, processes
 
 
 def discover_packages(core):
-    for name, process in load_local_modules(core):
-        core.register_link(name, process)
-        if '.' in name:
-            final_name = name.split('.')[-1]
-            core.register_link(final_name, process)
+    core, discovered = load_local_modules(core)
 
-    core, processes = traverse_modules(core)
-    core.register_links(processes)
+    for fq_name, edge_cls in discovered:
+        core.register_link(fq_name, edge_cls)
+
+        short = fq_name.split(".")[-1]
+        core.register_link(short, edge_cls)
 
     return core
-
