@@ -624,9 +624,6 @@ class Core:
         if isinstance(wires, (list, tuple)):
             destination = resolve_path(list(path) + list(wires))
 
-            if '*' in wires:
-                import ipdb; ipdb.set_trace()
-
             project_schema = self.resolve(
                 project_schema,
                 ports_schema,
@@ -876,7 +873,7 @@ def test_array(core):
 
     basic_initial = {
         'array': np.array([
-            x + (7 * y)
+            x + (7.1 * y)
             for x in range(5)
             for y in range(6)]).reshape((5,6)),
         'link': basic_link}

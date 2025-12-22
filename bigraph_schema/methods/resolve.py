@@ -419,13 +419,29 @@ def resolve_dict_path(current, update, path=None):
                 else:
                     subschema = dtype_schema(update._data)
 
-                resolve_schema = subschema
-                for key, subcurrent in current.items():
-                    merge_schema = resolve(
-                        subcurrent,
+                if current:
+                    resolve_schema = subschema
+                    for key, subcurrent in current.items():
+                        merge_schema = resolve(
+                            subcurrent,
+                            subschema,
+                            path=path[1:])
+                        resolve_schema = resolve(resolve_schema, merge_schema)
+
+                else:
+                    resolve_schema = resolve(
+                        {},
                         subschema,
                         path=path[1:])
-                    resolve_schema = resolve(resolve_schema, merge_schema)
+
+                    if isinstance(resolve_schema, dict):
+                        inner_index = max(resolve_schema.keys())
+                        inner = resolve_schema[inner_index]
+                        if isinstance(inner, Array):
+                            inner_shape = (inner_index+1,) + inner._shape
+                        else:
+                            inner_shape = (inner_index+1,)
+                        resolve_schema = replace(update, **{'_shape': inner_shape})
 
                 if isinstance(resolve_schema, Array):
                     resolve_shape = (row_shape,) + resolve_schema._shape

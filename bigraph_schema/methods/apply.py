@@ -208,7 +208,11 @@ def apply(schema: Xor, state, update, path):
 
 @dispatch
 def apply(schema: Array, state, update, path):
-    return state + update, []
+    index = tuple([
+        slice(0, dimension)
+        for dimension in update.shape])
+    state[index] += update
+    return state, []
 
 @dispatch
 def apply(schema: dict, state: np.ndarray, update, path):

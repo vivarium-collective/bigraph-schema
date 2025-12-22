@@ -181,7 +181,22 @@ def merge(schema: Tree, current, update, path=()):
 @dispatch
 def merge(schema: Array, current, update, path=()):
     if path:
-        import ipdb; ipdb.set_trace()
+        if current is None:
+            current = default(schema)
+
+        head = path[0]
+        if head == '*':
+            for index, row, subupdate in zip(range(current.shape[0]), current, update):
+                subschema = replace(schema, **{'_shape': schema._shape[1:]})
+                current[index] = merge(subschema, row, subupdate, path=path[1:])
+
+        else:
+            row = current[head]
+            subschema = replace(schema, **{'_shape': schema._shape[1:]})
+            subvalue = merge(subschema, row, update, path=path[1:])
+            current[head] = subvalue
+
+        return current
 
     # TODO: more sophisticated merge for arrays?
     if update is None:
