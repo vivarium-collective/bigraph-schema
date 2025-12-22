@@ -502,34 +502,14 @@ class Core:
 
         return decode_schema, merge_state
 
-    def nest(self, schema, path, subschema):
-        schema = schema or {}
-
-        if len(path) == 0:
-            return self.resolve(schema, subschema)
-
-        else:
-            head = path[0]
-            if not isinstance(schema, dict):
-                import ipdb; ipdb.set_trace()
-            schema[head] = self.nest(
-                schema.get(head, {}),
-                path[1:],
-                subschema)
-            return schema
-
-    def nest_schema(self, schema, path, subschema):
-        subpath = resolve_path(path)
-        return self.nest(schema, subpath, subschema)
-
     def generalize_merges(self, schema, merges):
         if len(merges) > 0:
             merge_schema = {}
             for path, subschema in merges:
-                merge_schema = self.nest_schema(
+                merge_schema = self.resolve(
                     merge_schema,
-                    path,
-                    subschema)
+                    subschema,
+                    resolve_path(path))
 
             schema = self.generalize(schema, merge_schema)
 
@@ -764,9 +744,9 @@ class Core:
             return state, []
 
 
-def allocate_core():
+def allocate_core(top=None):
     core = Core(BASE_TYPES)
-    core = discover_packages(core)
+    core = discover_packages(core, top)
 
     return core
 

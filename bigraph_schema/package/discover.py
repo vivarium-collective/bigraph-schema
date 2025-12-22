@@ -7,43 +7,16 @@ from typing import Dict, List, Tuple, Set, Type
 from bigraph_schema import Edge
 
 
-def recursive_dynamic_import(
-    core,
-    package_name: str,
-    *,
-    visited: Set[str] | None = None,
-) -> tuple[object, List[tuple[str, Type[Edge]]]]:
-    if visited is None:
-        visited = set()
-
-    adjusted = package_name.replace("-", "_")
-
-    if adjusted in visited:
-        return core, []
-    visited.add(adjusted)
-
-    try:
-        module = importlib.import_module(adjusted)
-    except ModuleNotFoundError as e:
-        # e.name is the missing module name
-        # If the missing name IS the module we tried to import, then it's truly not found.
-        # Otherwise, it's a dependency import failure inside that module.
-        if getattr(e, "name", None) == adjusted:
-            raise ModuleNotFoundError(
-                f"Error: module `{adjusted}` not found when trying to dynamically import!"
-            ) from e
-        raise  # preserve the real traceback/cause
-
-    # Allow module to register types into core
-    if hasattr(module, "register_types"):
-        core = module.register_types(core)
-
-    discovered: List[tuple[str, Type[Edge]]] = []
-
-    for _, cls in inspect.getmembers(module, inspect.isclass):
+def find_edges(mapping, module_name=None):
+    discovered = []
+    for _, cls in mapping:
         # Only classes defined in this module (not imported into it)
-        if cls.__module__ != module.__name__:
+        if not inspect.isclass(cls):
             continue
+
+        if module_name and cls.__module__ != module_name:
+            continue
+
         if not issubclass(cls, Edge) or cls is Edge:
             continue
 
@@ -51,11 +24,51 @@ def recursive_dynamic_import(
         fq_name = f"{cls.__module__}.{cls.__name__}"
         discovered.append((fq_name, cls))
 
+    return discovered
+
+
+def recursive_dynamic_import(
+    core,
+    module,
+    *,
+    visited: Set[str] | None = None,
+) -> tuple[object, List[tuple[str, Type[Edge]]]]:
+    if visited is None:
+        visited = set()
+
+    if isinstance(module, str):
+        adjusted = module.replace("-", "_")
+
+        if adjusted in visited:
+            return core, []
+        visited.add(adjusted)
+
+        try:
+            module = importlib.import_module(adjusted)
+
+        except ModuleNotFoundError as e:
+            # e.name is the missing module name
+            # If the missing name IS the module we tried to import, then it's truly not found.
+            # Otherwise, it's a dependency import failure inside that module.
+            if getattr(e, "name", None) == adjusted:
+                raise ModuleNotFoundError(
+                    f"Error: module `{adjusted}` not found when trying to dynamically import"
+                ) from e
+            raise  # preserve the real traceback/cause
+
+    # Allow module to register types into core
+    if hasattr(module, "register_types"):
+        core = module.register_types(core)
+
+    mapping = inspect.getmembers(module, inspect.isclass)
+    discovered = find_edges(mapping)
+
     # Recurse into submodules if this is a package
     if hasattr(module, "__path__"):
         for _, subname, _ in pkgutil.iter_modules(module.__path__):
             submod = f"{adjusted}.{subname}"
-            core, sub_discovered = recursive_dynamic_import(core, submod, visited=visited)
+            core, sub_discovered = recursive_dynamic_import(
+                core, submod, visited=visited)
             discovered.extend(sub_discovered)
 
     return core, discovered
@@ -68,18 +81,25 @@ def is_process_library(dist: importlib.metadata.Distribution) -> bool:
     return any("bigraph-schema" in r for r in reqs)
 
 
-def load_local_modules(core) -> tuple[object, List[tuple[str, Type[Edge]]]]:
+def load_local_modules(core, top=None) -> tuple[object, List[tuple[str, Type[Edge]]]]:
     processes: List[tuple[str, Type[Edge]]] = []
+
     for dist in importlib.metadata.distributions():
         if not is_process_library(dist):
             continue
         core, found = recursive_dynamic_import(core, dist.metadata["Name"])
         processes.extend(found)
+
+    if top:
+        discovered = find_edges(
+            top.items())
+        processes.extend(discovered)
+
     return core, processes
 
 
-def discover_packages(core):
-    core, discovered = load_local_modules(core)
+def discover_packages(core, top=None):
+    core, discovered = load_local_modules(core, top=top)
 
     for fq_name, edge_cls in discovered:
         core.register_link(fq_name, edge_cls)

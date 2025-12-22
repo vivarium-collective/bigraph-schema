@@ -412,6 +412,7 @@ def resolve_dict_path(current, update, path=None):
 
                 if current:
                     row_shape = max(row_shape, max(current.keys()) + 1)
+
                 subshape = update._shape[1:]
                 if subshape:
                     subschema = replace(update, **{'_shape': subshape})
