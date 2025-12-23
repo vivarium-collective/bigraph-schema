@@ -8,6 +8,9 @@ from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
 
 
+NONE_SYMBOL = '__nil__'
+
+
 @dataclass(kw_only=True)
 class Node():
     _default: object = None
@@ -117,10 +120,6 @@ class Array(Node):
 @dataclass(kw_only=True)
 class Path(List):
     _element: Node = field(default_factory=Node)
-
-# @dataclass(kw_only=True)
-# class Wire(Union):
-#     _options: typing.Tuple[Node] = (Key(), Jump())
 
 @dataclass(kw_only=True)
 class Wires(Tree):
@@ -353,11 +352,8 @@ BASE_TYPES = {
     'list': List,
     'map': Map,
     'tree': Tree,
-    # 'dtype': Dtype,
     'array': Array,
     'path': Path,
-    # 'jump': Jump,
-    # 'wire': Wire,
     'wires': Wires,
     'protocol': Protocol,
     'local': LocalProtocol,

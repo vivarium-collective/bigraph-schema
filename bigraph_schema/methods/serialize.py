@@ -2,12 +2,11 @@ from plum import dispatch
 import numpy as np
 from numpy.random.mtrand import RandomState
 
-from bigraph_schema.utilities import NONE_SYMBOL
-
 from bigraph_schema.schema import (
     Node,
     Atom,
     Empty,
+    NONE_SYMBOL,
     Union,
     Tuple,
     Boolean,

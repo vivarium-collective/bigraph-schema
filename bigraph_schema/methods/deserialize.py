@@ -6,11 +6,12 @@ from numpy.random.mtrand import RandomState
 from dataclasses import replace
 
 from bigraph_schema.protocols import local_lookup
-from bigraph_schema.utilities import NONE_SYMBOL
+
 
 from bigraph_schema.schema import (
     Node,
     Empty,
+    NONE_SYMBOL,
     Union,
     Tuple,
     Boolean,
