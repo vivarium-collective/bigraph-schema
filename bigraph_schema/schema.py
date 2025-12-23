@@ -3,6 +3,7 @@ from __future__ import annotations
 import typing
 import numpy as np
 import numpy.lib.format as nf
+import collections
 
 from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
@@ -203,7 +204,7 @@ def resolve_path(path):
         else:
             resolve.append(step)
 
-    return resolve
+    return tuple(resolve)
 
 def deep_merge(dct, merge_dct):
     """
@@ -273,6 +274,12 @@ def dtype_schema(dtype: np.dtype):
     else:
         raise Exception('do not know how to interpret dtype as schema:\n\n{dtype}\n\n')
     
+
+def make_default(schema, state):
+    return {
+        '_type': schema,
+        '_default': state}
+
 
 @dispatch
 def schema_dtype(schema: Complex):
@@ -361,10 +368,3 @@ BASE_TYPES = {
     'link': Link}
 
 
-
-def test_schema():
-    pass
-
-
-if __name__ == '__main__':
-    test_schema()
