@@ -97,6 +97,25 @@ def resolve(current: Wrap, update: Node, path=None):
     return type(current)(_value=value)
 
 @dispatch
+def resolve(current: Integer, update: Float, path=None):
+    if is_empty(update._default):
+        if is_empty(current._default):
+            return update
+        else:
+            return replace(update, **{'_default': current._default})
+    else:
+        return update
+
+@dispatch
+def resolve(current: Float, update: Integer, path=None):
+    if is_empty(update._default):
+        return current
+    elif is_empty(current._default):
+        return replace(current, **{'_default': update._default})
+    else:
+        return current
+
+@dispatch
 def resolve(current: Node, update: Wrap, path=None):
     value = resolve(current, update._value, path=path)
     return type(update)(_value=value)

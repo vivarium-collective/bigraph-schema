@@ -30,17 +30,22 @@ def find_edges(mapping, module_name=None):
 def recursive_dynamic_import(
     core,
     module,
-    *,
     visited: Set[str] | None = None,
 ) -> tuple[object, List[tuple[str, Type[Edge]]]]:
     if visited is None:
         visited = set()
 
-    if isinstance(module, str):
-        adjusted = module.replace("-", "_")
-
+    if inspect.ismodule(module):
+        adjusted = module.__name__
         if adjusted in visited:
-            return core, []
+            return core, [], visited
+
+        visited.add(adjusted)
+
+    if isinstance(module, str):
+        adjusted = core.distributions_packages.get(module, module)
+        if adjusted in visited:
+            return core, [], visited
         visited.add(adjusted)
 
         try:
@@ -50,11 +55,7 @@ def recursive_dynamic_import(
             # e.name is the missing module name
             # If the missing name IS the module we tried to import, then it's truly not found.
             # Otherwise, it's a dependency import failure inside that module.
-            if getattr(e, "name", None) == adjusted:
-                raise ModuleNotFoundError(
-                    f"Error: module `{adjusted}` not found when trying to dynamically import"
-                ) from e
-            raise  # preserve the real traceback/cause
+            print(f"module `{adjusted}` not found during dynamic import")
 
     # Allow module to register types into core
     if hasattr(module, "register_types"):
@@ -67,11 +68,11 @@ def recursive_dynamic_import(
     if hasattr(module, "__path__"):
         for _, subname, _ in pkgutil.iter_modules(module.__path__):
             submod = f"{adjusted}.{subname}"
-            core, sub_discovered = recursive_dynamic_import(
+            core, sub_discovered, visited = recursive_dynamic_import(
                 core, submod, visited=visited)
             discovered.extend(sub_discovered)
 
-    return core, discovered
+    return core, discovered, visited
 
 
 def is_process_library(dist: importlib.metadata.Distribution) -> bool:
@@ -82,18 +83,28 @@ def is_process_library(dist: importlib.metadata.Distribution) -> bool:
 
 
 def load_local_modules(core, top=None) -> tuple[object, List[tuple[str, Type[Edge]]]]:
-    processes: List[tuple[str, Type[Edge]]] = []
+    processes = []
+    visited = set([])
 
-    for dist in importlib.metadata.distributions():
+    for dist_name in core.distributions_packages:
+        dist = importlib.metadata.distribution(dist_name)
         if not is_process_library(dist):
             continue
-        core, found = recursive_dynamic_import(core, dist.metadata["Name"])
+
+        core, found, visited = recursive_dynamic_import(
+            core,
+            dist_name,
+            visited=visited)
+
         processes.extend(found)
 
     if top:
-        discovered = find_edges(
-            top.items())
-        processes.extend(discovered)
+        for key, value in top.items():
+            if inspect.isclass(value) and issubclass(value, Edge):
+                processes.append((key, value))
+
+            if key == 'register_types':
+                core = value(core)
 
     return core, processes
 

@@ -24,5 +24,7 @@ dependencies = [
 
 [tool.setuptools]
 packages = [
-    "bigraph_schema"
+    "bigraph_schema",
+    "bigraph_schema.methods",
+    "bigraph_schema.package",
 ]

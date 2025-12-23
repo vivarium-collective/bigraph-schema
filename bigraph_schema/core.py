@@ -27,6 +27,7 @@ from numpy import dtype
 import numpy.lib.format as nf
 import pytest
 import logging
+import importlib.metadata
 
 from plum import dispatch
 from parsimonious.nodes import NodeVisitor
@@ -223,12 +224,24 @@ class Core:
 
     def __init__(self, types):
         """Initialize operation with a base type registry (e.g., `BASE_TYPES`)."""
+
+        self.packages_distributions = {
+            key: list(set(values))
+            for key, values in importlib.metadata.packages_distributions().items()
+            for value in values}
+
+        self.distributions_packages = {
+            value: key
+            for key, values in self.packages_distributions.items()
+            for value in values}
+
         self.registry = {}
-        self.register_types(types)
         self.link_registry = {}
         self.method_registry = {}
+
         self.parse_visitor = CoreVisitor(self)
 
+        self.register_types(types)
         self.register_link('edge', Edge)
 
     def register_type(self, key, data):
@@ -300,9 +313,6 @@ class Core:
             elif isinstance(schema, Node) and schema._default is not None:
                 default_value = schema._default
 
-            if not isinstance(schema, Node):
-                import ipdb; ipdb.set_trace()
-
             schema = replace(
                 schema,
                 **{'_default': default_value})
@@ -349,7 +359,6 @@ class Core:
                 try:
                     return visit_expression(key, self.parse_visitor)
                 except Exception as e:
-                    import ipdb; ipdb.set_trace()
                     raise e
             else:
                 entry = self.registry[key]
@@ -434,9 +443,6 @@ class Core:
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
         current = self.access(current_schema)
         update = self.access(update_schema)
-
-        if isinstance(current, np.ndarray) or isinstance(update, np.ndarray):
-            import ipdb; ipdb.set_trace()
 
         if path:
             return resolve(current, update, path=path)

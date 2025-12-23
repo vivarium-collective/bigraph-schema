@@ -11,7 +11,7 @@
 from bigraph_schema.edge import Edge
 from bigraph_schema.protocols import local_lookup_module
 
-from bigraph_schema.schema import BASE_TYPES, resolve_path, deep_merge
+from bigraph_schema.schema import BASE_TYPES, resolve_path, deep_merge, make_default
 from bigraph_schema.core import Core, allocate_core
 
 import bigraph_schema.methods
