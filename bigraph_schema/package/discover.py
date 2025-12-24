@@ -116,6 +116,7 @@ def discover_packages(core, top=None):
         core.register_link(fq_name, edge_cls)
 
         short = fq_name.split(".")[-1]
-        core.register_link(short, edge_cls)
+        if short not in core.link_registry:
+            core.register_link(short, edge_cls)
 
     return core
