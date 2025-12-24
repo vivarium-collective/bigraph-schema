@@ -10,7 +10,7 @@ This module defines the **Core** class — the main operational interface for
 Core provides a consistent API for all major transformations:
 - `access` / `render`: parse and serialize schema definitions
 - `default` / `infer`: connect schemas to example states
-- `serialize` / `deserialize`: encode and decode state data
+- `serialize` / `realize`: encode and decode state data
 
 These methods form a reversible, type-aware layer for schema construction,
 validation, and data transformation.
@@ -19,19 +19,24 @@ validation, and data transformation.
 expressions into structured schema nodes (`Union`, `Tuple`, `Array`, `Link`, etc.).
 """
 
+import sys
 import copy
 import typing
+import inspect
+
 from pprint import pformat as pf
+
 import numpy as np
 from numpy import dtype
 import numpy.lib.format as nf
+
 import pytest
 import logging
-import importlib.metadata
 
 from plum import dispatch
 from parsimonious.nodes import NodeVisitor
 from dataclasses import dataclass, is_dataclass, replace
+import importlib.metadata
 
 from bigraph_schema.schema import (
     BASE_TYPES,
@@ -83,7 +88,7 @@ from bigraph_schema.methods import (
     validate,
     render,
     serialize,
-    deserialize,
+    realize,
     merge,
     jump,
     traverse,
@@ -216,7 +221,7 @@ class Core:
     - Normalizes schema representations (strings, dicts, lists) into dataclass nodes
       via `access(...)` using the bigraph grammar (`parse.visit_expression`).
     - Exposes core methods (`infer`, `render`, `default`, `resolve`, `check`,
-      `serialize`, `deserialize`, `merge`, `jump`, `traverse`, `bind`, `apply`).
+      `serialize`, `realize`, `merge`, `jump`, `traverse`, `bind`, `apply`).
     - Post-access invariants: e.g., `Array._shape -> tuple[int,...]`,
       `Array._data -> numpy.dtype`; node fields like `_values`, `_options`,
       `_key/_value`, `_inputs/_outputs` are populated.
@@ -432,12 +437,12 @@ class Core:
         found = self.access(schema)
 
         value = default(found)
-        return deserialize(self, found, value, path=path)
+        return realize(self, found, value, path=path)
 
     def default(self, schema, path=()):
         found = self.access(schema)
         value = default(found)
-        return self.deserialize(found, value, path=path)
+        return self.realize(found, value, path=path)
 
     def resolve(self, current_schema, update_schema, path=None):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
@@ -484,7 +489,7 @@ class Core:
         found = self.access(schema)
         return serialize(found, state)
 
-    def deserialize(self, schema, state, path=()):
+    def realize(self, schema, state, path=()):
         """Convert an encoded representation back into structured Python values.
 
         Decodes strings, numbers, and nested structures into their appropriate types,
@@ -492,7 +497,7 @@ class Core:
         """
         found = self.access(schema)
 
-        decode_schema, decode_state, merges = deserialize(
+        decode_schema, decode_state, merges = realize(
             self,
             found,
             state,
@@ -695,7 +700,7 @@ class Core:
     def combine(self, schema, state, update_schema, update_state):
         resolved = self.resolve(schema, update_schema)
         merged = self.merge(resolved, state, update_state)
-        decode_schema, decode_state = self.deserialize(resolved, merged)
+        decode_schema, decode_state = self.realize(resolved, merged)
 
         return decode_schema, decode_state
 

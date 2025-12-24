@@ -35,7 +35,7 @@ from bigraph_schema.schema import (
 
 
 from bigraph_schema.methods.serialize import serialize
-from bigraph_schema.methods.deserialize import deserialize
+from bigraph_schema.methods.realize import realize
 
 MISSING_TYPES = {}
 
@@ -144,7 +144,7 @@ def infer(core, value: dict, path: tuple = ()):
             for key, subvalue in value.items()
             if key.startswith('_')}
         schema = core.access_type(schema_keys)
-        schema, state, merges = deserialize(
+        schema, state, merges = realize(
             core, schema, value, path=path)
 
         return set_default(schema, state), merges

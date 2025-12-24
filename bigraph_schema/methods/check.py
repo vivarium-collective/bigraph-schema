@@ -127,13 +127,13 @@ def check(schema: Map, state):
         return all_values
 
     else:
-        # if the keys are not strings, we must deserialize
+        # if the keys are not strings, we must realize
         # them all to tell if they pass the check?
         # - this seems expensive?
         all_keys = all([
-            # TODO: if deserialize needs core this will fail
+            # TODO: if realize needs core this will fail
             #   does that matter?
-            check(schema._key, deserialize(None, schema._key, key))
+            check(schema._key, realize(None, schema._key, key))
             for key in state.keys()])
 
         return all_keys and all_values

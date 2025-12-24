@@ -9,7 +9,7 @@ from bigraph_schema.methods import check, render, serialize
 
 @pytest.fixture
 def core():
-    return allocate_core(locals())
+    return allocate_core()
 
 
 
@@ -129,7 +129,7 @@ def test_array(core):
             for y in range(6)]).reshape((5,6)),
         'link': basic_link}
 
-    basic_schema, basic_state = core.deserialize(
+    basic_schema, basic_state = core.realize(
         {'array': basic},
         basic_initial)
 
@@ -300,9 +300,9 @@ def test_check(core):
     assert not core.check(link_schema, link_d)
     assert not core.check(link_schema, 44.44444)
 
-    _, a_instance = core.deserialize(link_schema, link_a)
-    _, b_instance = core.deserialize(link_schema, link_b)
-    _, c_instance = core.deserialize(link_schema, link_c)
+    _, a_instance = core.realize(link_schema, link_a)
+    _, b_instance = core.realize(link_schema, link_b)
+    _, c_instance = core.realize(link_schema, link_c)
 
     assert core.check(link_schema, a_instance)
     assert core.check(link_schema, b_instance)
@@ -322,7 +322,7 @@ def test_serialize(core):
 
     assert encoded_b['a'] == 55.55555
 
-def test_deserialize(core):
+def test_realize(core):
     encoded_link = {
         'inputs': {
             'mass': ['cell','mass'],
@@ -331,7 +331,7 @@ def test_deserialize(core):
             "mass":["cell","mass"],\
             "concentrations":["cell","internal"]}'}
 
-    decoded_schema, decoded_state = core.deserialize(link_schema, encoded_link)
+    decoded_schema, decoded_state = core.realize(link_schema, encoded_link)
 
     assert isinstance(decoded_state['instance'], Edge)
 
@@ -342,7 +342,7 @@ def test_deserialize(core):
         'a': '5555',
         'b': ('1111.1', "okay", '{"x": 5, "y": "11"}')}
 
-    decoded_schema, decoded_state = core.deserialize(schema, code)
+    decoded_schema, decoded_state = core.realize(schema, code)
     assert decoded_state['a'] == 5555
     assert decoded_state['b'][2]['y'] == 11
 
@@ -497,7 +497,7 @@ def test_generate(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    generated_schema, generated_state = core.deserialize(schema, state)
+    generated_schema, generated_state = core.realize(schema, state)
 
     assert generated_state['A'] == 5.5
     assert generated_state['B'] == 'one'
@@ -558,7 +558,7 @@ def test_unify(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    generated_schema, generated_state = core.deserialize(
+    generated_schema, generated_state = core.realize(
         schema,
         state)
 
@@ -572,7 +572,7 @@ def test_unify(core):
     rendered = core.render(generated_schema, defaults=True)
 
     serialized = core.serialize(generated_schema, generated_state)
-    deserialized = core.deserialize(generated_schema, serialized)
+    realized = core.realize(generated_schema, serialized)
 
     link_view = core.view(
         generated_schema,
@@ -609,9 +609,9 @@ def test_generate_coverage(core):
             '_type': 'tuple[number,number]',
             '_default': (0,0)}}
 
-    generated_schema, generated_state = core.deserialize(schema, state)
+    generated_schema, generated_state = core.realize(schema, state)
 
-    deschema, destate = core.deserialize(
+    deschema, destate = core.realize(
         generated_schema,
         core.serialize(generated_schema, generated_state))
 
@@ -630,7 +630,7 @@ def test_generate_tuple_default(core):
             '_type': 'tuple[number,number]',
             '_default': (0,0)}}
 
-    generated_schema, generated_state = core.deserialize(schema, state)
+    generated_schema, generated_state = core.realize(schema, state)
     assert generated_state['C'] == (0,0)
     assert generated_state['B'] == True
 
@@ -649,10 +649,10 @@ def test_generate_promote_to_struct(core):
             '_type': 'boolean',
             '_default': True}}
 
-    generated_schema, generated_state = core.deserialize(schema, state)
+    generated_schema, generated_state = core.realize(schema, state)
     serialized = core.serialize(generated_schema, generated_state)
 
-    deschema, destate = core.deserialize(
+    deschema, destate = core.realize(
         generated_schema,
         serialized)
     assert deschema == generated_schema
@@ -706,7 +706,7 @@ if __name__ == '__main__':
     test_resolve(core)
     test_check(core)
     test_serialize(core)
-    test_deserialize(core)
+    test_realize(core)
     test_merge(core)
     test_traverse(core)
     test_infer_link(core)

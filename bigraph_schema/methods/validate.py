@@ -148,16 +148,11 @@ def validate(core, schema: Map, state):
         return results
 
     elif not isinstance(schema._key, String):
-        # if the keys are not strings, we must deserialize
-        # them all to tell if they pass the check?
-        # - this seems expensive?
         results = filter_nones([
-            # TODO: if deserialize needs core this will fail
-            #   does that matter?
             validate(
                 core,
                 schema._key,
-                deserialize(
+                realize(
                     core,
                     schema._key,
                     key))
