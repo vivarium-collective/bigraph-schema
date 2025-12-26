@@ -136,16 +136,24 @@ def infer(core, value: set, path: tuple = ()):
         list(value),
         path)
 
+
+def separate_keys(d):
+    schema = {}
+    state = {}
+    for key, value in d.items():
+        if key.startswith('_'):
+            schema[key] = value
+        else:
+            state[key] = value
+
+    return schema, state
+
 @dispatch
 def infer(core, value: dict, path: tuple = ()):
     if '_type' in value:
-        schema_keys = {
-            key: subvalue
-            for key, subvalue in value.items()
-            if key.startswith('_')}
+        schema_keys, state = separate_keys(value)
         schema = core.access_type(schema_keys)
-        schema, state, merges = realize(
-            core, schema, value, path=path)
+        merges = []
 
         return set_default(schema, state), merges
 

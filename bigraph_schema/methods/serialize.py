@@ -298,10 +298,7 @@ def render(schema: str, defaults=False):
 
 @dispatch
 def render(schema, defaults=False):
-    import ipdb; ipdb.set_trace()
-
     return schema
-    # what is happening
 
 def render_associated(assoc):
     if all([isinstance(value, str) for value in assoc.values()]):
@@ -386,10 +383,6 @@ def serialize(schema: Tree, state):
     if check(schema._leaf, state):
         return serialize(schema._leaf, state)
     else:
-        # return {
-        #     key: serialize(schema, branch)
-        #     for key, branch in state.items()}
-
         try:
             return {
                 key: serialize(schema, branch)
