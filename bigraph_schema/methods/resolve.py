@@ -543,18 +543,6 @@ def resolve_dict_path(current, update, path=None):
 
                 return result_schema
 
-            # TODO: deal with other data types
-
-            # elif isinstance(update, Map):
-            #     subschema = update._value
-
-        # elif isinstance(update, Array):
-        #     if isinstance(head, str):
-        #         import ipdb; ipdb.set_trace()
-        #     if head >= update._shape[0]:
-        #         update = replace(update, **{
-        #             '_shape': (head+1,) + update._shape[1:]})
-        #     return update
         else:
             down_schema = current.get(head, {})
             down_resolve = resolve(down_schema, update, path=path[1:])
@@ -599,15 +587,6 @@ def resolve(current: Link, update: dict, path=None):
 @dispatch
 def resolve(current: dict, update: Link, path=None):
     return resolve_link(update, current, path=path)
-    # schema = update
-    # for key in ['_inputs', '_outputs']:
-    #     if key in current:
-    #         subupdate = current[key]
-    #         attr = getattr(schema, key)
-    #         subresolve = resolve(attr, subupdate)
-    #         schema = replace(schema, **{key: subresolve})
-
-    # return schema
 
 @dispatch
 def resolve(current: Node, update: dict, path=None):
