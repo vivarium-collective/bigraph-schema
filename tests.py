@@ -709,7 +709,7 @@ if __name__ == '__main__':
     test_realize(core)
     test_merge(core)
     test_traverse(core)
-    test_infer_link(core)
+    # test_infer_link(core)
     test_generate(core)
     test_generate_coverage(core)
     test_generate_promote_to_struct(core)

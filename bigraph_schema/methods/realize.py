@@ -449,16 +449,29 @@ def realize(core, schema: Node, encode, path=()):
 
 @dispatch
 def realize(core, schema: None, encode, path=()):
-    if isinstance(encode, dict) and '_type' in encode:
-        schema_keys = {
-            key: value
-            for key, value in encode.items()
-            if key.startswith('_')}
-        schema = core.access_type(schema_keys)
-        result_schema, result_state, merges = realize(
-            core, schema, encode, path=path)
+    if isinstance(encode, dict):
+        if '_type' in encode:
+            schema_keys = {
+                key: value
+                for key, value in encode.items()
+                if key.startswith('_')}
+            schema = core.access_type(schema_keys)
+            result_schema, result_state, merges = realize(
+                core, schema, encode, path=path)
 
-        return result_schema, result_state, merges
+            return result_schema, result_state, merges
+        else:
+            merges = []
+            schema = {}
+            state = {}
+            for key, value in encode.items():
+                schema[key], state[key], submerges = realize(
+                    core,
+                    None,
+                    value,
+                    path+(key,))
+                merges += submerges
+            return schema, state, merges
     else:
         infer_schema, merges = core.infer_merges(
             encode, path=path)
