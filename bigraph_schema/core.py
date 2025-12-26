@@ -318,6 +318,9 @@ class Core:
             elif isinstance(schema, Node) and schema._default is not None:
                 default_value = schema._default
 
+            if not isinstance(schema, Node):
+                raise Exception(f'accessing {value} but schema is not found\n{schema}')
+
             schema = replace(
                 schema,
                 **{'_default': default_value})
@@ -364,7 +367,7 @@ class Core:
                 try:
                     return visit_expression(key, self.parse_visitor)
                 except Exception as e:
-                    raise e
+                    raise Exception(f'unable to parse type "{key}"\n\ndue to\n{e}')
             else:
                 entry = self.registry[key]
                 if callable(entry):
