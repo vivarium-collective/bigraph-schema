@@ -33,3 +33,25 @@ def local_lookup_module(address):
         module = sys.modules[__name__]
         if hasattr(module, address):
             return getattr(sys.modules[__name__], address)
+
+
+def local_lookup_registry(core, address):
+    """Process Registry Protocol
+
+    Retrieves from the process registry
+    """
+    return core.link_registry.get(address)
+
+
+def local_lookup(core, address):
+    """Local Lookup Protocol
+
+    Retrieves local processes, from the process registry or from a local module
+    """
+    if address[0] == '!':
+        instantiate = local_lookup_module(address[1:])
+    else:
+        instantiate = local_lookup_registry(core, address)
+    return instantiate
+
+

@@ -50,7 +50,9 @@ class Edge:
         self._composition = 'edge'
         self._state = {}
 
-        self.initialize(self._config)
+        self.initialize(
+            self._config)
+
 
     @property
     def config(self):
@@ -107,6 +109,11 @@ class Edge:
         """
         return {}
 
+    def default_config(self):
+        """ get the default of the config_schema for this edge """
+        return self.core.default(
+            self.config_schema)
+
     def default_inputs(self):
         """Generate default wire paths for inputs: {port: [port]}"""
         return default_wires(self.inputs())
@@ -127,3 +134,5 @@ class Edge:
             'inputs': self.inputs(),
             'outputs': self.outputs()
         }
+
+

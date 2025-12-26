@@ -24,7 +24,8 @@ parameter_examples = {
     'inputs_and_outputs': 'edge[input1:float|input2:int,output1:float|output2:int]',
     'tuple': 'what[is,happening|(with:yellow|this:green)|this:now]',
     'single': 'hello[(3),over]',
-    'double': 'hello[(3|4),over]',
+    'double': 'hello[(3|4),over{owiehf;a832hf9237fh!@#(&$A(HFO@I#}]',
+    'double_default': 'hello[(3|4),over]{3,3,3,3,3}',
     'units_type': 'length^2*mass/time^1_5',
     'nothing': '()'}
 
@@ -38,9 +39,11 @@ parameter_grammar = Grammar(
     bigraph = group / nest
     group = paren_left expression paren_right
     nest = symbol colon tree
-    type_name = symbol parameter_list?
+    type_name = symbol parameter_list? default_block?
     parameter_list = square_left expression (comma expression)* square_right
-    symbol = ~r"[\\w\\d-_/*&^%$#@!`+ ]+"
+    default_block = curly_left default curly_right
+    default = ~r"[^}]*"
+    symbol = ~r"[\\w\\d-_/<>*&^%$#@!`+ ]+"
     dot = "."
     colon = ":"
     bar = "|"
@@ -48,6 +51,8 @@ parameter_grammar = Grammar(
     paren_right = ")"
     square_left = "["
     square_right = "]"
+    curly_left = "{"
+    curly_right = "}"
     comma = ","
     tilde = "~"
     not_newline = ~r"[^\\n\\r]"*
@@ -117,13 +122,26 @@ class ParameterVisitor(NodeVisitor):
         return {'node': node, 'visit': visit}
 
 # --- API ---------------------------------------------------------------------
+def parsed_leftmost_leaf(parsed):
+    if len(parsed.children) == 0:
+        return parsed
+    else:
+        return parsed_leftmost_leaf(parsed.children[0])
+
+def visit_expression(expression, visitor):
+    parsed = parameter_grammar.parse(expression)
+    leaf = parsed_leftmost_leaf(parsed)
+    if hasattr(leaf, 'match') and leaf.match[0] == expression:
+        return expression
+    else:
+        return visitor.visit(parsed)
+
 def parse_expression(expression):
     """
     Parse a bigraph-style type expression into a structured Python object.
     """
-    parsed = parameter_grammar.parse(expression)
     visitor = ParameterVisitor()
-    return visitor.visit(parsed)
+    return visit_expression(expression, visitor)
 
 def is_type_expression(expression):
     """

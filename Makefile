@@ -1,13 +1,22 @@
 DOCTEST_FILES=bigraph_schema/type_system.py
-DEBUG_FILE=bigraph_schema/tests.py
+TESTS=bigraph_schema/tests.py
+RUNTIME=bigraph_schema/core.py
+PY=PYTHONPATH=`pwd` uv run
 
-tests: pytest doctest
+
+tests: pytest doctest runtime
 
 pytest:
-	uv run pytest
+	${PY} pytest
+
+runtime:
+	${PY} ${RUNTIME}
 
 doctest:
-	uv run python3 -m doctest ${DOCTEST_FILES}
+	${PY} -m doctest ${DOCTEST_FILES}
 
 debug:
-	PYTHONPATH=`pwd` uv run python3 -i $(DEBUG_FILE)
+	${PY} python3 -i ${TESTS}
+
+core:
+	${PY} python3 -i ${RUNTIME}
