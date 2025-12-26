@@ -122,15 +122,30 @@ def merge(schema: List, current, update, path=()):
 def merge(schema: Map, current, update, path=()):
     if path:
         head = path[0]
-        subschema = schema._value
-        current[head] = merge(subschema, current[head], update, path[1:])
-        return current
+
+        if head == '*':
+            current = current or {}
+            for key, value in update.items():
+                current[key] = merge(
+                    schema._value,
+                    current.get(key),
+                    value,
+                    path[1:])
+
+            return current
+
+        else:
+            subschema = schema._value
+            current[head] = merge(subschema, current[head], update, path[1:])
+            return current
 
     result = {}
     if current is None:
         return update
+
     elif update is None:
         return current
+
     else:
         for key in current.keys() | update.keys():
             if key in update:
@@ -320,11 +335,14 @@ def tuplify_dict(d):
 def merge(schema: dict, current, update, path=()):
     if path:
         head = path[0]
-        current = current or {}
-        subschema = schema.get(head)
-        substate = current.get(head)
-        current[head] = merge(subschema, substate, update, path[1:])
-        return current
+        if head == '*':
+            import ipdb; ipdb.set_trace()
+        else:
+            current = current or {}
+            subschema = schema.get(head)
+            substate = current.get(head)
+            current[head] = merge(subschema, substate, update, path[1:])
+            return current
 
     result = {}
     if is_empty(current):

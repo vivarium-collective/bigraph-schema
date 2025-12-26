@@ -322,8 +322,11 @@ def realize_link(core, schema: Link, encode, path=()):
     address = encode.get('address', 'local:edge')
     if isinstance(address, str):
         if ':' not in address:
-            import ipdb; ipdb.set_trace()
-        protocol, data = address.split(':', 1)
+            protocol = 'local'
+            data = address
+        else:
+            protocol, data = address.split(':', 1)
+
         address = {
             'protocol': protocol,
             'data': data}
@@ -503,10 +506,11 @@ def realize(core, schema: dict, encode, path=()):
                     result_state[key] = outcome_state
                     merges += submerges
             else:
-                result_schema[key], result_state[key], submerges = core.default_merges(
-                    subschema,
-                    path=path+(key,))
-                merges += submerges
+                if key != '_default':
+                    result_schema[key], result_state[key], submerges = core.default_merges(
+                        subschema,
+                        path=path+(key,))
+                    merges += submerges
 
         for key in encode.keys():
             if (isinstance(key, str) and not key.startswith('_')) and not key in schema:

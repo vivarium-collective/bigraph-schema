@@ -180,6 +180,8 @@ def default(schema: dict):
         result = {}
         for key in schema:
             if not is_schema_key(key):
+                if isinstance(schema[key], float):
+                    import ipdb; ipdb.set_trace()
                 inner = default(
                     schema[key])
                 result[key] = inner

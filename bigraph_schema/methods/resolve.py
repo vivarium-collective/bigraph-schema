@@ -157,13 +157,7 @@ def resolve(current: Node, update: Node, path=None):
     else:
         raise Exception(f'\ncannot resolve types:\n{current}\n{update}\n')
 
-@dispatch
-def resolve(current: Map, update: Node, path=None):
-    if path:
-        head = path[0]
-        down_resolve = resolve(current._value, update, path[1:])
-        return replace(current, **{'_value': down_resolve})
-
+def resolve_map(current: Map, update, path=None):
     current_type = type(current)
     update_type = type(update)
 
@@ -184,6 +178,56 @@ def resolve(current: Map, update: Node, path=None):
 
     else:
         raise Exception(f'\ncannot resolve types:\n{current}\n{update}\n')
+
+
+@dispatch
+def resolve(current: Map, update: Map, path=None):
+    if path:
+        head = path[0]
+
+        if head == '*':
+            down_resolve = resolve(
+                current._value,
+                update._value,
+                path[1:])
+
+        else:
+            down_resolve = resolve(
+                current._value,
+                update,
+                path[1:])
+
+        return replace(current, **{'_value': down_resolve})
+
+    else:
+        return resolve_map(current, update, path=path)
+
+@dispatch
+def resolve(current: Map, update: Node, path=None):
+    if path:
+        head = path[0]
+
+        if head == '*':
+            for key in update.__dataclass_fields__:
+                value = current._value
+                if not key.startswith('_'):
+                    value = resolve(
+                        value,
+                        getattr(update, key),
+                        path[1:])
+
+            return replace(current, **{'_value': value})
+
+        else:
+            down_resolve = resolve(
+                current._value,
+                update,
+                path[1:])
+
+        return replace(current, **{'_value': down_resolve})
+
+    else:
+        return resolve_map(current, update, path=path)
 
 
 @dispatch
@@ -214,9 +258,32 @@ def resolve(current: Map, update: dict, path=None):
 def resolve(current: dict, update: Map, path=None):
     if path:
         head = path[0]
-        down_resolve = resolve(current.get(head, {}), update, path[1:])
-        current[head] = down_resolve
-        return current
+        if head == '*':
+            if current:
+                for key, subcurrent in current.items():
+                    current[key] = resolve(
+                        subcurrent,
+                        update._value,
+                        path[1:])
+                return current
+
+            else:
+                subvalue = resolve(
+                    current,
+                    update._value,
+                    path[1:])
+
+                return replace(
+                    update,
+                    **{'_value': subvalue})
+
+        else:
+            down_resolve = resolve(
+                current.get(head, {}),
+                update,
+                path[1:])
+            current[head] = down_resolve
+            return current
 
     result = update._value
 
@@ -329,6 +396,7 @@ def resolve(current: dict, update: dict, path=None):
             value = resolve(
                 current.get(key),
                 update.get(key))
+
         except Exception as e:
             raise Exception(f'\ncannot resolve subtypes for key \'{key}\':\n{current}\n{update}\n\n  due to\n{e}')
 
