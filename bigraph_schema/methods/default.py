@@ -139,7 +139,6 @@ def default(schema: Frame):
         columns = {
             key: schema_dtype(column)
             for key, column in schema._columns.items()}
-        import ipdb; ipdb.set_trace()
         dataframe = pd.DataFrame(columns=columns.keys())
         return dataframe.astype(columns)
 

@@ -712,6 +712,7 @@ def test_frame(core):
 
     default = core.default(schema)
     frame_schema, frame_state = core.realize(schema, _dict)
+    encoded = core.serialize(frame_schema, frame_state)
 
     import ipdb; ipdb.set_trace()
 
