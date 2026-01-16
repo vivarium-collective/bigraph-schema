@@ -1,5 +1,6 @@
 from plum import dispatch
 import numpy as np
+import pandas as pd
 from numpy.random.mtrand import RandomState
 import traceback
 
@@ -26,11 +27,13 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
     Schema,
     Link,
+    dtype_schema
 )
 
 
@@ -86,6 +89,17 @@ def infer(core, value: np.ndarray, path: tuple = ()):
         _data=value.dtype) # Dtype(_fields=value.dtype))
 
     return set_default(schema, value), []
+
+def get_frame_schema(df):
+    schema = {}
+    for column in df.columns:
+        schema[column] = dtype_schema(df.loc[:, column].dtype)
+    return schema
+
+@infer.dispatch
+def infer(core, value: pd.DataFrame, path=()):
+    columns = get_frame_schema(value)
+    return Frame(_columns=columns), []
 
 @dispatch
 def infer(core, value: RandomState, path: tuple = ()):

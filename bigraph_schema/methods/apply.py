@@ -24,6 +24,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
@@ -204,6 +205,11 @@ def apply(schema: And, state, update, path):
 @dispatch
 def apply(schema: Xor, state, update, path):
     return (state or update) and not (state and update), []
+
+
+@apply.dispatch
+def apply(schema: Frame, state, update, path):
+    return update, []
 
 
 @dispatch

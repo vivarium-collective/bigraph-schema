@@ -26,6 +26,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
@@ -86,6 +87,11 @@ def align_parameters(schema: Array, parameters):
         '_data': parameters[1]}
 
 @dispatch
+def align_parameters(schema: Frame, parameters):
+    return {
+        '_columns': parameters[0]}
+
+@dispatch
 def align_parameters(schema: Link, parameters):
     align = {
         '_inputs': parameters[0],
@@ -131,6 +137,11 @@ def reify_schema(core, schema: Array, parameters):
     else:
         schema._data = dtype
 
+    return schema
+
+@dispatch
+def reify_schema(core, schema: Frame, parameters):
+    schema._columns = parameters['_columns']
     return schema
 
 @dispatch

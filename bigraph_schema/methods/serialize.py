@@ -25,6 +25,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
@@ -225,6 +226,14 @@ def render(schema: Array, defaults=False):
 
     result = f'array[{shape},{data}]'
     return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: Frame, defaults=False):
+    columns = '|'.join([
+        f'{key}:{render(value, default=defaults)}'
+        for key, value in schema._columns.items()])
+    result = f'dataframe[{columns}]'
+    return result
 
 @dispatch
 def render(schema: Key, defaults=False):
@@ -431,6 +440,12 @@ def serialize(schema: Array, state: dict):
 @dispatch
 def serialize(schema: Array, state):
     raise Exception(f'serializing array:\n  {schema}\nbut state is not an array?\n  {state}')
+
+@serialize.dispatch
+def serialize(schema: Frame, state):
+    if not state:
+        return {}
+    return state.to_dict(orient="list")
 
 @dispatch
 def serialize(schema: Schema, state):
