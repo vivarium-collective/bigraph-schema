@@ -443,7 +443,7 @@ def serialize(schema: Array, state):
 
 @serialize.dispatch
 def serialize(schema: Frame, state):
-    if not state:
+    if state is None:
         return {}
     return state.to_dict(orient="list")
 

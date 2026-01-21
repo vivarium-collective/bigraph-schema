@@ -268,6 +268,8 @@ def apply(schema: Node, state, update, path):
     if isinstance(state, dict) and isinstance(update, dict):
         result = {}
         for key in schema.__dataclass_fields__:
+            if key == '_default':
+                continue
             subschema = getattr(schema, key)
             result[key], submerges = apply(
                 subschema,

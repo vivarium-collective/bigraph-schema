@@ -713,10 +713,9 @@ def test_frame(core):
     default = core.default(schema)
     frame_schema, frame_state = core.realize(schema, _dict)
     encoded = core.serialize(frame_schema, frame_state)
+    realized_schema, realized_state = core.realize(frame_schema, encoded)
 
-    import ipdb; ipdb.set_trace()
-
-    print("Done")
+    assert realized_state.equals(df)
 
 
 def test_apply(core):

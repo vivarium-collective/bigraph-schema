@@ -33,7 +33,8 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
-    dtype_schema
+    dtype_schema,
+    get_frame_schema,
 )
 
 
@@ -89,12 +90,6 @@ def infer(core, value: np.ndarray, path: tuple = ()):
         _data=value.dtype) # Dtype(_fields=value.dtype))
 
     return set_default(schema, value), []
-
-def get_frame_schema(df):
-    schema = {}
-    for column in df.columns:
-        schema[column] = dtype_schema(df.loc[:, column].dtype)
-    return schema
 
 @infer.dispatch
 def infer(core, value: pd.DataFrame, path=()):

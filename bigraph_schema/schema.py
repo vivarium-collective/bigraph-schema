@@ -280,6 +280,11 @@ def dtype_schema(dtype: np.dtype):
     else:
         raise Exception('do not know how to interpret dtype as schema:\n\n{dtype}\n\n')
     
+def get_frame_schema(df):
+    schema = {}
+    for column in df.columns:
+        schema[column] = dtype_schema(df.loc[:, column].dtype)
+    return schema
 
 def make_default(schema, state):
     return {
