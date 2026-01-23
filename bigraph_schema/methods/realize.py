@@ -2,6 +2,7 @@ from ast import literal_eval
 from pprint import pformat as pf
 from plum import dispatch
 import numpy as np
+import pandas as pd
 from numpy.random.mtrand import RandomState
 from dataclasses import replace
 
@@ -30,6 +31,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
@@ -262,6 +264,16 @@ def realize(core, schema: Array, encode, path=()):
         state.reshape(schema._shape)
 
     return schema, state, []
+
+
+@realize.dispatch
+def realize(core, schema: Frame, encode, path=()):
+    if isinstance(encode, pd.DataFrame):
+        return schema, encode, []
+    elif not encode:
+        return schema, {}, []
+    else:
+        return schema, pd.DataFrame(encode), []
 
 
 def load_local_protocol(core, protocol, data):

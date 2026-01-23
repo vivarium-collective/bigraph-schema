@@ -119,6 +119,10 @@ class Array(Node):
     _data: np.dtype = field(default_factory=lambda:np.dtype('float64'))
 
 @dataclass(kw_only=True)
+class Frame(Node):
+    _columns: dict = field(default_factory=dict)
+
+@dataclass(kw_only=True)
 class Path(List):
     _element: Node = field(default_factory=Node)
 
@@ -256,6 +260,8 @@ def dtype_schema(dtype: np.dtype):
             return Float()
         elif 'U' in data:
             return String()
+        elif 'b1' in data:
+            return Boolean()
         elif 'i' in data or 'b' in data or 'h' in data:
             return Integer()
         elif 'F' in data or 'D' in data:
@@ -274,6 +280,11 @@ def dtype_schema(dtype: np.dtype):
     else:
         raise Exception('do not know how to interpret dtype as schema:\n\n{dtype}\n\n')
     
+def get_frame_schema(df):
+    schema = {}
+    for column in df.columns:
+        schema[column] = dtype_schema(df.loc[:, column].dtype)
+    return schema
 
 def make_default(schema, state):
     return {
@@ -360,6 +371,7 @@ BASE_TYPES = {
     'map': Map,
     'tree': Tree,
     'array': Array,
+    'dataframe': Frame,
     'path': Path,
     'wires': Wires,
     'protocol': Protocol,

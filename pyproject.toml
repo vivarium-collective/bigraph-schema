@@ -10,13 +10,14 @@ authors = [
 ]
 dependencies = [
     "fire",
+    "ipdb",
     "numpy",
     "orjson",
+    "pandas",
     "parsimonious",
     "pint",
     "plum-dispatch",
     "pytest",
-    "ipdb",
     "requests>=2.31.0",
     "setuptools",
     "twine>=4.0.2",

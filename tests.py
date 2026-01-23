@@ -1,6 +1,7 @@
 import pytest
 
 import numpy as np
+import pandas as pd
 
 from bigraph_schema import Edge, allocate_core, BASE_TYPES
 from bigraph_schema.schema import Float, String, Map, Tree, Link
@@ -696,6 +697,27 @@ def test_merge(core):
         'c': 4444,
         'd': '111111'})
 
+def test_frame(core):
+    _dict = {
+        "a": [1.0, 5.0, 6.0, 6.0],
+        "b": [1, 5, 6, 6],
+        "c": [True, False, False, False],
+    }
+    df = pd.DataFrame(_dict)
+    schema = core.infer(df)
+
+    from_string = core.access('dataframe[a:float|b:integer|c:boolean]')
+
+    assert schema == from_string
+
+    default = core.default(schema)
+    frame_schema, frame_state = core.realize(schema, _dict)
+    encoded = core.serialize(frame_schema, frame_state)
+    realized_schema, realized_state = core.realize(frame_schema, encoded)
+
+    assert realized_state.equals(df)
+
+
 def test_apply(core):
     core
 
@@ -723,6 +745,7 @@ if __name__ == '__main__':
     test_problem_schema_1(core)
     test_problem_schema_2(core)
 
+    test_frame(core)
     test_apply(core)
     test_unify(core)
 

@@ -1,5 +1,6 @@
 from plum import dispatch
 import numpy as np
+import pandas as pd
 
 from bigraph_schema.schema import (
     Node,
@@ -21,6 +22,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
@@ -28,6 +30,7 @@ from bigraph_schema.schema import (
     LocalProtocol,
     Schema,
     Link,
+    schema_dtype,
 )
 
 
@@ -127,6 +130,18 @@ def default(schema: Array):
         return np.zeros(
             schema._shape,
             dtype=schema._data)
+
+@dispatch
+def default(schema: Frame):
+    if schema._default is not None:
+        return schema._default
+    else:
+        columns = {
+            key: schema_dtype(column)
+            for key, column in schema._columns.items()}
+        dataframe = pd.DataFrame(columns=columns.keys())
+        return dataframe.astype(columns)
+
 
 def default_wires(schema, path=None):
     path = path or []

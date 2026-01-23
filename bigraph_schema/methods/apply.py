@@ -24,6 +24,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
@@ -206,6 +207,11 @@ def apply(schema: Xor, state, update, path):
     return (state or update) and not (state and update), []
 
 
+@apply.dispatch
+def apply(schema: Frame, state, update, path):
+    return update, []
+
+
 @dispatch
 def apply(schema: Array, state, update, path):
     index = tuple([
@@ -262,6 +268,8 @@ def apply(schema: Node, state, update, path):
     if isinstance(state, dict) and isinstance(update, dict):
         result = {}
         for key in schema.__dataclass_fields__:
+            if key == '_default':
+                continue
             subschema = getattr(schema, key)
             result[key], submerges = apply(
                 subschema,
