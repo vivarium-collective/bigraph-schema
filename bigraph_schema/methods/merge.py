@@ -24,6 +24,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
