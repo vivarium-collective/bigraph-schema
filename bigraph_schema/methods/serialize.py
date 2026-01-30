@@ -445,7 +445,7 @@ def serialize(schema: Array, state):
 def serialize(schema: Frame, state):
     if state is None:
         return {}
-    return state.to_dict(orient="list")
+    return state.reset_index().to_dict(orient="list")
 
 @dispatch
 def serialize(schema: Schema, state):
