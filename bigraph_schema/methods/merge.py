@@ -24,6 +24,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    Frame,
     Key,
     Path,
     Wires,
@@ -222,6 +223,12 @@ def merge(schema: Array, current, update, path=()):
     else:
         return update
 
+@dispatch
+def merge(schema: Frame, current, update, path=()):
+    if update.empty:
+        return current
+    else:
+        return update
 
 @dispatch
 def merge(schema: Atom, current, update, path=()):
