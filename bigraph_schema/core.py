@@ -105,6 +105,13 @@ def schema_keys(schema):
     return keys
 
 
+def append_link_path(schema, link_path):
+    if not hasattr(schema, 'link_path'):
+        schema.link_path = []
+    schema.link_path.append(link_path)
+    return schema
+
+
 class CoreVisitor(NodeVisitor):
     """Visitor that converts parsed bigraph expressions into schema node structures.
 
@@ -460,6 +467,7 @@ class Core:
                 return current
             else:
                 return resolve(current, update)
+
         except ValueError:
             # numpy grumble grumble
             return resolve(current, update)
@@ -531,7 +539,8 @@ class Core:
     def resolve_merges(self, schema, merges):
         if len(merges) > 0:
             merge_schema = {}
-            for path, subschema in merges:
+            for path, subschema, link_path in merges:
+                subschema = append_link_path(subschema, link_path)
                 merge_schema = self.resolve(
                     merge_schema,
                     subschema,

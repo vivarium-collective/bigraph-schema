@@ -301,7 +301,7 @@ def load_protocol(core, protocol, data):
 def port_merges(core, port_schema, wires, path):
     if isinstance(wires, (list, tuple)):
         subpath = path[:-1] + tuple(wires)
-        return [(subpath, port_schema)]
+        return [(subpath, port_schema, path)]
 
     else:
         merges = []

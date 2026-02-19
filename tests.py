@@ -514,6 +514,29 @@ def test_generate(core):
 
     rendered = core.render(generated_schema, defaults=True)
 
+
+def test_resolve_conflict(core):
+    state = {
+        'A': {
+            '_type': 'link',
+            '_inputs': {
+                'number': 'float{3.333}'},
+            '_outputs': {
+                'place': 'string{world}'},
+            'inputs': {'number': ['number']},
+            'outputs': {'place': ['place']}},
+        'B': {
+            '_type': 'link',
+            '_inputs': {
+                'place': 'map[string]'},
+            '_outputs': {
+                'number': 'float'},
+            'inputs': {'place': ['number']},
+            'outputs': {'number': ['other place']}}}
+
+    schema, realized = core.realize({}, state)
+
+
 def test_unify(core):
     default_hello = 'string{hello}'
 
@@ -751,3 +774,5 @@ if __name__ == '__main__':
 
     test_generate_tuple_default(core)
     test_array(core)
+
+    # test_resolve_conflict(core)

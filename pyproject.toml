@@ -3,7 +3,7 @@ name = "bigraph-schema"
 version = "1.0.2"
 description = "A serializable type schema for compositional systems biology"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 authors = [
   {name = "Eran Agmon"},
   {name = "Ryan Spangler"}

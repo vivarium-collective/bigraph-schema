@@ -39,6 +39,13 @@ from bigraph_schema.methods.default import default
 from bigraph_schema.methods.merge import merge, merge_update
 
 
+def read_link_path(schema):
+    if hasattr(schema, 'link_path'):
+        return schema.link_path
+    else:
+        return []
+
+
 def resolve_subclass(subclass, superclass):
     result = {}
     for key in subclass.__dataclass_fields__:    
@@ -155,7 +162,7 @@ def resolve(current: Node, update: Node, path=None):
             return current
 
     else:
-        raise Exception(f'\ncannot resolve types:\n{current}\n{update}\n')
+        raise Exception(f'\ncannot resolve types:\n{read_link_path(current)}: {current}\n{read_link_path(update)}: {update}\n')
 
 def resolve_map(current: Map, update, path=None):
     current_type = type(current)
