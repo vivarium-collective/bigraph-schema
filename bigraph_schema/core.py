@@ -106,9 +106,15 @@ def schema_keys(schema):
 
 
 def append_link_path(schema, link_path):
-    if not hasattr(schema, 'link_path'):
-        schema.link_path = []
-    schema.link_path.append(link_path)
+    if isinstance(schema, Node):
+        if not hasattr(schema, 'link_path'):
+            schema.link_path = []
+        schema.link_path.append(link_path)
+    else:
+        if not 'link_path' in schema:
+            schema['link_path'] = []
+        schema['link_path'].append(link_path)
+
     return schema
 
 
