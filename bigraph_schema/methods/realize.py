@@ -518,7 +518,7 @@ def realize(core, schema: dict, encode, path=()):
                     result_state[key] = outcome_state
                     merges += submerges
             else:
-                if key != '_default':
+                if key not in ("_default", "_link_path"):
                     result_schema[key], result_state[key], submerges = core.default_merges(
                         subschema,
                         path=path+(key,))

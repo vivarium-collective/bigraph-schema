@@ -40,8 +40,12 @@ from bigraph_schema.methods.merge import merge, merge_update
 
 
 def read_link_path(schema):
-    if hasattr(schema, 'link_path'):
-        return schema.link_path
+    if hasattr(schema, '_link_path'):
+        return schema._link_path
+    elif isinstance(schema, dict):
+        if "_link_path" in schema:
+            return schema["_link_path"]
+        return []
     else:
         return []
 
@@ -51,6 +55,8 @@ def resolve_subclass(subclass, superclass):
     for key in subclass.__dataclass_fields__:    
         if key == '_default':
             result[key] = subclass._default or superclass._default
+        elif key == '_link_path':
+            continue
         else:
             subattr = getattr(subclass, key)
             if hasattr(superclass, key): # and not key.startswith('_'):
@@ -396,7 +402,7 @@ def resolve(current: dict, update: dict, path=None):
             all_keys.append(key)
 
     for key in all_keys:
-        if key in ('_inherit',):
+        if key in ('_inherit', '_link_path'):
             continue
 
         try:
