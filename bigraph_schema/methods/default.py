@@ -194,6 +194,8 @@ def default(schema: dict):
     else:
         result = {}
         for key in schema:
+            if key == '_link_path':
+                continue
             if not is_schema_key(key):
                 if isinstance(schema[key], float):
                     import ipdb; ipdb.set_trace()
