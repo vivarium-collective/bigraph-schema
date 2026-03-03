@@ -688,6 +688,43 @@ def resolve(current: List, update: Tuple, path=None):
 
 
 @dispatch
+def resolve(current: tuple, update: Tuple, path=None):
+    result = []
+    index = 0
+
+    for subcurrent, subelement in zip(current, update._values):
+        subresolve = resolve(subcurrent, subupdate, path=path)
+        result.append(subresolve)
+        index += 1
+
+    if len(current) > len(update._values):
+        result += list(current[index:])
+    elif len(update._values) > len(current):
+        result += list(update._values[index:])
+
+    update._values = result
+    return update
+
+
+@dispatch
+def resolve(current: tuple, update: tuple, path=None):
+    result = []
+    index = 0
+
+    for subcurrent, subelement in zip(current, update):
+        subresolve = resolve(subcurrent, subupdate, path=path)
+        result.append(subresolve)
+        index += 1
+
+    if len(current) > len(update):
+        result += list(current[index:])
+    elif len(update) > len(current):
+        result += list(update[index:])
+
+    return tuple(result)
+
+
+@dispatch
 def resolve(current: list, update: list, path=None):
     ### ???
     return tuple(update)

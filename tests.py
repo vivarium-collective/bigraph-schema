@@ -742,12 +742,15 @@ def test_frame(core):
 
 
 def test_infer_star(core):
-    import ipdb; ipdb.set_trace()
-
     core.infer({
         "global_time": {"_default": 0.0, "_updater": "accumulate"},
         "next_update_time": {"*": {}},
     })
+
+
+def test_access_tuple(core):
+    found = core.access({'0': {('what',): 'float'}})
+    assert isinstance(found['0'][('what',)], Float)
 
 
 def test_apply(core):
@@ -784,5 +787,7 @@ if __name__ == '__main__':
     test_generate_tuple_default(core)
     test_array(core)
     test_infer_star(core)
+
+    test_access_tuple(core)
 
     # test_resolve_conflict(core)

@@ -358,6 +358,7 @@ class Core:
                     result = found
                 else:
                     result = self.resolve(result, found)
+
         return result
 
     def access(self, key):
@@ -399,8 +400,9 @@ class Core:
                 result = self.resolve_inherit(key)
 
                 for subkey, subitem in key.items():
-                    if isinstance(subkey, str):
-                        subitem = subitem if subkey.startswith('_') else self.access(subitem)
+                    if (isinstance(subkey, str) and not subkey.startswith('_')) or isinstance(subkey, (int, tuple)):
+                        subitem = self.access(subitem)
+
                     if isinstance(result, Node):
                         if hasattr(result, subkey):
                             result = replace(result, **{subkey: subitem})
@@ -413,6 +415,7 @@ class Core:
 
         elif isinstance(key, list):
             return [self.access(element) for element in key]
+
         else:
             return key
 

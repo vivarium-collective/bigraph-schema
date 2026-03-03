@@ -359,7 +359,10 @@ def realize_link(core, schema: Link, encode, path=()):
     message = f'config provided to {address} does not match the config_schema!\n\nconfig_schema: {pf(render(config_schema))}\n\nconfig: {pf(config)}\n\n'
     core.validate(config_schema, config, message)
 
-    edge_instance = encode.get('instance', edge_class(config, core))
+    edge_instance = encode.get(
+        'instance',
+        edge_class(config, core))
+
     interface = edge_instance.interface()
 
     decode = {

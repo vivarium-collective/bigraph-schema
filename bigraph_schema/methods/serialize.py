@@ -308,7 +308,7 @@ def render(schema, defaults=False):
     return schema
 
 def render_associated(assoc):
-    if all([isinstance(value, str) for value in assoc.values()]):
+    if all([isinstance(key, str) and isinstance(value, str) for key, value in assoc.items()]):
         parts = [f'{key}:{value}' for key, value in assoc.items()]
         assoc = '|'.join(parts)
     return assoc
