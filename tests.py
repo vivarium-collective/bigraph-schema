@@ -753,6 +753,12 @@ def test_access_tuple(core):
     assert isinstance(found['0'][('what',)], Float)
 
 
+def test_serialize_realize_shape(core):
+    array_schema = core.access('array[38383,float]')
+    assert array_schema._shape[0] == 38383
+    assert len(array_schema._shape) == 1
+
+
 def test_apply(core):
     core
 
@@ -789,5 +795,6 @@ if __name__ == '__main__':
     test_infer_star(core)
 
     test_access_tuple(core)
+    test_serialize_realize_shape(core)
 
     # test_resolve_conflict(core)

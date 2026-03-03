@@ -363,6 +363,7 @@ BASE_TYPES = {
     'number': Number,
     'integer': Integer,
     'float': Float,
+    'float64': Float,
     'delta': Delta,
     'nonnegative': Nonnegative,
     'random_state': NPRandom,
