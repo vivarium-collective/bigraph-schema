@@ -506,19 +506,20 @@ def realize(core, schema: dict, encode, path=()):
 
     if isinstance(encode, dict):
         for key, subschema in schema.items():
-            if key in encode:
-                outcome_schema, outcome_state, submerges = realize(
-                    core,
-                    subschema,
-                    encode[key],
-                    path+(key,))
+            if key not in ("_default", "_link_path"):
+                if key in encode:
+                    outcome_schema, outcome_state, submerges = realize(
+                        core,
+                        subschema,
+                        encode[key],
+                        path+(key,))
 
-                if outcome_state is not None:
-                    result_schema[key] = core.resolve(subschema, outcome_schema)
-                    result_state[key] = outcome_state
-                    merges += submerges
-            else:
-                if key not in ("_default", "_link_path"):
+                    if outcome_state is not None:
+                        result_schema[key] = core.resolve(subschema, outcome_schema)
+                        result_state[key] = outcome_state
+                        merges += submerges
+
+                else:
                     result_schema[key], result_state[key], submerges = core.default_merges(
                         subschema,
                         path=path+(key,))

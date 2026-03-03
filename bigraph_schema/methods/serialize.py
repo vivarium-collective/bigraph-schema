@@ -296,9 +296,6 @@ def render(schema: Node, defaults=False):
         else:
             subrender[key] = render(value, defaults=defaults)
 
-        if not defaults:
-            subrender = render_associated(subrender)
-
     return wrap_default(schema, subrender) if defaults else subrender
 
 @dispatch
