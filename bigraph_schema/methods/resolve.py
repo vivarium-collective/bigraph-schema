@@ -737,7 +737,6 @@ def resolve(current, update, path=None):
     elif is_empty(update):
         return current
     else:
-        import ipdb; ipdb.set_trace()
         raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')
 
 

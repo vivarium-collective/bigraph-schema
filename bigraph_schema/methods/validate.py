@@ -28,6 +28,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    dtype_schema,
 )
 
 from bigraph_schema.methods.check import check
@@ -184,11 +185,20 @@ def validate(core, schema: Array, state):
         return f'Array schema but state is not an array:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
     shape_match = tuple(schema._shape) == state.shape
-    data_match = schema._data == state.dtype
+    schema_data = schema._data
+    state_data = state.dtype
+
+    if isinstance(schema_data, np.dtype):
+        schema_data = dtype_schema(schema_data)
+    if isinstance(state_data, np.dtype):
+        state_data = dtype_schema(state_data)
+
+    data_match = schema_data == state_data
 
     if not shape_match:
         return f'Array schema but shape does not match:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
     if not data_match:
+        import ipdb; ipdb.set_trace()
         return f'Array schema but data does not match:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
 
