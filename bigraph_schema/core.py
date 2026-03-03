@@ -380,6 +380,7 @@ class Core:
                 try:
                     return visit_expression(key, self.parse_visitor)
                 except Exception as e:
+                    import ipdb; ipdb.set_trace()
                     raise Exception(f'unable to parse type "{key}"\n\ndue to\n{e}')
             else:
                 entry = self.registry[key]

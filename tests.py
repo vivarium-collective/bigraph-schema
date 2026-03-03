@@ -741,6 +741,15 @@ def test_frame(core):
     assert realized_state.equals(df)
 
 
+def test_infer_star(core):
+    import ipdb; ipdb.set_trace()
+
+    core.infer({
+        "global_time": {"_default": 0.0, "_updater": "accumulate"},
+        "next_update_time": {"*": {}},
+    })
+
+
 def test_apply(core):
     core
 
@@ -774,5 +783,6 @@ if __name__ == '__main__':
 
     test_generate_tuple_default(core)
     test_array(core)
+    test_infer_star(core)
 
     # test_resolve_conflict(core)

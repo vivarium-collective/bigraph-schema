@@ -208,6 +208,7 @@ def render(schema: NPRandom, defaults=False):
     result = {
         '_type': 'random_state',
         'state': render(schema.state, defaults=defaults)}
+
     return wrap_default(schema, result) if defaults else result
 
 

@@ -255,6 +255,7 @@ def walk_path(context, to, subpath=None):
 
 def dtype_schema(dtype: np.dtype):
     data = nf.dtype_to_descr(dtype)
+
     if isinstance(data, str):
         if 'f' in data or 'd' in data:
             return Float()
@@ -262,10 +263,13 @@ def dtype_schema(dtype: np.dtype):
             return String()
         elif 'b1' in data:
             return Boolean()
-        elif 'i' in data or 'b' in data or 'h' in data:
+        elif 'i' in data or 'b' in data or 'h' in data or 'u' in data:
             return Integer()
         elif 'F' in data or 'D' in data:
             return Complex()
+        else:
+            raise Exception(f'unknown dtype {data}')
+
     elif isinstance(data, list):
         result = {}
         for group in data:
