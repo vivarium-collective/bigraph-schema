@@ -59,7 +59,9 @@ def realize(core, schema: Maybe, encode, path=()):
 
 @dispatch
 def realize(core, schema: Wrap, encode, path=()):
-    return realize(core, schema._value, encode)
+    outschema, outstate, merges = realize(core, schema._value, encode, path=path)
+    schema._value = outschema
+    return schema, outstate, merges
 
 @dispatch
 def realize(core, schema: Union, encode, path=()):
