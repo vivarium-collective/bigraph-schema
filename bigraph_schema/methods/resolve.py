@@ -102,7 +102,25 @@ def resolve(current: Node, update: Empty, path=None):
 def resolve(current: Wrap, update: Wrap, path=None):
     if type(current) == type(update):
         value = resolve(current._value, update._value, path=path)
-        return type(current)(_value=value)
+        schema = type(current)(_value=value)
+
+        if update._default is not None:
+            schema._default = update._default
+        else:
+            schema._default = current._default
+
+        return schema
+    else:
+        # TODO: resolve wrappings somehow?
+        raise Exception(f'cannot resolve two different wrappings {current} {update}')
+
+
+@dispatch
+def resolve(current: Boolean, update: Boolean, path=None):
+    if current._default:
+        return current
+    else:
+        return update
 
 @dispatch
 def resolve(current: Wrap, update: Node, path=None):

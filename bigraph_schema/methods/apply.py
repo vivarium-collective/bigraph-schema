@@ -94,7 +94,9 @@ def apply(schema: Tuple, state, update, path):
 
 @dispatch
 def apply(schema: List, state, update, path):
+    result = []
     merges = []
+
     if isinstance(update, dict):
         if '_remove' in update:
             indexes = update['_remove']
@@ -105,8 +107,16 @@ def apply(schema: List, state, update, path):
                     item
                     for index, item in enumerate(state)
                     if index not in indexes]
+
         if '_add' in update:
             result += update['_add']
+
+    if isinstance(update, np.ndarray):
+        result = update
+
+    elif isinstance(state, np.ndarray):
+        result = state
+
     else:
         result = state + update
 
