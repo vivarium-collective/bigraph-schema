@@ -109,10 +109,16 @@ def merge(schema: List, current, update, path=()):
         current[head] = merge(subschema, current[head], update, path[1:])
         return current
 
-    elif current is None:
+    elif current is None or current == []:
         return update
 
-    elif update is None:
+    elif update is None or update == []:
+        return current
+
+    elif isinstance(update, np.ndarray):
+        return update
+
+    elif isinstance(current, np.ndarray):
         return current
 
     else:

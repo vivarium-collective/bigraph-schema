@@ -73,6 +73,8 @@ from bigraph_schema.schema import (
     Jump,
     Star,
     Index,
+    Protocol,
+    LocalProtocol
 )
 
 from bigraph_schema.parse import visit_expression
@@ -358,6 +360,7 @@ class Core:
                     result = found
                 else:
                     result = self.resolve(result, found)
+
         return result
 
     def access(self, key):
@@ -380,6 +383,7 @@ class Core:
                 try:
                     return visit_expression(key, self.parse_visitor)
                 except Exception as e:
+                    import ipdb; ipdb.set_trace()
                     raise Exception(f'unable to parse type "{key}"\n\ndue to\n{e}')
             else:
                 entry = self.registry[key]
@@ -398,8 +402,9 @@ class Core:
                 result = self.resolve_inherit(key)
 
                 for subkey, subitem in key.items():
-                    if isinstance(subkey, str):
-                        subitem = subitem if subkey.startswith('_') else self.access(subitem)
+                    if (isinstance(subkey, str) and not subkey.startswith('_')) or isinstance(subkey, (int, tuple)):
+                        subitem = self.access(subitem)
+
                     if isinstance(result, Node):
                         if hasattr(result, subkey):
                             result = replace(result, **{subkey: subitem})
@@ -412,6 +417,7 @@ class Core:
 
         elif isinstance(key, list):
             return [self.access(element) for element in key]
+
         else:
             return key
 
@@ -731,13 +737,15 @@ class Core:
         if instance is not None:
             initial_state = instance.initial_state()
 
-            for ports_key in ['inputs', 'outputs']:
-                ports_schema = link.get(f'_{ports_key}', {})
-                wires = link.get(ports_key, {})
-                project_schema, project_state = self.project_ports(ports_schema, wires, path[:-1], initial_state)
-                result_schema, result_state = self.combine(
-                    result_schema, result_state,
-                    project_schema, project_state)
+            if initial_state:
+                for ports_key in ['inputs', 'outputs']:
+                    ports_schema = link.get(f'_{ports_key}', {})
+                    wires = link.get(ports_key, {})
+
+                    project_schema, project_state = self.project_ports(ports_schema, wires, path[:-1], initial_state)
+                    result_schema, result_state = self.combine(
+                        result_schema, result_state,
+                        project_schema, project_state)
 
         return result_schema, result_state
 

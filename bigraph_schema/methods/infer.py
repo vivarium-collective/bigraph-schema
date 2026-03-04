@@ -159,7 +159,10 @@ def separate_keys(d):
 
 @dispatch
 def infer(core, value: dict, path: tuple = ()):
-    if '_type' in value:
+    if not value:
+        return Node(), []
+
+    elif '_type' in value:
         schema_keys, state = separate_keys(value)
         schema = core.access_type(schema_keys)
         merges = []
@@ -173,6 +176,7 @@ def infer(core, value: dict, path: tuple = ()):
         subvalues = {}
         distinct_subvalues = []
         merges = []
+
         for key, subvalue in value.items():
             subvalues[key], submerges = infer(
                 core,

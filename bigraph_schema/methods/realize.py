@@ -59,7 +59,9 @@ def realize(core, schema: Maybe, encode, path=()):
 
 @dispatch
 def realize(core, schema: Wrap, encode, path=()):
-    return realize(core, schema._value, encode)
+    outschema, outstate, merges = realize(core, schema._value, encode, path=path)
+    schema._value = outschema
+    return schema, outstate, merges
 
 @dispatch
 def realize(core, schema: Union, encode, path=()):
@@ -328,10 +330,8 @@ def default_wires(schema):
 
 
 def realize_link(core, schema: Link, encode, path=()):
-    if 'instance' in encode:
-        return schema, encode, []
-
     address = encode.get('address', 'local:edge')
+
     if isinstance(address, str):
         if ':' not in address:
             protocol = 'local'
@@ -343,29 +343,38 @@ def realize_link(core, schema: Link, encode, path=()):
             'protocol': protocol,
             'data': data}
 
-    protocol = address.get('protocol', 'local')
-    protocol_schema = core.access(protocol)
-    edge_class = load_protocol(core, protocol_schema, address['data'])
+    if 'instance' in encode:
+        edge_instance = encode['instance']
+        config = encode['config']
 
-    if edge_class is None:
-        raise Exception(f'no link found at address: {address}')
+        # return schema, encode, []
 
-    config_schema = edge_class.config_schema
-    encode_config = encode.get('config', {})
-    _, decode_config = core.realize(config_schema, encode_config)
-    config = core.fill(config_schema, decode_config)
+    else:
+        protocol = address.get('protocol', 'local')
+        protocol_schema = core.access(protocol)
+        edge_class = load_protocol(core, protocol_schema, address['data'])
 
-    # validate the config against the config_schema
-    message = f'config provided to {address} does not match the config_schema!\n\nconfig_schema: {pf(render(config_schema))}\n\nconfig: {pf(config)}\n\n'
-    core.validate(config_schema, config, message)
+        if edge_class is None:
+            raise Exception(f'no link found at address: {address}')
 
-    edge_instance = encode.get('instance', edge_class(config, core))
-    interface = edge_instance.interface()
+        config_schema = edge_class.config_schema
+        encode_config = encode.get('config', {})
+        _, decode_config = core.realize(config_schema, encode_config)
+        config = core.fill(config_schema, decode_config)
+
+        # validate the config against the config_schema
+        message = f'config provided to {address} does not match the config_schema!\n\nconfig_schema: {pf(render(config_schema))}\n\nconfig: {pf(config)}\n\n'
+        core.validate(config_schema, config, message)
+
+        edge_instance = edge_class(config, core)
 
     decode = {
         'address': address,
         'config': config,
         'instance': edge_instance}
+
+    interface = edge_instance.interface()
+
     merges = []
 
     for port in ['inputs', 'outputs']:
@@ -375,6 +384,7 @@ def realize_link(core, schema: Link, encode, path=()):
         port_schema = core.resolve(
             port_schema,
             interface[port])
+
         if port_key in encode and encode[port_key]:
             port_schema = core.resolve(
                 port_schema,
@@ -388,6 +398,7 @@ def realize_link(core, schema: Link, encode, path=()):
 
         if port not in encode or encode[port] is None:
             decode[port] = default_wires(port_schema)
+
         else:
             subschema = getattr(schema, port)
 
@@ -407,15 +418,6 @@ def realize_link(core, schema: Link, encode, path=()):
 
         merges += submerges
 
-    # if 'shared' in encode and encode['shared'] is not None:
-    #     decode['shared'] = {}
-    #     for shared_name, shared_state in encode['shared'].items():
-    #         link_schema, link_state, submerges = realize_link(core, schema, shared_state, path+('shared',))
-    #         merges += submerges
-
-    #         link_state['instance'].register_shared(edge_instance)
-    #         decode['shared'][shared_name] = link_state
-
     for key, value in encode.items():
         if not key.startswith('_'):
             if hasattr(schema, key):
@@ -425,6 +427,15 @@ def realize_link(core, schema: Link, encode, path=()):
                     core, {}, value, path+(key,))
                 setattr(schema, key, attr)
                 merges += submerges
+
+    # if 'shared' in encode and encode['shared'] is not None:
+    #     decode['shared'] = {}
+    #     for shared_name, shared_state in encode['shared'].items():
+    #         link_schema, link_state, submerges = realize_link(core, schema, shared_state, path+('shared',))
+    #         merges += submerges
+
+    #         link_state['instance'].register_shared(edge_instance)
+    #         decode['shared'][shared_name] = link_state
 
     return schema, decode, merges
 
@@ -505,20 +516,25 @@ def realize(core, schema: dict, encode, path=()):
     merges = []
 
     if isinstance(encode, dict):
-        for key, subschema in schema.items():
-            if key in encode:
-                outcome_schema, outcome_state, submerges = realize(
-                    core,
-                    subschema,
-                    encode[key],
-                    path+(key,))
+        if '_type' in encode:
+            schema = core.access_type(encode)
+            result = {}
 
-                if outcome_state is not None:
-                    result_schema[key] = core.resolve(subschema, outcome_schema)
-                    result_state[key] = outcome_state
-                    merges += submerges
-            else:
-                if key not in ("_default", "_link_path"):
+        for key, subschema in schema.items():
+            if key not in ('_default', '_link_path'):
+                if key in encode:
+                    outcome_schema, outcome_state, submerges = realize(
+                        core,
+                        subschema,
+                        encode[key],
+                        path+(key,))
+
+                    if outcome_state is not None:
+                        result_schema[key] = core.resolve(subschema, outcome_schema)
+                        result_state[key] = outcome_state
+                        merges += submerges
+
+                else:
                     result_schema[key], result_state[key], submerges = core.default_merges(
                         subschema,
                         path=path+(key,))

@@ -122,9 +122,17 @@ def reify_schema(core, schema: Array, parameters):
     if '|' in parameters.get('_shape', ''):
         import ipdb; ipdb.set_trace()
 
+    shape = parameters.get('_shape', (1,))
+    if isinstance(shape, str):
+        shape = int(shape)
+    if isinstance(shape, list):
+        shape = tuple(shape)
+    if not isinstance(shape, tuple):
+        shape = (shape,)
+
     schema._shape = tuple([
         int(value)
-        for value in parameters.get('_shape', (1,))])
+        for value in shape])
 
     data = parameters.get('_data', 'float')
     data_schema = core.access(data)

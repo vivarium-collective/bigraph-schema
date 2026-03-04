@@ -102,7 +102,25 @@ def resolve(current: Node, update: Empty, path=None):
 def resolve(current: Wrap, update: Wrap, path=None):
     if type(current) == type(update):
         value = resolve(current._value, update._value, path=path)
-        return type(current)(_value=value)
+        schema = type(current)(_value=value)
+
+        if update._default is not None:
+            schema._default = update._default
+        else:
+            schema._default = current._default
+
+        return schema
+    else:
+        # TODO: resolve wrappings somehow?
+        raise Exception(f'cannot resolve two different wrappings {current} {update}')
+
+
+@dispatch
+def resolve(current: Boolean, update: Boolean, path=None):
+    if current._default:
+        return current
+    else:
+        return update
 
 @dispatch
 def resolve(current: Wrap, update: Node, path=None):
@@ -402,7 +420,7 @@ def resolve(current: dict, update: dict, path=None):
             all_keys.append(key)
 
     for key in all_keys:
-        if key in ('_inherit', '_link_path'):
+        if key in ('_inherit', '_link_path', '_default'):
             continue
 
         try:
@@ -681,10 +699,60 @@ def resolve(current: String, update: Node, path=None):
     
 
 @dispatch
+def resolve(current: List, update: List, path=None):
+    if current._default:
+        if update._default:
+            if len(current._default) > len(update._default):
+                return current
+            else:
+                return update
+        else:
+            return current
+    else:
+        return update
+
+@dispatch
 def resolve(current: List, update: Tuple, path=None):
     if not update._default and current._default:
         update._default = tuple(current._default)
     return update
+
+
+@dispatch
+def resolve(current: tuple, update: Tuple, path=None):
+    result = []
+    index = 0
+
+    for subcurrent, subelement in zip(current, update._values):
+        subresolve = resolve(subcurrent, subupdate, path=path)
+        result.append(subresolve)
+        index += 1
+
+    if len(current) > len(update._values):
+        result += list(current[index:])
+    elif len(update._values) > len(current):
+        result += list(update._values[index:])
+
+    update._values = result
+    return update
+
+
+@dispatch
+def resolve(current: tuple, update: tuple, path=None):
+    result = []
+    index = 0
+
+    for subcurrent, subelement in zip(current, update):
+        subresolve = resolve(subcurrent, subupdate, path=path)
+        result.append(subresolve)
+        index += 1
+
+    if len(current) > len(update):
+        result += list(current[index:])
+    elif len(update) > len(current):
+        result += list(update[index:])
+
+    return tuple(result)
 
 
 @dispatch
