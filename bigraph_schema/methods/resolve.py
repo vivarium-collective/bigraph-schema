@@ -681,6 +681,19 @@ def resolve(current: String, update: Node, path=None):
     
 
 @dispatch
+def resolve(current: List, update: List, path=None):
+    if current._default:
+        if update._default:
+            if len(current._default) > len(update._default):
+                return current
+            else:
+                return update
+        else:
+            return current
+    else:
+        return update
+
+@dispatch
 def resolve(current: List, update: Tuple, path=None):
     if not update._default and current._default:
         update._default = tuple(current._default)

@@ -118,6 +118,9 @@ def merge(schema: List, current, update, path=()):
     elif isinstance(update, np.ndarray):
         return update
 
+    elif isinstance(current, np.ndarray):
+        return current
+
     else:
         return current + update
 
