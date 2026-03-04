@@ -116,7 +116,7 @@ def merge(schema: List, current, update, path=()):
         return current
 
     else:
-        return current + update
+        return update
 
 
 @dispatch

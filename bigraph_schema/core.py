@@ -73,6 +73,8 @@ from bigraph_schema.schema import (
     Jump,
     Star,
     Index,
+    Protocol,
+    LocalProtocol
 )
 
 from bigraph_schema.parse import visit_expression
@@ -735,13 +737,15 @@ class Core:
         if instance is not None:
             initial_state = instance.initial_state()
 
-            for ports_key in ['inputs', 'outputs']:
-                ports_schema = link.get(f'_{ports_key}', {})
-                wires = link.get(ports_key, {})
-                project_schema, project_state = self.project_ports(ports_schema, wires, path[:-1], initial_state)
-                result_schema, result_state = self.combine(
-                    result_schema, result_state,
-                    project_schema, project_state)
+            if initial_state:
+                for ports_key in ['inputs', 'outputs']:
+                    ports_schema = link.get(f'_{ports_key}', {})
+                    wires = link.get(ports_key, {})
+
+                    project_schema, project_state = self.project_ports(ports_schema, wires, path[:-1], initial_state)
+                    result_schema, result_state = self.combine(
+                        result_schema, result_state,
+                        project_schema, project_state)
 
         return result_schema, result_state
 

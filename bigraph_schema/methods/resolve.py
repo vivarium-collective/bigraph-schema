@@ -402,7 +402,7 @@ def resolve(current: dict, update: dict, path=None):
             all_keys.append(key)
 
     for key in all_keys:
-        if key in ('_inherit', '_link_path'):
+        if key in ('_inherit', '_link_path', '_default'):
             continue
 
         try:

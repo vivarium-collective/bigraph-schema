@@ -455,16 +455,21 @@ def serialize(schema: Link, state):
     instance = state.get('instance')
     unconfig = state.get('config')
 
-    if instance is None:
-        config_schema = {}
-    else:
-        config_schema = instance.core.access(instance.config_schema)
+    # if instance is None:
+    #     config_schema = {}
+    # else:
+    #     config_schema = instance.core.access(
+    #         instance.config_schema)
 
     # config = serialize(config_schema, unconfig)
     # inputs = serialize(schema.inputs, state.get('inputs'))
     # outputs = serialize(schema.outputs, state.get('outputs'))
-    _inputs = resolve(schema._inputs, state.get('_inputs'))
-    _outputs = resolve(schema._outputs, state.get('_outputs'))
+
+    # _inputs = resolve(schema._inputs, state.get('_inputs'))
+    # _outputs = resolve(schema._outputs, state.get('_outputs'))
+
+    _inputs = schema._inputs
+    _outputs = schema._outputs
 
     encode = {
         'address': address,
@@ -476,6 +481,10 @@ def serialize(schema: Link, state):
         encode['inputs'] = state.get('inputs')
     if state.get('outputs'):
         encode['outputs'] = state.get('outputs')
+    if state.get('interval'):
+        encode['interval'] = state.get('interval')
+    if state.get('priority'):
+        encode['priority'] = state.get('priority')
 
     return encode
 

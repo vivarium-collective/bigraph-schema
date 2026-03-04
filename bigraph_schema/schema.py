@@ -317,6 +317,10 @@ def schema_dtype(schema: String):
     return np.dtype('unicode')
 
 @dispatch
+def schema_dtype(schema: Array):
+    return np.dtype('object')
+
+@dispatch
 def schema_dtype(schema: str):
     return np.dtype(schema)
 
