@@ -168,6 +168,8 @@ def render(schema: List, defaults=False):
     element = render(schema._element, defaults=defaults)
     if isinstance(element, str):
         result = f'list[{element}]'
+    elif not element:
+        result = 'list[node]'
     else:
         result = {
             '_type': 'list',
@@ -275,7 +277,7 @@ def render(schema: dict, defaults=False):
         parts = {}
         for key, value in schema.items():
             subrender = render(value, defaults=defaults)
-            parts[key] = subrender
+            parts[str(key)] = subrender
 
         if not defaults:
             parts = render_associated(parts)
@@ -291,9 +293,11 @@ def render(schema: Node, defaults=False):
     subrender = {}
 
     for key in schema.__dataclass_fields__:
-        value = getattr(schema,key)
+        value = getattr(schema, key)
         if key == '_default':
-            subrender[key] = serialize(schema, value)
+            default_render = serialize(schema, value)
+            if default_render:
+                subrender['_default'] = default_render
         else:
             subrender[key] = render(value, defaults=defaults)
 
@@ -311,6 +315,7 @@ def render_associated(assoc):
     if all([isinstance(key, str) and isinstance(value, str) for key, value in assoc.items()]):
         parts = [f'{key}:{value}' for key, value in assoc.items()]
         assoc = '|'.join(parts)
+
     return assoc
 
 
@@ -339,6 +344,7 @@ def serialize(schema: Union, state):
             match = serialize(option, state)
 
             break
+
     return match
 
 @dispatch
@@ -367,7 +373,7 @@ def serialize(schema: NPRandom, state):
 
 @dispatch
 def serialize(schema: String, state):
-    return state
+    return str(state)
 
 @dispatch
 def serialize(schema: np.str_, state):
@@ -382,7 +388,7 @@ def serialize(schema: List, state):
 @dispatch
 def serialize(schema: Map, state):
     return {
-        key: serialize(schema._value, value)
+        serialize(schema._key, key): serialize(schema._value, value)
         for key, value in state.items()}
 
 @dispatch
@@ -392,8 +398,9 @@ def serialize(schema: Tree, state):
     else:
         try:
             return {
-                key: serialize(schema, branch)
+                str(key): serialize(schema, branch)
                 for key, branch in state.items()}
+
         except Exception as e:
             import ipdb; ipdb.set_trace()
 
@@ -406,7 +413,7 @@ def serialize(schema: dict, state):
 
     for key, subschema in schema.items():
         if not key.startswith('_'):
-            result[key] = serialize(
+            result[str(key)] = serialize(
                 subschema,
                 state.get(key))
 
@@ -433,7 +440,10 @@ def serialize(schema: Array, state: list):
 
 @dispatch
 def serialize(schema: Array, state: dict):
-    return state
+    if 'data' in state:
+        return state['data']
+    else:
+        return state
 
 @dispatch
 def serialize(schema: Array, state):
@@ -455,13 +465,14 @@ def serialize(schema: Link, state):
     instance = state.get('instance')
     unconfig = state.get('config')
 
-    # if instance is None:
-    #     config_schema = {}
-    # else:
-    #     config_schema = instance.core.access(
-    #         instance.config_schema)
+    if instance is None:
+        config_schema = {}
+    else:
+        config_schema = instance.core.access(
+            instance.config_schema)
 
-    # config = serialize(config_schema, unconfig)
+    config = serialize(config_schema, unconfig)
+
     # inputs = serialize(schema.inputs, state.get('inputs'))
     # outputs = serialize(schema.outputs, state.get('outputs'))
 
@@ -473,7 +484,8 @@ def serialize(schema: Link, state):
 
     encode = {
         'address': address,
-        'config': unconfig,
+        'config': config,
+        # 'config': unconfig,
         '_inputs': render(_inputs),
         '_outputs': render(_outputs)}
 
