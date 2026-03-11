@@ -59,6 +59,9 @@ def merge(schema: Maybe, current, update, path=()):
 def merge(schema: Wrap, current, update, path=()):
     return merge(schema._value, current, update, path=path)
 
+@dispatch
+def merge(schema: Overwrite, current, update, path=()):
+    return update
 
 @dispatch
 def merge(schema: Union, current, update, path=()):
