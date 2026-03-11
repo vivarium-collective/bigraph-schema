@@ -157,7 +157,7 @@ def merge(schema: Map, current, update, path=()):
         for key in current.keys() | update.keys():
             if key in update:
                 if key in current:
-                    if not key.startswith('_'):
+                    if not isinstance(key, str) or not key.startswith('_'):
                         result[key] = merge(
                             schema._value,
                             current[key],
