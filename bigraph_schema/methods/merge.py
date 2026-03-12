@@ -105,6 +105,32 @@ def merge(schema: Tuple, current, update, path=()):
 
 
 @dispatch
+def merge(schema: Boolean, current, update, path=()) -> bool:
+    result = update if update is not None else current
+    if result is None:
+        result = default(schema)
+    if result == 'true':
+        return True
+    return False
+
+
+@dispatch
+def merge(schema: Integer, current, update, path=()) -> int:
+    result = update if update is not None else current
+    if result is None:
+        result = default(schema)
+    return int(result)
+
+
+@dispatch
+def merge(schema: Float, current, update, path=()) -> float:
+    result = update if update is not None else current
+    if result is None:
+        result = default(schema)
+    return float(result)
+
+
+@dispatch
 def merge(schema: List, current, update, path=()):
     if path:
         head = path[0]
