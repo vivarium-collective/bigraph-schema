@@ -59,6 +59,9 @@ def merge(schema: Maybe, current, update, path=()):
 def merge(schema: Wrap, current, update, path=()):
     return merge(schema._value, current, update, path=path)
 
+@dispatch
+def merge(schema: Overwrite, current, update, path=()):
+    return update
 
 @dispatch
 def merge(schema: Union, current, update, path=()):
@@ -157,7 +160,7 @@ def merge(schema: Map, current, update, path=()):
         for key in current.keys() | update.keys():
             if key in update:
                 if key in current:
-                    if not key.startswith('_'):
+                    if not isinstance(key, str) or not key.startswith('_'):
                         result[key] = merge(
                             schema._value,
                             current[key],
@@ -239,16 +242,14 @@ def merge(schema: Frame, current, update, path=()):
 @dispatch
 def merge(schema: Atom, current, update, path=()):
     result = None
-    if update and update is not None:
+    if update: # Checking if default
         result = update
-    elif current and current is not None:
+    elif current:
         result = current
-    # if update and update is not None:
-    #     result = update
-    # elif current and current is not None:
-    #     result = current
-    else:
-        result = default(schema)
+    elif update is not None:
+        result = update
+    elif current is not None:
+        result = current
 
     return result
 

@@ -195,7 +195,7 @@ def realize(core, schema: Map, encode, path=()):
         value_schemas = []
 
         for key, value in encode.items():
-            if key.startswith('_'):
+            if isinstance(key, str) and key.startswith('_'):
                 continue
             else:
                 subschema, substate, submerges = realize(core, schema._value, value, path+(key,))
