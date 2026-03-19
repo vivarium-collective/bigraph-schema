@@ -234,7 +234,9 @@ def merge(schema: Array, current, update, path=()):
 
 @dispatch
 def merge(schema: Frame, current, update, path=()):
-    if update.empty:
+    if isinstance(update, dict):
+        return current
+    elif update.empty:
         return current
     else:
         return update
