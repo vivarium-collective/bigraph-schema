@@ -50,6 +50,10 @@ def default(schema: Wrap):
         return default(schema._value)
 
 @dispatch
+def default(schema: Maybe):
+    return None
+
+@dispatch
 def default(schema: Union):
     if schema._default is not None:
         return schema._default

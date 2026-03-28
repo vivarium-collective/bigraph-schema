@@ -534,7 +534,13 @@ def test_resolve_conflict(core):
             'inputs': {'place': ['number']},
             'outputs': {'number': ['other place']}}}
 
-    schema, realized = core.realize({}, state)
+    conflict = False
+    try:
+        schema, realized = core.realize({}, state)
+    except Exception as e:
+        conflict = True
+
+    assert conflict
 
 
 def test_unify(core):
@@ -797,4 +803,4 @@ if __name__ == '__main__':
     test_access_tuple(core)
     test_serialize_realize_shape(core)
 
-    # test_resolve_conflict(core)
+    test_resolve_conflict(core)
