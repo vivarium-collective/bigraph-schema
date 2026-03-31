@@ -706,6 +706,142 @@ class Core:
 
         return project_schema, project_state
 
+    def _resolve_wire_paths(self, wires, parent_path):
+        """Recursively resolve wires to absolute state paths.
+
+        Returns a structure matching the wires layout, but with leaf wire
+        lists resolved to absolute tuple paths. Returns None if the wires
+        contain unsupported patterns.
+        """
+        if isinstance(wires, str):
+            wires = [wires]
+
+        if isinstance(wires, (list, tuple)):
+            return resolve_path(list(parent_path) + list(wires))
+
+        elif isinstance(wires, dict):
+            resolved = {}
+            for port_key, subwires in wires.items():
+                sub_resolved = self._resolve_wire_paths(subwires, parent_path)
+                if sub_resolved is None:
+                    return None
+                resolved[port_key] = sub_resolved
+            return resolved
+
+        return None
+
+    def precompile_view(self, schema, state, link_path):
+        """Precompile a view operation for a link at the given path.
+
+        Resolves the link's input port schemas and wires once, then
+        pre-resolves wire paths to absolute state paths so that
+        view_fast() can extract values via direct get_path() lookups
+        instead of traversing the schema tree.
+
+        Args:
+            schema: The full schema tree.
+            state: The full state tree.
+            link_path: Path to the link (process/step) in the tree.
+
+        Returns:
+            A compiled view structure for use with view_fast(), or None
+            if precompilation is not possible for this link.
+        """
+        try:
+            link_schema, link_state = self.traverse(schema, state, link_path)
+            parent_path = link_path[:-1]
+            ports_schema = getattr(link_schema, '_inputs', None)
+            wires = link_state.get('inputs') or {}
+
+            if ports_schema is None:
+                return None
+
+            resolved = self._resolve_wire_paths(wires, parent_path)
+            if resolved is not None:
+                return ('resolved', resolved)
+
+            # Fall back to storing port schema and wires for view_ports
+            return ('ports', ports_schema, wires, parent_path)
+        except Exception:
+            return None
+
+    def view_fast(self, compiled, state):
+        """Extract input state using a precompiled view.
+
+        Args:
+            compiled: Result from precompile_view().
+            state: The current full state tree.
+
+        Returns:
+            The input state dict for the process.
+        """
+        kind = compiled[0]
+        if kind == 'resolved':
+            return self._view_resolved(compiled[1], state)
+        elif kind == 'ports':
+            _, ports_schema, wires, parent_path = compiled
+            return self.view_ports(
+                None, state, parent_path, ports_schema, wires)
+
+    @staticmethod
+    def _get_path(tree, path):
+        """Follow a path of keys down a nested dict."""
+        for key in path:
+            if not isinstance(tree, dict) or key not in tree:
+                return None
+            tree = tree[key]
+        return tree
+
+    @staticmethod
+    def _view_resolved(resolved_paths, state):
+        """Extract state values using pre-resolved absolute paths."""
+        if isinstance(resolved_paths, tuple):
+            return Core._get_path(state, resolved_paths)
+        elif isinstance(resolved_paths, dict):
+            result = {}
+            for port_key, sub_paths in resolved_paths.items():
+                value = Core._view_resolved(sub_paths, state)
+                if value is not None:
+                    result[port_key] = value
+            return result
+
+    def precompile_link(self, schema, state, link_path):
+        """Precompile both view and project operations for a link.
+
+        Convenience method that combines precompile_view and
+        precompile_project for a process at the given path.
+
+        Args:
+            schema: The full schema tree.
+            state: The full state tree.
+            link_path: Path to the link (process/step) in the tree.
+
+        Returns:
+            A dict with 'view' and 'project' compiled structures,
+            or None if precompilation fails.
+        """
+        try:
+            link_schema, link_state = self.traverse(schema, state, link_path)
+            parent_path = link_path[:-1]
+
+            compiled = {}
+
+            # Compile view (inputs)
+            compiled['view'] = self.precompile_view(schema, state, link_path)
+
+            # Compile project (outputs)
+            out_ports_schema = getattr(link_schema, '_outputs', None)
+            out_wires = link_state.get('outputs') or {}
+            if out_ports_schema is not None:
+                compiled['project'] = self.precompile_project(
+                    out_ports_schema, out_wires, parent_path)
+            else:
+                compiled['project'] = None
+
+            return compiled
+        except Exception:
+            return None
+
     def precompile_project(self, ports_schema, wires, path):
         """Precompile the schema resolution for project_ports.
 
