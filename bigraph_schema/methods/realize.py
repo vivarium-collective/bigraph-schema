@@ -344,10 +344,9 @@ def realize_link(core, schema: Link, encode, path=()):
             'data': data}
 
     if 'instance' in encode:
-        edge_instance = encode['instance']
-        config = encode['config']
-
-        # return schema, encode, []
+        # Instance already exists — skip full realization.
+        # Return current state as-is with no new merges.
+        return schema, encode, []
 
     else:
         protocol = address.get('protocol', 'local')

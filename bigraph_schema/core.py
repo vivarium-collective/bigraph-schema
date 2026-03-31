@@ -258,6 +258,7 @@ class Core:
         self.registry = {}
         self.link_registry = {}
         self.method_registry = {}
+        self._access_cache = {}
 
         self.parse_visitor = CoreVisitor(self)
 
@@ -271,6 +272,8 @@ class Core:
             self.update_type(key, found)
         else:
             self.registry[key] = found
+        # Invalidate access cache since type registry changed
+        self._access_cache.pop(key, None)
 
     def register_types(self, types):
         """Bulk register multiple type keys into the operation registry."""
@@ -371,10 +374,6 @@ class Core:
         normalized in-memory representations.
         """
 
-        # TODO: consider other terms for this?
-        #   * compile
-        #   * parse
-
         if is_dataclass(key):
             return key
 
@@ -383,7 +382,6 @@ class Core:
                 try:
                     return visit_expression(key, self.parse_visitor)
                 except Exception as e:
-                    import ipdb; ipdb.set_trace()
                     raise Exception(f'unable to parse type "{key}"\n\ndue to\n{e}')
             else:
                 entry = self.registry[key]
@@ -707,6 +705,107 @@ class Core:
                 f'inverting state\n  {view}\naccording to ports schema\n  {ports_schema}\nbut wires are not recognized\n  {wires}')
 
         return project_schema, project_state
+
+    def precompile_project(self, ports_schema, wires, path):
+        """Precompile the schema resolution for project_ports.
+
+        Returns a compiled structure that can be used by project_ports_fast
+        to skip repeated schema resolution. Call once per process, then use
+        project_ports_fast on each timestep.
+
+        Returns:
+            A compiled projection structure, or None if the wires pattern
+            is not supported for fast projection.
+        """
+        if isinstance(wires, str):
+            wires = [wires]
+
+        if isinstance(wires, (list, tuple)):
+            destination = resolve_path(list(path) + list(wires))
+            project_schema = self.resolve({}, ports_schema, path=destination)
+            return ('leaf', destination, project_schema)
+
+        elif isinstance(wires, dict):
+            sub_compiled = []
+            for key, subwires in wires.items():
+                subports, _ = self.jump(ports_schema, {}, key)
+                if subports is None:
+                    continue
+                sub = self.precompile_project(subports, subwires, path)
+                if sub is None:
+                    return None
+                sub_compiled.append((key, sub))
+
+            # Precompute the merged schema
+            project_schema = Node()
+            for _, sub in sub_compiled:
+                if sub[0] == 'leaf':
+                    project_schema = resolve(project_schema, sub[2])
+                elif sub[0] == 'dict':
+                    project_schema = resolve(project_schema, sub[2])
+            return ('dict', sub_compiled, project_schema)
+
+        return None
+
+    @staticmethod
+    def _set_nested(target, path, value):
+        """Set a value at a nested path in a dict, creating intermediates."""
+        current = target
+        for key in path[:-1]:
+            if key not in current:
+                current[key] = {}
+            current = current[key]
+        if path:
+            current[path[-1]] = value
+
+    @staticmethod
+    def _merge_nested(target, source):
+        """Recursively merge source dict into target dict."""
+        for key, value in source.items():
+            if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+                Core._merge_nested(target[key], value)
+            else:
+                target[key] = value
+
+    def project_ports_fast(self, compiled, view):
+        """Fast version of project_ports using precompiled schema.
+
+        Args:
+            compiled: Result from precompile_project.
+            view: The process update values.
+
+        Returns:
+            (project_schema, project_state) tuple.
+        """
+        kind = compiled[0]
+
+        if kind == 'leaf':
+            _, destination, project_schema = compiled
+            # Build nested dict directly instead of calling self.merge
+            project_state = {}
+            self._set_nested(project_state, destination, view)
+            return project_schema, project_state
+
+        elif kind == 'dict':
+            _, sub_compiled, full_schema = compiled
+            if isinstance(view, list):
+                result = [
+                    self.project_ports_fast(('dict', sub_compiled, full_schema), state)
+                    for state in view]
+                project_schema = Tuple(_values=[item[0] for item in result])
+                project_state = [item[1] for item in result]
+                return project_schema, project_state
+            else:
+                project_state = {}
+                project_schema = full_schema
+                for key, sub in sub_compiled:
+                    if key not in view:
+                        continue
+                    subview = view[key]
+                    _, substate = self.project_ports_fast(sub, subview)
+                    if substate is not None:
+                        self._merge_nested(project_state, substate)
+                return project_schema, project_state
 
     def project(self, schema, state, link_path, view, ports_key='outputs'):
         found = self.access(schema)
