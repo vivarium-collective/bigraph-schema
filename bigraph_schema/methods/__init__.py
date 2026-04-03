@@ -16,3 +16,4 @@ from bigraph_schema.methods.coerce import coerce
 from bigraph_schema.methods.select import select
 from bigraph_schema.methods.transform import transform
 from bigraph_schema.methods.patch import patch
+from bigraph_schema.methods.is_empty import is_empty

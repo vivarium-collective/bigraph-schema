@@ -519,7 +519,13 @@ def realize_link(core, schema: Link, encode, path=()):
             continue
 
         if port not in encode or encode[port] is None:
-            decode[port] = default_wires(port_schema)
+            if isinstance(port_schema, dict):
+                decode[port] = default_wires(port_schema)
+            elif hasattr(port_schema, '__dataclass_fields__'):
+                # Leaf schema (e.g. Float) — default wire is identity
+                decode[port] = {}
+            else:
+                decode[port] = {}
 
         else:
             subschema = getattr(schema, port)

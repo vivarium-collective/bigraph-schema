@@ -29,7 +29,6 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
-    is_empty,
     dtype_schema,
     schema_dtype,
 )
@@ -37,6 +36,7 @@ from bigraph_schema.schema import (
 
 from bigraph_schema.methods.default import default
 from bigraph_schema.methods.merge import merge, merge_update
+from bigraph_schema.methods.is_empty import is_empty as _is_empty
 
 
 def read_link_path(schema):
@@ -108,8 +108,24 @@ def resolve(current: Array, update: Empty, path=None):
     return current
 
 @dispatch
+def resolve(current: Array, update: Wrap, path=None):
+    value = resolve(current, update._value, path=path)
+    result = type(update)(_value=value)
+    if result._default is None and current._default is not None:
+        result._default = current._default
+    return result
+
+@dispatch
 def resolve(current: Tree, update: Empty, path=None):
     return current
+
+@dispatch
+def resolve(current: Tree, update: Wrap, path=None):
+    value = resolve(current, update._value, path=path)
+    result = type(update)(_value=value)
+    if result._default is None and current._default is not None:
+        result._default = current._default
+    return result
 
 @dispatch
 def resolve(current: String, update: Empty, path=None):
@@ -118,6 +134,20 @@ def resolve(current: String, update: Empty, path=None):
 @dispatch
 def resolve(current: dict, update: Empty, path=None):
     return current
+
+@dispatch
+def resolve(current: dict, update: Wrap, path=None):
+    if path:
+        head = path[0]
+        down_resolve = resolve(
+            current.get(head, {}),
+            update,
+            path[1:])
+        current[head] = down_resolve
+        return current
+    # dict schemas don't have _default, just wrap the value
+    value = resolve(current, update._value, path=path)
+    return type(update)(_value=value)
 
 @dispatch
 def resolve(current: Wrap, update: Wrap, path=None):
@@ -150,8 +180,8 @@ def resolve(current: Wrap, update: Node, path=None):
 
 @dispatch
 def resolve(current: Integer, update: Float, path=None):
-    if is_empty(update._default):
-        if is_empty(current._default):
+    if _is_empty(update, update._default):
+        if _is_empty(current, current._default):
             return update
         else:
             return replace(update, **{'_default': current._default})
@@ -160,9 +190,9 @@ def resolve(current: Integer, update: Float, path=None):
 
 @dispatch
 def resolve(current: Float, update: Integer, path=None):
-    if is_empty(update._default):
+    if _is_empty(update, update._default):
         return current
-    elif is_empty(current._default):
+    elif _is_empty(current, current._default):
         return replace(current, **{'_default': update._default})
     else:
         return current
@@ -170,7 +200,11 @@ def resolve(current: Float, update: Integer, path=None):
 @dispatch
 def resolve(current: Node, update: Wrap, path=None):
     value = resolve(current, update._value, path=path)
-    return type(update)(_value=value)
+    result = type(update)(_value=value)
+    # Preserve the more informative default
+    if result._default is None and hasattr(current, '_default') and current._default is not None:
+        result._default = current._default
+    return result
 
 @dispatch
 def resolve(current: Node, update: Node, path=None):
@@ -257,6 +291,14 @@ def resolve(current: Map, update: Map, path=None):
 @dispatch
 def resolve(current: Map, update: Empty, path=None):
     return current
+
+@dispatch
+def resolve(current: Map, update: Wrap, path=None):
+    value = resolve(current, update._value, path=path)
+    result = type(update)(_value=value)
+    if result._default is None and current._default is not None:
+        result._default = current._default
+    return result
 
 @dispatch
 def resolve(current: Map, update: Node, path=None):
@@ -788,9 +830,9 @@ def resolve(current: list, update: list, path=None):
 
 @dispatch
 def resolve(current, update, path=None):
-    if is_empty(current):
+    if current is None or current == {} or current == []:
         return update
-    elif is_empty(update):
+    elif update is None or update == {} or update == []:
         return current
     else:
         raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')

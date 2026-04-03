@@ -257,17 +257,13 @@ def merge(schema: Frame, current, update, path=()):
 
 @dispatch
 def merge(schema: Atom, current, update, path=()):
-    result = None
-    if update: # Checking if default
-        result = update
-    elif current:
-        result = current
-    elif update is not None:
-        result = update
-    elif current is not None:
-        result = current
-
-    return result
+    from bigraph_schema.methods.is_empty import is_empty as _is_empty
+    if not _is_empty(schema, update):
+        return update
+    elif not _is_empty(schema, current):
+        return current
+    else:
+        return default(schema)
 
 
 @dispatch
@@ -321,21 +317,18 @@ def merge(schema: Node, current, update, path=()):
         return merge(down, current, update)
 
     else:
-        # result = merge(
-        #     Atom(),
-        #     current,
-        #     update)
+        # Non-empty wins over empty. If both non-empty, update wins.
+        from bigraph_schema.methods.is_empty import is_empty as _is_empty
 
-        result = None
-        if update is not None:
-            result = update
-        elif current is not None:
-            result = current
+        update_empty = _is_empty(schema, update)
+        current_empty = _is_empty(schema, current)
 
-        if result is None:
-            result = default(schema)
-
-        return result
+        if not update_empty:
+            return update
+        elif not current_empty:
+            return current
+        else:
+            return default(schema)
 
 
 @dispatch
@@ -343,7 +336,8 @@ def merge(schema, current, update, path=()):
     return update
 
 
-def is_empty(value):
+def _value_is_empty(value):
+    """Simple emptiness check for dict merge (no schema context)."""
     if isinstance(value, np.ndarray):
         return False
     else:
@@ -375,9 +369,9 @@ def merge(schema: dict, current, update, path=()):
             return current
 
     result = {}
-    if is_empty(current):
+    if _value_is_empty(current):
         return update
-    if is_empty(update):
+    if _value_is_empty(update):
         return current
 
     if isinstance(update, np.ndarray):

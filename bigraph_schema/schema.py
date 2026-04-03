@@ -247,8 +247,6 @@ def deep_merge(dct, merge_dct):
             dct[k] = v
     return dct
 
-def is_empty(value):
-    return value is None or value == {} or value == []
 
 def convert_path(path):
     resolved = resolve_path(path)
