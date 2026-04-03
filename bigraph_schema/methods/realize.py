@@ -330,6 +330,10 @@ def default_wires(schema):
 
 
 def realize_link(core, schema: Link, encode, path=()):
+    # Invalidate any cached compiled link structure so it will be
+    # rebuilt with the new wiring after realization.
+    core.invalidate_link(path)
+
     address = encode.get('address', 'local:edge')
 
     if isinstance(address, str):

@@ -259,6 +259,7 @@ class Core:
         self.link_registry = {}
         self.method_registry = {}
         self._access_cache = {}
+        self._link_cache = {}
 
         self.parse_visitor = CoreVisitor(self)
 
@@ -809,7 +810,9 @@ class Core:
         """Precompile both view and project operations for a link.
 
         Convenience method that combines precompile_view and
-        precompile_project for a process at the given path.
+        precompile_project for a process at the given path. The result
+        is cached internally keyed by link_path. Call invalidate_link()
+        or re-call this method to refresh after wiring changes.
 
         Args:
             schema: The full schema tree.
@@ -838,9 +841,26 @@ class Core:
             else:
                 compiled['project'] = None
 
+            self._link_cache[tuple(link_path)] = compiled
             return compiled
         except Exception:
             return None
+
+    def get_compiled_link(self, link_path):
+        """Retrieve the cached compiled link structure for a path.
+
+        Returns:
+            The cached compiled dict, or None if not cached.
+        """
+        return self._link_cache.get(tuple(link_path))
+
+    def invalidate_link(self, link_path):
+        """Remove the cached compiled structure for a link path.
+
+        Call this when wiring changes for a link so that the next
+        precompile_link call rebuilds the compiled structure.
+        """
+        self._link_cache.pop(tuple(link_path), None)
 
     def precompile_project(self, ports_schema, wires, path):
         """Precompile the schema resolution for project_ports.
