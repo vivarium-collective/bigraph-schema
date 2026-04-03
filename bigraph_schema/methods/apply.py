@@ -274,11 +274,9 @@ def apply(schema: Array, state, update, path):
         if state.size == 0:
             # State was initialized empty — replace with update
             state = update
-        elif state.shape != update.shape:
-            raise ValueError(
-                f'Array apply shape mismatch at path {path}: '
-                f'state.shape={state.shape}, update.shape={update.shape}')
         else:
+            # Slice-based update: handles partial updates where
+            # update is smaller than state (e.g. 5x4 into 5x6)
             index = tuple([
                 slice(0, dimension)
                 for dimension in update.shape])
