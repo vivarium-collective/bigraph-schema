@@ -21,6 +21,7 @@ from bigraph_schema.schema import (
     String,
     Enum,
     Wrap,
+    Quote,
     Maybe,
     Overwrite,
     Const,
@@ -96,6 +97,17 @@ def render(schema: Const, defaults=False):
     else:
         result = {
             '_type': 'const',
+            '_value': value}
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: Quote, defaults=False):
+    value = render(schema._value, defaults=defaults)
+    if isinstance(value, str):
+        result = f'quote[{value}]'
+    else:
+        result = {
+            '_type': 'quote',
             '_value': value}
     return wrap_default(schema, result) if defaults else result
 
@@ -332,6 +344,11 @@ def render(schema: np.str_, defaults=False):
 def render(schema: Node, defaults=False):
     subrender = {}
 
+    # Emit _type for registered Node subclasses so roundtrip works
+    type_name = _node_type_name(type(schema))
+    if type_name:
+        subrender['_type'] = type_name
+
     for key in schema.__dataclass_fields__:
         value = getattr(schema, key)
         if key == '_default':
@@ -342,6 +359,20 @@ def render(schema: Node, defaults=False):
             subrender[key] = render(value, defaults=defaults)
 
     return wrap_default(schema, subrender) if defaults else subrender
+
+
+# Reverse lookup: Node subclass -> registered type name
+_TYPE_NAME_CACHE = {}
+
+def _node_type_name(cls):
+    """Get the registered type name for a Node subclass, if any."""
+    if not _TYPE_NAME_CACHE:
+        # Build cache from BASE_TYPES
+        from bigraph_schema.schema import BASE_TYPES
+        for name, type_cls in BASE_TYPES.items():
+            if isinstance(type_cls, type):
+                _TYPE_NAME_CACHE[type_cls] = name
+    return _TYPE_NAME_CACHE.get(cls)
 
 @dispatch
 def render(schema: str, defaults=False):

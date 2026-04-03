@@ -373,6 +373,20 @@ def schema_dtype(schema):
     raise Exception(f'schema dtype not implemented for:\n\n{schema}\n\n')
     
 
+@dataclass(kw_only=True)
+class Quote(Wrap):
+    """Opaque value — passes through realize and apply untouched.
+
+    Inherits from Wrap so ``_value`` records the inner type for
+    introspection, but realize/apply treat the value as opaque.
+    Use for values that should be carried as-is: process instances,
+    simData objects, binary blobs, etc.
+
+    Usage: ``'quote[float]'``, ``'quote[node]'``, ``'quote'``
+    """
+    pass
+
+
 BASE_TYPES = {
     'node': Node,
     'atom': Atom,
@@ -409,6 +423,7 @@ BASE_TYPES = {
     'protocol': Protocol,
     'local': LocalProtocol,
     'schema': Schema,
-    'link': Link}
+    'link': Link,
+    'quote': Quote}
 
 

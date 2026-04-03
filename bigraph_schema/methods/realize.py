@@ -27,6 +27,7 @@ from bigraph_schema.schema import (
     String,
     Enum,
     Wrap,
+    Quote,
     Maybe,
     Overwrite,
     Const,
@@ -86,6 +87,11 @@ def _enrich_defaults(port_schema, v1_ports):
 
 @dispatch
 def realize(core, schema: tuple, encode, path=()):
+    return schema, encode, []
+
+@dispatch
+def realize(core, schema: Quote, encode, path=()):
+    # Opaque — pass through without walking or inferring the value
     return schema, encode, []
 
 @dispatch
@@ -534,9 +540,15 @@ def realize_link(core, schema: Link, encode, path=()):
 
         merges += submerges
 
+    # Realize remaining non-port keys (config, priority, interval, etc.)
+    # When instance already exists, pass through config and instance
+    # without expensive realization/inference.
+    has_instance = 'instance' in encode
     for key, value in encode.items():
         if not key.startswith('_'):
-            if hasattr(schema, key):
+            if has_instance and key in ('config', 'instance'):
+                decode[key] = value
+            elif hasattr(schema, key):
                 getattr(schema, key)._default = value
             else:
                 attr, decode[key], submerges = realize(

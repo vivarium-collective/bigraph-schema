@@ -19,7 +19,7 @@ from bigraph_schema import allocate_core
 from bigraph_schema.schema import (
     Node, Empty, Union, Tuple, Boolean, Or, And, Xor,
     Number, Integer, Float, Delta, Nonnegative, Complex, Range,
-    String, Enum, Maybe, Wrap, Overwrite, Const,
+    String, Enum, Maybe, Wrap, Quote, Overwrite, Const,
     List, Set, Map, Tree, Array, Frame, Path, Wires, Link,
 )
 from bigraph_schema.methods import (
@@ -981,6 +981,66 @@ class TestOverwrite:
     def test_validate_fail(self, core):
         result = validate(core, Overwrite(_value=String()), 123)
         assert result is not None
+
+
+# ── Quote ──────────────────────────────────────────────────
+
+class TestQuote:
+    """Quote wraps a value opaquely — realize, apply pass through."""
+
+    def test_access(self, core):
+        q = core.access('quote[float]')
+        assert isinstance(q, Quote)
+
+    def test_access_bare(self, core):
+        q = core.access('quote')
+        assert isinstance(q, Quote)
+
+    def test_default(self):
+        # Quote inherits Wrap's default behavior
+        assert default(Quote(_value=Float())) == 0.0
+
+    def test_realize_passthrough(self, core):
+        """realize does not walk or transform the value."""
+        opaque_obj = object()
+        _, result, merges = realize(core, Quote(_value=Node()), opaque_obj)
+        assert result is opaque_obj
+        assert merges == []
+
+    def test_realize_none(self, core):
+        _, result, _ = realize(core, Quote(_value=Float()), None)
+        assert result is None
+
+    def test_apply_replace(self):
+        """apply replaces state with update."""
+        result, _ = apply(Quote(_value=Float()), 1.0, 2.0, ())
+        assert result == 2.0
+
+    def test_apply_none_keeps(self):
+        result, _ = apply(Quote(_value=Float()), 1.0, None, ())
+        assert result == 1.0
+
+    def test_apply_opaque_objects(self):
+        """apply works with arbitrary non-schema objects."""
+        obj_a = {'complex': [1, 2, 3]}
+        obj_b = {'other': 'thing'}
+        result, _ = apply(Quote(_value=Node()), obj_a, obj_b, ())
+        assert result is obj_b
+
+    def test_render(self):
+        assert render(Quote(_value=Float())) == 'quote[float]'
+
+    def test_render_node(self):
+        r = render(Quote(_value=Node()))
+        # May be compact 'quote[node]' or dict form
+        assert r == 'quote[node]' or (isinstance(r, dict) and r['_type'] == 'quote')
+
+    def test_roundtrip(self, core):
+        """render → access roundtrip preserves the Quote type."""
+        original = Quote(_value=Float())
+        rendered = render(original)
+        restored = core.access(rendered)
+        assert isinstance(restored, Quote)
 
 
 # ── Union ──────────────────────────────────────────────────

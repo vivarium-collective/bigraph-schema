@@ -23,6 +23,7 @@ from bigraph_schema.schema import (
     String,
     Enum,
     Wrap,
+    Quote,
     Maybe,
     Overwrite,
     Const,
@@ -59,6 +60,14 @@ def apply(schema: Wrap, state, update, path):
 @dispatch
 def apply(schema: Overwrite, state, update, path):
     return update, []
+
+
+@dispatch
+def apply(schema: Quote, state, update, path):
+    # Opaque — if there's an update, replace; otherwise keep state
+    if update is not None:
+        return update, []
+    return state, []
 
 
 @dispatch
