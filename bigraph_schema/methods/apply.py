@@ -16,14 +16,18 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -55,6 +59,11 @@ def apply(schema: Wrap, state, update, path):
 @dispatch
 def apply(schema: Overwrite, state, update, path):
     return update, []
+
+
+@dispatch
+def apply(schema: Const, state, update, path):
+    return state, []
 
 
 @dispatch
@@ -124,6 +133,19 @@ def apply(schema: List, state, update, path):
         result = state + update
 
     return result, merges
+
+
+@dispatch
+def apply(schema: Set, state, update, path):
+    result = set(state) if state else set()
+    if isinstance(update, dict):
+        if '_add' in update:
+            result |= set(update['_add'])
+        if '_remove' in update:
+            result -= set(update['_remove'])
+    elif isinstance(update, set):
+        result |= update
+    return result, []
 
 
 @dispatch
@@ -235,6 +257,8 @@ def apply(schema: Array, state, update, path):
 
 @dispatch
 def apply(schema: dict, state: np.ndarray, update, path):
+    if update is None:
+        return state, []
     merges = []
     for key, subschema in schema.items():
         if key in update:

@@ -786,11 +786,19 @@ class Core:
 
     @staticmethod
     def _get_path(tree, path):
-        """Follow a path of keys down a nested dict."""
+        """Follow a path of keys down a nested dict, list, or array."""
         for key in path:
-            if not isinstance(tree, dict) or key not in tree:
+            if isinstance(tree, dict):
+                if key not in tree:
+                    return None
+                tree = tree[key]
+            elif isinstance(key, int) and hasattr(tree, '__getitem__'):
+                try:
+                    tree = tree[key]
+                except (IndexError, KeyError):
+                    return None
+            else:
                 return None
-            tree = tree[key]
         return tree
 
     @staticmethod

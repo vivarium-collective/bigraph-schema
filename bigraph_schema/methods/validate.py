@@ -12,14 +12,18 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -104,9 +108,23 @@ def validate(core, schema: Float, state):
 
 
 @dispatch
+def validate(core, schema: Complex, state):
+    if not isinstance(state, (complex, float, int)):
+        return f'Complex schema but state is not complex:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+
+
+@dispatch
 def validate(core, schema: Nonnegative, state):
     if state < 0:
         return f'Nonnegative schema but state is negative:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+
+
+@dispatch
+def validate(core, schema: Range, state):
+    if not isinstance(state, float):
+        return f'Range schema but state is not a float:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+    if state < schema._min or state > schema._max:
+        return f'Range schema but state {state} is outside [{schema._min}, {schema._max}]:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
 
 @dispatch
@@ -128,6 +146,18 @@ def validate(core, schema: Enum, state):
 def validate(core, schema: List, state):
     if not isinstance(state, (list, tuple)):
         return f'List schema but state is not a list:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+
+    results = filter_nones([
+        validate(core, schema._element, element)
+        for element in state])
+
+    if results:
+        return results
+
+@dispatch
+def validate(core, schema: Set, state):
+    if not isinstance(state, set):
+        return f'Set schema but state is not a set:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
     results = filter_nones([
         validate(core, schema._element, element)
@@ -198,7 +228,6 @@ def validate(core, schema: Array, state):
     if not shape_match:
         return f'Array schema but shape does not match:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
     if not data_match:
-        import ipdb; ipdb.set_trace()
         return f'Array schema but data does not match:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
 

@@ -11,14 +11,18 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -87,8 +91,18 @@ def check(schema: Float, state):
 
 
 @dispatch
+def check(schema: Complex, state):
+    return isinstance(state, (complex, float, int))
+
+
+@dispatch
 def check(schema: Nonnegative, state):
     return state >= 0
+
+
+@dispatch
+def check(schema: Range, state):
+    return isinstance(state, float) and schema._min <= state <= schema._max
 
 
 @dispatch
@@ -107,6 +121,16 @@ def check(schema: Enum, state):
 @dispatch
 def check(schema: List, state):
     if not isinstance(state, (list, tuple)):
+        return False
+
+    return all([
+        check(schema._element, element)
+        for element in state])
+
+
+@dispatch
+def check(schema: Set, state):
+    if not isinstance(state, set):
         return False
 
     return all([

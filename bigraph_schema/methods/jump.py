@@ -356,8 +356,7 @@ def jump(schema: Array, state, to: Star, context):
         subschema = replace(schema, **{'_shape': result_shape})
         return subschema, np.array(results)
     else:
-        # TODO: handle array data of different types
-        import ipdb; ipdb.set_trace()
+        raise Exception('star jump on array produced non-array result type')
 
 
 @dispatch

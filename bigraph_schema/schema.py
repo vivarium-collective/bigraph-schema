@@ -77,6 +77,12 @@ class Nonnegative(Float):
     pass
 
 @dataclass(kw_only=True)
+class Range(Float):
+    """Bounded float with min/max constraints."""
+    _min: float = float('-inf')
+    _max: float = float('inf')
+
+@dataclass(kw_only=True)
 class NPRandom(Node):
     state: Tuple() = field(default_factory=tuple)
 
@@ -101,7 +107,17 @@ class Overwrite(Wrap):
     pass
 
 @dataclass(kw_only=True)
+class Const(Wrap):
+    """Immutable wrapper - merge and apply preserve the current value."""
+    pass
+
+@dataclass(kw_only=True)
 class List(Node):
+    _element: Node = field(default_factory=Node)
+
+@dataclass(kw_only=True)
+class Set(Node):
+    """Unordered collection of unique elements."""
     _element: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
@@ -370,13 +386,17 @@ BASE_TYPES = {
     'float64': Float,
     'delta': Delta,
     'nonnegative': Nonnegative,
+    'complex': Complex,
+    'range': Range,
     'random_state': NPRandom,
     'string': String,
     'enum': Enum,
     'wrap': Wrap,
     'maybe': Maybe,
     'overwrite': Overwrite,
+    'const': Const,
     'list': List,
+    'set': Set,
     'map': Map,
     'tree': Tree,
     'array': Array,

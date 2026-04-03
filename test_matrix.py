@@ -18,13 +18,14 @@ import pandas as pd
 from bigraph_schema import allocate_core
 from bigraph_schema.schema import (
     Node, Empty, Union, Tuple, Boolean, Or, And, Xor,
-    Number, Integer, Float, Delta, Nonnegative, Complex,
-    String, Enum, Maybe, Wrap, Overwrite,
-    List, Map, Tree, Array, Frame, Path, Wires, Link,
+    Number, Integer, Float, Delta, Nonnegative, Complex, Range,
+    String, Enum, Maybe, Wrap, Overwrite, Const,
+    List, Set, Map, Tree, Array, Frame, Path, Wires, Link,
 )
 from bigraph_schema.methods import (
     default, check, validate, render, serialize, realize, merge, apply,
-    infer,
+    infer, walk, diff, coerce, select, transform, patch,
+    generalize,
 )
 
 
@@ -3206,6 +3207,673 @@ class TestDictSchema:
         schema = {'a': Integer()}
         _, state, _ = realize(core, schema, {'a': '42', 'extra': 'value'})
         assert state['a'] == 42
+
+
+# ── New Types ──────────────────────────────────────────────
+
+class TestComplex:
+    def test_default(self):
+        assert default(Complex()) == 0+0j
+
+    def test_default_custom(self):
+        assert default(Complex(_default=1+2j)) == 1+2j
+
+    def test_check_complex(self):
+        assert check(Complex(), 1+2j)
+
+    def test_check_float(self):
+        assert check(Complex(), 3.14)
+
+    def test_check_int(self):
+        assert check(Complex(), 5)
+
+    def test_check_fail(self):
+        assert not check(Complex(), 'hello')
+
+    def test_render(self):
+        assert render(Complex()) == 'complex'
+
+    def test_serialize(self):
+        assert serialize(Complex(), 1+2j) == '(1+2j)'
+
+    def test_realize(self, core):
+        _, state, _ = realize(core, Complex(), '1+2j')
+        assert state == 1+2j
+
+    def test_realize_none(self, core):
+        _, state, _ = realize(core, Complex(), None)
+        assert state == 0+0j
+
+    def test_merge(self):
+        result = merge(Complex(), 1+1j, 2+2j)
+        assert result == 2+2j
+
+    def test_apply(self):
+        result, _ = apply(Complex(), 1+1j, 2+2j, ())
+        assert result == 3+3j
+
+    def test_validate(self, core):
+        assert validate(core, Complex(), 1+2j) is None
+
+    def test_validate_fail(self, core):
+        assert validate(core, Complex(), 'hello') is not None
+
+    def test_infer(self, core):
+        schema, _ = infer(core, 1+2j)
+        assert isinstance(schema, Complex)
+
+    def test_core_access(self, core):
+        s = core.access('complex')
+        assert isinstance(s, Complex)
+
+    def test_core_roundtrip(self, core):
+        s, v = core.default('complex')
+        assert v == 0+0j
+
+
+class TestConst:
+    def test_default(self):
+        assert default(Const(_value=Float())) == 0.0
+
+    def test_default_custom(self):
+        assert default(Const(_value=String(), _default='locked')) == 'locked'
+
+    def test_check(self):
+        assert check(Const(_value=Float()), 3.14)
+
+    def test_check_fail(self):
+        assert not check(Const(_value=Float()), 'wrong')
+
+    def test_render(self):
+        assert render(Const(_value=Float())) == 'const[float]'
+
+    def test_render_string(self):
+        assert render(Const(_value=String())) == 'const[string]'
+
+    def test_serialize(self):
+        assert serialize(Const(_value=Float()), 3.14) == 3.14
+
+    def test_realize(self, core):
+        _, state, _ = realize(core, Const(_value=Float()), '3.14')
+        assert abs(state - 3.14) < 1e-10
+
+    def test_merge_preserves_current(self):
+        result = merge(Const(_value=Float()), 1.0, 99.0)
+        assert result == 1.0
+
+    def test_merge_ignores_update(self):
+        result = merge(Const(_value=String()), 'original', 'changed')
+        assert result == 'original'
+
+    def test_apply_preserves_state(self):
+        result, _ = apply(Const(_value=Float()), 5.0, 99.0, ())
+        assert result == 5.0
+
+    def test_apply_ignores_update(self):
+        result, _ = apply(Const(_value=String()), 'locked', 'new', ())
+        assert result == 'locked'
+
+    def test_validate(self, core):
+        assert validate(core, Const(_value=Float()), 1.0) is None
+
+    def test_core_access(self, core):
+        s = core.access('const[float]')
+        assert isinstance(s, Const)
+
+    def test_core_roundtrip(self, core):
+        s, v = core.default('const[float]')
+        assert v == 0.0
+
+
+class TestRange:
+    def test_default(self):
+        assert default(Range(_min=0.0, _max=1.0)) == 0.0
+
+    def test_default_with_positive_min(self):
+        assert default(Range(_min=5.0, _max=10.0)) == 5.0
+
+    def test_default_custom(self):
+        assert default(Range(_min=0.0, _max=1.0, _default=0.5)) == 0.5
+
+    def test_check_in_range(self):
+        assert check(Range(_min=0.0, _max=1.0), 0.5)
+
+    def test_check_at_min(self):
+        assert check(Range(_min=0.0, _max=1.0), 0.0)
+
+    def test_check_at_max(self):
+        assert check(Range(_min=0.0, _max=1.0), 1.0)
+
+    def test_check_below_min(self):
+        assert not check(Range(_min=0.0, _max=1.0), -0.1)
+
+    def test_check_above_max(self):
+        assert not check(Range(_min=0.0, _max=1.0), 1.1)
+
+    def test_check_not_float(self):
+        assert not check(Range(_min=0.0, _max=1.0), 1)
+
+    def test_render(self):
+        r = render(Range(_min=0.0, _max=1.0))
+        assert 'range' in r
+        assert '0.0' in r
+        assert '1.0' in r
+
+    def test_serialize(self):
+        assert serialize(Range(_min=0.0, _max=1.0), 0.5) == 0.5
+
+    def test_realize(self, core):
+        _, state, _ = realize(core, Range(_min=0.0, _max=1.0), '0.5')
+        assert state == 0.5
+
+    def test_realize_clamps(self, core):
+        _, state, _ = realize(core, Range(_min=0.0, _max=1.0), '5.0')
+        assert state == 1.0
+
+    def test_merge(self):
+        result = merge(Range(_min=0.0, _max=1.0), 0.3, 0.7)
+        assert result == 0.7
+
+    def test_apply(self):
+        result, _ = apply(Range(_min=0.0, _max=1.0), 0.3, 0.2, ())
+        assert abs(result - 0.5) < 1e-10
+
+    def test_validate_pass(self, core):
+        assert validate(core, Range(_min=0.0, _max=1.0), 0.5) is None
+
+    def test_validate_fail_below(self, core):
+        assert validate(core, Range(_min=0.0, _max=1.0), -0.1) is not None
+
+    def test_validate_fail_above(self, core):
+        assert validate(core, Range(_min=0.0, _max=1.0), 1.1) is not None
+
+    def test_validate_fail_type(self, core):
+        assert validate(core, Range(_min=0.0, _max=1.0), 1) is not None
+
+    def test_core_access(self, core):
+        s = core.access('range[0.0,1.0]')
+        assert isinstance(s, Range)
+        assert s._min == 0.0
+        assert s._max == 1.0
+
+    def test_core_access_dict(self, core):
+        s = core.access({'_type': 'range', '_min': 0.0, '_max': 1.0})
+        assert isinstance(s, Range)
+
+    def test_core_roundtrip(self, core):
+        s, v = core.default('range[0.0,1.0]')
+        assert v == 0.0
+
+
+class TestSet:
+    def test_default(self):
+        assert default(Set(_element=Float())) == set()
+
+    def test_check_valid(self):
+        assert check(Set(_element=Float()), {1.0, 2.0})
+
+    def test_check_empty(self):
+        assert check(Set(_element=Float()), set())
+
+    def test_check_fail_wrong_element(self):
+        assert not check(Set(_element=Float()), {1, 2})
+
+    def test_check_fail_not_set(self):
+        assert not check(Set(_element=Float()), [1.0, 2.0])
+
+    def test_render(self):
+        assert render(Set(_element=Float())) == 'set[float]'
+
+    def test_serialize(self):
+        result = serialize(Set(_element=Float()), {1.0, 2.0})
+        assert isinstance(result, list)
+        assert len(result) == 2
+
+    def test_realize(self, core):
+        _, state, _ = realize(core, Set(_element=Integer()), [1, 2, 3])
+        assert isinstance(state, set)
+        assert state == {1, 2, 3}
+
+    def test_merge_union(self):
+        result = merge(Set(_element=Float()), {1.0, 2.0}, {2.0, 3.0})
+        assert result == {1.0, 2.0, 3.0}
+
+    def test_merge_none_current(self):
+        result = merge(Set(_element=Float()), None, {1.0})
+        assert result == {1.0}
+
+    def test_merge_none_update(self):
+        result = merge(Set(_element=Float()), {1.0}, None)
+        assert result == {1.0}
+
+    def test_apply_union(self):
+        result, _ = apply(Set(_element=Float()), {1.0}, {2.0}, ())
+        assert result == {1.0, 2.0}
+
+    def test_apply_add(self):
+        result, _ = apply(
+            Set(_element=Float()),
+            {1.0, 2.0},
+            {'_add': {3.0, 4.0}},
+            ())
+        assert 3.0 in result
+        assert 4.0 in result
+
+    def test_apply_remove(self):
+        result, _ = apply(
+            Set(_element=Float()),
+            {1.0, 2.0, 3.0},
+            {'_remove': {2.0}},
+            ())
+        assert 2.0 not in result
+        assert 1.0 in result
+
+    def test_validate_pass(self, core):
+        assert validate(core, Set(_element=Float()), {1.0, 2.0}) is None
+
+    def test_validate_fail_not_set(self, core):
+        assert validate(core, Set(_element=Float()), [1.0]) is not None
+
+    def test_core_access(self, core):
+        s = core.access('set[float]')
+        assert isinstance(s, Set)
+
+    def test_core_roundtrip(self, core):
+        s, v = core.default('set[float]')
+        assert v == set()
+
+
+# ── New Methods ────────────────────────────────────────────
+
+class TestWalk:
+    def test_walk_leaf(self):
+        result = walk(Float(), 3.14, lambda s, st, p: st * 2)
+        assert result == 6.28
+
+    def test_walk_tuple(self):
+        t = Tuple(_values=[Float(), String()])
+        result = walk(t, (1.0, 'hi'), lambda s, st, p: st)
+        assert result == [1.0, 'hi']  # no combine, returns raw list of leaf results
+
+    def test_walk_tuple_combine(self):
+        t = Tuple(_values=[Float(), String()])
+        result = walk(
+            t, (1.0, 'hi'),
+            lambda s, st, p: st,
+            lambda s, c, p: tuple(c))
+        assert result == (1.0, 'hi')
+
+    def test_walk_list(self):
+        result = walk(
+            List(_element=Integer()), [1, 2, 3],
+            lambda s, st, p: st * 10,
+            lambda s, c, p: c)
+        assert result == [10, 20, 30]
+
+    def test_walk_map(self):
+        result = walk(
+            Map(_value=Float()), {'a': 1.0, 'b': 2.0},
+            lambda s, st, p: st + 100,
+            lambda s, c, p: c)
+        assert result == {'a': 101.0, 'b': 102.0}
+
+    def test_walk_tree_leaf(self):
+        result = walk(
+            Tree(_leaf=Float()), 3.14,
+            lambda s, st, p: st * 2)
+        assert result == 6.28
+
+    def test_walk_tree_nested(self):
+        result = walk(
+            Tree(_leaf=Float()), {'a': 1.0, 'b': {'c': 2.0}},
+            lambda s, st, p: st * 10,
+            lambda s, c, p: c)
+        assert result == {'a': 10.0, 'b': {'c': 20.0}}
+
+    def test_walk_maybe_none(self):
+        result = walk(
+            Maybe(_value=Float()), None,
+            lambda s, st, p: 'was none')
+        assert result == 'was none'
+
+    def test_walk_maybe_value(self):
+        result = walk(
+            Maybe(_value=Float()), 3.14,
+            lambda s, st, p: st * 2)
+        assert result == 6.28
+
+    def test_walk_wrap(self):
+        result = walk(
+            Wrap(_value=Float()), 3.14,
+            lambda s, st, p: st + 1)
+        assert abs(result - 4.14) < 1e-10
+
+    def test_walk_struct(self):
+        schema = {'a': Float(), 'b': String()}
+        state = {'a': 1.0, 'b': 'hi'}
+        result = walk(
+            schema, state,
+            lambda s, st, p: st,
+            lambda s, c, p: c)
+        assert result == {'a': 1.0, 'b': 'hi'}
+
+    def test_walk_path_tracking(self):
+        paths = []
+        walk(
+            {'a': Float(), 'b': Map(_value=Integer())},
+            {'a': 1.0, 'b': {'x': 1}},
+            lambda s, st, p: paths.append(p) or st,
+            lambda s, c, p: c)
+        assert ('a',) in paths
+        assert ('b', 'x') in paths
+
+    def test_walk_set(self):
+        result = walk(
+            Set(_element=Integer()), {1, 2, 3},
+            lambda s, st, p: st * 10,
+            lambda s, c, p: c)
+        assert sorted(result) == [10, 20, 30]
+
+    def test_walk_check_equivalent(self):
+        """Walk can implement check: leaf returns isinstance, combine with all()."""
+        def check_leaf(s, st, p):
+            if isinstance(s, Float): return isinstance(st, float)
+            if isinstance(s, String): return isinstance(st, str)
+            return True
+
+        def check_combine(s, c, p):
+            if isinstance(c, dict): return all(c.values())
+            return all(c)
+
+        schema = {'a': Float(), 'b': String()}
+        assert walk(schema, {'a': 1.0, 'b': 'hi'}, check_leaf, check_combine) is True
+        assert walk(schema, {'a': 'wrong', 'b': 'hi'}, check_leaf, check_combine) is False
+
+    def test_walk_serialize_equivalent(self):
+        """Walk can implement serialize."""
+        def ser_leaf(s, st, p):
+            if isinstance(s, Boolean): return 'true' if st else 'false'
+            if isinstance(s, Number): return st
+            if isinstance(s, String): return str(st)
+            return st
+
+        def ser_combine(s, c, p):
+            if isinstance(s, Tuple): return list(c)
+            return c
+
+        t = Tuple(_values=[Float(), String(), Boolean()])
+        result = walk(t, (3.14, 'hi', True), ser_leaf, ser_combine)
+        assert result == [3.14, 'hi', 'true']
+
+
+class TestDiff:
+    def test_diff_float_same(self):
+        assert diff(Float(), 1.0, 1.0) is None
+
+    def test_diff_float_different(self):
+        assert diff(Float(), 1.0, 3.0) == 2.0
+
+    def test_diff_integer(self):
+        assert diff(Integer(), 5, 8) == 3
+
+    def test_diff_string_same(self):
+        assert diff(String(), 'hello', 'hello') is None
+
+    def test_diff_string_different(self):
+        assert diff(String(), 'hello', 'world') == 'world'
+
+    def test_diff_boolean(self):
+        assert diff(Boolean(), True, False) is False
+        assert diff(Boolean(), True, True) is None
+
+    def test_diff_tuple(self):
+        t = Tuple(_values=[Float(), String()])
+        result = diff(t, (1.0, 'a'), (3.0, 'a'))
+        assert result[0] == 2.0
+        assert result[1] is None
+
+    def test_diff_map(self):
+        result = diff(
+            Map(_value=Float()),
+            {'a': 1.0, 'b': 2.0},
+            {'a': 1.0, 'b': 5.0})
+        assert result == {'b': 3.0}
+
+    def test_diff_tree(self):
+        result = diff(
+            Tree(_leaf=Float()),
+            {'a': 1.0, 'b': 2.0},
+            {'a': 1.0, 'b': 5.0})
+        # Tree diff uses Number diff on leaves: 5.0 - 2.0 = 3.0
+        assert result == {'b': 3.0}
+
+    def test_diff_set(self):
+        result = diff(
+            Set(_element=Integer()),
+            {1, 2, 3},
+            {2, 3, 4})
+        assert result['_add'] == {4}
+        assert result['_remove'] == {1}
+
+    def test_diff_const(self):
+        assert diff(Const(_value=Float()), 1.0, 2.0) is None
+
+    def test_diff_overwrite(self):
+        assert diff(Overwrite(_value=String()), 'a', 'b') == 'b'
+
+    def test_diff_struct(self):
+        schema = {'a': Float(), 'b': String()}
+        result = diff(schema, {'a': 1.0, 'b': 'hi'}, {'a': 2.0, 'b': 'hi'})
+        assert result == {'a': 1.0}  # diff = 2.0 - 1.0
+
+
+class TestCoerce:
+    def test_float_from_string(self):
+        assert coerce(Float(), '3.14') == 3.14
+
+    def test_float_from_int(self):
+        assert coerce(Float(), 5) == 5.0
+
+    def test_float_passthrough(self):
+        assert coerce(Float(), 3.14) == 3.14
+
+    def test_integer_from_string(self):
+        assert coerce(Integer(), '42') == 42
+
+    def test_integer_from_float(self):
+        assert coerce(Integer(), 5.7) == 5
+
+    def test_string_from_int(self):
+        assert coerce(String(), 42) == '42'
+
+    def test_string_from_float(self):
+        assert coerce(String(), 3.14) == '3.14'
+
+    def test_boolean_from_string(self):
+        assert coerce(Boolean(), 'true') is True
+        assert coerce(Boolean(), 'false') is False
+        assert coerce(Boolean(), 'yes') is True
+
+    def test_boolean_from_int(self):
+        assert coerce(Boolean(), 1) is True
+        assert coerce(Boolean(), 0) is False
+
+    def test_complex_from_string(self):
+        assert coerce(Complex(), '1+2j') == 1+2j
+
+    def test_range_clamps(self):
+        assert coerce(Range(_min=0.0, _max=1.0), 5.0) == 1.0
+        assert coerce(Range(_min=0.0, _max=1.0), -1.0) == 0.0
+
+    def test_enum_valid(self):
+        assert coerce(Enum(_values=('a', 'b')), 'a') == 'a'
+
+    def test_enum_invalid(self):
+        assert coerce(Enum(_values=('a', 'b')), 'z') == 'a'
+
+    def test_tuple_coerce(self):
+        t = Tuple(_values=[Float(), String()])
+        result = coerce(t, [5, 42])
+        assert result == (5.0, '42')
+
+    def test_list_from_set(self):
+        result = coerce(List(_element=Integer()), {1, 2, 3})
+        assert isinstance(result, list)
+        assert len(result) == 3
+
+    def test_set_from_list(self):
+        result = coerce(Set(_element=Integer()), [1, 2, 2, 3])
+        assert isinstance(result, set)
+        assert result == {1, 2, 3}
+
+    def test_map_coerce(self):
+        result = coerce(Map(_value=Float()), {'a': '1.5', 'b': 2})
+        assert result == {'a': 1.5, 'b': 2.0}
+
+    def test_struct_coerce(self):
+        schema = {'a': Float(), 'b': String()}
+        result = coerce(schema, {'a': '3.14', 'b': 42})
+        assert result == {'a': 3.14, 'b': '42'}
+
+
+class TestSelect:
+    def test_select_simple(self, core):
+        schema = {'a': 'float', 'b': 'string', 'c': 'integer'}
+        state = {'a': 1.0, 'b': 'hi', 'c': 5}
+        result_schema, result_state = select(core, schema, state, ['a', 'c'])
+        assert 'a' in result_state
+        assert 'c' in result_state
+        assert 'b' not in result_state
+
+    def test_select_nested(self, core):
+        schema = {'x': {'y': 'float', 'z': 'string'}}
+        state = {'x': {'y': 3.14, 'z': 'hello'}}
+        result_schema, result_state = select(core, schema, state, [['x', 'y']])
+        assert 'y' in result_state
+        assert abs(result_state['y'] - 3.14) < 1e-10
+
+
+class TestTransform:
+    def test_matching_fields(self, core):
+        source = {'a': 'float', 'b': 'string'}
+        target = {'a': 'float', 'b': 'string'}
+        state = {'a': 1.0, 'b': 'hello'}
+        _, result = transform(core, source, target, state)
+        assert result == state
+
+    def test_type_coercion(self, core):
+        source = {'a': 'integer'}
+        target = {'a': 'float'}
+        state = {'a': 5}
+        _, result = transform(core, source, target, state)
+        assert result['a'] == 5.0
+
+    def test_missing_field_default(self, core):
+        source = {'a': 'float'}
+        target = {'a': 'float', 'b': 'string'}
+        state = {'a': 1.0}
+        _, result = transform(core, source, target, state)
+        assert result['a'] == 1.0
+        # b gets default from target schema
+        assert 'b' in result
+
+    def test_extra_field_dropped(self, core):
+        source = {'a': 'float', 'b': 'string'}
+        target = {'a': 'float'}
+        state = {'a': 1.0, 'b': 'hello'}
+        _, result = transform(core, source, target, state)
+        # transform only includes fields in target schema
+        assert result['a'] == 1.0
+
+
+class TestPatch:
+    def test_add(self, core):
+        state = {'a': 1.0}
+        result = patch(core, {}, state, [
+            {'op': 'add', 'path': ['b'], 'value': 2.0}])
+        assert result['b'] == 2.0
+
+    def test_remove(self, core):
+        state = {'a': 1.0, 'b': 2.0}
+        result = patch(core, {}, state, [
+            {'op': 'remove', 'path': ['b']}])
+        assert 'b' not in result
+        assert 'a' in result
+
+    def test_replace(self, core):
+        state = {'a': 1.0}
+        result = patch(core, {}, state, [
+            {'op': 'replace', 'path': ['a'], 'value': 99.0}])
+        assert result['a'] == 99.0
+
+    def test_move(self, core):
+        state = {'a': 1.0, 'b': 2.0}
+        result = patch(core, {}, state, [
+            {'op': 'move', 'from': ['a'], 'path': ['c']}])
+        assert 'a' not in result
+        assert result['c'] == 1.0
+
+    def test_nested_add(self, core):
+        state = {'x': {'y': 1.0}}
+        result = patch(core, {}, state, [
+            {'op': 'add', 'path': ['x', 'z'], 'value': 2.0}])
+        assert result['x']['z'] == 2.0
+
+    def test_multiple_ops(self, core):
+        state = {'a': 1.0, 'b': 2.0}
+        result = patch(core, {}, state, [
+            {'op': 'replace', 'path': ['a'], 'value': 10.0},
+            {'op': 'remove', 'path': ['b']},
+            {'op': 'add', 'path': ['c'], 'value': 3.0}])
+        assert result == {'a': 10.0, 'c': 3.0}
+
+
+# ── Generalize ─────────────────────────────────────────────
+
+class TestGeneralize:
+    def test_int_float(self, core):
+        result = generalize(Integer(), Float())
+        assert isinstance(result, Float)
+
+    def test_float_int(self, core):
+        result = generalize(Float(), Integer())
+        assert isinstance(result, Float)
+
+    def test_empty_node(self, core):
+        result = generalize(Empty(), Float())
+        assert isinstance(result, Float)
+
+    def test_node_empty(self, core):
+        result = generalize(Float(), Empty())
+        assert isinstance(result, Float)
+
+    def test_empty_empty(self, core):
+        result = generalize(Empty(), Empty())
+        assert isinstance(result, Empty)
+
+    def test_same_type(self, core):
+        result = generalize(String(), String())
+        assert isinstance(result, String)
+
+    def test_dict_dict(self, core):
+        result = generalize(
+            {'a': Float(), 'b': String()},
+            {'a': Float(), 'c': Integer()})
+        assert isinstance(result, dict)
+        assert 'a' in result
+
+    def test_tree_tree(self, core):
+        result = generalize(
+            Tree(_leaf=Float()),
+            Tree(_leaf=Integer()))
+        assert isinstance(result, Tree)
+
+    def test_wrap_wrap(self, core):
+        result = generalize(
+            Wrap(_value=Float()),
+            Wrap(_value=Integer()))
+        # Generalize unwraps and generalizes the inner values
+        assert isinstance(result, (Wrap, Float))
 
 
 if __name__ == '__main__':

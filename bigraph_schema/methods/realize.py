@@ -19,15 +19,19 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     NPRandom,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -145,6 +149,35 @@ def realize(core, schema: Float, encode, path=()):
             return schema, None, []
 
 @dispatch
+def realize(core, schema: Complex, encode, path=()):
+    if encode is None:
+        schema, state = core.default(schema, path=path)
+        return schema, state, []
+    elif isinstance(encode, dict):
+        return realize_default(core, schema, encode, path=path)
+    else:
+        try:
+            result = complex(encode)
+            return schema, result, []
+        except Exception:
+            return schema, None, []
+
+@dispatch
+def realize(core, schema: Range, encode, path=()):
+    if encode is None:
+        schema, state = core.default(schema, path=path)
+        return schema, state, []
+    elif isinstance(encode, dict):
+        return realize_default(core, schema, encode, path=path)
+    else:
+        try:
+            result = float(encode)
+            result = max(schema._min, min(schema._max, result))
+            return schema, result, []
+        except Exception:
+            return schema, None, []
+
+@dispatch
 def realize(core, schema: String, encode, path=()):
     if isinstance(encode, dict):
         return realize_default(core, schema, encode, path=path)
@@ -180,6 +213,19 @@ def realize(core, schema: List, encode, path=()):
 
         return schema, decode, merges
 
+    else:
+        return schema, None, []
+
+@dispatch
+def realize(core, schema: Set, encode, path=()):
+    if isinstance(encode, (list, tuple, set)):
+        decode = set()
+        merges = []
+        for element in encode:
+            subschema, substate, submerges = realize(core, schema._element, element)
+            decode.add(substate)
+            merges += submerges
+        return schema, decode, merges
     else:
         return schema, None, []
 

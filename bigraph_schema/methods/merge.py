@@ -13,14 +13,18 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -62,6 +66,10 @@ def merge(schema: Wrap, current, update, path=()):
 @dispatch
 def merge(schema: Overwrite, current, update, path=()):
     return update
+
+@dispatch
+def merge(schema: Const, current, update, path=()):
+    return current
 
 @dispatch
 def merge(schema: Union, current, update, path=()):
@@ -127,6 +135,14 @@ def merge(schema: List, current, update, path=()):
     else:
         return current + update
 
+
+@dispatch
+def merge(schema: Set, current, update, path=()):
+    if current is None:
+        return update
+    if update is None:
+        return current
+    return current | update
 
 @dispatch
 def merge(schema: Map, current, update, path=()):
@@ -350,7 +366,7 @@ def merge(schema: dict, current, update, path=()):
     if path:
         head = path[0]
         if head == '*':
-            import ipdb; ipdb.set_trace()
+            raise Exception('star path not supported in dict merge')
         else:
             current = current or {}
             subschema = schema.get(head)
@@ -396,7 +412,7 @@ def merge(schema: dict, current, update, path=()):
 
 def merge_update(schema, current, update, path=()):
     if path:
-        import ipdb; ipdb.set_trace()
+        raise Exception('merge_update with path not implemented')
 
     current_state = default(current)
     update_state = default(update)

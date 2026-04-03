@@ -15,6 +15,7 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
     NPRandom,
@@ -76,6 +77,11 @@ def infer(core,
                   np.dtypes.Float32DType | np.dtypes.Float64DType),
           path: tuple = ()):
     schema = Float()
+    return set_default(schema, value), []
+
+@dispatch
+def infer(core, value: complex, path: tuple = ()):
+    schema = Complex()
     return set_default(schema, value), []
 
 @dispatch

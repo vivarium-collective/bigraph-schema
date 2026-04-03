@@ -22,7 +22,10 @@ from bigraph_schema.schema import (
     Wrap,
     Maybe,
     Overwrite,
+    Const,
+    Range,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -100,6 +103,17 @@ def align_parameters(schema: Link, parameters):
     return align
 
 @dispatch
+def align_parameters(schema: Range, parameters):
+    return {
+        '_min': parameters[0],
+        '_max': parameters[1]}
+
+@dispatch
+def align_parameters(schema: Set, parameters):
+    return {
+        '_element': parameters[0]}
+
+@dispatch
 def align_parameters(schema: Node, parameters):
     align = {}
     keys = schema_keys(schema)[1:]
@@ -112,6 +126,14 @@ def align_parameters(schema, parameters):
     raise Exception(f'unknown parameters for schema {schema}: {parameters}')
 
 @dispatch
+def reify_schema(core, schema: Range, parameters):
+    if '_min' in parameters:
+        schema._min = float(parameters['_min'])
+    if '_max' in parameters:
+        schema._max = float(parameters['_max'])
+    return schema
+
+@dispatch
 def reify_schema(core, schema: Enum, parameters):
     if '_values' in parameters:
         schema._values = parameters['_values']
@@ -119,9 +141,6 @@ def reify_schema(core, schema: Enum, parameters):
 
 @dispatch
 def reify_schema(core, schema: Array, parameters):
-    if '|' in parameters.get('_shape', ''):
-        import ipdb; ipdb.set_trace()
-
     shape = parameters.get('_shape', (1,))
     if isinstance(shape, str):
         shape = int(shape)
@@ -194,7 +213,7 @@ def reify_schema(core, schema: Node, parameters):
 
 @dispatch
 def reify_schema(core, schema, parameters):
-    import ipdb; ipdb.set_trace()
+    raise Exception(f'cannot reify schema {schema} with parameters {parameters}')
 
 def handle_parameters(core, schema, parameters):
     align = align_parameters(schema, parameters)
