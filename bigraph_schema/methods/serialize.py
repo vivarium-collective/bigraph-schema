@@ -233,7 +233,7 @@ def render(schema: Array, defaults=False):
 @dispatch
 def render(schema: Frame, defaults=False):
     columns = '|'.join([
-        f'{key}:{render(value, default=defaults)}'
+        f'{key}:{render(value, defaults=defaults)}'
         for key, value in schema._columns.items()])
     result = f'dataframe[{columns}]'
     return result
