@@ -44,12 +44,12 @@ from bigraph_schema.methods.resolve import resolve
 
 def wrap_default(schema, result):
     found = None
-    if isinstance(schema, Node) and schema._default:
+    if isinstance(schema, Node) and schema._default is not None:
         found = schema._default
     elif isinstance(schema, dict) and '_default' in schema:
         found = schema['_default']
 
-    if found:
+    if found is not None:
         inner_default = found
         if isinstance(result, str) and isinstance(inner_default, str):
             result = result + '{' + inner_default + '}'
@@ -291,14 +291,18 @@ def render(schema: Wires, defaults=False):
 
 @dispatch
 def render(schema: Link, defaults=False):
-    intermediate = {
-        '_type': 'link',
-        '_inputs': render(schema._inputs, defaults=defaults),
-        '_outputs': render(schema._outputs, defaults=defaults),
-        'inputs': render(schema.inputs, defaults=defaults),
-        'outputs': render(schema.outputs, defaults=defaults)}
+    intermediate = {'_type': 'link'}
 
-    if isinstance(intermediate['_inputs'], str) and isinstance(intermediate['_outputs'], str):
+    for field_name in schema.__dataclass_fields__:
+        if field_name == '_default':
+            continue
+        value = getattr(schema, field_name)
+        intermediate[field_name] = render(value, defaults=defaults)
+
+    # Compact form for simple links with only core fields
+    if (isinstance(intermediate.get('_inputs'), str)
+            and isinstance(intermediate.get('_outputs'), str)
+            and len(intermediate) <= 5):
         result = f'link[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
     else:
         result = intermediate

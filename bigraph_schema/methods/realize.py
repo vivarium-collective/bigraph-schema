@@ -50,6 +50,44 @@ from bigraph_schema.methods.serialize import render
 from bigraph_schema.methods.default import default
 
 
+def _enrich_defaults(port_schema, v1_ports):
+    """Walk a port schema and inject _default values from v1 ports_schema().
+
+    The v1 ports_schema has runtime defaults (with correct shapes from simData)
+    that the inferred schema lacks. This enriches the schema with those defaults
+    so that realize/fill creates state with the right shapes.
+    """
+    if isinstance(port_schema, dict):
+        for key, subschema in port_schema.items():
+            if key in v1_ports and isinstance(v1_ports[key], dict):
+                v1_port = v1_ports[key]
+                if '_default' in v1_port and hasattr(subschema, '_default'):
+                    if subschema._default is None or (
+                        isinstance(subschema._default, (list, tuple)) and len(subschema._default) == 0
+                    ):
+                        subschema._default = v1_port['_default']
+                elif isinstance(v1_port, dict) and not '_default' in v1_port:
+                    _enrich_defaults(subschema, v1_port)
+    elif hasattr(port_schema, '__dataclass_fields__'):
+        for key in port_schema.__dataclass_fields__:
+            if key.startswith('_'):
+                continue
+            attr = getattr(port_schema, key)
+            if key in v1_ports and isinstance(v1_ports[key], dict):
+                v1_port = v1_ports[key]
+                if '_default' in v1_port and hasattr(attr, '_default'):
+                    if attr._default is None or (
+                        isinstance(attr._default, (list, tuple)) and len(attr._default) == 0
+                    ):
+                        attr._default = v1_port['_default']
+                elif isinstance(v1_port, dict) and not '_default' in v1_port:
+                    _enrich_defaults(attr, v1_port)
+
+
+@dispatch
+def realize(core, schema: tuple, encode, path=()):
+    return schema, encode, []
+
 @dispatch
 def realize(core, schema: Empty, encode, path=()):
     return schema, encode, []
@@ -188,12 +226,23 @@ def realize(core, schema: String, encode, path=()):
 def realize(core, schema: NPRandom, encode, path=()):
     if isinstance(encode, RandomState):
         return schema, encode, []
-    else:
-        state = realize(core, schema.state, encode)
-        random = RandomState()
-        random.set_state(state)
 
-        return schema, random, []
+    # No valid state to restore from — create a fresh RandomState
+    if encode is None:
+        return schema, RandomState(), []
+    if isinstance(encode, tuple) and len(encode) == 0:
+        return schema, RandomState(), []
+    if isinstance(encode, dict) and (
+        not encode.get('state') or
+        (isinstance(encode.get('state'), tuple) and len(encode['state']) == 0)
+    ):
+        return schema, RandomState(), []
+
+    # Restore from a valid state dict
+    _, state, _ = realize(core, schema.state, encode.get('state', encode) if isinstance(encode, dict) else encode)
+    random = RandomState()
+    random.set_state(state)
+    return schema, random, []
 
 @dispatch
 def realize(core, schema: List, encode, path=()):
@@ -308,8 +357,13 @@ def realize(core, schema: Array, encode, path=()):
         encode,
         dtype=schema._data)
 
-    if state.shape != schema._shape:
-        state.reshape(schema._shape)
+    if state.size > 0 and state.shape != schema._shape:
+        try:
+            state = state.reshape(schema._shape)
+        except ValueError:
+            # Shape mismatch (e.g., enriched default has different size
+            # than inferred schema shape). Use the actual data shape.
+            schema._shape = state.shape
 
     return schema, state, []
 
@@ -394,9 +448,23 @@ def realize_link(core, schema: Link, encode, path=()):
             'data': data}
 
     if 'instance' in encode:
-        # Instance already exists — skip full realization.
-        # Return current state as-is with no new merges.
-        return schema, encode, []
+        # Instance already exists — skip instantiation but still
+        # compute port merges so wired state paths get created.
+        # Use the instance's ports_schema() defaults to populate
+        # the merge schema with correctly-shaped initial values.
+        edge_instance = encode['instance']
+        decode = dict(encode)
+
+        # Enrich the port schemas with runtime defaults from ports_schema()
+        if hasattr(edge_instance, 'ports_schema'):
+            try:
+                v1_ports = edge_instance.ports_schema()
+                for port_key in ['_inputs', '_outputs']:
+                    port_schema = getattr(schema, port_key, None)
+                    if port_schema is not None and isinstance(v1_ports, dict):
+                        _enrich_defaults(port_schema, v1_ports)
+            except Exception:
+                pass
 
     else:
         protocol = address.get('protocol', 'local')
@@ -416,11 +484,10 @@ def realize_link(core, schema: Link, encode, path=()):
         core.validate(config_schema, config, message)
 
         edge_instance = edge_class(config, core)
-
-    decode = {
-        'address': address,
-        'config': config,
-        'instance': edge_instance}
+        decode = {
+            'address': address,
+            'config': config,
+            'instance': edge_instance}
 
     interface = edge_instance.interface()
 

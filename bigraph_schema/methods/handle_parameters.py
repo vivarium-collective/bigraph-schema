@@ -90,8 +90,18 @@ def align_parameters(schema: Array, parameters):
         if isinstance(param, dict):
             # Structured array: array[field1:type|field2:type]
             return {'_data': param}
+        elif isinstance(param, str):
+            # Could be shape ("5") or data type name ("float")
+            try:
+                int(param)
+                return {'_shape': param}
+            except ValueError:
+                return {'_data': param}
+        elif isinstance(param, Node):
+            # Schema node as data type: array[float] -> Float node
+            return {'_data': param}
         else:
-            # Shape only: array[5]
+            # Assume shape
             return {'_shape': param}
     elif len(parameters) >= 2:
         # Shape + data: array[5,float] or array[5,field1:type|field2:type]

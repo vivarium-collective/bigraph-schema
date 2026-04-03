@@ -249,10 +249,41 @@ def apply(schema: Frame, state, update, path):
 
 @dispatch
 def apply(schema: Array, state, update, path):
-    index = tuple([
-        slice(0, dimension)
-        for dimension in update.shape])
-    state[index] += update
+    if isinstance(update, list):
+        # Sparse index updates: [(index, delta), ...]
+        for idx, delta in update:
+            state[idx] += delta
+        return state, []
+
+    elif isinstance(update, dict):
+        # Field-level updates on structured arrays: {'field': values}
+        # or nested update operations: {'set': {'field': values}}
+        if isinstance(state, np.ndarray) and state.dtype.names:
+            if 'set' in update:
+                # Set semantics: replace field values
+                for field, values in update['set'].items():
+                    if field in state.dtype.names:
+                        state[field] = values
+            else:
+                for field, values in update.items():
+                    if field in state.dtype.names:
+                        state[field] += values
+            return state, []
+
+    if hasattr(update, 'shape'):
+        if state.size == 0:
+            # State was initialized empty — replace with update
+            state = update
+        elif state.shape != update.shape:
+            raise ValueError(
+                f'Array apply shape mismatch at path {path}: '
+                f'state.shape={state.shape}, update.shape={update.shape}')
+        else:
+            index = tuple([
+                slice(0, dimension)
+                for dimension in update.shape])
+            state[index] += update
+
     return state, []
 
 @dispatch

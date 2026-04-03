@@ -98,6 +98,27 @@ def resolve(current: Empty, update: Node, path=None):
 def resolve(current: Node, update: Empty, path=None):
     return resolve_empty(update, current, path=path)
 
+# Disambiguate (SubType, Empty) for all subtypes that have (SubType, Node) dispatches
+@dispatch
+def resolve(current: Wrap, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: Array, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: Tree, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: String, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: dict, update: Empty, path=None):
+    return current
+
 @dispatch
 def resolve(current: Wrap, update: Wrap, path=None):
     if type(current) == type(update):
@@ -232,6 +253,10 @@ def resolve(current: Map, update: Map, path=None):
 
     else:
         return resolve_map(current, update, path=path)
+
+@dispatch
+def resolve(current: Map, update: Empty, path=None):
+    return current
 
 @dispatch
 def resolve(current: Map, update: Node, path=None):

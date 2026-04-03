@@ -43,6 +43,10 @@ def default(schema: None):
     return None
 
 @dispatch
+def default(schema: tuple):
+    return schema
+
+@dispatch
 def default(schema: Empty):
     return None
 
