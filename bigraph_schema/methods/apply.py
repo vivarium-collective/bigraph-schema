@@ -114,7 +114,7 @@ def apply(schema: List, state, update, path):
         if '_add' in update:
             result += update['_add']
 
-    if isinstance(update, np.ndarray):
+    elif isinstance(update, np.ndarray):
         result = update
 
     elif isinstance(state, np.ndarray):
