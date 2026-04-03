@@ -85,9 +85,19 @@ def align_parameters(schema: Map, parameters):
 
 @dispatch
 def align_parameters(schema: Array, parameters):
-    return {
-        '_shape': parameters[0],
-        '_data': parameters[1]}
+    if len(parameters) == 1:
+        param = parameters[0]
+        if isinstance(param, dict):
+            # Structured array: array[field1:type|field2:type]
+            return {'_data': param}
+        else:
+            # Shape only: array[5]
+            return {'_shape': param}
+    elif len(parameters) >= 2:
+        # Shape + data: array[5,float] or array[5,field1:type|field2:type]
+        return {
+            '_shape': parameters[0],
+            '_data': parameters[1]}
 
 @dispatch
 def align_parameters(schema: Frame, parameters):

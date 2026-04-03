@@ -334,7 +334,9 @@ def schema_dtype(schema: String):
 
 @dispatch
 def schema_dtype(schema: Array):
-    return np.dtype('object')
+    # For sub-array fields in structured dtypes, return the Array itself
+    # so that schema_dtype(dict) can extract shape + inner dtype.
+    return schema
 
 @dispatch
 def schema_dtype(schema: str):
@@ -352,10 +354,11 @@ def schema_dtype(schema: dict):
 
     for key, value in schema.items():
         subschema = schema_dtype(value)
-        subresult = (key, subschema)
         if isinstance(subschema, Array):
-            subshape = subschema._shape
-            subresult = subresult + (subshape,)
+            # Sub-array field: (name, inner_dtype, shape)
+            subresult = (key, subschema._data, subschema._shape)
+        else:
+            subresult = (key, subschema)
 
         result.append(subresult)
 

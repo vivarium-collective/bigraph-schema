@@ -164,6 +164,45 @@ def test_array(core):
     rendered = core.render(array_schema)
 
 
+def test_structured_array(core):
+    """Test structured array type expressions with named typed fields."""
+
+    # Basic structured array: two fields
+    schema = core.access('array[id:string|count:integer]')
+    assert schema._data == np.dtype([('id', '<U'), ('count', '<i4')])
+
+    # Structured array with explicit shape
+    schema = core.access('array[5,id:string|count:integer]')
+    assert schema._shape == (5,)
+    assert schema._data == np.dtype([('id', '<U'), ('count', '<i4')])
+
+    # Structured array with sub-array field
+    schema = core.access('array[id:string|count:integer|mass:array[9,float]]')
+    expected_dtype = np.dtype([('id', '<U'), ('count', '<i4'), ('mass', '<f8', (9,))])
+    assert schema._data == expected_dtype
+
+    # Create numpy array from structured dtype and verify field access
+    arr = np.zeros(3, dtype=schema._data)
+    assert arr.shape == (3,)
+    assert arr['mass'].shape == (3, 9)
+    assert arr['count'].dtype == np.int32
+
+    # Mixed field types with boolean
+    schema = core.access('array[name:string|values:array[3,integer]|flag:boolean]')
+    expected_dtype = np.dtype([('name', '<U'), ('values', '<i4', (3,)), ('flag', '?')])
+    assert schema._data == expected_dtype
+
+    # Shaped structured array
+    schema = core.access('array[10,x:float|y:float|z:float]')
+    assert schema._shape == (10,)
+    arr = np.zeros(10, dtype=schema._data)
+    assert arr['x'].shape == (10,)
+
+    # Single field (degenerate case)
+    schema = core.access('array[value:float]')
+    assert 'value' in schema._data.names
+
+
 def test_infer(core):
     default_schema, default_state = core.default(node_schema)
     node_inferred = core.infer(default_state)
