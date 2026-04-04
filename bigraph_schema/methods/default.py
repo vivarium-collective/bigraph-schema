@@ -35,6 +35,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     schema_dtype,
+    is_schema_field,
 )
 
 
@@ -217,19 +218,14 @@ def default_link(schema: Link):
 def default(schema: Link):
     return default_link(schema)
 
-def is_schema_key(key):
-    return isinstance(key, str) and key.startswith('_')
-
 @dispatch
 def default(schema: dict):
-    if '_default' in schema: 
+    if '_default' in schema:
         return schema['_default']
     else:
         result = {}
         for key in schema:
-            if key == '_link_path':
-                continue
-            if not is_schema_key(key):
+            if is_schema_field(schema, key):
                 inner = default(
                     schema[key])
                 result[key] = inner
@@ -243,7 +239,7 @@ def default(schema: Node):
     else:
         result = {}
         for key in schema.__dataclass_fields__:
-            if not is_schema_key(key):
+            if is_schema_field(schema, key):
                 inner = default(
                     getattr(schema, key))
                 result[key] = inner

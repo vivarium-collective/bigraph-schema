@@ -44,6 +44,7 @@ from bigraph_schema.schema import (
     LocalProtocol,
     Schema,
     Link,
+    is_schema_field,
 )
 
 
@@ -107,6 +108,8 @@ def realize(core, schema: Maybe, encode, path=()):
 
 @dispatch
 def realize(core, schema: Wrap, encode, path=()):
+    if encode is None:
+        encode = default(schema)
     outschema, outstate, merges = realize(core, schema._value, encode, path=path)
     schema._value = outschema
     return schema, outstate, merges
@@ -286,6 +289,9 @@ def realize(core, schema: Set, encode, path=()):
 
 @dispatch
 def realize(core, schema: Map, encode, path=()):
+    if encode is None:
+        encode = default(schema)
+
     if isinstance(encode, str):
         encode = literal_eval(encode)
 
@@ -590,7 +596,7 @@ def realize(core, schema: Node, encode, path=()):
 
     if isinstance(encode, dict):
         for key in schema.__dataclass_fields__:
-            if key in encode:
+            if is_schema_field(schema, key) and key in encode:
                 attr = getattr(schema, key)
                 subschema, substate, submerges = realize(
                     core,
@@ -639,6 +645,9 @@ def realize(core, schema: None, encode, path=()):
 
 @dispatch
 def realize(core, schema: dict, encode, path=()):
+    if encode is None and schema:
+        encode = default(schema)
+
     if isinstance(encode, str):
         try:
             encode = literal_eval(encode)
@@ -655,7 +664,7 @@ def realize(core, schema: dict, encode, path=()):
             result = {}
 
         for key, subschema in schema.items():
-            if key not in ('_default', '_link_path'):
+            if is_schema_field(schema, key):
                 if key in encode:
                     outcome_schema, outcome_state, submerges = realize(
                         core,

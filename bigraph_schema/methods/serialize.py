@@ -37,6 +37,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     dtype_schema,
+    is_schema_field,
 )
 
 from bigraph_schema.methods.check import check
@@ -306,7 +307,7 @@ def render(schema: Link, defaults=False):
     intermediate = {'_type': 'link'}
 
     for field_name in schema.__dataclass_fields__:
-        if field_name == '_default':
+        if not is_schema_field(schema, field_name):
             continue
         value = getattr(schema, field_name)
         intermediate[field_name] = render(value, defaults=defaults)
@@ -350,13 +351,15 @@ def render(schema: Node, defaults=False):
         subrender['_type'] = type_name
 
     for key in schema.__dataclass_fields__:
+        if not is_schema_field(schema, key):
+            if key == '_default':
+                value = getattr(schema, key)
+                default_render = serialize(schema, value)
+                if default_render:
+                    subrender['_default'] = default_render
+            continue
         value = getattr(schema, key)
-        if key == '_default':
-            default_render = serialize(schema, value)
-            if default_render:
-                subrender['_default'] = default_render
-        else:
-            subrender[key] = render(value, defaults=defaults)
+        subrender[key] = render(value, defaults=defaults)
 
     return wrap_default(schema, subrender) if defaults else subrender
 
@@ -439,7 +442,7 @@ def _serialize_leaf(schema, state, path):
         if isinstance(state, dict):
             result = {}
             for key in schema.__dataclass_fields__:
-                if key != '_default' and key in state:
+                if is_schema_field(schema, key) and key in state:
                     result[key] = serialize(getattr(schema, key), state[key])
             return result
         elif state is None:

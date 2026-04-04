@@ -31,6 +31,7 @@ from bigraph_schema.schema import (
     Link,
     dtype_schema,
     schema_dtype,
+    is_schema_field,
 )
 
 
@@ -52,26 +53,28 @@ def read_link_path(schema):
 
 def resolve_subclass(subclass, superclass):
     result = {}
-    for key in subclass.__dataclass_fields__:    
-        if key == '_default':
-            result[key] = subclass._default or superclass._default
-        elif key == '_link_path':
+    for key in subclass.__dataclass_fields__:
+        if not is_schema_field(subclass, key):
+            if key == '_default':
+                result[key] = subclass._default or superclass._default
+            else:
+                result[key] = getattr(subclass, key)
             continue
-        else:
-            subattr = getattr(subclass, key)
-            if hasattr(superclass, key): # and not key.startswith('_'):
-                superattr = getattr(superclass, key)
-                if isinstance(superattr, (Node, dict)):
-                    try:
-                        outcome = resolve(subattr, superattr)
-                    except Exception as e:
-                        raise Exception(f'\ncannot resolve subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
 
-                    result[key] = outcome
-                else:
-                    result[key] = subattr
+        subattr = getattr(subclass, key)
+        if hasattr(superclass, key):
+            superattr = getattr(superclass, key)
+            if isinstance(superattr, (Node, dict)):
+                try:
+                    outcome = resolve(subattr, superattr)
+                except Exception as e:
+                    raise Exception(f'\ncannot resolve subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
+
+                result[key] = outcome
             else:
                 result[key] = subattr
+        else:
+            result[key] = subattr
 
     resolved = type(subclass)(**result)
     return resolved
@@ -347,7 +350,9 @@ def resolve(current: Map, update: dict, path=None):
         resolved = {
             key: current._value
             for key in map_default}
-        resolved.update(update)
+        for key, value in update.items():
+            if is_schema_field(update, key):
+                resolved[key] = value
 
     schema = merge_update(resolved, current, update)
     return schema
@@ -396,7 +401,9 @@ def resolve(current: dict, update: Map, path=None):
         resolved = {
             key: update._value
             for key in map_default}
-        current.update(resolved)
+        for key, value in current.items():
+            if is_schema_field(current, key):
+                resolved[key] = value
 
     schema = merge_update(resolved, current, update)
     return schema
@@ -487,7 +494,7 @@ def resolve(current: dict, update: dict, path=None):
             all_keys.append(key)
 
     for key in all_keys:
-        if key in ('_inherit', '_link_path', '_default'):
+        if not is_schema_field(current, key):
             continue
 
         try:
@@ -554,7 +561,10 @@ def resolve(current: Array, update: Array, path=None):
         new_shape += current._shape[len(update._shape):]
     if len(update._shape) > len(current._shape):
         new_shape += update._shape[len(current._shape):]
-    return replace(current, **{'_shape': new_shape})
+
+    # Prefer the more specific subtype
+    base = update if issubclass(type(update), type(current)) else current
+    return replace(base, **{'_shape': new_shape})
 
 
 @dispatch

@@ -34,6 +34,7 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
+    is_schema_field,
 )
 
 from bigraph_schema.methods.check import check
@@ -169,7 +170,7 @@ def diff(schema: dict, state_a, state_b):
         return state_b
     result = {}
     for key, subschema in schema.items():
-        if key.startswith('_'):
+        if not is_schema_field(schema, key):
             continue
         a = state_a.get(key)
         b = state_b.get(key)

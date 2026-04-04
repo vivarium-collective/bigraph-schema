@@ -38,6 +38,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    is_schema_field,
 )
 
 
@@ -59,6 +60,8 @@ def apply(schema: Wrap, state, update, path):
 
 @dispatch
 def apply(schema: Overwrite, state, update, path):
+    if update is None:
+        return state, []
     return update, []
 
 
@@ -115,6 +118,13 @@ def apply(schema: Tuple, state, update, path):
 
 @dispatch
 def apply(schema: List, state, update, path):
+    # Coerce state to list if it arrived as wrong type
+    if not isinstance(state, list):
+        state = list(state) if hasattr(state, '__iter__') and not isinstance(state, (str, dict)) else []
+
+    if update is None:
+        return state, []
+
     result = []
     merges = []
 
@@ -159,7 +169,9 @@ def apply(schema: Set, state, update, path):
 
 @dispatch
 def apply(schema: Map, state, update, path):
-    result = state.copy()
+    if isinstance(state, list):
+        state = {}
+    result = state.copy() if isinstance(state, dict) else {}
     merges = []
 
     if update is None:
@@ -258,6 +270,11 @@ def apply(schema: Frame, state, update, path):
 
 @dispatch
 def apply(schema: Array, state, update, path):
+    # Ensure state is an ndarray — it may arrive as a list from
+    # realize or merge when type information was lost.
+    if isinstance(state, list):
+        state = np.array(state, dtype=schema._data)
+
     if isinstance(update, list):
         # Sparse index updates: [(index, delta), ...]
         for idx, delta in update:
@@ -283,13 +300,21 @@ def apply(schema: Array, state, update, path):
         if state.size == 0:
             # State was initialized empty — replace with update
             state = update
-        else:
-            # Slice-based update: handles partial updates where
-            # update is smaller than state (e.g. 5x4 into 5x6)
+        elif isinstance(state, np.ndarray) and state.dtype.names:
+            # Structured array: add field-by-field for numeric fields
             index = tuple([
                 slice(0, dimension)
                 for dimension in update.shape])
-            state[index] += update
+            for field in state.dtype.names:
+                if np.issubdtype(state.dtype[field], np.number):
+                    state[field][index] += update[field][index]
+        else:
+            if state.ndim != update.ndim or state.shape != update.shape:
+                # Shape mismatch — replace state with update
+                state = update
+            else:
+                # Additive update for matching shapes
+                state += update
 
     return state, []
 
@@ -317,10 +342,10 @@ def apply(schema: dict, state, update, path):
     result = {}
 
     for key, subschema in schema.items():
-        if key in ('_inherit',):
+        if not is_schema_field(schema, key):
             continue
 
-        if key not in state:
+        if key not in state and key not in update:
             continue
 
         result[key], submerges = apply(
@@ -340,10 +365,11 @@ def apply(schema: dict, state, update, path):
 @dispatch
 def apply(schema: Node, state, update, path):
     merges = []
+
     if isinstance(state, dict) and isinstance(update, dict):
         result = {}
         for key in schema.__dataclass_fields__:
-            if key == '_default':
+            if not is_schema_field(schema, key):
                 continue
             subschema = getattr(schema, key)
             result[key], submerges = apply(
@@ -352,6 +378,21 @@ def apply(schema: Node, state, update, path):
                 update.get(key),
                 path+(key,))
             merges += submerges
+
+        # Preserve state keys not covered by schema fields.
+        # For keys in both state and update, recursively apply
+        # using Node() as schema to preserve nested state.
+        all_keys = set(state.keys()) | set(update.keys())
+        for key in all_keys:
+            if key not in result:
+                if key in state and key in update:
+                    result[key], submerges = apply(
+                        Node(), state[key], update[key], path+(key,))
+                    merges += submerges
+                elif key in update:
+                    result[key] = update[key]
+                else:
+                    result[key] = state[key]
 
     else:
         result = update

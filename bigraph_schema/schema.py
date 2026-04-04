@@ -12,12 +12,28 @@ from dataclasses import dataclass, is_dataclass, field
 NONE_SYMBOL = '__nil__'
 
 
+def is_schema_field(schema, key):
+    """Check whether a _ prefixed key on a schema is a schema field (vs metadata).
+
+    For Node types, checks the _schema_keys class variable.
+    For dicts, all _ prefixed keys are metadata (e.g. _default, _link_path).
+    Non _ prefixed keys are always schema fields.
+    """
+    if not isinstance(key, str) or not key.startswith('_'):
+        return True
+    if isinstance(schema, Node):
+        return key in schema._schema_keys
+    return False
+
+
 @dataclass(kw_only=True)
 class Node():
+    _schema_keys = frozenset()
     _default: object = None
 
 @dataclass(kw_only=True)
 class Place(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_subnodes'})
     _subnodes: dict = field(default_factory=dict)
 
 @dataclass(kw_only=True)
@@ -30,10 +46,12 @@ class Empty(Atom):
 
 @dataclass(kw_only=True)
 class Union(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_options'})
     _options: typing.Tuple[Node] = field(default_factory=tuple)
 
 @dataclass(kw_only=True)
 class Tuple(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_values'})
     _values: typing.List[Node] = field(default_factory=list)
 
 @dataclass(kw_only=True)
@@ -92,10 +110,12 @@ class String(Atom):
 
 @dataclass(kw_only=True)
 class Enum(String):
+    _schema_keys =String._schema_keys | frozenset({'_values'})
     _values: typing.Tuple[str] = field(default_factory=tuple)
 
 @dataclass(kw_only=True)
 class Wrap(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_value'})
     _value: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
@@ -113,29 +133,35 @@ class Const(Wrap):
 
 @dataclass(kw_only=True)
 class List(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_element'})
     _element: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Set(Node):
     """Unordered collection of unique elements."""
+    _schema_keys =Node._schema_keys | frozenset({'_element'})
     _element: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Map(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_key', '_value'})
     _key: Node = field(default_factory=String)
     _value: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Tree(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_leaf'})
     _leaf: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Array(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_data'})
     _shape: typing.Tuple[int] = field(default_factory=tuple)
     _data: np.dtype = field(default_factory=lambda:np.dtype('float64'))
 
 @dataclass(kw_only=True)
 class Frame(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_columns'})
     _columns: dict = field(default_factory=dict)
 
 @dataclass(kw_only=True)
@@ -161,6 +187,7 @@ class LocalProtocol(Protocol):
 
 @dataclass(kw_only=True)
 class Link(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_inputs', '_outputs'})
     address: Protocol = field(default_factory=Protocol)
     config: Node = field(default_factory=Node)
     _inputs: dict = field(default_factory=dict)

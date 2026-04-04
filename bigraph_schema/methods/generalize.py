@@ -37,6 +37,9 @@ from bigraph_schema.methods.resolve import resolve
 from bigraph_schema.methods.merge import merge, merge_update
 
 
+# TODO: update generalize to use is_schema_field like the other methods.
+# Currently nothing calls generalize_merges — consider whether this is still needed.
+
 NODE_INSTANCE = Node()
 
 def generalize_subclass(subclass, superclass):

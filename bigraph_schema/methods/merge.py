@@ -34,6 +34,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    is_schema_field,
 )
 
 from bigraph_schema.methods.check import check
@@ -65,6 +66,8 @@ def merge(schema: Wrap, current, update, path=()):
 
 @dispatch
 def merge(schema: Overwrite, current, update, path=()):
+    if update is None:
+        return current
     return update
 
 @dispatch
@@ -313,7 +316,8 @@ def merge(schema: Node, current, update, path=()):
     elif isinstance(current, dict) and isinstance(update, dict):
         down = {}
         for key in schema.__dataclass_fields__:
-            down[key] = getattr(schema, key)
+            if is_schema_field(schema, key):
+                down[key] = getattr(schema, key)
         return merge(down, current, update)
 
     else:
@@ -328,11 +332,17 @@ def merge(schema: Node, current, update, path=()):
         elif not current_empty:
             return current
         else:
-            return default(schema)
+            return None
 
 
 @dispatch
 def merge(schema, current, update, path=()):
+    if path:
+        head = path[0]
+        current = current or {}
+        if isinstance(current, dict):
+            current[head] = merge(schema, current.get(head), update, path[1:])
+            return current
     return update
 
 
@@ -380,24 +390,25 @@ def merge(schema: dict, current, update, path=()):
         return current
 
     for key in schema.keys() | current.keys() | update.keys():
+        if not is_schema_field(schema, key):
+            continue
         if key in schema:
             result[key] = merge(
                 schema[key],
                 current.get(key),
                 update.get(key))
+        elif key in current and key in update:
+            # Both have this key but no schema — recursively merge
+            result[key] = merge(
+                Node(),
+                current[key],
+                update[key])
         elif key in update:
             result[key] = update[key]
         elif key in current:
             result[key] = current[key]
         else:
             raise Exception('logically impossible')
-
-        if key in schema and schema[key] and result[key] is None:
-            if key.startswith('_'):
-                result[key] = schema[key]
-            else:
-                result[key] = default(
-                    schema[key])
 
         if result[key] is None:
             del result[key]
@@ -408,15 +419,13 @@ def merge_update(schema, current, update, path=()):
     if path:
         raise Exception('merge_update with path not implemented')
 
-    current_state = default(current)
-    update_state = default(update)
-    state = current_state
+    # Pick the more informative default — prefer update over current.
+    # Avoid merging defaults via merge() which can corrupt schemas
+    # by walking state data (bare lists) through schema methods.
+    current_default = current._default if isinstance(current, Node) else current.get('_default')
+    update_default = update._default if isinstance(update, Node) else update.get('_default') if isinstance(update, dict) else None
 
-    if update_state:
-        if current_state:
-            state = merge(schema, current_state, update_state)
-        else:
-            state = update_state
+    state = update_default if update_default is not None else current_default
 
     if isinstance(schema, Node):
         schema = replace(schema, _default=state)

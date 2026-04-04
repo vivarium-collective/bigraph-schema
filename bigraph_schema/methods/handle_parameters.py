@@ -36,6 +36,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     schema_dtype,
+    is_schema_field,
 )
 
 # aligning parameters takes them from positioned arguments and gives them keys
@@ -52,7 +53,7 @@ from bigraph_schema.schema import (
 def schema_keys(schema):
     keys = []
     for key in schema.__dataclass_fields__:
-        if key.startswith('_'):
+        if key.startswith('_') and is_schema_field(schema, key):
             keys.append(key)
 
     return keys

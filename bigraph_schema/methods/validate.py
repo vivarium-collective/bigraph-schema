@@ -33,6 +33,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     dtype_schema,
+    is_schema_field,
 )
 
 from bigraph_schema.methods.check import check
@@ -242,13 +243,13 @@ def validate(core, schema: Node, state):
     fields = [
         field
         for field in schema.__dataclass_fields__
-        if not field.startswith('_')]
+        if is_schema_field(schema, field)]
 
     if fields:
         if isinstance(state, dict):
             result = {}
             for key in schema.__dataclass_fields__:
-                if not key.startswith('_'):
+                if is_schema_field(schema, key):
                     if key not in state:
                         return f'Node schema but key "{key}" is not in state:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
                     else:
@@ -271,6 +272,8 @@ def validate(core, schema: Node, state):
 def validate(core, schema: dict, state):
     result = {}
     for key, subschema in schema.items():
+        if not is_schema_field(schema, key):
+            continue
         if key not in state:
             continue
             # result[key] = f'Schema has key "{key}" but state does not:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'

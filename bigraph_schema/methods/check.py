@@ -31,6 +31,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    is_schema_field,
 )
 
 
@@ -196,6 +197,9 @@ def check(schema: Key, state):
 
 @dispatch
 def check(schema: Node, state):
+    # Only check non-underscore fields against state — underscore
+    # schema fields (like _inputs, _outputs) describe type structure,
+    # not state shape.
     fields = [
         field
         for field in schema.__dataclass_fields__
@@ -203,16 +207,15 @@ def check(schema: Node, state):
 
     if fields:
         if isinstance(state, dict):
-            for key in schema.__dataclass_fields__:
-                if not key.startswith('_'):
-                    if key not in state:
+            for key in fields:
+                if key not in state:
+                    return False
+                else:
+                    down = check(
+                        getattr(schema, key),
+                        state[key])
+                    if down is False:
                         return False
-                    else:
-                        down = check(
-                            getattr(schema, key),
-                            state[key])
-                        if down is False:
-                            return False
             return True
         else:
             return False
@@ -223,6 +226,8 @@ def check(schema: Node, state):
 @dispatch
 def check(schema: dict, state):
     for key, subschema in schema.items():
+        if not is_schema_field(schema, key):
+            continue
         if key not in state:
             continue
             # return False

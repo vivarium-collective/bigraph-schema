@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 
 from bigraph_schema import Edge, allocate_core, BASE_TYPES
-from bigraph_schema.schema import Float, String, Map, Tree, Link
-from bigraph_schema.methods import check, render, serialize
+from bigraph_schema.schema import Float, String, Map, Tree, Link, Array
+from bigraph_schema.methods import check, render, serialize, apply
 
 
 @pytest.fixture
@@ -201,6 +201,47 @@ def test_structured_array(core):
     # Single field (degenerate case)
     schema = core.access('array[value:float]')
     assert 'value' in schema._data.names
+
+
+def test_apply_structured_array(core):
+    """Test that apply on structured arrays adds numeric fields
+    and preserves non-numeric fields."""
+    dt = np.dtype([('id', '<U50'), ('count', '<i8'), ('mass', '<f8')])
+    schema = Array(_shape=(3,), _data=dt)
+
+    state = np.zeros(3, dtype=dt)
+    state['id'] = ['a', 'b', 'c']
+    state['count'] = [10, 20, 30]
+    state['mass'] = [1.0, 2.0, 3.0]
+
+    update = np.zeros(3, dtype=dt)
+    update['count'] = [5, -3, 7]
+    update['mass'] = [0.1, 0.2, 0.3]
+
+    result, merges = apply(schema, state, update, ())
+
+    assert list(result['count']) == [15, 17, 37], f"Expected additive counts, got {result['count']}"
+    assert abs(result['mass'][0] - 1.1) < 1e-10, f"Expected additive mass, got {result['mass']}"
+    assert list(result['id']) == ['a', 'b', 'c'], f"Expected preserved ids, got {result['id']}"
+
+
+def test_apply_structured_array_dict_update(core):
+    """Test that apply on structured arrays with dict updates
+    handles both set and additive semantics."""
+    dt = np.dtype([('id', '<U50'), ('count', '<i8')])
+    schema = Array(_shape=(3,), _data=dt)
+
+    state = np.zeros(3, dtype=dt)
+    state['id'] = ['a', 'b', 'c']
+    state['count'] = [10, 20, 30]
+
+    # Additive dict update
+    result, _ = apply(schema, state.copy(), {'count': np.array([1, 2, 3])}, ())
+    assert list(result['count']) == [11, 22, 33]
+
+    # Set dict update
+    result, _ = apply(schema, state.copy(), {'set': {'count': np.array([100, 200, 300])}}, ())
+    assert list(result['count']) == [100, 200, 300]
 
 
 def test_infer(core):

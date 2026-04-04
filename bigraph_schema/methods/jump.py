@@ -34,6 +34,7 @@ from bigraph_schema.schema import (
     Jump,
     convert_path,
     walk_path,
+    is_schema_field,
 )
 
 from bigraph_schema.methods import default, check, serialize, resolve
@@ -53,7 +54,7 @@ def jump(schema: Maybe, state, to, context):
 
 
 @dispatch
-def jump(schema: Wrap, state, to, context):
+def jump(schema: Wrap, state, to: Jump, context):
     return jump(schema._value, state, to, context)
 
 
@@ -310,7 +311,7 @@ def jump(schema: Node, state, to: Star, context):
     values = {}
 
     for key, value in schema.__dataclass_fields__:
-        if key in state:
+        if is_schema_field(schema, key) and key in state:
             subschema, subvalue = traverse(
                 getattr(schema, key),
                 state[key],
@@ -362,7 +363,16 @@ def jump(schema: Array, state, to: Star, context):
 @dispatch
 def jump(schema: Node, state, to: Jump, context):
     key = to._value
-    if key in state:
+    if isinstance(state, dict) and key in state:
+        # When schema is a generic Node but state is a dict,
+        # traverse into the dict using Node() as sub-schema.
+        sub_schema = getattr(schema, key, None) or Node()
+        return traverse(
+            sub_schema,
+            state[key],
+            context['subpath'],
+            context)
+    elif hasattr(schema, key) and key in state:
         return traverse(
             getattr(schema, key),
             state[key],
@@ -402,7 +412,7 @@ def jump(schema: dict, state, to: Star, context):
     values = {}
 
     for key in schema:
-        if key in state:
+        if is_schema_field(schema, key) and key in state:
             subschema, subvalue = traverse(
                 schema[key],
                 state[key],
