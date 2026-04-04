@@ -802,7 +802,6 @@ def test_merge(core):
 
     assert(key_merge == {
         'a': 55555.555,
-        'b': '',
         'c': 4444,
         'd': '111111'})
 

@@ -959,9 +959,9 @@ class TestOverwrite:
     def test_merge_always_update(self):
         assert merge(Overwrite(_value=Float()), 1.0, 2.0) == 2.0
 
-    def test_merge_none_update_still_overwrites(self):
+    def test_merge_none_update_keeps_current(self):
         result = merge(Overwrite(_value=Float()), 1.0, None)
-        assert result is None
+        assert result == 1.0
 
     def test_merge_none_current(self):
         result = merge(Overwrite(_value=Float()), None, 5.0)
@@ -971,9 +971,9 @@ class TestOverwrite:
         result, _ = apply(Overwrite(_value=Float()), 1.0, 2.0, ())
         assert result == 2.0
 
-    def test_apply_replaces_with_none(self):
+    def test_apply_none_keeps_state(self):
         result, _ = apply(Overwrite(_value=Float()), 1.0, None, ())
-        assert result is None
+        assert result == 1.0
 
     def test_validate(self, core):
         assert validate(core, Overwrite(_value=String()), 'hi') is None
@@ -1491,7 +1491,7 @@ class TestMap:
 
     def test_realize_none(self, core):
         _, state, _ = realize(core, Map(_value=Float()), None)
-        assert state is None
+        assert state == {}
 
     def test_realize_skips_schema_keys(self, core):
         _, state, _ = realize(core, Map(_value=Float()), {'a': 1.0, '_type': 'map'})

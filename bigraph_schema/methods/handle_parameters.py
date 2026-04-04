@@ -137,7 +137,7 @@ def align_parameters(schema: Set, parameters):
 @dispatch
 def align_parameters(schema: Node, parameters):
     align = {}
-    keys = schema_keys(schema)[1:]
+    keys = schema_keys(schema)
     for key, parameter in zip(keys, parameters):
         align[key] = parameter
     return align

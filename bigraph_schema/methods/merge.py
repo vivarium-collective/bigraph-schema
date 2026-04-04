@@ -265,8 +265,10 @@ def merge(schema: Atom, current, update, path=()):
         return update
     elif not _is_empty(schema, current):
         return current
-    else:
-        return default(schema)
+    elif update is not None:
+        return update
+    elif current is not None:
+        return current
 
 
 @dispatch

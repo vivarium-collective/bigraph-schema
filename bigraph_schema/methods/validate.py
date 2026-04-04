@@ -240,26 +240,28 @@ def validate(core, schema: Key, state):
 
 @dispatch
 def validate(core, schema: Node, state):
+    # Only check non-underscore fields against state — underscore
+    # schema fields (like _inputs, _outputs) describe type structure,
+    # not state shape. This matches check(Node) behavior.
     fields = [
         field
         for field in schema.__dataclass_fields__
-        if is_schema_field(schema, field)]
+        if not field.startswith('_')]
 
     if fields:
         if isinstance(state, dict):
             result = {}
-            for key in schema.__dataclass_fields__:
-                if is_schema_field(schema, key):
-                    if key not in state:
-                        return f'Node schema but key "{key}" is not in state:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
-                    else:
-                        down = validate(
-                            core, 
-                            getattr(schema, key),
-                            state[key])
+            for key in fields:
+                if key not in state:
+                    return f'Node schema but key "{key}" is not in state:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+                else:
+                    down = validate(
+                        core,
+                        getattr(schema, key),
+                        state[key])
 
-                        if down:
-                            result[key] = down
+                    if down:
+                        result[key] = down
             if result:
                 return result
         else:
