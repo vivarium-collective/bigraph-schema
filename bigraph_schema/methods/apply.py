@@ -249,46 +249,45 @@ def apply(schema: dict, state, update, path):
         return update, []
 
     merges = []
-    result = {}
 
     for key, subschema in schema.items():
         if key in ('_inherit',):
             continue
 
-        if key not in state:
+        if key not in state and key not in update:
             continue
 
-        result[key], submerges = apply(
+        state[key], submerges = apply(
             subschema,
             state.get(key),
             update.get(key),
             path+(key,))
         merges += submerges
 
-    for key in state.keys():
-        if not key in result and not key in schema:
-            result[key] = state[key]
-
-    return result, merges
+    return state, merges
 
 
 @dispatch
 def apply(schema: Node, state, update, path):
+    if update is None:
+        return state, []
+
     merges = []
     if isinstance(state, dict) and isinstance(update, dict):
-        result = {}
         for key in schema.__dataclass_fields__:
             if key == '_default':
                 continue
             subschema = getattr(schema, key)
-            result[key], submerges = apply(
+            sub_update = update.get(key)
+            if sub_update is None and key not in state:
+                continue
+            state[key], submerges = apply(
                 subschema,
                 state.get(key),
-                update.get(key),
+                sub_update,
                 path+(key,))
             merges += submerges
+        return state, merges
 
     else:
-        result = update
-
-    return result, merges
+        return update, merges

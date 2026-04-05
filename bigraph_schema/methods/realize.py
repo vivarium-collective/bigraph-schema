@@ -330,6 +330,10 @@ def default_wires(schema):
 
 
 def realize_link(core, schema: Link, encode, path=()):
+    # Invalidate any cached compiled link structure so it will be
+    # rebuilt with the new wiring after realization.
+    core.invalidate_link(path)
+
     address = encode.get('address', 'local:edge')
 
     if isinstance(address, str):
@@ -344,10 +348,9 @@ def realize_link(core, schema: Link, encode, path=()):
             'data': data}
 
     if 'instance' in encode:
-        edge_instance = encode['instance']
-        config = encode['config']
-
-        # return schema, encode, []
+        # Instance already exists — skip full realization.
+        # Return current state as-is with no new merges.
+        return schema, encode, []
 
     else:
         protocol = address.get('protocol', 'local')
