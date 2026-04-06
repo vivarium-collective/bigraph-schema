@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 
 from bigraph_schema import Edge, allocate_core, BASE_TYPES
-from bigraph_schema.schema import Float, String, Map, Tree, Link, Array
-from bigraph_schema.methods import check, render, serialize, apply
+from bigraph_schema.schema import Float, String, Map, Tree, Link, Array, Overwrite, Node
+from bigraph_schema.methods import check, render, serialize, apply, reconcile
 
 
 @pytest.fixture
@@ -242,6 +242,73 @@ def test_apply_structured_array_dict_update(core):
     # Set dict update
     result, _ = apply(schema, state.copy(), {'set': {'count': np.array([100, 200, 300])}}, ())
     assert list(result['count']) == [100, 200, 300]
+
+
+def test_reconcile_float(core):
+    """Float reconciliation sums deltas."""
+    result = reconcile(Float(), [1.0, 2.5, -0.5])
+    assert result == 3.0
+
+
+def test_reconcile_float_all_none(core):
+    result = reconcile(Float(), [None, None])
+    assert result is None
+
+
+def test_reconcile_overwrite(core):
+    """Overwrite reconciliation: last non-None wins."""
+    from bigraph_schema.schema import Overwrite, Node
+    result = reconcile(Overwrite(_value=Node()), ['first', 'second', None])
+    assert result == 'second'
+
+
+def test_reconcile_array_sparse(core):
+    """Array with sparse updates: concatenate sparse entry lists."""
+    schema = Array(_shape=(10,), _data=np.dtype('float64'))
+    u1 = [(np.array([0, 1]), np.array([1.0, 2.0]))]
+    u2 = [(np.array([2]), np.array([3.0]))]
+    result = reconcile(schema, [u1, u2])
+    # Two sparse entries: one from each update
+    assert len(result) == 2
+    assert list(result[0][0]) == [0, 1]
+    assert list(result[1][0]) == [2]
+
+
+def test_reconcile_array_dense(core):
+    """Array with dense updates: element-wise sum."""
+    schema = Array(_shape=(3,), _data=np.dtype('float64'))
+    result = reconcile(schema, [np.array([1, 0, 0]), np.array([0, 2, 0])])
+    assert list(result) == [1, 2, 0]
+
+
+def test_reconcile_map(core):
+    """Map reconciliation merges keys."""
+    result = reconcile(Map(), [{'a': 1}, {'b': 2}, {'a': 3}])
+    assert result['a'] == 3
+    assert result['b'] == 2
+
+
+def test_reconcile_dict_schema(core):
+    """Dict schema reconciles per-key with sub-schema dispatch."""
+    schema = {'x': Float(), 'y': Float()}
+    result = reconcile(schema, [
+        {'x': 1.0, 'y': 2.0},
+        {'x': 3.0},
+    ])
+    assert result['x'] == 4.0
+    assert result['y'] == 2.0
+
+
+def test_reconcile_nested(core):
+    """Nested dict schema reconciles recursively."""
+    schema = {'inner': {'a': Float(), 'b': Float()}}
+    result = reconcile(schema, [
+        {'inner': {'a': 1.0}},
+        {'inner': {'b': 2.0}},
+        {'inner': {'a': 5.0}},
+    ])
+    assert result['inner']['a'] == 6.0
+    assert result['inner']['b'] == 2.0
 
 
 def test_infer(core):

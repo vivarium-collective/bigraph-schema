@@ -94,7 +94,8 @@ from bigraph_schema.methods import (
     merge,
     jump,
     traverse,
-    apply)
+    apply,
+    reconcile)
 
 from bigraph_schema.package import discover_packages
 
@@ -1036,6 +1037,23 @@ class Core:
             return apply(found, state, update, path)
         else:
             return state, []
+
+    def reconcile(self, schema, updates):
+        """Reconcile multiple updates into a single combined update.
+
+        Groups updates by destination path and combines them according
+        to each schema type's reconciliation semantics. The result can
+        be passed to apply() for a single atomic state update.
+
+        Args:
+            schema: The schema at the update target path.
+            updates: List of updates to reconcile.
+
+        Returns:
+            A single reconciled update, or None if all updates are empty.
+        """
+        found = self.access(schema)
+        return reconcile(found, updates)
 
 
 def allocate_core(top=None):
