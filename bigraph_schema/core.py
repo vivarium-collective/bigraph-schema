@@ -740,6 +740,13 @@ class Core:
         view_fast() can extract values via direct get_path() lookups
         instead of traversing the schema tree.
 
+        Also computes any unit-conversion scale factors at compile time:
+        if a wire connects state with `_units='fg'` to a port reading
+        `_units='g'`, the scale `1e-15` is computed once via pint here
+        and applied as a single multiply at view time. Wires with
+        matching units (the common case) get scale=1.0 and pay no
+        runtime cost (the 'resolved' kind path is unchanged).
+
         Args:
             schema: The full schema tree.
             state: The full state tree.
@@ -760,12 +767,136 @@ class Core:
 
             resolved = self._resolve_wire_paths(wires, parent_path)
             if resolved is not None:
+                # Walk the wires + ports schema to compute per-leaf scales.
+                scales = self._collect_view_scales(
+                    wires, parent_path, ports_schema, schema)
+                if scales is not None and self._has_nonunit_scale(scales):
+                    return ('scaled_resolved', resolved, scales)
                 return ('resolved', resolved)
 
             # Fall back to storing port schema and wires for view_ports
             return ('ports', ports_schema, wires, parent_path)
         except Exception:
             return None
+
+    def _compute_unit_scale(self, src_units, dst_units):
+        """Compute the multiplier to convert from src_units to dst_units.
+
+        Returns 1.0 in any of these "no conversion" cases:
+        - either side has no unit declared (empty string)
+        - units match exactly
+        - one side is 'dimensionless' (treated as unitless passthrough)
+
+        Otherwise, uses pint at compile time to compute the scalar
+        conversion factor. Raises if units are incompatible
+        (e.g. fg → mol) — caller catches and falls back to 1.0,
+        but this should ideally surface as a wire validation error.
+        """
+        if not src_units or not dst_units:
+            return 1.0
+        if src_units == dst_units:
+            return 1.0
+        if src_units == 'dimensionless' or dst_units == 'dimensionless':
+            return 1.0
+        from bigraph_schema.units import units as _ureg
+        src_q = 1.0 * _ureg(src_units)
+        dst_q = src_q.to(_ureg(dst_units))
+        return float(dst_q.magnitude)
+
+    def _schema_units_at_path(self, full_schema, path):
+        """Look up `_units` of the state schema at an absolute path.
+
+        Returns empty string if not found or if the schema at the
+        path has no _units attribute.
+        """
+        try:
+            sub_schema, _ = self.traverse(full_schema, None, list(path))
+            return getattr(sub_schema, '_units', '') or ''
+        except Exception:
+            return ''
+
+    @staticmethod
+    def _port_units(port_schema):
+        """Extract `_units` from a port schema, unwrapping common wrappers."""
+        if port_schema is None:
+            return ''
+        # Unwrap Wrap/Maybe/Overwrite to find inner Number type
+        seen = set()
+        while hasattr(port_schema, '_value') and id(port_schema) not in seen:
+            seen.add(id(port_schema))
+            port_schema = port_schema._value
+        return getattr(port_schema, '_units', '') or ''
+
+    def _collect_view_scales(self, wires, parent_path, port_schema, full_schema):
+        """Walk the wires + port schema, returning a parallel scale tree.
+
+        Each leaf in the result is a float scale factor (or 1.0 if no
+        conversion is needed). The structure mirrors `wires`.
+        """
+        if isinstance(wires, str):
+            wires = [wires]
+
+        if isinstance(wires, (list, tuple)):
+            full_path = resolve_path(list(parent_path) + list(wires))
+            src_units = self._schema_units_at_path(full_schema, full_path)
+            dst_units = self._port_units(port_schema)
+            try:
+                return self._compute_unit_scale(src_units, dst_units)
+            except Exception:
+                return 1.0
+
+        elif isinstance(wires, dict):
+            scales = {}
+            for port_key, subwires in wires.items():
+                # Drill into port schema for this key
+                sub_port_schema = self._subport_schema(port_schema, port_key)
+                sub = self._collect_view_scales(
+                    subwires, parent_path, sub_port_schema, full_schema)
+                if sub is not None:
+                    scales[port_key] = sub
+            return scales
+
+        return None
+
+    @staticmethod
+    def _subport_schema(port_schema, key):
+        """Pull a sub-port schema by key from a structured port type."""
+        if port_schema is None:
+            return None
+        # If it's a dict (structured port), index it
+        if isinstance(port_schema, dict):
+            return port_schema.get(key)
+        # If it's a Node with named fields (rare for structured ports)
+        if hasattr(port_schema, key):
+            return getattr(port_schema, key)
+        return None
+
+    @staticmethod
+    def _has_nonunit_scale(scales):
+        """Recursively check whether any leaf scale is != 1.0."""
+        if isinstance(scales, dict):
+            return any(Core._has_nonunit_scale(v) for v in scales.values())
+        if isinstance(scales, (int, float)):
+            return scales != 1.0
+        return False
+
+    @staticmethod
+    def _apply_view_scales(view, scales):
+        """Multiply leaves of `view` by their scale factors in `scales`.
+
+        Both arguments share the same nested-dict structure.
+        Multiplication is in-place where the value is a numpy array
+        and out-of-place for plain floats. Skips scales of 1.0.
+        """
+        if isinstance(scales, (int, float)):
+            if scales == 1.0 or view is None:
+                return view
+            return view * scales
+        if isinstance(scales, dict) and isinstance(view, dict):
+            for key, sub_scale in scales.items():
+                if key in view:
+                    view[key] = Core._apply_view_scales(view[key], sub_scale)
+        return view
 
     def view_fast(self, compiled, state):
         """Extract input state using a precompiled view.
@@ -780,6 +911,10 @@ class Core:
         kind = compiled[0]
         if kind == 'resolved':
             return self._view_resolved(compiled[1], state)
+        elif kind == 'scaled_resolved':
+            # Wires include unit conversions — extract then scale.
+            result = self._view_resolved(compiled[1], state)
+            return self._apply_view_scales(result, compiled[2])
         elif kind == 'ports':
             _, ports_schema, wires, parent_path = compiled
             return self.view_ports(
@@ -846,7 +981,8 @@ class Core:
             out_wires = link_state.get('outputs') or {}
             if out_ports_schema is not None:
                 compiled['project'] = self.precompile_project(
-                    out_ports_schema, out_wires, parent_path)
+                    out_ports_schema, out_wires, parent_path,
+                    full_schema=schema)
             else:
                 compiled['project'] = None
 
@@ -871,12 +1007,18 @@ class Core:
         """
         self._link_cache.pop(tuple(link_path), None)
 
-    def precompile_project(self, ports_schema, wires, path):
+    def precompile_project(self, ports_schema, wires, path, full_schema=None):
         """Precompile the schema resolution for project_ports.
 
         Returns a compiled structure that can be used by project_ports_fast
         to skip repeated schema resolution. Call once per process, then use
         project_ports_fast on each timestep.
+
+        If `full_schema` is provided, also computes per-leaf unit
+        conversion scales (port unit → state unit). The scale is the
+        *inverse* of the view direction. Leaves with scale=1.0 use the
+        existing zero-overhead 'leaf' kind. Non-trivial scales use
+        'scaled_leaf' so the multiply happens at project time.
 
         Returns:
             A compiled projection structure, or None if the wires pattern
@@ -888,6 +1030,16 @@ class Core:
         if isinstance(wires, (list, tuple)):
             destination = resolve_path(list(path) + list(wires))
             project_schema = self.resolve({}, ports_schema, path=destination)
+            scale = 1.0
+            if full_schema is not None:
+                src_units = self._port_units(ports_schema)
+                dst_units = self._schema_units_at_path(full_schema, destination)
+                try:
+                    scale = self._compute_unit_scale(src_units, dst_units)
+                except Exception:
+                    scale = 1.0
+            if scale != 1.0:
+                return ('scaled_leaf', destination, project_schema, scale)
             return ('leaf', destination, project_schema)
 
         elif isinstance(wires, dict):
@@ -896,7 +1048,7 @@ class Core:
                 subports, _ = self.jump(ports_schema, {}, key)
                 if subports is None:
                     continue
-                sub = self.precompile_project(subports, subwires, path)
+                sub = self.precompile_project(subports, subwires, path, full_schema)
                 if sub is None:
                     return None
                 sub_compiled.append((key, sub))
@@ -904,9 +1056,8 @@ class Core:
             # Precompute the merged schema
             project_schema = Node()
             for _, sub in sub_compiled:
-                if sub[0] == 'leaf':
-                    project_schema = resolve(project_schema, sub[2])
-                elif sub[0] == 'dict':
+                # sub[2] is project_schema for both leaf and dict kinds
+                if sub[0] in ('leaf', 'scaled_leaf', 'dict'):
                     project_schema = resolve(project_schema, sub[2])
             return ('dict', sub_compiled, project_schema)
 
@@ -949,6 +1100,14 @@ class Core:
             # Build nested dict directly instead of calling self.merge
             project_state = {}
             self._set_nested(project_state, destination, view)
+            return project_schema, project_state
+
+        elif kind == 'scaled_leaf':
+            _, destination, project_schema, scale = compiled
+            # Apply unit conversion (port unit → state unit) before storing.
+            scaled_view = view * scale if view is not None else view
+            project_state = {}
+            self._set_nested(project_state, destination, scaled_view)
             return project_schema, project_state
 
         elif kind == 'dict':
