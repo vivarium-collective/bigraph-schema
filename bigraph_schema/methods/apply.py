@@ -60,13 +60,15 @@ def apply(schema: Wrap, state, update, path):
 
 @dispatch
 def apply(schema: Overwrite, state, update, path):
+    """Overwrite means replace. Always.
+
+    Sibling-preservation for structured types is the job of the
+    structured dict / Node schema itself — declare the dict layout
+    explicitly with per-leaf overwrite[T] rather than wrapping a
+    whole subtree in overwrite[node].
+    """
     if update is None:
         return state, []
-    # When both are dicts, delegate to the inner value schema
-    # to preserve keys not in the update (e.g. listener keys).
-    # Pure Overwrite (replace) only applies to leaf values.
-    if isinstance(state, dict) and isinstance(update, dict):
-        return apply(schema._value, state, update, path)
     return update, []
 
 
