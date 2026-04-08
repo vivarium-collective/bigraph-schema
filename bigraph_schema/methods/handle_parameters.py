@@ -6,6 +6,7 @@ from types import NoneType
 from dataclasses import replace
 
 from bigraph_schema.schema import (
+    Atom,
     Node,
     Union,
     Tuple,
@@ -130,6 +131,13 @@ def align_parameters(schema: Range, parameters):
         '_max': parameters[1]}
 
 @dispatch
+def align_parameters(schema: Number, parameters):
+    """float[fg] or integer[count] — single parameter is the unit string."""
+    if len(parameters) == 1:
+        return {'_units': parameters[0]}
+    return {}
+
+@dispatch
 def align_parameters(schema: Set, parameters):
     return {
         '_element': parameters[0]}
@@ -155,6 +163,15 @@ def reify_schema(core, schema: Range, parameters):
     return schema
 
 @dispatch
+def reify_schema(core, schema: Number, parameters):
+    """Set the unit string verbatim — units are stored, not resolved as types."""
+    if '_units' in parameters:
+        units_param = parameters['_units']
+        if isinstance(units_param, str):
+            schema._units = units_param
+    return schema
+
+@dispatch
 def reify_schema(core, schema: Enum, parameters):
     if '_values' in parameters:
         schema._values = parameters['_values']
@@ -176,6 +193,10 @@ def reify_schema(core, schema: Array, parameters):
 
     data = parameters.get('_data', 'float')
     data_schema = core.access(data)
+    # Lift _units from inner Number type to the Array itself.
+    # array[float[fg]] becomes Array(_data=float, _units='fg').
+    if isinstance(data_schema, Number) and data_schema._units:
+        schema._units = data_schema._units
     # if isinstance(data, Node):
     #     data = core.render(data)
     # schema._data = nf.descr_to_dtype(data)

@@ -368,6 +368,26 @@ def apply(schema: dict, state, update, path):
 
 
 @dispatch
+def apply(schema: Float, state, update, path):
+    """Additive: float updates are deltas."""
+    if update is None:
+        return state, []
+    if state is None:
+        return update, []
+    return state + update, []
+
+
+@dispatch
+def apply(schema: Integer, state, update, path):
+    """Additive: integer updates are deltas."""
+    if update is None:
+        return state, []
+    if state is None:
+        return update, []
+    return state + update, []
+
+
+@dispatch
 def apply(schema: Node, state, update, path):
     merges = []
 
@@ -400,10 +420,6 @@ def apply(schema: Node, state, update, path):
                     result[key] = state[key]
 
     else:
-        # Preserve ndarray type when update is a compatible list
-        if isinstance(state, np.ndarray) and isinstance(update, list):
-            result = np.array(update, dtype=state.dtype) if update else state
-        else:
-            result = update
+        result = update
 
     return result, merges

@@ -1056,8 +1056,26 @@ class Core:
         return reconcile(found, updates)
 
 
+_cached_base_core = None
+
 def allocate_core(top=None):
+    """Allocate a new Core with all discovered packages.
+
+    The base core (without ``top``) is cached after the first call
+    to avoid repeated expensive package discovery. Each call returns
+    a fresh copy so callers can register additional types independently.
+    """
+    global _cached_base_core
+    if top is None and _cached_base_core is not None:
+        import copy
+        return copy.copy(_cached_base_core)
+
     core = Core(BASE_TYPES)
     core = discover_packages(core, top)
+
+    if top is None:
+        _cached_base_core = core
+        import copy
+        return copy.copy(core)
 
     return core

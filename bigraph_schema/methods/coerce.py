@@ -57,10 +57,35 @@ def coerce(schema: Boolean, state):
     return False
 
 
+def _strip_quantity(state, target_unit):
+    """Strip a Pint Quantity to its magnitude in the target unit.
+
+    Boundary-only operation: called when a process emits a Quantity
+    at a typed port. Inside the simulation, values are plain numbers
+    and this function is never invoked.
+    """
+    if hasattr(state, 'to') and hasattr(state, 'magnitude'):
+        # Pint Quantity
+        if target_unit:
+            return state.to(target_unit).magnitude
+        return state.magnitude
+    if hasattr(state, 'asNumber'):
+        # vivarium / wcEcoli unum-style Quantity
+        if target_unit:
+            try:
+                from bigraph_schema.units import units as _ureg
+                return state.asNumber(getattr(_ureg, target_unit, 1.0))
+            except Exception:
+                return state.asNumber()
+        return state.asNumber()
+    return state
+
+
 @dispatch
 def coerce(schema: Integer, state):
     if isinstance(state, int) and not isinstance(state, bool):
         return state
+    state = _strip_quantity(state, schema._units)
     try:
         return int(state)
     except (ValueError, TypeError):
@@ -71,6 +96,7 @@ def coerce(schema: Integer, state):
 def coerce(schema: Float, state):
     if isinstance(state, float):
         return state
+    state = _strip_quantity(state, schema._units)
     try:
         return float(state)
     except (ValueError, TypeError):

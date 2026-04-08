@@ -49,7 +49,13 @@ from bigraph_schema.schema import (
 
 @dispatch
 def reconcile(schema: Node, updates: list):
-    """Default: last non-None update wins."""
+    """Default: merge dict updates recursively, last value wins for leaves."""
+    # If all updates are dicts, merge them key-by-key
+    dict_updates = [u for u in updates if isinstance(u, dict)]
+    if dict_updates and len(dict_updates) == len([u for u in updates if u is not None]):
+        return reconcile({}, dict_updates)
+
+    # Otherwise, last non-None wins
     for update in reversed(updates):
         if update is not None:
             return update

@@ -72,7 +72,14 @@ class Xor(Boolean):
 
 @dataclass(kw_only=True)
 class Number(Atom):
-    pass
+    """Numeric types may carry an optional pint-parseable unit string.
+
+    Empty string means "no unit declared" (accept anything). Non-empty
+    means a specific unit; wires between Numbers with different units
+    are auto-scaled at wire-build time so runtime apply stays unit-blind.
+    """
+    _schema_keys = Atom._schema_keys | frozenset({'_units'})
+    _units: str = ''
 
 @dataclass(kw_only=True)
 class Integer(Number):
@@ -97,6 +104,7 @@ class Nonnegative(Float):
 @dataclass(kw_only=True)
 class Range(Float):
     """Bounded float with min/max constraints."""
+    _schema_keys = Float._schema_keys | frozenset({'_min', '_max'})
     _min: float = float('-inf')
     _max: float = float('inf')
 
@@ -155,9 +163,12 @@ class Tree(Node):
 
 @dataclass(kw_only=True)
 class Array(Node):
-    _schema_keys =Node._schema_keys | frozenset({'_data'})
+    """Numerical array. Optional _units applies to all elements (one
+    bulk scale at wire crossing — no per-element cost)."""
+    _schema_keys =Node._schema_keys | frozenset({'_data', '_units'})
     _shape: typing.Tuple[int] = field(default_factory=tuple)
     _data: np.dtype = field(default_factory=lambda:np.dtype('float64'))
+    _units: str = ''
 
 @dataclass(kw_only=True)
 class Frame(Node):
