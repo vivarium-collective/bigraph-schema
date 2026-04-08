@@ -62,6 +62,11 @@ def apply(schema: Wrap, state, update, path):
 def apply(schema: Overwrite, state, update, path):
     if update is None:
         return state, []
+    # When both are dicts, delegate to the inner value schema
+    # to preserve keys not in the update (e.g. listener keys).
+    # Pure Overwrite (replace) only applies to leaf values.
+    if isinstance(state, dict) and isinstance(update, dict):
+        return apply(schema._value, state, update, path)
     return update, []
 
 
@@ -395,6 +400,10 @@ def apply(schema: Node, state, update, path):
                     result[key] = state[key]
 
     else:
-        result = update
+        # Preserve ndarray type when update is a compatible list
+        if isinstance(state, np.ndarray) and isinstance(update, list):
+            result = np.array(update, dtype=state.dtype) if update else state
+        else:
+            result = update
 
     return result, merges
