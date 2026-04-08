@@ -788,6 +788,37 @@ def resolve(current: List, update: List, path=None):
     else:
         return update
 
+
+@dispatch
+def resolve(current: List, update: Array, path=None):
+    """When the same path is declared as both List[T] and Array[T],
+    favor Array — it's the more specific numerical form. The List is
+    typically a generic fallback (often inferred from an empty default
+    `[]`), while the Array carries shape and dtype information that
+    matters for downstream operations.
+
+    If the List has a non-empty default and the Array doesn't, lift the
+    list as the Array's default so we don't lose the data.
+    """
+    if current._default and update._default is None:
+        # Preserve the non-empty list as the array's default
+        try:
+            return replace(update, **{'_default': current._default})
+        except Exception:
+            return update
+    return update
+
+
+@dispatch
+def resolve(current: Array, update: List, path=None):
+    """Mirror of resolve(List, Array) — Array still wins."""
+    if update._default and current._default is None:
+        try:
+            return replace(current, **{'_default': update._default})
+        except Exception:
+            return current
+    return current
+
 @dispatch
 def resolve(current: List, update: Tuple, path=None):
     if not update._default and current._default:

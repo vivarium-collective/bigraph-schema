@@ -40,10 +40,12 @@ import importlib.metadata
 
 from bigraph_schema.schema import (
     BASE_TYPES,
+    deep_merge,
     resolve_path,
     convert_jump,
     convert_path,
     blank_context,
+    Atom,
     Node,
     Union,
     Tuple,
@@ -260,6 +262,7 @@ class Core:
         self.link_registry = {}
         self.method_registry = {}
         self._access_cache = {}
+        self._access_string_cache = {}
         self._link_cache = {}
 
         self.parse_visitor = CoreVisitor(self)
@@ -374,25 +377,37 @@ class Core:
         Converts strings, dicts, or lists into dataclass-based schema instances.
         Acts as the main entry point for parsing bigraph expressions and building
         normalized in-memory representations.
+
+        String keys are memoized: parsing a type expression like
+        'overwrite[float[fg]]' is expensive (recursive resolution), and the
+        same string is accessed many times per simulation timestep. The cache
+        returns a deep copy so callers can freely mutate the result.
         """
 
         if is_dataclass(key):
             return key
 
         elif isinstance(key, str):
+            cached = self._access_string_cache.get(key)
+            if cached is not None:
+                return copy.deepcopy(cached)
             if key not in self.registry:
                 try:
-                    return visit_expression(key, self.parse_visitor)
+                    result = visit_expression(key, self.parse_visitor)
                 except Exception as e:
                     raise Exception(f'unable to parse type "{key}"\n\ndue to\n{e}')
             else:
                 entry = self.registry[key]
                 if callable(entry):
-                    return entry()
+                    result = entry()
                 elif isinstance(entry, Node):
                     return entry
                 elif isinstance(entry, dict):
                     return self.access(entry)
+                else:
+                    return entry
+            self._access_string_cache[key] = result
+            return copy.deepcopy(result)
 
         elif isinstance(key, dict):
             if '_type' in key:
