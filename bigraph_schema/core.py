@@ -1295,6 +1295,14 @@ class Core:
         to each schema type's reconciliation semantics. The result can
         be passed to apply() for a single atomic state update.
 
+        Fast path: when there is only ONE non-None update, return it
+        directly without dispatching. Reconcile's job is to merge
+        multiple updates per type's semantics; with a single update
+        there's nothing to merge, and the update is already in the
+        format apply() expects (sums of one delta == that delta,
+        unions of one set == that set, etc.). This skip is safe for
+        every type currently registered.
+
         Args:
             schema: The schema at the update target path.
             updates: List of updates to reconcile.
@@ -1302,6 +1310,22 @@ class Core:
         Returns:
             A single reconciled update, or None if all updates are empty.
         """
+        if not updates:
+            return None
+        # Pass-through fast path for the common single-update case.
+        non_none_count = 0
+        single = None
+        for u in updates:
+            if u is not None:
+                non_none_count += 1
+                single = u
+                if non_none_count > 1:
+                    break
+        if non_none_count == 0:
+            return None
+        if non_none_count == 1:
+            return single
+        # Multiple updates — dispatch to per-type reconcile.
         found = self.access(schema)
         return reconcile(found, updates)
 
