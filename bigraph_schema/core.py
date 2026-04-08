@@ -1105,6 +1105,8 @@ class Core:
         elif kind == 'scaled_leaf':
             _, destination, project_schema, scale = compiled
             # Apply unit conversion (port unit → state unit) before storing.
+            # The scale was computed once at compile time via pint and is
+            # 1.0 in the common case (matching units).
             scaled_view = view * scale if view is not None else view
             project_state = {}
             self._set_nested(project_state, destination, scaled_view)
