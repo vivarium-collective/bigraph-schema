@@ -966,8 +966,23 @@ class Core:
 
     @staticmethod
     def _get_path(tree, path):
-        """Follow a path of keys down a nested dict, list, or array."""
-        for key in path:
+        """Follow a path of keys down a nested dict, list, or array.
+
+        A `*` segment fans out: it gathers values from every child key
+        at that level into a dict. Multiple `*` segments nest the result.
+        Used by view_fast to support wildcard wires.
+        """
+        for i, key in enumerate(path):
+            if key == '*':
+                remaining = path[i+1:]
+                if isinstance(tree, dict):
+                    result = {}
+                    for k, v in tree.items():
+                        sub = Core._get_path(v, remaining)
+                        if sub is not None:
+                            result[k] = sub
+                    return result
+                return None
             if isinstance(tree, dict):
                 if key not in tree:
                     return None
@@ -1109,14 +1124,44 @@ class Core:
 
     @staticmethod
     def _set_nested(target, path, value):
-        """Set a value at a nested path in a dict, creating intermediates."""
+        """Set a value at a nested path in a dict, creating intermediates.
+
+        A `*` segment fans out: `value` must be a dict whose keys are the
+        keys to expand into. For each (k, sub_value) in value, set the
+        path with `*` replaced by `k` and the remaining path traversed.
+        Multiple stars nest the expansion.
+        """
+        if not path:
+            return
+        # Find first star, if any
+        star_idx = None
+        for i, key in enumerate(path):
+            if key == '*':
+                star_idx = i
+                break
+        if star_idx is not None:
+            prefix = path[:star_idx]
+            suffix = path[star_idx+1:]
+            # Walk to the prefix dict
+            current = target
+            for key in prefix:
+                if key not in current:
+                    current[key] = {}
+                current = current[key]
+            if not isinstance(value, dict):
+                return
+            for k, sub_value in value.items():
+                if k not in current:
+                    current[k] = {}
+                Core._set_nested(current[k], suffix, sub_value)
+            return
+        # No star — original behavior
         current = target
         for key in path[:-1]:
             if key not in current:
                 current[key] = {}
             current = current[key]
-        if path:
-            current[path[-1]] = value
+        current[path[-1]] = value
 
     @staticmethod
     def _merge_nested(target, source):
