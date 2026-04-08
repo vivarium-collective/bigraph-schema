@@ -424,13 +424,24 @@ def apply(schema: dict, state, update, path):
         if not is_schema_field(schema, key):
             continue
 
-        if key not in state and key not in update:
+        if key not in update:
+            # No update for this key — passthrough the state value.
+            # Most apply dispatchers return state unchanged when
+            # update is None, so the recursion is wasted work.
+            if key in state:
+                result[key] = state[key]
+            continue
+
+        update_value = update[key]
+        if update_value is None and key in state:
+            # Explicit None update — also a passthrough.
+            result[key] = state[key]
             continue
 
         result[key], submerges = apply(
             subschema,
             state.get(key),
-            update.get(key),
+            update_value,
             path+(key,))
         merges += submerges
 

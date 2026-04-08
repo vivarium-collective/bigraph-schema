@@ -264,6 +264,12 @@ class Core:
         self._access_cache = {}
         self._access_string_cache = {}
         self._link_cache = {}
+        # Resolve memoization: map (id(current), id(update)) → result Node.
+        # Schemas in the hot path come from precompiled link caches (Node
+        # objects built once at construction), so the same id pairs recur
+        # every tick. The witness tuple verifies the ids still refer to
+        # the same objects.
+        self._resolve_cache = {}
 
         self.parse_visitor = CoreVisitor(self)
 
@@ -507,26 +513,49 @@ class Core:
         return self.realize(found, value, path=path)
 
     def resolve(self, current_schema, update_schema, path=None):
-        """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
+        """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution).
+
+        Memoized by (id(current), id(update)) when both inputs are
+        already Node objects (the common hot-path case from
+        precompiled link caches). The witness tuple verifies the ids
+        still point to the same objects (Python may reuse ids after GC).
+        """
         # Skip access() when the schema is already a Node — pure
-        # function-call overhead otherwise (the resolve hot path is
-        # called many times per process_update with already-resolved
-        # schemas).
-        current = current_schema if isinstance(current_schema, Node) else self.access(current_schema)
-        update = update_schema if isinstance(update_schema, Node) else self.access(update_schema)
+        # function-call overhead otherwise.
+        current_is_node = isinstance(current_schema, Node)
+        update_is_node = isinstance(update_schema, Node)
+        current = current_schema if current_is_node else self.access(current_schema)
+        update = update_schema if update_is_node else self.access(update_schema)
+
+        # Identity short-circuit: same Python object on both sides.
+        if current is update:
+            return current
 
         if path:
             return resolve(current, update, path=path)
 
+        # Memoize the (current, update) → result mapping. Only cache
+        # when both inputs are Nodes (otherwise the access() call above
+        # may have produced fresh objects we don't want to pin).
+        cache_key = None
+        if current_is_node and update_is_node:
+            cache_key = (id(current), id(update))
+            cached = self._resolve_cache.get(cache_key)
+            if cached is not None and cached[0] is current and cached[1] is update:
+                return cached[2]
+
         try:
             if current == update:
-                return current
+                result = current
             else:
-                return resolve(current, update)
-
+                result = resolve(current, update)
         except ValueError:
             # numpy grumble grumble
-            return resolve(current, update)
+            result = resolve(current, update)
+
+        if cache_key is not None:
+            self._resolve_cache[cache_key] = (current, update, result)
+        return result
 
     def generalize(self, current_schema, update_schema):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
