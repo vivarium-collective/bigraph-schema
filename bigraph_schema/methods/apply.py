@@ -4,6 +4,8 @@ import numpy as np
 from bigraph_schema.methods.check import check
 from bigraph_schema.methods.default import default
 
+from bigraph_schema.methods.divide import divide as _divide_state
+
 from bigraph_schema.schema import (
     Node,
     Atom,
@@ -174,6 +176,45 @@ def apply(schema: Set, state, update, path):
     return result, []
 
 
+def _handle_divide_sentinel(value_schema, state, update, path):
+    """Process a `_divide` sentinel from a Map / dict update.
+
+    Shape:
+        {'_divide': {'mother': <key>, 'daughters': [<key1>, <key2>]}}
+
+    Splits state[mother] into two daughter values via the type-driven
+    `divide()` method (which walks the value schema and dispatches per
+    field), then removes the mother from state and adds the daughters.
+    Caller is responsible for processing any non-`_divide` keys.
+
+    Returns the updated state dict.
+    """
+    spec = update['_divide']
+    mother = spec['mother']
+    daughters = spec['daughters']
+
+    if not isinstance(state, dict):
+        raise ValueError(
+            f'_divide at {path}: state is not a dict, got {type(state).__name__}')
+    if mother not in state:
+        raise ValueError(
+            f'_divide at {path}: mother key {mother!r} not in state '
+            f'(have keys {sorted(state.keys())})')
+    if len(daughters) != 2:
+        raise ValueError(
+            f'_divide at {path}: expected exactly 2 daughter keys, '
+            f'got {len(daughters)}: {daughters}')
+
+    mother_state = state[mother]
+    a, b = _divide_state(value_schema, mother_state,
+                         context=mother_state, path=())
+
+    result = {k: v for k, v in state.items() if k != mother}
+    result[daughters[0]] = a
+    result[daughters[1]] = b
+    return result
+
+
 @dispatch
 def apply(schema: Map, state, update, path):
     if isinstance(state, list):
@@ -183,6 +224,16 @@ def apply(schema: Map, state, update, path):
 
     if update is None:
         return state, merges
+
+    # _divide sentinel: split state[mother] into two daughters via the
+    # type-driven divide() method on schema._value, remove the mother
+    # from the map, and add the daughters. Symmetric with _add/_remove.
+    if isinstance(update, dict) and '_divide' in update:
+        result = _handle_divide_sentinel(schema._value, result, update, path)
+        rest = {k: v for k, v in update.items() if k != '_divide'}
+        if not rest:
+            return result, merges
+        update = rest
 
     if '_add' in update:
         add_update = update['_add']
@@ -344,6 +395,27 @@ def apply(schema: dict, state, update, path):
         return state, []
     if state is None:
         return update, []
+
+    # _divide sentinel: when the dict-shaped schema is acting as a Map
+    # (one key per agent, all sharing the same cell layout), split the
+    # mother's state via the type-driven divide() method using the
+    # mother's schema as the value type. Symmetric with _add/_remove on
+    # Maps.
+    if isinstance(update, dict) and '_divide' in update:
+        spec = update['_divide']
+        mother = spec['mother']
+        if mother in schema:
+            value_schema = schema[mother]
+            state = _handle_divide_sentinel(value_schema, state, update, path)
+            # Add daughter schemas (same as the mother's schema) so the
+            # post-divide schema dict matches the new state keys.
+            new_schema = {k: v for k, v in schema.items() if k != mother}
+            for d in spec['daughters']:
+                new_schema[d] = value_schema
+            schema = new_schema
+        update = {k: v for k, v in update.items() if k != '_divide'}
+        if not update:
+            return state, []
 
     merges = []
     result = {}
