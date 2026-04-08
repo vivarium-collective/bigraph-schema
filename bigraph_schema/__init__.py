@@ -99,14 +99,34 @@ def is_schema_key(key):
     """Check if a key is a schema key (starts with underscore)."""
     return isinstance(key, str) and key.startswith('_')
 
+def _has_any_schema_keys(state):
+    """Recursively scan a dict for any underscore-prefixed string key.
+    Used as a fast pre-check by strip_schema_keys to avoid copying when
+    nothing needs stripping.
+    """
+    if not isinstance(state, dict):
+        return False
+    for k, v in state.items():
+        if isinstance(k, str) and k.startswith('_'):
+            return True
+        if isinstance(v, dict) and _has_any_schema_keys(v):
+            return True
+    return False
+
+
 def strip_schema_keys(state):
     """
     Recursively remove all schema keys from a dictionary.
-    """
-    if isinstance(state, dict):
-        return {
-            k: strip_schema_keys(v)
-            for k, v in state.items()
-            if not is_schema_key(k)}
 
-    return state
+    Fast path: if the state has no schema keys anywhere, return it
+    unchanged (avoids the deep copy). Most process input views are
+    already clean — the strip walk is wasted work in the common case.
+    """
+    if not isinstance(state, dict):
+        return state
+    if not _has_any_schema_keys(state):
+        return state
+    return {
+        k: strip_schema_keys(v)
+        for k, v in state.items()
+        if not is_schema_key(k)}
