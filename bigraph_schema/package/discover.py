@@ -5,6 +5,7 @@ import inspect
 from typing import Dict, List, Tuple, Set, Type
 
 from bigraph_schema import Edge
+from bigraph_schema.schema import Node
 
 
 def find_edges(mapping, module_name=None):
@@ -27,25 +28,56 @@ def find_edges(mapping, module_name=None):
     return discovered
 
 
+def find_types(mapping, module_name=None):
+    """Discover Node subclasses defined in a module.
+
+    Returns a list of (fully_qualified_name, class) tuples for classes
+    that inherit from Node but are not part of the base schema module
+    (i.e., user-defined types from domain packages).
+    """
+    discovered = []
+    for _, cls in mapping:
+        if not inspect.isclass(cls):
+            continue
+
+        if module_name and cls.__module__ != module_name:
+            continue
+
+        if not issubclass(cls, Node) or cls is Node:
+            continue
+
+        # Skip built-in schema types (defined in bigraph_schema itself)
+        if cls.__module__.startswith('bigraph_schema.'):
+            continue
+
+        fq_name = f"{cls.__module__}.{cls.__name__}"
+        discovered.append((fq_name, cls))
+
+    return discovered
+
+
 def recursive_dynamic_import(
     core,
     module,
     visited: Set[str] | None = None,
-) -> tuple[object, List[tuple[str, Type[Edge]]]]:
+) -> tuple[object, List[tuple[str, Type[Edge]]], List[tuple[str, type]]]:
     if visited is None:
         visited = set()
+
+    edges = []
+    types = []
 
     if inspect.ismodule(module):
         adjusted = module.__name__
         if adjusted in visited:
-            return core, [], visited
+            return core, edges, types, visited
 
         visited.add(adjusted)
 
     if isinstance(module, str):
         adjusted = core.distributions_packages.get(module, module)
         if adjusted in visited:
-            return core, [], visited
+            return core, edges, types, visited
         visited.add(adjusted)
 
         try:
@@ -62,17 +94,19 @@ def recursive_dynamic_import(
         core = module.register_types(core)
 
     mapping = inspect.getmembers(module, inspect.isclass)
-    discovered = find_edges(mapping)
+    edges.extend(find_edges(mapping))
+    types.extend(find_types(mapping))
 
     # Recurse into submodules if this is a package
     if hasattr(module, "__path__"):
         for _, subname, _ in pkgutil.iter_modules(module.__path__):
             submod = f"{adjusted}.{subname}"
-            core, sub_discovered, visited = recursive_dynamic_import(
+            core, sub_edges, sub_types, visited = recursive_dynamic_import(
                 core, submod, visited=visited)
-            discovered.extend(sub_discovered)
+            edges.extend(sub_edges)
+            types.extend(sub_types)
 
-    return core, discovered, visited
+    return core, edges, types, visited
 
 
 def is_process_library(dist: importlib.metadata.Distribution) -> bool:
@@ -82,8 +116,12 @@ def is_process_library(dist: importlib.metadata.Distribution) -> bool:
     return any("bigraph-schema" in r for r in reqs)
 
 
-def load_local_modules(core, top=None) -> tuple[object, List[tuple[str, Type[Edge]]]]:
-    processes = []
+def load_local_modules(core, top=None) -> tuple[
+        object,
+        List[tuple[str, Type[Edge]]],
+        List[tuple[str, type]]]:
+    edges = []
+    types = []
     visited = set([])
 
     for dist_name in core.distributions_packages:
@@ -91,32 +129,45 @@ def load_local_modules(core, top=None) -> tuple[object, List[tuple[str, Type[Edg
         if not is_process_library(dist):
             continue
 
-        core, found, visited = recursive_dynamic_import(
+        core, found_edges, found_types, visited = recursive_dynamic_import(
             core,
             dist_name,
             visited=visited)
 
-        processes.extend(found)
+        edges.extend(found_edges)
+        types.extend(found_types)
 
     if top:
         for key, value in top.items():
-            if inspect.isclass(value) and issubclass(value, Edge):
-                processes.append((key, value))
+            if not inspect.isclass(value):
+                if key == 'register_types':
+                    core = value(core)
+                continue
 
-            if key == 'register_types':
-                core = value(core)
+            if issubclass(value, Edge) and value is not Edge:
+                fq_name = f"{value.__module__}.{value.__name__}"
+                edges.append((fq_name, value))
 
-    return core, processes
+            elif issubclass(value, Node) and value is not Node:
+                if not value.__module__.startswith('bigraph_schema.'):
+                    fq_name = f"{value.__module__}.{value.__name__}"
+                    types.append((fq_name, value))
+
+    return core, edges, types
 
 
 def discover_packages(core, top=None):
-    core, discovered = load_local_modules(core, top=top)
+    core, edges, types = load_local_modules(core, top=top)
 
-    for fq_name, edge_cls in discovered:
+    for fq_name, edge_cls in edges:
         core.register_link(fq_name, edge_cls)
 
         short = fq_name.split(".")[-1]
         if short not in core.link_registry:
             core.register_link(short, edge_cls)
+
+    for fq_name, type_cls in types:
+        short = fq_name.split(".")[-1]
+        core.register_type(short, type_cls)
 
     return core
