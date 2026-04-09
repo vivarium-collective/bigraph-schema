@@ -1310,8 +1310,14 @@ class Core:
         return outcome
 
     def apply(self, schema, state, update, path=()):
-        """Apply a schema-aware update/patch; provides minimal context."""
-        if update:
+        """Apply a schema-aware update/patch; provides minimal context.
+
+        `is not None` rather than truthiness — numpy arrays don't have
+        a scalar truth value, and even an "empty" container (e.g. {})
+        should reach the dispatched apply (which is a no-op for empty
+        updates anyway).
+        """
+        if update is not None:
             found = self.access(schema)
             return apply(found, state, update, path)
         else:
