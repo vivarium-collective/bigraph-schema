@@ -219,7 +219,8 @@ def _handle_divide_sentinel(value_schema, state, update, path):
 def apply(schema: Map, state, update, path):
     if isinstance(state, list):
         state = {}
-    result = state.copy() if isinstance(state, dict) else {}
+    if not isinstance(state, dict):
+        state = {}
     merges = []
 
     if update is None:
@@ -229,36 +230,46 @@ def apply(schema: Map, state, update, path):
     # type-driven divide() method on schema._value, remove the mother
     # from the map, and add the daughters. Symmetric with _add/_remove.
     if isinstance(update, dict) and '_divide' in update:
-        result = _handle_divide_sentinel(schema._value, result, update, path)
+        state = _handle_divide_sentinel(schema._value, state, update, path)
         rest = {k: v for k, v in update.items() if k != '_divide'}
         if not rest:
-            return result, merges
+            return state, merges
         update = rest
 
     if '_add' in update:
         add_update = update['_add']
         if isinstance(add_update, list):
             for add_key, add_value in update['_add']:
-                result[add_key] = add_value
+                state[add_key] = add_value
         elif isinstance(add_update, dict):
             for add_key, add_value in update['_add'].items():
-                result[add_key] = add_value
+                state[add_key] = add_value
 
-    for key, value in result.items():
-        if key in update:
-            result[key], submerges = apply(
-                schema._value,
-                value,
-                update[key],
-                path+(key,))
+    # Update-driven walk: iterate update keys (matching state) instead
+    # of state keys, mutating in place. Skip _add/_remove sentinels
+    # which were handled above.
+    value_schema = schema._value
+    for key, update_value in update.items():
+        if key in ('_add', '_remove'):
+            continue
+        if key not in state:
+            continue
+        new_value, submerges = apply(
+            value_schema,
+            state[key],
+            update_value,
+            path+(key,))
+        if new_value is not state[key]:
+            state[key] = new_value
+        if submerges:
             merges += submerges
 
     if '_remove' in update:
         for remove_key in update['_remove']:
-            if remove_key in result:
-                del result[remove_key]
+            if remove_key in state:
+                del state[remove_key]
 
-    return result, merges
+    return state, merges
 
 
 @dispatch
@@ -418,38 +429,33 @@ def apply(schema: dict, state, update, path):
             return state, []
 
     merges = []
-    result = {}
 
-    for key, subschema in schema.items():
+    # Update-driven walk: iterate update keys (typically 5-20) instead
+    # of schema keys (typically 50-100). State is mutated in place — we
+    # only write back when the apply produces a NEW value object. This
+    # mirrors v1 vivarium's Store.apply_update which descends the
+    # state tree directly via update keys.
+    for key, update_value in update.items():
         if not is_schema_field(schema, key):
             continue
-
-        if key not in update:
-            # No update for this key — passthrough the state value.
-            # Most apply dispatchers return state unchanged when
-            # update is None, so the recursion is wasted work.
-            if key in state:
-                result[key] = state[key]
+        if key not in schema:
+            continue
+        if update_value is None:
             continue
 
-        update_value = update[key]
-        if update_value is None and key in state:
-            # Explicit None update — also a passthrough.
-            result[key] = state[key]
-            continue
-
-        result[key], submerges = apply(
+        subschema = schema[key]
+        sub_state = state.get(key)
+        new_value, submerges = apply(
             subschema,
-            state.get(key),
+            sub_state,
             update_value,
             path+(key,))
-        merges += submerges
+        if new_value is not sub_state:
+            state[key] = new_value
+        if submerges:
+            merges += submerges
 
-    for key in state.keys():
-        if not key in result and not key in schema:
-            result[key] = state[key]
-
-    return result, merges
+    return state, merges
 
 
 @dispatch
