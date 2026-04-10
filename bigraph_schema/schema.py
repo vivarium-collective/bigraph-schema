@@ -12,12 +12,28 @@ from dataclasses import dataclass, is_dataclass, field
 NONE_SYMBOL = '__nil__'
 
 
+def is_schema_field(schema, key):
+    """Check whether a _ prefixed key on a schema is a schema field (vs metadata).
+
+    For Node types, checks the _schema_keys class variable.
+    For dicts, all _ prefixed keys are metadata (e.g. _default, _link_path).
+    Non _ prefixed keys are always schema fields.
+    """
+    if not isinstance(key, str) or not key.startswith('_'):
+        return True
+    if isinstance(schema, Node):
+        return key in schema._schema_keys
+    return False
+
+
 @dataclass(kw_only=True)
 class Node():
+    _schema_keys = frozenset()
     _default: object = None
 
 @dataclass(kw_only=True)
 class Place(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_subnodes'})
     _subnodes: dict = field(default_factory=dict)
 
 @dataclass(kw_only=True)
@@ -30,10 +46,12 @@ class Empty(Atom):
 
 @dataclass(kw_only=True)
 class Union(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_options'})
     _options: typing.Tuple[Node] = field(default_factory=tuple)
 
 @dataclass(kw_only=True)
 class Tuple(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_values'})
     _values: typing.List[Node] = field(default_factory=list)
 
 @dataclass(kw_only=True)
@@ -54,7 +72,14 @@ class Xor(Boolean):
 
 @dataclass(kw_only=True)
 class Number(Atom):
-    pass
+    """Numeric types may carry an optional pint-parseable unit string.
+
+    Empty string means "no unit declared" (accept anything). Non-empty
+    means a specific unit; wires between Numbers with different units
+    are auto-scaled at wire-build time so runtime apply stays unit-blind.
+    """
+    _schema_keys = Atom._schema_keys | frozenset({'_units'})
+    _units: str = ''
 
 @dataclass(kw_only=True)
 class Integer(Number):
@@ -77,6 +102,13 @@ class Nonnegative(Float):
     pass
 
 @dataclass(kw_only=True)
+class Range(Float):
+    """Bounded float with min/max constraints."""
+    _schema_keys = Float._schema_keys | frozenset({'_min', '_max'})
+    _min: float = float('-inf')
+    _max: float = float('inf')
+
+@dataclass(kw_only=True)
 class NPRandom(Node):
     state: Tuple() = field(default_factory=tuple)
 
@@ -86,10 +118,12 @@ class String(Atom):
 
 @dataclass(kw_only=True)
 class Enum(String):
+    _schema_keys =String._schema_keys | frozenset({'_values'})
     _values: typing.Tuple[str] = field(default_factory=tuple)
 
 @dataclass(kw_only=True)
 class Wrap(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_value'})
     _value: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
@@ -101,25 +135,44 @@ class Overwrite(Wrap):
     pass
 
 @dataclass(kw_only=True)
+class Const(Wrap):
+    """Immutable wrapper - merge and apply preserve the current value."""
+    pass
+
+@dataclass(kw_only=True)
 class List(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_element'})
+    _element: Node = field(default_factory=Node)
+
+@dataclass(kw_only=True)
+class Set(Node):
+    """Unordered collection of unique elements."""
+    _schema_keys =Node._schema_keys | frozenset({'_element'})
     _element: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Map(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_key', '_value'})
     _key: Node = field(default_factory=String)
     _value: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Tree(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_leaf'})
     _leaf: Node = field(default_factory=Node)
 
 @dataclass(kw_only=True)
 class Array(Node):
+    """Numerical array. Optional _units applies to all elements (one
+    bulk scale at wire crossing — no per-element cost)."""
+    _schema_keys =Node._schema_keys | frozenset({'_data', '_units'})
     _shape: typing.Tuple[int] = field(default_factory=tuple)
     _data: np.dtype = field(default_factory=lambda:np.dtype('float64'))
+    _units: str = ''
 
 @dataclass(kw_only=True)
 class Frame(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_columns'})
     _columns: dict = field(default_factory=dict)
 
 @dataclass(kw_only=True)
@@ -145,6 +198,7 @@ class LocalProtocol(Protocol):
 
 @dataclass(kw_only=True)
 class Link(Node):
+    _schema_keys =Node._schema_keys | frozenset({'_inputs', '_outputs'})
     address: Protocol = field(default_factory=Protocol)
     config: Node = field(default_factory=Node)
     _inputs: dict = field(default_factory=dict)
@@ -231,8 +285,6 @@ def deep_merge(dct, merge_dct):
             dct[k] = v
     return dct
 
-def is_empty(value):
-    return value is None or value == {} or value == []
 
 def convert_path(path):
     resolved = resolve_path(path)
@@ -318,7 +370,9 @@ def schema_dtype(schema: String):
 
 @dispatch
 def schema_dtype(schema: Array):
-    return np.dtype('object')
+    # For sub-array fields in structured dtypes, return the Array itself
+    # so that schema_dtype(dict) can extract shape + inner dtype.
+    return schema
 
 @dispatch
 def schema_dtype(schema: str):
@@ -336,10 +390,11 @@ def schema_dtype(schema: dict):
 
     for key, value in schema.items():
         subschema = schema_dtype(value)
-        subresult = (key, subschema)
         if isinstance(subschema, Array):
-            subshape = subschema._shape
-            subresult = subresult + (subshape,)
+            # Sub-array field: (name, inner_dtype, shape)
+            subresult = (key, subschema._data, subschema._shape)
+        else:
+            subresult = (key, subschema)
 
         result.append(subresult)
 
@@ -353,6 +408,20 @@ def schema_dtype(schema: dict):
 def schema_dtype(schema):
     raise Exception(f'schema dtype not implemented for:\n\n{schema}\n\n')
     
+
+@dataclass(kw_only=True)
+class Quote(Wrap):
+    """Opaque value — passes through realize and apply untouched.
+
+    Inherits from Wrap so ``_value`` records the inner type for
+    introspection, but realize/apply treat the value as opaque.
+    Use for values that should be carried as-is: process instances,
+    simData objects, binary blobs, etc.
+
+    Usage: ``'quote[float]'``, ``'quote[node]'``, ``'quote'``
+    """
+    pass
+
 
 BASE_TYPES = {
     'node': Node,
@@ -370,13 +439,17 @@ BASE_TYPES = {
     'float64': Float,
     'delta': Delta,
     'nonnegative': Nonnegative,
+    'complex': Complex,
+    'range': Range,
     'random_state': NPRandom,
     'string': String,
     'enum': Enum,
     'wrap': Wrap,
     'maybe': Maybe,
     'overwrite': Overwrite,
+    'const': Const,
     'list': List,
+    'set': Set,
     'map': Map,
     'tree': Tree,
     'array': Array,
@@ -386,6 +459,7 @@ BASE_TYPES = {
     'protocol': Protocol,
     'local': LocalProtocol,
     'schema': Schema,
-    'link': Link}
+    'link': Link,
+    'quote': Quote}
 
 

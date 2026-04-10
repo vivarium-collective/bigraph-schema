@@ -19,15 +19,20 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     NPRandom,
     String,
     Enum,
     Wrap,
+    Quote,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -39,12 +44,56 @@ from bigraph_schema.schema import (
     LocalProtocol,
     Schema,
     Link,
+    is_schema_field,
 )
 
 
 from bigraph_schema.methods.serialize import render
 from bigraph_schema.methods.default import default
 
+
+def _enrich_defaults(port_schema, v1_ports):
+    """Walk a port schema and inject _default values from v1 ports_schema().
+
+    The v1 ports_schema has runtime defaults (with correct shapes from simData)
+    that the inferred schema lacks. This enriches the schema with those defaults
+    so that realize/fill creates state with the right shapes.
+    """
+    if isinstance(port_schema, dict):
+        for key, subschema in port_schema.items():
+            if key in v1_ports and isinstance(v1_ports[key], dict):
+                v1_port = v1_ports[key]
+                if '_default' in v1_port and hasattr(subschema, '_default'):
+                    if subschema._default is None or (
+                        isinstance(subschema._default, (list, tuple)) and len(subschema._default) == 0
+                    ):
+                        subschema._default = v1_port['_default']
+                elif isinstance(v1_port, dict) and not '_default' in v1_port:
+                    _enrich_defaults(subschema, v1_port)
+    elif hasattr(port_schema, '__dataclass_fields__'):
+        for key in port_schema.__dataclass_fields__:
+            if key.startswith('_'):
+                continue
+            attr = getattr(port_schema, key)
+            if key in v1_ports and isinstance(v1_ports[key], dict):
+                v1_port = v1_ports[key]
+                if '_default' in v1_port and hasattr(attr, '_default'):
+                    if attr._default is None or (
+                        isinstance(attr._default, (list, tuple)) and len(attr._default) == 0
+                    ):
+                        attr._default = v1_port['_default']
+                elif isinstance(v1_port, dict) and not '_default' in v1_port:
+                    _enrich_defaults(attr, v1_port)
+
+
+@dispatch
+def realize(core, schema: tuple, encode, path=()):
+    return schema, encode, []
+
+@dispatch
+def realize(core, schema: Quote, encode, path=()):
+    # Opaque — pass through without walking or inferring the value
+    return schema, encode, []
 
 @dispatch
 def realize(core, schema: Empty, encode, path=()):
@@ -59,6 +108,8 @@ def realize(core, schema: Maybe, encode, path=()):
 
 @dispatch
 def realize(core, schema: Wrap, encode, path=()):
+    if encode is None:
+        encode = default(schema)
     outschema, outstate, merges = realize(core, schema._value, encode, path=path)
     schema._value = outschema
     return schema, outstate, merges
@@ -145,6 +196,35 @@ def realize(core, schema: Float, encode, path=()):
             return schema, None, []
 
 @dispatch
+def realize(core, schema: Complex, encode, path=()):
+    if encode is None:
+        schema, state = core.default(schema, path=path)
+        return schema, state, []
+    elif isinstance(encode, dict):
+        return realize_default(core, schema, encode, path=path)
+    else:
+        try:
+            result = complex(encode)
+            return schema, result, []
+        except Exception:
+            return schema, None, []
+
+@dispatch
+def realize(core, schema: Range, encode, path=()):
+    if encode is None:
+        schema, state = core.default(schema, path=path)
+        return schema, state, []
+    elif isinstance(encode, dict):
+        return realize_default(core, schema, encode, path=path)
+    else:
+        try:
+            result = float(encode)
+            result = max(schema._min, min(schema._max, result))
+            return schema, result, []
+        except Exception:
+            return schema, None, []
+
+@dispatch
 def realize(core, schema: String, encode, path=()):
     if isinstance(encode, dict):
         return realize_default(core, schema, encode, path=path)
@@ -155,12 +235,23 @@ def realize(core, schema: String, encode, path=()):
 def realize(core, schema: NPRandom, encode, path=()):
     if isinstance(encode, RandomState):
         return schema, encode, []
-    else:
-        state = realize(core, schema.state, encode)
-        random = RandomState()
-        random.set_state(state)
 
-        return schema, random, []
+    # No valid state to restore from — create a fresh RandomState
+    if encode is None:
+        return schema, RandomState(), []
+    if isinstance(encode, tuple) and len(encode) == 0:
+        return schema, RandomState(), []
+    if isinstance(encode, dict) and (
+        not encode.get('state') or
+        (isinstance(encode.get('state'), tuple) and len(encode['state']) == 0)
+    ):
+        return schema, RandomState(), []
+
+    # Restore from a valid state dict
+    _, state, _ = realize(core, schema.state, encode.get('state', encode) if isinstance(encode, dict) else encode)
+    random = RandomState()
+    random.set_state(state)
+    return schema, random, []
 
 @dispatch
 def realize(core, schema: List, encode, path=()):
@@ -184,7 +275,23 @@ def realize(core, schema: List, encode, path=()):
         return schema, None, []
 
 @dispatch
+def realize(core, schema: Set, encode, path=()):
+    if isinstance(encode, (list, tuple, set)):
+        decode = set()
+        merges = []
+        for element in encode:
+            subschema, substate, submerges = realize(core, schema._element, element)
+            decode.add(substate)
+            merges += submerges
+        return schema, decode, merges
+    else:
+        return schema, None, []
+
+@dispatch
 def realize(core, schema: Map, encode, path=()):
+    if encode is None:
+        encode = default(schema)
+
     if isinstance(encode, str):
         encode = literal_eval(encode)
 
@@ -262,8 +369,13 @@ def realize(core, schema: Array, encode, path=()):
         encode,
         dtype=schema._data)
 
-    if state.shape != schema._shape:
-        state.reshape(schema._shape)
+    if state.size > 0 and state.shape != schema._shape:
+        try:
+            state = state.reshape(schema._shape)
+        except ValueError:
+            # Shape mismatch (e.g., enriched default has different size
+            # than inferred schema shape). Use the actual data shape.
+            schema._shape = state.shape
 
     return schema, state, []
 
@@ -348,9 +460,23 @@ def realize_link(core, schema: Link, encode, path=()):
             'data': data}
 
     if 'instance' in encode:
-        # Instance already exists — skip full realization.
-        # Return current state as-is with no new merges.
-        return schema, encode, []
+        # Instance already exists — skip instantiation but still
+        # compute port merges so wired state paths get created.
+        # Use the instance's ports_schema() defaults to populate
+        # the merge schema with correctly-shaped initial values.
+        edge_instance = encode['instance']
+        decode = dict(encode)
+
+        # Enrich the port schemas with runtime defaults from ports_schema()
+        if hasattr(edge_instance, 'ports_schema'):
+            try:
+                v1_ports = edge_instance.ports_schema()
+                for port_key in ['_inputs', '_outputs']:
+                    port_schema = getattr(schema, port_key, None)
+                    if port_schema is not None and isinstance(v1_ports, dict):
+                        _enrich_defaults(port_schema, v1_ports)
+            except Exception:
+                pass
 
     else:
         protocol = address.get('protocol', 'local')
@@ -370,11 +496,10 @@ def realize_link(core, schema: Link, encode, path=()):
         core.validate(config_schema, config, message)
 
         edge_instance = edge_class(config, core)
-
-    decode = {
-        'address': address,
-        'config': config,
-        'instance': edge_instance}
+        decode = {
+            'address': address,
+            'config': config,
+            'instance': edge_instance}
 
     interface = edge_instance.interface()
 
@@ -400,7 +525,13 @@ def realize_link(core, schema: Link, encode, path=()):
             continue
 
         if port not in encode or encode[port] is None:
-            decode[port] = default_wires(port_schema)
+            if isinstance(port_schema, dict):
+                decode[port] = default_wires(port_schema)
+            elif hasattr(port_schema, '__dataclass_fields__'):
+                # Leaf schema (e.g. Float) — default wire is identity
+                decode[port] = {}
+            else:
+                decode[port] = {}
 
         else:
             subschema = getattr(schema, port)
@@ -421,9 +552,15 @@ def realize_link(core, schema: Link, encode, path=()):
 
         merges += submerges
 
+    # Realize remaining non-port keys (config, priority, interval, etc.)
+    # When instance already exists, pass through config and instance
+    # without expensive realization/inference.
+    has_instance = 'instance' in encode
     for key, value in encode.items():
         if not key.startswith('_'):
-            if hasattr(schema, key):
+            if has_instance and key in ('config', 'instance'):
+                decode[key] = value
+            elif hasattr(schema, key):
                 getattr(schema, key)._default = value
             else:
                 attr, decode[key], submerges = realize(
@@ -459,7 +596,7 @@ def realize(core, schema: Node, encode, path=()):
 
     if isinstance(encode, dict):
         for key in schema.__dataclass_fields__:
-            if key in encode:
+            if is_schema_field(schema, key) and key in encode:
                 attr = getattr(schema, key)
                 subschema, substate, submerges = realize(
                     core,
@@ -508,6 +645,9 @@ def realize(core, schema: None, encode, path=()):
 
 @dispatch
 def realize(core, schema: dict, encode, path=()):
+    if encode is None and schema:
+        encode = default(schema)
+
     if isinstance(encode, str):
         try:
             encode = literal_eval(encode)
@@ -524,7 +664,7 @@ def realize(core, schema: dict, encode, path=()):
             result = {}
 
         for key, subschema in schema.items():
-            if key not in ('_default', '_link_path'):
+            if is_schema_field(schema, key):
                 if key in encode:
                     outcome_schema, outcome_state, submerges = realize(
                         core,

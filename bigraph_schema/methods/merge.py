@@ -13,14 +13,18 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -30,6 +34,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    is_schema_field,
 )
 
 from bigraph_schema.methods.check import check
@@ -61,7 +66,13 @@ def merge(schema: Wrap, current, update, path=()):
 
 @dispatch
 def merge(schema: Overwrite, current, update, path=()):
+    if update is None:
+        return current
     return update
+
+@dispatch
+def merge(schema: Const, current, update, path=()):
+    return current
 
 @dispatch
 def merge(schema: Union, current, update, path=()):
@@ -127,6 +138,14 @@ def merge(schema: List, current, update, path=()):
     else:
         return current + update
 
+
+@dispatch
+def merge(schema: Set, current, update, path=()):
+    if current is None:
+        return update
+    if update is None:
+        return current
+    return current | update
 
 @dispatch
 def merge(schema: Map, current, update, path=()):
@@ -234,24 +253,24 @@ def merge(schema: Array, current, update, path=()):
 
 @dispatch
 def merge(schema: Frame, current, update, path=()):
-    if update.empty:
+    if isinstance(update, dict):
+        return current
+    elif update.empty:
         return current
     else:
         return update
 
 @dispatch
 def merge(schema: Atom, current, update, path=()):
-    result = None
-    if update: # Checking if default
-        result = update
-    elif current:
-        result = current
+    from bigraph_schema.methods.is_empty import is_empty as _is_empty
+    if not _is_empty(schema, update):
+        return update
+    elif not _is_empty(schema, current):
+        return current
     elif update is not None:
-        result = update
+        return update
     elif current is not None:
-        result = current
-
-    return result
+        return current
 
 
 @dispatch
@@ -301,33 +320,38 @@ def merge(schema: Node, current, update, path=()):
     elif isinstance(current, dict) and isinstance(update, dict):
         down = {}
         for key in schema.__dataclass_fields__:
-            down[key] = getattr(schema, key)
+            if is_schema_field(schema, key):
+                down[key] = getattr(schema, key)
         return merge(down, current, update)
 
     else:
-        # result = merge(
-        #     Atom(),
-        #     current,
-        #     update)
+        # Non-empty wins over empty. If both non-empty, update wins.
+        from bigraph_schema.methods.is_empty import is_empty as _is_empty
 
-        result = None
-        if update is not None:
-            result = update
-        elif current is not None:
-            result = current
+        update_empty = _is_empty(schema, update)
+        current_empty = _is_empty(schema, current)
 
-        if result is None:
-            result = default(schema)
-
-        return result
+        if not update_empty:
+            return update
+        elif not current_empty:
+            return current
+        else:
+            return None
 
 
 @dispatch
 def merge(schema, current, update, path=()):
+    if path:
+        head = path[0]
+        current = current or {}
+        if isinstance(current, dict):
+            current[head] = merge(schema, current.get(head), update, path[1:])
+            return current
     return update
 
 
-def is_empty(value):
+def _value_is_empty(value):
+    """Simple emptiness check for dict merge (no schema context)."""
     if isinstance(value, np.ndarray):
         return False
     else:
@@ -350,7 +374,7 @@ def merge(schema: dict, current, update, path=()):
     if path:
         head = path[0]
         if head == '*':
-            import ipdb; ipdb.set_trace()
+            raise Exception('star path not supported in dict merge')
         else:
             current = current or {}
             subschema = schema.get(head)
@@ -359,9 +383,9 @@ def merge(schema: dict, current, update, path=()):
             return current
 
     result = {}
-    if is_empty(current):
+    if _value_is_empty(current):
         return update
-    if is_empty(update):
+    if _value_is_empty(update):
         return current
 
     if isinstance(update, np.ndarray):
@@ -370,24 +394,25 @@ def merge(schema: dict, current, update, path=()):
         return current
 
     for key in schema.keys() | current.keys() | update.keys():
+        if not is_schema_field(schema, key):
+            continue
         if key in schema:
             result[key] = merge(
                 schema[key],
                 current.get(key),
                 update.get(key))
+        elif key in current and key in update:
+            # Both have this key but no schema — recursively merge
+            result[key] = merge(
+                Node(),
+                current[key],
+                update[key])
         elif key in update:
             result[key] = update[key]
         elif key in current:
             result[key] = current[key]
         else:
             raise Exception('logically impossible')
-
-        if key in schema and schema[key] and result[key] is None:
-            if key.startswith('_'):
-                result[key] = schema[key]
-            else:
-                result[key] = default(
-                    schema[key])
 
         if result[key] is None:
             del result[key]
@@ -396,17 +421,15 @@ def merge(schema: dict, current, update, path=()):
 
 def merge_update(schema, current, update, path=()):
     if path:
-        import ipdb; ipdb.set_trace()
+        raise Exception('merge_update with path not implemented')
 
-    current_state = default(current)
-    update_state = default(update)
-    state = current_state
+    # Pick the more informative default — prefer update over current.
+    # Avoid merging defaults via merge() which can corrupt schemas
+    # by walking state data (bare lists) through schema methods.
+    current_default = current._default if isinstance(current, Node) else current.get('_default')
+    update_default = update._default if isinstance(update, Node) else update.get('_default') if isinstance(update, dict) else None
 
-    if update_state:
-        if current_state:
-            state = merge(schema, current_state, update_state)
-        else:
-            state = update_state
+    state = update_default if update_default is not None else current_default
 
     if isinstance(schema, Node):
         schema = replace(schema, _default=state)

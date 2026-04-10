@@ -11,14 +11,18 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -31,12 +35,17 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     schema_dtype,
+    is_schema_field,
 )
 
 
 @dispatch
 def default(schema: None):
     return None
+
+@dispatch
+def default(schema: tuple):
+    return schema
 
 @dispatch
 def default(schema: Empty):
@@ -91,6 +100,20 @@ def default(schema: Float):
         return 0.0
 
 @dispatch
+def default(schema: Complex):
+    if schema._default is not None:
+        return schema._default
+    else:
+        return 0+0j
+
+@dispatch
+def default(schema: Range):
+    if schema._default is not None:
+        return schema._default
+    else:
+        return max(schema._min, 0.0) if schema._min != float('-inf') else 0.0
+
+@dispatch
 def default(schema: String):
     if schema._default is not None:
         return schema._default
@@ -110,6 +133,13 @@ def default(schema: List):
         return schema._default
     else:
         return []
+
+@dispatch
+def default(schema: Set):
+    if schema._default is not None:
+        return schema._default
+    else:
+        return set()
 
 @dispatch
 def default(schema: Map):
@@ -188,21 +218,14 @@ def default_link(schema: Link):
 def default(schema: Link):
     return default_link(schema)
 
-def is_schema_key(key):
-    return isinstance(key, str) and key.startswith('_')
-
 @dispatch
 def default(schema: dict):
-    if '_default' in schema: 
+    if '_default' in schema:
         return schema['_default']
     else:
         result = {}
         for key in schema:
-            if key == '_link_path':
-                continue
-            if not is_schema_key(key):
-                if isinstance(schema[key], float):
-                    import ipdb; ipdb.set_trace()
+            if is_schema_field(schema, key):
                 inner = default(
                     schema[key])
                 result[key] = inner
@@ -216,7 +239,7 @@ def default(schema: Node):
     else:
         result = {}
         for key in schema.__dataclass_fields__:
-            if not is_schema_key(key):
+            if is_schema_field(schema, key):
                 inner = default(
                     getattr(schema, key))
                 result[key] = inner

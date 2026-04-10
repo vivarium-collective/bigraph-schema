@@ -29,14 +29,15 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
-    is_empty,
     dtype_schema,
     schema_dtype,
+    is_schema_field,
 )
 
 
 from bigraph_schema.methods.default import default
 from bigraph_schema.methods.merge import merge, merge_update
+from bigraph_schema.methods.is_empty import is_empty as _is_empty
 
 
 def read_link_path(schema):
@@ -52,26 +53,28 @@ def read_link_path(schema):
 
 def resolve_subclass(subclass, superclass):
     result = {}
-    for key in subclass.__dataclass_fields__:    
-        if key == '_default':
-            result[key] = subclass._default or superclass._default
-        elif key == '_link_path':
+    for key in subclass.__dataclass_fields__:
+        if not is_schema_field(subclass, key):
+            if key == '_default':
+                result[key] = subclass._default or superclass._default
+            else:
+                result[key] = getattr(subclass, key)
             continue
-        else:
-            subattr = getattr(subclass, key)
-            if hasattr(superclass, key): # and not key.startswith('_'):
-                superattr = getattr(superclass, key)
-                if isinstance(superattr, (Node, dict)):
-                    try:
-                        outcome = resolve(subattr, superattr)
-                    except Exception as e:
-                        raise Exception(f'\ncannot resolve subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
 
-                    result[key] = outcome
-                else:
-                    result[key] = subattr
+        subattr = getattr(subclass, key)
+        if hasattr(superclass, key):
+            superattr = getattr(superclass, key)
+            if isinstance(superattr, (Node, dict)):
+                try:
+                    outcome = resolve(subattr, superattr)
+                except Exception as e:
+                    raise Exception(f'\ncannot resolve subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
+
+                result[key] = outcome
             else:
                 result[key] = subattr
+        else:
+            result[key] = subattr
 
     resolved = type(subclass)(**result)
     return resolved
@@ -97,6 +100,57 @@ def resolve(current: Empty, update: Node, path=None):
 @dispatch
 def resolve(current: Node, update: Empty, path=None):
     return resolve_empty(update, current, path=path)
+
+# Disambiguate (SubType, Empty) for all subtypes that have (SubType, Node) dispatches
+@dispatch
+def resolve(current: Wrap, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: Array, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: Array, update: Wrap, path=None):
+    value = resolve(current, update._value, path=path)
+    result = type(update)(_value=value)
+    if result._default is None and current._default is not None:
+        result._default = current._default
+    return result
+
+@dispatch
+def resolve(current: Tree, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: Tree, update: Wrap, path=None):
+    value = resolve(current, update._value, path=path)
+    result = type(update)(_value=value)
+    if result._default is None and current._default is not None:
+        result._default = current._default
+    return result
+
+@dispatch
+def resolve(current: String, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: dict, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: dict, update: Wrap, path=None):
+    if path:
+        head = path[0]
+        down_resolve = resolve(
+            current.get(head, {}),
+            update,
+            path[1:])
+        current[head] = down_resolve
+        return current
+    # dict schemas don't have _default, just wrap the value
+    value = resolve(current, update._value, path=path)
+    return type(update)(_value=value)
 
 @dispatch
 def resolve(current: Wrap, update: Wrap, path=None):
@@ -129,8 +183,8 @@ def resolve(current: Wrap, update: Node, path=None):
 
 @dispatch
 def resolve(current: Integer, update: Float, path=None):
-    if is_empty(update._default):
-        if is_empty(current._default):
+    if _is_empty(update, update._default):
+        if _is_empty(current, current._default):
             return update
         else:
             return replace(update, **{'_default': current._default})
@@ -139,9 +193,9 @@ def resolve(current: Integer, update: Float, path=None):
 
 @dispatch
 def resolve(current: Float, update: Integer, path=None):
-    if is_empty(update._default):
+    if _is_empty(update, update._default):
         return current
-    elif is_empty(current._default):
+    elif _is_empty(current, current._default):
         return replace(current, **{'_default': update._default})
     else:
         return current
@@ -149,7 +203,11 @@ def resolve(current: Float, update: Integer, path=None):
 @dispatch
 def resolve(current: Node, update: Wrap, path=None):
     value = resolve(current, update._value, path=path)
-    return type(update)(_value=value)
+    result = type(update)(_value=value)
+    # Preserve the more informative default
+    if result._default is None and hasattr(current, '_default') and current._default is not None:
+        result._default = current._default
+    return result
 
 @dispatch
 def resolve(current: Node, update: Node, path=None):
@@ -234,6 +292,18 @@ def resolve(current: Map, update: Map, path=None):
         return resolve_map(current, update, path=path)
 
 @dispatch
+def resolve(current: Map, update: Empty, path=None):
+    return current
+
+@dispatch
+def resolve(current: Map, update: Wrap, path=None):
+    value = resolve(current, update._value, path=path)
+    result = type(update)(_value=value)
+    if result._default is None and current._default is not None:
+        result._default = current._default
+    return result
+
+@dispatch
 def resolve(current: Map, update: Node, path=None):
     if path:
         head = path[0]
@@ -280,7 +350,9 @@ def resolve(current: Map, update: dict, path=None):
         resolved = {
             key: current._value
             for key in map_default}
-        resolved.update(update)
+        for key, value in update.items():
+            if is_schema_field(update, key):
+                resolved[key] = value
 
     schema = merge_update(resolved, current, update)
     return schema
@@ -329,7 +401,9 @@ def resolve(current: dict, update: Map, path=None):
         resolved = {
             key: update._value
             for key in map_default}
-        current.update(resolved)
+        for key, value in current.items():
+            if is_schema_field(current, key):
+                resolved[key] = value
 
     schema = merge_update(resolved, current, update)
     return schema
@@ -420,7 +494,7 @@ def resolve(current: dict, update: dict, path=None):
             all_keys.append(key)
 
     for key in all_keys:
-        if key in ('_inherit', '_link_path', '_default'):
+        if not is_schema_field(current, key):
             continue
 
         try:
@@ -487,7 +561,10 @@ def resolve(current: Array, update: Array, path=None):
         new_shape += current._shape[len(update._shape):]
     if len(update._shape) > len(current._shape):
         new_shape += update._shape[len(current._shape):]
-    return replace(current, **{'_shape': new_shape})
+
+    # Prefer the more specific subtype
+    base = update if issubclass(type(update), type(current)) else current
+    return replace(base, **{'_shape': new_shape})
 
 
 @dispatch
@@ -711,6 +788,37 @@ def resolve(current: List, update: List, path=None):
     else:
         return update
 
+
+@dispatch
+def resolve(current: List, update: Array, path=None):
+    """When the same path is declared as both List[T] and Array[T],
+    favor Array — it's the more specific numerical form. The List is
+    typically a generic fallback (often inferred from an empty default
+    `[]`), while the Array carries shape and dtype information that
+    matters for downstream operations.
+
+    If the List has a non-empty default and the Array doesn't, lift the
+    list as the Array's default so we don't lose the data.
+    """
+    if current._default and update._default is None:
+        # Preserve the non-empty list as the array's default
+        try:
+            return replace(update, **{'_default': current._default})
+        except Exception:
+            return update
+    return update
+
+
+@dispatch
+def resolve(current: Array, update: List, path=None):
+    """Mirror of resolve(List, Array) — Array still wins."""
+    if update._default and current._default is None:
+        try:
+            return replace(current, **{'_default': update._default})
+        except Exception:
+            return current
+    return current
+
 @dispatch
 def resolve(current: List, update: Tuple, path=None):
     if not update._default and current._default:
@@ -763,9 +871,9 @@ def resolve(current: list, update: list, path=None):
 
 @dispatch
 def resolve(current, update, path=None):
-    if is_empty(current):
+    if current is None or current == {} or current == []:
         return update
-    elif is_empty(update):
+    elif update is None or update == {} or update == []:
         return current
     else:
         raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')
