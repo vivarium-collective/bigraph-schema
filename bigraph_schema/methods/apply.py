@@ -176,18 +176,63 @@ def apply(schema: Set, state, update, path):
     return result, []
 
 
+def _deep_merge_into(base, overlay):
+    """Recursively merge `overlay` into `base`, mutating `base`.
+
+    For matching dict keys, recurse. For non-dict values (or where
+    only one side has a key), the overlay wins. Used by `_divide` to
+    layer caller-provided per-daughter overrides on top of the type-
+    driven divide walk result.
+    """
+    if not isinstance(overlay, dict):
+        return overlay
+    if not isinstance(base, dict):
+        return overlay
+    for key, overlay_value in overlay.items():
+        if key in base and isinstance(base[key], dict) and isinstance(overlay_value, dict):
+            base[key] = _deep_merge_into(base[key], overlay_value)
+        else:
+            base[key] = overlay_value
+    return base
+
+
 def _handle_divide_sentinel(value_schema, state, update, path):
     """Process a `_divide` sentinel from a Map / dict update.
 
     Shape:
-        {'_divide': {'mother': <key>, 'daughters': [<key1>, <key2>]}}
+        {'_divide': {
+            'mother': <key>,
+            'daughters': {
+                <daughter_key_1>: <override_1>,  # partial state
+                <daughter_key_2>: <override_2>,
+            },
+        }}
 
-    Splits state[mother] into two daughter values via the type-driven
-    `divide()` method (which walks the value schema and dispatches per
-    field), then removes the mother from state and adds the daughters.
-    Caller is responsible for processing any non-`_divide` keys.
+    Or the simpler form (no overrides — pure type-driven split):
+        {'_divide': {
+            'mother': <key>,
+            'daughters': [<daughter_key_1>, <daughter_key_2>],
+        }}
 
-    Returns the updated state dict.
+    The handler is a TWO-PHASE merge:
+
+    1. **Type-driven divide walk**: call `divide(value_schema, mother_state)`
+       which walks the value's schema field-by-field and produces two
+       baseline daughter states (bulk binomial-split, unique molecules
+       split via the type-specific dividers, listeners shared, etc.).
+
+    2. **Caller overrides layered on top**: each daughter's override
+       dict is deep-merged onto the baseline. The caller typically
+       provides fresh link declarations (address, config, wires, instance)
+       so the daughters don't share the mother's process instances. Any
+       fields the caller doesn't specify keep the type-driven default.
+
+    The framework's realize() pass (triggered because `_divide` is
+    treated as a structural change) then instantiates any new links
+    in the merged daughter states and projects their wired state into
+    the tree.
+
+    Returns the updated state dict (mutated in place).
     """
     spec = update['_divide']
     mother = spec['mother']
@@ -200,19 +245,63 @@ def _handle_divide_sentinel(value_schema, state, update, path):
         raise ValueError(
             f'_divide at {path}: mother key {mother!r} not in state '
             f'(have keys {sorted(state.keys())})')
-    if len(daughters) != 2:
-        raise ValueError(
-            f'_divide at {path}: expected exactly 2 daughter keys, '
-            f'got {len(daughters)}: {daughters}')
 
+    # Normalize the daughters spec into a list of (key, override) tuples.
+    # Accepted forms:
+    #   - dict:           {daughter_key: override_dict}
+    #   - list of strs:   ['00', '01']                         (no overrides)
+    #   - list of pairs:  [('00', override), ('01', override)]
+    #   - list of dicts:  [{'key': '00', ...}, {'key': '01', ...}]
+    #     (v1 vivarium-style: 'key' identifies the daughter; any
+    #     additional fields like 'processes'/'steps'/'flow'/'topology'/
+    #     'initial_state' are vivarium engine concepts that don't apply to
+    #     the composite engine and are ignored. The 'initial_state' field,
+    #     if present, is treated as the daughter override so callers can
+    #     still seed daughter-specific state.)
+    if isinstance(daughters, dict):
+        daughter_items = [(k, v) for k, v in daughters.items()]
+    elif isinstance(daughters, list):
+        daughter_items = []
+        for item in daughters:
+            if isinstance(item, str):
+                daughter_items.append((item, {}))
+            elif isinstance(item, (list, tuple)) and len(item) == 2:
+                daughter_items.append(tuple(item))
+            elif isinstance(item, dict) and 'key' in item:
+                # v1 vivarium daughter dict — extract just the key. The
+                # other v1 fields ('processes'/'steps'/'flow'/'topology'/
+                # 'initial_state') are vivarium-engine concepts and don't
+                # apply to the composite engine. The type-driven divide
+                # walk + divide(Link) handles fresh instance construction.
+                daughter_items.append((item['key'], {}))
+            else:
+                raise ValueError(
+                    f'_divide at {path}: bad daughter entry {item!r}')
+    else:
+        raise ValueError(
+            f'_divide at {path}: daughters must be dict or list, '
+            f'got {type(daughters).__name__}')
+
+    if len(daughter_items) != 2:
+        raise ValueError(
+            f'_divide at {path}: expected exactly 2 daughters, got '
+            f'{len(daughter_items)}')
+
+    # Phase 1: type-driven divide walk produces two baseline daughters.
     mother_state = state[mother]
     a, b = _divide_state(value_schema, mother_state,
                          context=mother_state, path=())
 
-    result = {k: v for k, v in state.items() if k != mother}
-    result[daughters[0]] = a
-    result[daughters[1]] = b
-    return result
+    # Phase 2: deep-merge each daughter's overrides onto the baseline.
+    (key_a, override_a), (key_b, override_b) = daughter_items
+    daughter_a = _deep_merge_into(a, override_a) if override_a else a
+    daughter_b = _deep_merge_into(b, override_b) if override_b else b
+
+    # Remove the mother and install daughters.
+    del state[mother]
+    state[key_a] = daughter_a
+    state[key_b] = daughter_b
+    return state
 
 
 @dispatch
@@ -226,9 +315,10 @@ def apply(schema: Map, state, update, path):
     if update is None:
         return state, merges
 
-    # _divide sentinel: split state[mother] into two daughters via the
-    # type-driven divide() method on schema._value, remove the mother
-    # from the map, and add the daughters. Symmetric with _add/_remove.
+    # _divide sentinel: remove the mother key, install caller-provided
+    # daughter states. The framework's realize() pass (triggered by
+    # `_divide` being a structural sentinel) instantiates any new
+    # links in the daughter states. Symmetric with _add/_remove.
     if isinstance(update, dict) and '_divide' in update:
         state = _handle_divide_sentinel(schema._value, state, update, path)
         rest = {k: v for k, v in update.items() if k != '_divide'}
@@ -407,23 +497,32 @@ def apply(schema: dict, state, update, path):
     if state is None:
         return update, []
 
-    # _divide sentinel: when the dict-shaped schema is acting as a Map
-    # (one key per agent, all sharing the same cell layout), split the
-    # mother's state via the type-driven divide() method using the
-    # mother's schema as the value type. Symmetric with _add/_remove on
-    # Maps.
+    # _divide sentinel: type-driven walk + caller overrides. See
+    # _handle_divide_sentinel docstring for the contract.
     if isinstance(update, dict) and '_divide' in update:
         spec = update['_divide']
         mother = spec['mother']
         if mother in schema:
-            value_schema = schema[mother]
+            # Mutate the schema dict in place: pop the mother key,
+            # reuse its schema for each daughter (daughters are
+            # structurally homogeneous instances of the same type).
+            value_schema = schema.pop(mother)
             state = _handle_divide_sentinel(value_schema, state, update, path)
-            # Add daughter schemas (same as the mother's schema) so the
-            # post-divide schema dict matches the new state keys.
-            new_schema = {k: v for k, v in schema.items() if k != mother}
-            for d in spec['daughters']:
-                new_schema[d] = value_schema
-            schema = new_schema
+            # Extract daughter keys to register in the schema dict
+            daughters = spec['daughters']
+            if isinstance(daughters, dict):
+                daughter_keys = list(daughters.keys())
+            else:
+                daughter_keys = []
+                for item in daughters:
+                    if isinstance(item, str):
+                        daughter_keys.append(item)
+                    elif isinstance(item, (list, tuple)):
+                        daughter_keys.append(item[0])
+                    elif isinstance(item, dict) and 'key' in item:
+                        daughter_keys.append(item['key'])
+            for d in daughter_keys:
+                schema[d] = value_schema
         update = {k: v for k, v in update.items() if k != '_divide'}
         if not update:
             return state, []
