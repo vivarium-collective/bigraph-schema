@@ -486,13 +486,19 @@ def realize_link(core, schema: Link, encode, path=()):
         if edge_class is None:
             raise Exception(f'no link found at address: {address}')
 
+        config_schema = getattr(edge_class, 'config_schema', None) or {}
         encode_config = encode.get('config', {})
-        # Pass the config through as-is. vEcoli process configs contain
-        # complex non-serializable objects (sim_data references, CSR
-        # matrices, numpy arrays, pint units) that can't survive
-        # realize/fill/validate. The config was already built correctly
-        # by the composite builder or by the mother's division logic.
-        config = encode_config
+
+        if config_schema:
+            try:
+                _, decode_config = core.realize(config_schema, encode_config)
+                config = core.fill(config_schema, decode_config)
+            except Exception:
+                # Complex configs (sim_data references, CSR matrices,
+                # numpy arrays) may fail realize/fill. Pass through.
+                config = encode_config
+        else:
+            config = encode_config
 
         # Try (config, core) first (standard bigraph signature), then
         # fall back to (config) only (vivarium-style processes whose
