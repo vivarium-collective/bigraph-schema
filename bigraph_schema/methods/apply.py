@@ -429,6 +429,11 @@ def apply(schema: Frame, state, update, path):
 
 @dispatch
 def apply(schema: Array, state, update, path):
+    if update is None:
+        return state, []
+    if state is None:
+        return update, []
+
     # Ensure state is an ndarray — it may arrive as a list from
     # realize or merge when type information was lost.
     if isinstance(state, list):

@@ -252,65 +252,24 @@ def divide(schema: Tree, state, context=None, path=(), rng=None):
 
 @dispatch
 def divide(schema: Link, state, context=None, path=(), rng=None):
-    """Clone a Link (process/step instance) into two fresh instances.
+    """Produce two daughter link DECLARATIONS from a mother's link state.
 
-    A Link's state is a dict carrying:
-        - 'instance': the Python object running the process/step logic
-        - 'config' (or 'parameters'): the constructor args
-        - 'address', '_inputs', '_outputs', 'inputs', 'outputs': wiring
+    Instead of cloning the mother's instance, we strip the 'instance'
+    key and keep only the declaration fields (address, config, wires).
+    The framework's realize() step will instantiate fresh instances for
+    each daughter from the address + config — exactly like at initial
+    composite creation.
 
-    To produce two viable daughters, we instantiate the same class with
-    the same config TWICE. Each daughter gets its own fresh `instance`
-    so per-cell state (caches, RandomState, accumulators) is no longer
-    shared between daughters.
-
-    The non-instance fields ('address', wires, schemas) are reused by
-    reference — they describe the link, not its mutable state.
-
-    This mirrors v1 vivarium's `composer.generate()` which builds a
-    fresh process tree per daughter cell.
+    This ensures daughters get completely fresh process state (new
+    RandomState, empty caches, etc.) rather than inheriting stale
+    mother state.
     """
     if not isinstance(state, dict):
         return state, state
-    instance = state.get('instance')
-    if instance is None:
-        # No instance — share by reference (e.g. partially-built link)
-        return state, state
 
-    cls = type(instance)
-    # Prefer the explicit config; fall back to instance.parameters which
-    # most vivarium-style processes carry.
-    config = state.get('config')
-    if config is None:
-        config = getattr(instance, 'parameters', None) or getattr(instance, 'config', None)
-    if config is None:
-        return state, state
-
-    try:
-        d1_instance = cls(config)
-        d2_instance = cls(config)
-    except Exception:
-        # Class construction failed — fall back to share-by-reference.
-        # This keeps division non-fatal even when a link can't be cloned.
-        return state, state
-
-    # Vivarium-style processes do per-port cache initialization inside
-    # ports_schema() as a side effect (e.g. Requester sets
-    # self.cached_bulk_ports there). Call it once on each fresh instance
-    # so the daughters' instances are fully wired up the same way the
-    # mother's was at composer-build time.
-    for inst in (d1_instance, d2_instance):
-        if hasattr(inst, 'ports_schema'):
-            try:
-                inst.ports_schema()
-            except Exception:
-                pass
-
-    # Build daughter link states by shallow-copying the original dict
-    # and replacing only the instance. The rest (wires, schemas, config)
-    # is shared by reference — it describes the link, not its state.
-    d1 = dict(state)
-    d2 = dict(state)
-    d1['instance'] = d1_instance
-    d2['instance'] = d2_instance
+    # Strip the instance — keep everything else (address, config, wires,
+    # _inputs, _outputs, _type, priority/interval). realize() will
+    # re-instantiate from address + config.
+    d1 = {k: v for k, v in state.items() if k != 'instance'}
+    d2 = {k: v for k, v in state.items() if k != 'instance'}
     return d1, d2

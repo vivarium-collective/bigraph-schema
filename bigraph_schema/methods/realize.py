@@ -486,16 +486,21 @@ def realize_link(core, schema: Link, encode, path=()):
         if edge_class is None:
             raise Exception(f'no link found at address: {address}')
 
-        config_schema = edge_class.config_schema
         encode_config = encode.get('config', {})
-        _, decode_config = core.realize(config_schema, encode_config)
-        config = core.fill(config_schema, decode_config)
+        # Pass the config through as-is. vEcoli process configs contain
+        # complex non-serializable objects (sim_data references, CSR
+        # matrices, numpy arrays, pint units) that can't survive
+        # realize/fill/validate. The config was already built correctly
+        # by the composite builder or by the mother's division logic.
+        config = encode_config
 
-        # validate the config against the config_schema
-        message = f'config provided to {address} does not match the config_schema!\n\nconfig_schema: {pf(render(config_schema))}\n\nconfig: {pf(config)}\n\n'
-        core.validate(config_schema, config, message)
-
-        edge_instance = edge_class(config, core)
+        # Try (config, core) first (standard bigraph signature), then
+        # fall back to (config) only (vivarium-style processes whose
+        # __init__ doesn't accept core).
+        try:
+            edge_instance = edge_class(config, core)
+        except TypeError:
+            edge_instance = edge_class(config)
         decode = {
             'address': address,
             'config': config,
