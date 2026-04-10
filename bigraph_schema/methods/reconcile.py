@@ -190,10 +190,18 @@ def reconcile(schema: List, updates: list):
 
 @dispatch
 def reconcile(schema: Map, updates: list):
-    """Merge map operations: union adds, union removes, recursive merge values."""
+    """Merge map operations: union adds, union removes, recursive merge values.
+
+    When multiple updates target the same key, they are recursively
+    reconciled using the map's value schema instead of last-write-wins.
+    This is essential when multiple processes write to different fields
+    of the same map entry within a single timestep.
+    """
     adds = {}
     removes = []
-    value_updates = {}
+    # Group regular key updates by key so multiple updates to the same
+    # key can be recursively reconciled.
+    grouped_value_updates = {}
 
     for update in updates:
         if update is None:
@@ -208,10 +216,21 @@ def reconcile(schema: Map, updates: list):
                         adds[k] = v
             if '_remove' in update:
                 removes.extend(update['_remove'])
-            # Regular key updates
+            # Regular key updates: collect ALL updates per key, not just the last
             for key, value in update.items():
                 if key not in ('_add', '_remove'):
-                    value_updates[key] = value
+                    grouped_value_updates.setdefault(key, []).append(value)
+
+    # Recursively reconcile multiple updates targeting the same key
+    value_schema = schema._value
+    value_updates = {}
+    for key, sub_updates in grouped_value_updates.items():
+        if len(sub_updates) == 1:
+            value_updates[key] = sub_updates[0]
+        else:
+            reconciled = reconcile(value_schema, sub_updates)
+            if reconciled is not None:
+                value_updates[key] = reconciled
 
     result = {}
     if adds:
