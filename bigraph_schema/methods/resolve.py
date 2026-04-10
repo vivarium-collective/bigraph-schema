@@ -700,9 +700,12 @@ def resolve(current: dict, update: Link, path=None):
 def resolve(current: Node, update: dict, path=None):
     if path:
         head = path[0]
-        down_schema = {}
-        if hasattr(current, head):
-            down_schema = getattr(current, head)
+        # If this Node has no such field (e.g. Overwrite, Maybe, etc.)
+        # and the path segment is a dynamic key (like a daughter agent
+        # id), we can't descend into it — return current unchanged.
+        if not hasattr(current, head) or head not in current.__dataclass_fields__:
+            return current
+        down_schema = getattr(current, head)
         down_resolve = resolve(down_schema, update, path[1:])
         return replace(current, **{head: down_resolve})
 
