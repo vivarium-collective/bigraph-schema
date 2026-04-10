@@ -10,3 +10,12 @@ from bigraph_schema.methods.merge import merge, merge_update
 from bigraph_schema.methods.jump import jump, traverse
 from bigraph_schema.methods.handle_parameters import schema_keys, align_parameters, reify_schema, handle_parameters
 from bigraph_schema.methods.apply import apply
+from bigraph_schema.methods.divide import divide
+from bigraph_schema.methods.reconcile import reconcile
+from bigraph_schema.methods.walk import walk
+from bigraph_schema.methods.diff import diff
+from bigraph_schema.methods.coerce import coerce
+from bigraph_schema.methods.select import select
+from bigraph_schema.methods.transform import transform
+from bigraph_schema.methods.patch import patch
+from bigraph_schema.methods.is_empty import is_empty

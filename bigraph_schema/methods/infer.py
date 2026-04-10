@@ -15,6 +15,7 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
     NPRandom,
@@ -33,9 +34,11 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    Quote,
     dtype_schema,
     get_frame_schema,
 )
+from bigraph_schema.edge import Edge
 
 
 from bigraph_schema.methods.serialize import serialize
@@ -76,6 +79,11 @@ def infer(core,
                   np.dtypes.Float32DType | np.dtypes.Float64DType),
           path: tuple = ()):
     schema = Float()
+    return set_default(schema, value), []
+
+@dispatch
+def infer(core, value: complex, path: tuple = ()):
+    schema = Complex()
     return set_default(schema, value), []
 
 @dispatch
@@ -198,7 +206,18 @@ def infer(core, value: dict, path: tuple = ()):
 
 @dispatch
 def infer(core, value: object, path: tuple = ()):
+    # If the object looks like a process/step instance (has ports_schema,
+    # next_update, update, etc.), treat it as opaque to avoid walking
+    # into expensive simData internals.
+    if hasattr(value, 'ports_schema') or hasattr(value, 'next_update'):
+        schema = Quote(_value=Node())
+        return set_default(schema, value), []
+
     type_name = str(type(value))
+
+    if not hasattr(value, '__dict__'):
+        schema = Quote(_value=Node())
+        return set_default(schema, value), []
 
     value_keys = value.__dict__.keys()
     value_schema = {}

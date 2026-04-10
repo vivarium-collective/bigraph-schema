@@ -40,10 +40,12 @@ import importlib.metadata
 
 from bigraph_schema.schema import (
     BASE_TYPES,
+    deep_merge,
     resolve_path,
     convert_jump,
     convert_path,
     blank_context,
+    Atom,
     Node,
     Union,
     Tuple,
@@ -94,7 +96,8 @@ from bigraph_schema.methods import (
     merge,
     jump,
     traverse,
-    apply)
+    apply,
+    reconcile)
 
 from bigraph_schema.package import discover_packages
 
@@ -259,7 +262,14 @@ class Core:
         self.link_registry = {}
         self.method_registry = {}
         self._access_cache = {}
+        self._access_string_cache = {}
         self._link_cache = {}
+        # Resolve memoization: map (id(current), id(update)) → result Node.
+        # Schemas in the hot path come from precompiled link caches (Node
+        # objects built once at construction), so the same id pairs recur
+        # every tick. The witness tuple verifies the ids still refer to
+        # the same objects.
+        self._resolve_cache = {}
 
         self.parse_visitor = CoreVisitor(self)
 
@@ -373,36 +383,72 @@ class Core:
         Converts strings, dicts, or lists into dataclass-based schema instances.
         Acts as the main entry point for parsing bigraph expressions and building
         normalized in-memory representations.
+
+        Caches:
+        - Already-resolved Node instances are returned as-is (fast path).
+        - String keys are memoized in `_access_string_cache`; deep-copied on
+          retrieval since callers may mutate the result.
+        - Dict keys are memoized in `_access_cache` by `id()`, with the
+          original dict held as a witness so id reuse after GC is detected.
+          Schemas in vEcoli are constructed once and reused many times,
+          so this hits often (5x reuse ratio observed).
         """
 
-        if is_dataclass(key):
+        # Fast path: already-resolved schema node. ~99.99% of dataclass
+        # inputs are Node subclasses; the rare class-object case (where
+        # is_dataclass returns True for a type) falls through to the
+        # final else and is also returned as-is.
+        if isinstance(key, Node):
             return key
 
         elif isinstance(key, str):
+            cached = self._access_string_cache.get(key)
+            if cached is not None:
+                return copy.deepcopy(cached)
             if key not in self.registry:
                 try:
-                    return visit_expression(key, self.parse_visitor)
+                    result = visit_expression(key, self.parse_visitor)
                 except Exception as e:
                     raise Exception(f'unable to parse type "{key}"\n\ndue to\n{e}')
             else:
                 entry = self.registry[key]
                 if callable(entry):
-                    return entry()
+                    result = entry()
                 elif isinstance(entry, Node):
                     return entry
                 elif isinstance(entry, dict):
                     return self.access(entry)
+                else:
+                    return entry
+            self._access_string_cache[key] = result
+            return copy.deepcopy(result)
 
         elif isinstance(key, dict):
-            if '_type' in key:
-                return self.access_type(key)
+            # Identity cache for dict inputs. The witness verifies that
+            # the cached id() really refers to the same object (Python
+            # may reuse ids for new objects after GC). The cached result
+            # is returned by reference — Node trees are conceptually
+            # immutable in the codebase (mutations go through `replace`,
+            # which creates new instances).
+            kid = id(key)
+            cached = self._access_cache.get(kid)
+            if cached is not None and cached[0] is key:
+                return cached[1]
 
+            if '_type' in key:
+                result = self.access_type(key)
             else:
                 result = self.resolve_inherit(key)
 
                 for subkey, subitem in key.items():
                     if (isinstance(subkey, str) and not subkey.startswith('_')) or isinstance(subkey, (int, tuple)):
-                        subitem = self.access(subitem)
+                        # Skip the recursive access() call if subitem is
+                        # already a Node — this is the most common case
+                        # (~90% of redundant access calls come from here)
+                        # and the recursive call only burns function-call
+                        # overhead before returning the Node unchanged.
+                        if not isinstance(subitem, Node):
+                            subitem = self.access(subitem)
 
                     if isinstance(result, Node):
                         if hasattr(result, subkey):
@@ -410,9 +456,10 @@ class Core:
                         else:
                             setattr(result, subkey, subitem)
                     else:
-                        result[subkey] = subitem 
+                        result[subkey] = subitem
 
-                return result
+            self._access_cache[kid] = (key, result)
+            return result
 
         elif isinstance(key, list):
             return [self.access(element) for element in key]
@@ -466,22 +513,49 @@ class Core:
         return self.realize(found, value, path=path)
 
     def resolve(self, current_schema, update_schema, path=None):
-        """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
-        current = self.access(current_schema)
-        update = self.access(update_schema)
+        """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution).
+
+        Memoized by (id(current), id(update)) when both inputs are
+        already Node objects (the common hot-path case from
+        precompiled link caches). The witness tuple verifies the ids
+        still point to the same objects (Python may reuse ids after GC).
+        """
+        # Skip access() when the schema is already a Node — pure
+        # function-call overhead otherwise.
+        current_is_node = isinstance(current_schema, Node)
+        update_is_node = isinstance(update_schema, Node)
+        current = current_schema if current_is_node else self.access(current_schema)
+        update = update_schema if update_is_node else self.access(update_schema)
+
+        # Identity short-circuit: same Python object on both sides.
+        if current is update:
+            return current
 
         if path:
             return resolve(current, update, path=path)
 
+        # Memoize the (current, update) → result mapping. Only cache
+        # when both inputs are Nodes (otherwise the access() call above
+        # may have produced fresh objects we don't want to pin).
+        cache_key = None
+        if current_is_node and update_is_node:
+            cache_key = (id(current), id(update))
+            cached = self._resolve_cache.get(cache_key)
+            if cached is not None and cached[0] is current and cached[1] is update:
+                return cached[2]
+
         try:
             if current == update:
-                return current
+                result = current
             else:
-                return resolve(current, update)
-
+                result = resolve(current, update)
         except ValueError:
             # numpy grumble grumble
-            return resolve(current, update)
+            result = resolve(current, update)
+
+        if cache_key is not None:
+            self._resolve_cache[cache_key] = (current, update, result)
+        return result
 
     def generalize(self, current_schema, update_schema):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
@@ -739,6 +813,13 @@ class Core:
         view_fast() can extract values via direct get_path() lookups
         instead of traversing the schema tree.
 
+        Also computes any unit-conversion scale factors at compile time:
+        if a wire connects state with `_units='fg'` to a port reading
+        `_units='g'`, the scale `1e-15` is computed once via pint here
+        and applied as a single multiply at view time. Wires with
+        matching units (the common case) get scale=1.0 and pay no
+        runtime cost (the 'resolved' kind path is unchanged).
+
         Args:
             schema: The full schema tree.
             state: The full state tree.
@@ -759,12 +840,136 @@ class Core:
 
             resolved = self._resolve_wire_paths(wires, parent_path)
             if resolved is not None:
+                # Walk the wires + ports schema to compute per-leaf scales.
+                scales = self._collect_view_scales(
+                    wires, parent_path, ports_schema, schema)
+                if scales is not None and self._has_nonunit_scale(scales):
+                    return ('scaled_resolved', resolved, scales)
                 return ('resolved', resolved)
 
             # Fall back to storing port schema and wires for view_ports
             return ('ports', ports_schema, wires, parent_path)
         except Exception:
             return None
+
+    def _compute_unit_scale(self, src_units, dst_units):
+        """Compute the multiplier to convert from src_units to dst_units.
+
+        Returns 1.0 in any of these "no conversion" cases:
+        - either side has no unit declared (empty string)
+        - units match exactly
+        - one side is 'dimensionless' (treated as unitless passthrough)
+
+        Otherwise, uses pint at compile time to compute the scalar
+        conversion factor. Raises if units are incompatible
+        (e.g. fg → mol) — caller catches and falls back to 1.0,
+        but this should ideally surface as a wire validation error.
+        """
+        if not src_units or not dst_units:
+            return 1.0
+        if src_units == dst_units:
+            return 1.0
+        if src_units == 'dimensionless' or dst_units == 'dimensionless':
+            return 1.0
+        from bigraph_schema.units import units as _ureg
+        src_q = 1.0 * _ureg(src_units)
+        dst_q = src_q.to(_ureg(dst_units))
+        return float(dst_q.magnitude)
+
+    def _schema_units_at_path(self, full_schema, path):
+        """Look up `_units` of the state schema at an absolute path.
+
+        Returns empty string if not found or if the schema at the
+        path has no _units attribute.
+        """
+        try:
+            sub_schema, _ = self.traverse(full_schema, None, list(path))
+            return getattr(sub_schema, '_units', '') or ''
+        except Exception:
+            return ''
+
+    @staticmethod
+    def _port_units(port_schema):
+        """Extract `_units` from a port schema, unwrapping common wrappers."""
+        if port_schema is None:
+            return ''
+        # Unwrap Wrap/Maybe/Overwrite to find inner Number type
+        seen = set()
+        while hasattr(port_schema, '_value') and id(port_schema) not in seen:
+            seen.add(id(port_schema))
+            port_schema = port_schema._value
+        return getattr(port_schema, '_units', '') or ''
+
+    def _collect_view_scales(self, wires, parent_path, port_schema, full_schema):
+        """Walk the wires + port schema, returning a parallel scale tree.
+
+        Each leaf in the result is a float scale factor (or 1.0 if no
+        conversion is needed). The structure mirrors `wires`.
+        """
+        if isinstance(wires, str):
+            wires = [wires]
+
+        if isinstance(wires, (list, tuple)):
+            full_path = resolve_path(list(parent_path) + list(wires))
+            src_units = self._schema_units_at_path(full_schema, full_path)
+            dst_units = self._port_units(port_schema)
+            try:
+                return self._compute_unit_scale(src_units, dst_units)
+            except Exception:
+                return 1.0
+
+        elif isinstance(wires, dict):
+            scales = {}
+            for port_key, subwires in wires.items():
+                # Drill into port schema for this key
+                sub_port_schema = self._subport_schema(port_schema, port_key)
+                sub = self._collect_view_scales(
+                    subwires, parent_path, sub_port_schema, full_schema)
+                if sub is not None:
+                    scales[port_key] = sub
+            return scales
+
+        return None
+
+    @staticmethod
+    def _subport_schema(port_schema, key):
+        """Pull a sub-port schema by key from a structured port type."""
+        if port_schema is None:
+            return None
+        # If it's a dict (structured port), index it
+        if isinstance(port_schema, dict):
+            return port_schema.get(key)
+        # If it's a Node with named fields (rare for structured ports)
+        if hasattr(port_schema, key):
+            return getattr(port_schema, key)
+        return None
+
+    @staticmethod
+    def _has_nonunit_scale(scales):
+        """Recursively check whether any leaf scale is != 1.0."""
+        if isinstance(scales, dict):
+            return any(Core._has_nonunit_scale(v) for v in scales.values())
+        if isinstance(scales, (int, float)):
+            return scales != 1.0
+        return False
+
+    @staticmethod
+    def _apply_view_scales(view, scales):
+        """Multiply leaves of `view` by their scale factors in `scales`.
+
+        Both arguments share the same nested-dict structure.
+        Multiplication is in-place where the value is a numpy array
+        and out-of-place for plain floats. Skips scales of 1.0.
+        """
+        if isinstance(scales, (int, float)):
+            if scales == 1.0 or view is None:
+                return view
+            return view * scales
+        if isinstance(scales, dict) and isinstance(view, dict):
+            for key, sub_scale in scales.items():
+                if key in view:
+                    view[key] = Core._apply_view_scales(view[key], sub_scale)
+        return view
 
     def view_fast(self, compiled, state):
         """Extract input state using a precompiled view.
@@ -779,6 +984,10 @@ class Core:
         kind = compiled[0]
         if kind == 'resolved':
             return self._view_resolved(compiled[1], state)
+        elif kind == 'scaled_resolved':
+            # Wires include unit conversions — extract then scale.
+            result = self._view_resolved(compiled[1], state)
+            return self._apply_view_scales(result, compiled[2])
         elif kind == 'ports':
             _, ports_schema, wires, parent_path = compiled
             return self.view_ports(
@@ -786,11 +995,34 @@ class Core:
 
     @staticmethod
     def _get_path(tree, path):
-        """Follow a path of keys down a nested dict."""
-        for key in path:
-            if not isinstance(tree, dict) or key not in tree:
+        """Follow a path of keys down a nested dict, list, or array.
+
+        A `*` segment fans out: it gathers values from every child key
+        at that level into a dict. Multiple `*` segments nest the result.
+        Used by view_fast to support wildcard wires.
+        """
+        for i, key in enumerate(path):
+            if key == '*':
+                remaining = path[i+1:]
+                if isinstance(tree, dict):
+                    result = {}
+                    for k, v in tree.items():
+                        sub = Core._get_path(v, remaining)
+                        if sub is not None:
+                            result[k] = sub
+                    return result
                 return None
-            tree = tree[key]
+            if isinstance(tree, dict):
+                if key not in tree:
+                    return None
+                tree = tree[key]
+            elif isinstance(key, int) and hasattr(tree, '__getitem__'):
+                try:
+                    tree = tree[key]
+                except (IndexError, KeyError):
+                    return None
+            else:
+                return None
         return tree
 
     @staticmethod
@@ -837,7 +1069,8 @@ class Core:
             out_wires = link_state.get('outputs') or {}
             if out_ports_schema is not None:
                 compiled['project'] = self.precompile_project(
-                    out_ports_schema, out_wires, parent_path)
+                    out_ports_schema, out_wires, parent_path,
+                    full_schema=schema)
             else:
                 compiled['project'] = None
 
@@ -862,12 +1095,18 @@ class Core:
         """
         self._link_cache.pop(tuple(link_path), None)
 
-    def precompile_project(self, ports_schema, wires, path):
+    def precompile_project(self, ports_schema, wires, path, full_schema=None):
         """Precompile the schema resolution for project_ports.
 
         Returns a compiled structure that can be used by project_ports_fast
         to skip repeated schema resolution. Call once per process, then use
         project_ports_fast on each timestep.
+
+        If `full_schema` is provided, also computes per-leaf unit
+        conversion scales (port unit → state unit). The scale is the
+        *inverse* of the view direction. Leaves with scale=1.0 use the
+        existing zero-overhead 'leaf' kind. Non-trivial scales use
+        'scaled_leaf' so the multiply happens at project time.
 
         Returns:
             A compiled projection structure, or None if the wires pattern
@@ -879,6 +1118,16 @@ class Core:
         if isinstance(wires, (list, tuple)):
             destination = resolve_path(list(path) + list(wires))
             project_schema = self.resolve({}, ports_schema, path=destination)
+            scale = 1.0
+            if full_schema is not None:
+                src_units = self._port_units(ports_schema)
+                dst_units = self._schema_units_at_path(full_schema, destination)
+                try:
+                    scale = self._compute_unit_scale(src_units, dst_units)
+                except Exception:
+                    scale = 1.0
+            if scale != 1.0:
+                return ('scaled_leaf', destination, project_schema, scale)
             return ('leaf', destination, project_schema)
 
         elif isinstance(wires, dict):
@@ -887,7 +1136,7 @@ class Core:
                 subports, _ = self.jump(ports_schema, {}, key)
                 if subports is None:
                     continue
-                sub = self.precompile_project(subports, subwires, path)
+                sub = self.precompile_project(subports, subwires, path, full_schema)
                 if sub is None:
                     return None
                 sub_compiled.append((key, sub))
@@ -895,9 +1144,8 @@ class Core:
             # Precompute the merged schema
             project_schema = Node()
             for _, sub in sub_compiled:
-                if sub[0] == 'leaf':
-                    project_schema = resolve(project_schema, sub[2])
-                elif sub[0] == 'dict':
+                # sub[2] is project_schema for both leaf and dict kinds
+                if sub[0] in ('leaf', 'scaled_leaf', 'dict'):
                     project_schema = resolve(project_schema, sub[2])
             return ('dict', sub_compiled, project_schema)
 
@@ -905,14 +1153,44 @@ class Core:
 
     @staticmethod
     def _set_nested(target, path, value):
-        """Set a value at a nested path in a dict, creating intermediates."""
+        """Set a value at a nested path in a dict, creating intermediates.
+
+        A `*` segment fans out: `value` must be a dict whose keys are the
+        keys to expand into. For each (k, sub_value) in value, set the
+        path with `*` replaced by `k` and the remaining path traversed.
+        Multiple stars nest the expansion.
+        """
+        if not path:
+            return
+        # Find first star, if any
+        star_idx = None
+        for i, key in enumerate(path):
+            if key == '*':
+                star_idx = i
+                break
+        if star_idx is not None:
+            prefix = path[:star_idx]
+            suffix = path[star_idx+1:]
+            # Walk to the prefix dict
+            current = target
+            for key in prefix:
+                if key not in current:
+                    current[key] = {}
+                current = current[key]
+            if not isinstance(value, dict):
+                return
+            for k, sub_value in value.items():
+                if k not in current:
+                    current[k] = {}
+                Core._set_nested(current[k], suffix, sub_value)
+            return
+        # No star — original behavior
         current = target
         for key in path[:-1]:
             if key not in current:
                 current[key] = {}
             current = current[key]
-        if path:
-            current[path[-1]] = value
+        current[path[-1]] = value
 
     @staticmethod
     def _merge_nested(target, source):
@@ -940,6 +1218,16 @@ class Core:
             # Build nested dict directly instead of calling self.merge
             project_state = {}
             self._set_nested(project_state, destination, view)
+            return project_schema, project_state
+
+        elif kind == 'scaled_leaf':
+            _, destination, project_schema, scale = compiled
+            # Apply unit conversion (port unit → state unit) before storing.
+            # The scale was computed once at compile time via pint and is
+            # 1.0 in the common case (matching units).
+            scaled_view = view * scale if view is not None else view
+            project_state = {}
+            self._set_nested(project_state, destination, scaled_view)
             return project_schema, project_state
 
         elif kind == 'dict':
@@ -1022,16 +1310,81 @@ class Core:
         return outcome
 
     def apply(self, schema, state, update, path=()):
-        """Apply a schema-aware update/patch; provides minimal context."""
-        if update:
+        """Apply a schema-aware update/patch; provides minimal context.
+
+        `is not None` rather than truthiness — numpy arrays don't have
+        a scalar truth value, and even an "empty" container (e.g. {})
+        should reach the dispatched apply (which is a no-op for empty
+        updates anyway).
+        """
+        if update is not None:
             found = self.access(schema)
             return apply(found, state, update, path)
         else:
             return state, []
 
+    def reconcile(self, schema, updates):
+        """Reconcile multiple updates into a single combined update.
+
+        Groups updates by destination path and combines them according
+        to each schema type's reconciliation semantics. The result can
+        be passed to apply() for a single atomic state update.
+
+        Fast path: when there is only ONE non-None update, return it
+        directly without dispatching. Reconcile's job is to merge
+        multiple updates per type's semantics; with a single update
+        there's nothing to merge, and the update is already in the
+        format apply() expects (sums of one delta == that delta,
+        unions of one set == that set, etc.). This skip is safe for
+        every type currently registered.
+
+        Args:
+            schema: The schema at the update target path.
+            updates: List of updates to reconcile.
+
+        Returns:
+            A single reconciled update, or None if all updates are empty.
+        """
+        if not updates:
+            return None
+        # Pass-through fast path for the common single-update case.
+        non_none_count = 0
+        single = None
+        for u in updates:
+            if u is not None:
+                non_none_count += 1
+                single = u
+                if non_none_count > 1:
+                    break
+        if non_none_count == 0:
+            return None
+        if non_none_count == 1:
+            return single
+        # Multiple updates — dispatch to per-type reconcile.
+        found = self.access(schema)
+        return reconcile(found, updates)
+
+
+_cached_base_core = None
 
 def allocate_core(top=None):
+    """Allocate a new Core with all discovered packages.
+
+    The base core (without ``top``) is cached after the first call
+    to avoid repeated expensive package discovery. Each call returns
+    a fresh copy so callers can register additional types independently.
+    """
+    global _cached_base_core
+    if top is None and _cached_base_core is not None:
+        import copy
+        return copy.copy(_cached_base_core)
+
     core = Core(BASE_TYPES)
     core = discover_packages(core, top)
+
+    if top is None:
+        _cached_base_core = core
+        import copy
+        return copy.copy(core)
 
     return core

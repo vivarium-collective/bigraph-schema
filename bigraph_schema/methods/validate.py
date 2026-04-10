@@ -12,14 +12,18 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -29,6 +33,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     dtype_schema,
+    is_schema_field,
 )
 
 from bigraph_schema.methods.check import check
@@ -104,9 +109,23 @@ def validate(core, schema: Float, state):
 
 
 @dispatch
+def validate(core, schema: Complex, state):
+    if not isinstance(state, (complex, float, int)):
+        return f'Complex schema but state is not complex:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+
+
+@dispatch
 def validate(core, schema: Nonnegative, state):
     if state < 0:
         return f'Nonnegative schema but state is negative:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+
+
+@dispatch
+def validate(core, schema: Range, state):
+    if not isinstance(state, float):
+        return f'Range schema but state is not a float:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+    if state < schema._min or state > schema._max:
+        return f'Range schema but state {state} is outside [{schema._min}, {schema._max}]:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
 
 @dispatch
@@ -128,6 +147,18 @@ def validate(core, schema: Enum, state):
 def validate(core, schema: List, state):
     if not isinstance(state, (list, tuple)):
         return f'List schema but state is not a list:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+
+    results = filter_nones([
+        validate(core, schema._element, element)
+        for element in state])
+
+    if results:
+        return results
+
+@dispatch
+def validate(core, schema: Set, state):
+    if not isinstance(state, set):
+        return f'Set schema but state is not a set:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
     results = filter_nones([
         validate(core, schema._element, element)
@@ -198,7 +229,6 @@ def validate(core, schema: Array, state):
     if not shape_match:
         return f'Array schema but shape does not match:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
     if not data_match:
-        import ipdb; ipdb.set_trace()
         return f'Array schema but data does not match:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
 
@@ -210,6 +240,9 @@ def validate(core, schema: Key, state):
 
 @dispatch
 def validate(core, schema: Node, state):
+    # Only check non-underscore fields against state — underscore
+    # schema fields (like _inputs, _outputs) describe type structure,
+    # not state shape. This matches check(Node) behavior.
     fields = [
         field
         for field in schema.__dataclass_fields__
@@ -218,18 +251,17 @@ def validate(core, schema: Node, state):
     if fields:
         if isinstance(state, dict):
             result = {}
-            for key in schema.__dataclass_fields__:
-                if not key.startswith('_'):
-                    if key not in state:
-                        return f'Node schema but key "{key}" is not in state:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
-                    else:
-                        down = validate(
-                            core, 
-                            getattr(schema, key),
-                            state[key])
+            for key in fields:
+                if key not in state:
+                    return f'Node schema but key "{key}" is not in state:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+                else:
+                    down = validate(
+                        core,
+                        getattr(schema, key),
+                        state[key])
 
-                        if down:
-                            result[key] = down
+                    if down:
+                        result[key] = down
             if result:
                 return result
         else:
@@ -242,6 +274,8 @@ def validate(core, schema: Node, state):
 def validate(core, schema: dict, state):
     result = {}
     for key, subschema in schema.items():
+        if not is_schema_field(schema, key):
+            continue
         if key not in state:
             continue
             # result[key] = f'Schema has key "{key}" but state does not:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'

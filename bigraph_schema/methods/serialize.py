@@ -13,15 +13,20 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     NPRandom,
     String,
     Enum,
     Wrap,
+    Quote,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -32,6 +37,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     dtype_schema,
+    is_schema_field,
 )
 
 from bigraph_schema.methods.check import check
@@ -40,12 +46,12 @@ from bigraph_schema.methods.resolve import resolve
 
 def wrap_default(schema, result):
     found = None
-    if isinstance(schema, Node) and schema._default:
+    if isinstance(schema, Node) and schema._default is not None:
         found = schema._default
     elif isinstance(schema, dict) and '_default' in schema:
         found = schema['_default']
 
-    if found:
+    if found is not None:
         inner_default = found
         if isinstance(result, str) and isinstance(inner_default, str):
             result = result + '{' + inner_default + '}'
@@ -81,6 +87,28 @@ def render(schema: Overwrite, defaults=False):
     else:
         result = {
             '_type': 'overwrite',
+            '_value': value}
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: Const, defaults=False):
+    value = render(schema._value, defaults=defaults)
+    if isinstance(value, str):
+        result = f'const[{value}]'
+    else:
+        result = {
+            '_type': 'const',
+            '_value': value}
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: Quote, defaults=False):
+    value = render(schema._value, defaults=defaults)
+    if isinstance(value, str):
+        result = f'quote[{value}]'
+    else:
+        result = {
+            '_type': 'quote',
             '_value': value}
     return wrap_default(schema, result) if defaults else result
 
@@ -148,8 +176,18 @@ def render(schema: Float, defaults=False):
     return wrap_default(schema, result) if defaults else result
 
 @dispatch
+def render(schema: Complex, defaults=False):
+    result = 'complex'
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
 def render(schema: Number, defaults=False):
     result = 'number'
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: Range, defaults=False):
+    result = f'range[{schema._min},{schema._max}]'
     return wrap_default(schema, result) if defaults else result
 
 @dispatch
@@ -175,6 +213,17 @@ def render(schema: List, defaults=False):
             '_type': 'list',
             '_element': element}
 
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: Set, defaults=False):
+    element = render(schema._element, defaults=defaults)
+    if isinstance(element, str):
+        result = f'set[{element}]'
+    else:
+        result = {
+            '_type': 'set',
+            '_element': element}
     return wrap_default(schema, result) if defaults else result
 
 @dispatch
@@ -255,14 +304,18 @@ def render(schema: Wires, defaults=False):
 
 @dispatch
 def render(schema: Link, defaults=False):
-    intermediate = {
-        '_type': 'link',
-        '_inputs': render(schema._inputs, defaults=defaults),
-        '_outputs': render(schema._outputs, defaults=defaults),
-        'inputs': render(schema.inputs, defaults=defaults),
-        'outputs': render(schema.outputs, defaults=defaults)}
+    intermediate = {'_type': 'link'}
 
-    if isinstance(intermediate['_inputs'], str) and isinstance(intermediate['_outputs'], str):
+    for field_name in schema.__dataclass_fields__:
+        if not is_schema_field(schema, field_name):
+            continue
+        value = getattr(schema, field_name)
+        intermediate[field_name] = render(value, defaults=defaults)
+
+    # Compact form for simple links with only core fields
+    if (isinstance(intermediate.get('_inputs'), str)
+            and isinstance(intermediate.get('_outputs'), str)
+            and len(intermediate) <= 5):
         result = f'link[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
     else:
         result = intermediate
@@ -292,16 +345,37 @@ def render(schema: np.str_, defaults=False):
 def render(schema: Node, defaults=False):
     subrender = {}
 
+    # Emit _type for registered Node subclasses so roundtrip works
+    type_name = _node_type_name(type(schema))
+    if type_name:
+        subrender['_type'] = type_name
+
     for key in schema.__dataclass_fields__:
+        if not is_schema_field(schema, key):
+            if key == '_default':
+                value = getattr(schema, key)
+                default_render = serialize(schema, value)
+                if default_render:
+                    subrender['_default'] = default_render
+            continue
         value = getattr(schema, key)
-        if key == '_default':
-            default_render = serialize(schema, value)
-            if default_render:
-                subrender['_default'] = default_render
-        else:
-            subrender[key] = render(value, defaults=defaults)
+        subrender[key] = render(value, defaults=defaults)
 
     return wrap_default(schema, subrender) if defaults else subrender
+
+
+# Reverse lookup: Node subclass -> registered type name
+_TYPE_NAME_CACHE = {}
+
+def _node_type_name(cls):
+    """Get the registered type name for a Node subclass, if any."""
+    if not _TYPE_NAME_CACHE:
+        # Build cache from BASE_TYPES
+        from bigraph_schema.schema import BASE_TYPES
+        for name, type_cls in BASE_TYPES.items():
+            if isinstance(type_cls, type):
+                _TYPE_NAME_CACHE[type_cls] = name
+    return _TYPE_NAME_CACHE.get(cls)
 
 @dispatch
 def render(schema: str, defaults=False):
@@ -319,148 +393,80 @@ def render_associated(assoc):
     return assoc
 
 
-@dispatch
-def serialize(schema: Empty, state):
-    return NONE_SYMBOL
+from bigraph_schema.methods.walk import walk as _walk
 
-@dispatch
-def serialize(schema: Maybe, state):
-    if state is None:
+
+def _serialize_leaf(schema, state, path):
+    """Leaf serialization for atoms and special types."""
+    if isinstance(schema, Empty):
         return NONE_SYMBOL
-    else:
-        return serialize(
-            schema._value,
-            state)
-
-@dispatch
-def serialize(schema: Wrap, state):
-    return serialize(schema._value, state)
-
-@dispatch
-def serialize(schema: Union, state):
-    match = None
-    for option in schema._options:
-        if check(option, state):
-            match = serialize(option, state)
-
-            break
-
-    return match
-
-@dispatch
-def serialize(schema: Tuple, state):
-    return [
-        serialize(subschema, value)
-        for subschema, value in zip(schema._values, state)]
-
-@dispatch
-def serialize(schema: Boolean, state):
-    if state:
-        return 'true'
-    else:
-        return 'false'
-
-@dispatch
-def serialize(schema: NPRandom, state):
-    if isinstance(state, RandomState):
-        return serialize(
-            schema.state,
-            state.get_state())
-    elif isinstance(state, (list, tuple)):
+    if isinstance(schema, Boolean):
+        return 'true' if state else 'false'
+    if isinstance(schema, NPRandom):
+        if isinstance(state, RandomState):
+            return serialize(schema.state, state.get_state())
+        elif isinstance(state, (list, tuple)):
+            return state
+        else:
+            raise Exception(f'cannot serialize NPRandom state: {state}')
+    if isinstance(schema, Complex):
+        return str(state)
+    if isinstance(schema, Number):
         return state
-    else:
-        import ipdb; ipdb.set_trace()
-
-@dispatch
-def serialize(schema: String, state):
-    return str(state)
-
-@dispatch
-def serialize(schema: np.str_, state):
-    return str(state)
-
-@dispatch
-def serialize(schema: List, state):
-    return [
-        serialize(schema._element, element)
-        for element in state]
-
-@dispatch
-def serialize(schema: Map, state):
-    return {
-        serialize(schema._key, key): serialize(schema._value, value)
-        for key, value in state.items()}
-
-@dispatch
-def serialize(schema: Tree, state):
-    if check(schema._leaf, state):
-        return serialize(schema._leaf, state)
-    else:
-        try:
-            return {
-                str(key): serialize(schema, branch)
-                for key, branch in state.items()}
-
-        except Exception as e:
-            import ipdb; ipdb.set_trace()
-
-@dispatch
-def serialize(schema: dict, state):
-    if not isinstance(state, dict):
-        return {}
-
-    result = {}
-
-    for key, subschema in schema.items():
-        if not key.startswith('_'):
-            result[str(key)] = serialize(
-                subschema,
-                state.get(key))
-
-    return result
+    if isinstance(schema, String):
+        return str(state)
+    if isinstance(schema, Atom):
+        return str(state)
+    if isinstance(schema, np.str_):
+        return str(state)
+    if isinstance(schema, Array):
+        if isinstance(state, np.ndarray):
+            return state.tolist()
+        elif isinstance(state, list):
+            return state
+        elif isinstance(state, dict):
+            return state.get('data', state)
+        else:
+            raise Exception(
+                f'serializing array:\n  {schema}\n'
+                f'but state is not an array?\n  {state}')
+    if isinstance(schema, Frame):
+        if state is None:
+            return {}
+        return state.to_dict(orient="list")
+    if isinstance(schema, Schema):
+        return render(state)
+    if isinstance(schema, Link):
+        return _serialize_link(schema, state)
+    if isinstance(schema, Node):
+        if isinstance(state, dict):
+            result = {}
+            for key in schema.__dataclass_fields__:
+                if is_schema_field(schema, key) and key in state:
+                    result[key] = serialize(getattr(schema, key), state[key])
+            return result
+        elif state is None:
+            return None
+        else:
+            return str(state)
+    if schema is None and state is None:
+        return None
+    return str(state) if state is not None else None
 
 
-@dispatch
-def serialize(schema: Number, state):
-    return state
+def _serialize_combine(schema, children, path):
+    """Assemble serialized children into the parent structure."""
+    if isinstance(schema, Tuple):
+        return list(children)
+    if isinstance(schema, Set):
+        return sorted(children, key=str)
+    if isinstance(children, list):
+        return children
+    return children
 
 
-@dispatch
-def serialize(schema: Atom, state):
-    return str(state)
-
-
-@dispatch
-def serialize(schema: Array, state: np.ndarray):
-    return state.tolist()
-
-@dispatch
-def serialize(schema: Array, state: list):
-    return state
-
-@dispatch
-def serialize(schema: Array, state: dict):
-    if 'data' in state:
-        return state['data']
-    else:
-        return state
-
-@dispatch
-def serialize(schema: Array, state):
-    raise Exception(f'serializing array:\n  {schema}\nbut state is not an array?\n  {state}')
-
-@serialize.dispatch
-def serialize(schema: Frame, state):
-    if state is None:
-        return {}
-    return state.to_dict(orient="list")
-
-@dispatch
-def serialize(schema: Schema, state):
-    return render(state)
-
-@dispatch
-def serialize(schema: Link, state):
+def _serialize_link(schema, state):
+    """Special-case serialization for Link type."""
     address = serialize(schema.address, state.get('address'))
     instance = state.get('instance')
     unconfig = state.get('config')
@@ -468,24 +474,15 @@ def serialize(schema: Link, state):
     if instance is None:
         config_schema = {}
     else:
-        config_schema = instance.core.access(
-            instance.config_schema)
+        config_schema = instance.core.access(instance.config_schema)
 
     config = serialize(config_schema, unconfig)
-
-    # inputs = serialize(schema.inputs, state.get('inputs'))
-    # outputs = serialize(schema.outputs, state.get('outputs'))
-
-    # _inputs = resolve(schema._inputs, state.get('_inputs'))
-    # _outputs = resolve(schema._outputs, state.get('_outputs'))
-
     _inputs = schema._inputs
     _outputs = schema._outputs
 
     encode = {
         'address': address,
         'config': config,
-        # 'config': unconfig,
         '_inputs': render(_inputs),
         '_outputs': render(_outputs)}
 
@@ -501,25 +498,34 @@ def serialize(schema: Link, state):
     return encode
 
 
-@dispatch
-def serialize(schema: None, state: None):
-    return None
+def serialize(schema, state):
+    """Serialize state according to schema.
 
-@dispatch
-def serialize(schema: Node, state):
-    if isinstance(state, dict):
-        result = {}
+    Uses walk for container recursion, with type-specific
+    leaf handling for atoms and special types (Link, Frame, etc).
+    """
+    # Handle Maybe None before walk
+    if isinstance(schema, Maybe):
+        if state is None:
+            return NONE_SYMBOL
+        return serialize(schema._value, state)
 
-        for key in schema.__dataclass_fields__:
-            if not key in ('_default',):
-                if key in state:
-                    result[key] = serialize(
-                        getattr(schema, key),
-                        state[key])
+    # Map needs special key serialization
+    if isinstance(schema, Map) and isinstance(state, dict):
+        return {
+            serialize(schema._key, key): serialize(schema._value, value)
+            for key, value in state.items()}
 
-        return result
-    elif state is None:
-        return None
-    else:
-        return str(state)
+    # Special types that walk shouldn't recurse into
+    if isinstance(schema, (Link, Frame, Array, NPRandom, Schema)):
+        return _serialize_leaf(schema, state, ())
+
+    # dict schema with non-dict state
+    if isinstance(schema, dict) and not isinstance(state, dict):
+        return {}
+
+    if schema is None:
+        return _serialize_leaf(schema, state, ())
+
+    return _walk(schema, state, _serialize_leaf, _serialize_combine)
 

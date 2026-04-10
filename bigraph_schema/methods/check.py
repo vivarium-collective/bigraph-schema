@@ -11,14 +11,18 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Complex,
     Delta,
     Nonnegative,
+    Range,
     String,
     Enum,
     Wrap,
     Maybe,
     Overwrite,
+    Const,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -27,6 +31,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    is_schema_field,
 )
 
 
@@ -87,8 +92,18 @@ def check(schema: Float, state):
 
 
 @dispatch
+def check(schema: Complex, state):
+    return isinstance(state, (complex, float, int))
+
+
+@dispatch
 def check(schema: Nonnegative, state):
     return state >= 0
+
+
+@dispatch
+def check(schema: Range, state):
+    return isinstance(state, float) and schema._min <= state <= schema._max
 
 
 @dispatch
@@ -107,6 +122,16 @@ def check(schema: Enum, state):
 @dispatch
 def check(schema: List, state):
     if not isinstance(state, (list, tuple)):
+        return False
+
+    return all([
+        check(schema._element, element)
+        for element in state])
+
+
+@dispatch
+def check(schema: Set, state):
+    if not isinstance(state, set):
         return False
 
     return all([
@@ -172,6 +197,9 @@ def check(schema: Key, state):
 
 @dispatch
 def check(schema: Node, state):
+    # Only check non-underscore fields against state — underscore
+    # schema fields (like _inputs, _outputs) describe type structure,
+    # not state shape.
     fields = [
         field
         for field in schema.__dataclass_fields__
@@ -179,16 +207,15 @@ def check(schema: Node, state):
 
     if fields:
         if isinstance(state, dict):
-            for key in schema.__dataclass_fields__:
-                if not key.startswith('_'):
-                    if key not in state:
+            for key in fields:
+                if key not in state:
+                    return False
+                else:
+                    down = check(
+                        getattr(schema, key),
+                        state[key])
+                    if down is False:
                         return False
-                    else:
-                        down = check(
-                            getattr(schema, key),
-                            state[key])
-                        if down is False:
-                            return False
             return True
         else:
             return False
@@ -199,6 +226,8 @@ def check(schema: Node, state):
 @dispatch
 def check(schema: dict, state):
     for key, subschema in schema.items():
+        if not is_schema_field(schema, key):
+            continue
         if key not in state:
             continue
             # return False

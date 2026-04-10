@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 
 from bigraph_schema import Edge, allocate_core, BASE_TYPES
-from bigraph_schema.schema import Float, String, Map, Tree, Link
-from bigraph_schema.methods import check, render, serialize
+from bigraph_schema.schema import Float, String, Map, Tree, Link, Array, Overwrite, Node
+from bigraph_schema.methods import check, render, serialize, apply, reconcile
 
 
 @pytest.fixture
@@ -162,6 +162,153 @@ def test_array(core):
     array = np.zeros((3,4), dtype=complex_dtype)
     array_schema = core.infer(array)
     rendered = core.render(array_schema)
+
+
+def test_structured_array(core):
+    """Test structured array type expressions with named typed fields."""
+
+    # Basic structured array: two fields
+    schema = core.access('array[id:string|count:integer]')
+    assert schema._data == np.dtype([('id', '<U'), ('count', '<i4')])
+
+    # Structured array with explicit shape
+    schema = core.access('array[5,id:string|count:integer]')
+    assert schema._shape == (5,)
+    assert schema._data == np.dtype([('id', '<U'), ('count', '<i4')])
+
+    # Structured array with sub-array field
+    schema = core.access('array[id:string|count:integer|mass:array[9,float]]')
+    expected_dtype = np.dtype([('id', '<U'), ('count', '<i4'), ('mass', '<f8', (9,))])
+    assert schema._data == expected_dtype
+
+    # Create numpy array from structured dtype and verify field access
+    arr = np.zeros(3, dtype=schema._data)
+    assert arr.shape == (3,)
+    assert arr['mass'].shape == (3, 9)
+    assert arr['count'].dtype == np.int32
+
+    # Mixed field types with boolean
+    schema = core.access('array[name:string|values:array[3,integer]|flag:boolean]')
+    expected_dtype = np.dtype([('name', '<U'), ('values', '<i4', (3,)), ('flag', '?')])
+    assert schema._data == expected_dtype
+
+    # Shaped structured array
+    schema = core.access('array[10,x:float|y:float|z:float]')
+    assert schema._shape == (10,)
+    arr = np.zeros(10, dtype=schema._data)
+    assert arr['x'].shape == (10,)
+
+    # Single field (degenerate case)
+    schema = core.access('array[value:float]')
+    assert 'value' in schema._data.names
+
+
+def test_apply_structured_array(core):
+    """Test that apply on structured arrays adds numeric fields
+    and preserves non-numeric fields."""
+    dt = np.dtype([('id', '<U50'), ('count', '<i8'), ('mass', '<f8')])
+    schema = Array(_shape=(3,), _data=dt)
+
+    state = np.zeros(3, dtype=dt)
+    state['id'] = ['a', 'b', 'c']
+    state['count'] = [10, 20, 30]
+    state['mass'] = [1.0, 2.0, 3.0]
+
+    update = np.zeros(3, dtype=dt)
+    update['count'] = [5, -3, 7]
+    update['mass'] = [0.1, 0.2, 0.3]
+
+    result, merges = apply(schema, state, update, ())
+
+    assert list(result['count']) == [15, 17, 37], f"Expected additive counts, got {result['count']}"
+    assert abs(result['mass'][0] - 1.1) < 1e-10, f"Expected additive mass, got {result['mass']}"
+    assert list(result['id']) == ['a', 'b', 'c'], f"Expected preserved ids, got {result['id']}"
+
+
+def test_apply_structured_array_dict_update(core):
+    """Test that apply on structured arrays with dict updates
+    handles both set and additive semantics."""
+    dt = np.dtype([('id', '<U50'), ('count', '<i8')])
+    schema = Array(_shape=(3,), _data=dt)
+
+    state = np.zeros(3, dtype=dt)
+    state['id'] = ['a', 'b', 'c']
+    state['count'] = [10, 20, 30]
+
+    # Additive dict update
+    result, _ = apply(schema, state.copy(), {'count': np.array([1, 2, 3])}, ())
+    assert list(result['count']) == [11, 22, 33]
+
+    # Set dict update
+    result, _ = apply(schema, state.copy(), {'set': {'count': np.array([100, 200, 300])}}, ())
+    assert list(result['count']) == [100, 200, 300]
+
+
+def test_reconcile_float(core):
+    """Float reconciliation sums deltas."""
+    result = reconcile(Float(), [1.0, 2.5, -0.5])
+    assert result == 3.0
+
+
+def test_reconcile_float_all_none(core):
+    result = reconcile(Float(), [None, None])
+    assert result is None
+
+
+def test_reconcile_overwrite(core):
+    """Overwrite reconciliation: last non-None wins."""
+    from bigraph_schema.schema import Overwrite, Node
+    result = reconcile(Overwrite(_value=Node()), ['first', 'second', None])
+    assert result == 'second'
+
+
+def test_reconcile_array_sparse(core):
+    """Array with sparse updates: concatenate sparse entry lists."""
+    schema = Array(_shape=(10,), _data=np.dtype('float64'))
+    u1 = [(np.array([0, 1]), np.array([1.0, 2.0]))]
+    u2 = [(np.array([2]), np.array([3.0]))]
+    result = reconcile(schema, [u1, u2])
+    # Two sparse entries: one from each update
+    assert len(result) == 2
+    assert list(result[0][0]) == [0, 1]
+    assert list(result[1][0]) == [2]
+
+
+def test_reconcile_array_dense(core):
+    """Array with dense updates: element-wise sum."""
+    schema = Array(_shape=(3,), _data=np.dtype('float64'))
+    result = reconcile(schema, [np.array([1, 0, 0]), np.array([0, 2, 0])])
+    assert list(result) == [1, 2, 0]
+
+
+def test_reconcile_map(core):
+    """Map reconciliation merges keys."""
+    result = reconcile(Map(), [{'a': 1}, {'b': 2}, {'a': 3}])
+    assert result['a'] == 3
+    assert result['b'] == 2
+
+
+def test_reconcile_dict_schema(core):
+    """Dict schema reconciles per-key with sub-schema dispatch."""
+    schema = {'x': Float(), 'y': Float()}
+    result = reconcile(schema, [
+        {'x': 1.0, 'y': 2.0},
+        {'x': 3.0},
+    ])
+    assert result['x'] == 4.0
+    assert result['y'] == 2.0
+
+
+def test_reconcile_nested(core):
+    """Nested dict schema reconciles recursively."""
+    schema = {'inner': {'a': Float(), 'b': Float()}}
+    result = reconcile(schema, [
+        {'inner': {'a': 1.0}},
+        {'inner': {'b': 2.0}},
+        {'inner': {'a': 5.0}},
+    ])
+    assert result['inner']['a'] == 6.0
+    assert result['inner']['b'] == 2.0
 
 
 def test_infer(core):
@@ -722,7 +869,6 @@ def test_merge(core):
 
     assert(key_merge == {
         'a': 55555.555,
-        'b': '',
         'c': 4444,
         'd': '111111'})
 

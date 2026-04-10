@@ -6,6 +6,7 @@ from types import NoneType
 from dataclasses import replace
 
 from bigraph_schema.schema import (
+    Atom,
     Node,
     Union,
     Tuple,
@@ -22,7 +23,10 @@ from bigraph_schema.schema import (
     Wrap,
     Maybe,
     Overwrite,
+    Const,
+    Range,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -33,6 +37,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     schema_dtype,
+    is_schema_field,
 )
 
 # aligning parameters takes them from positioned arguments and gives them keys
@@ -49,7 +54,7 @@ from bigraph_schema.schema import (
 def schema_keys(schema):
     keys = []
     for key in schema.__dataclass_fields__:
-        if key.startswith('_'):
+        if key.startswith('_') and is_schema_field(schema, key):
             keys.append(key)
 
     return keys
@@ -82,9 +87,29 @@ def align_parameters(schema: Map, parameters):
 
 @dispatch
 def align_parameters(schema: Array, parameters):
-    return {
-        '_shape': parameters[0],
-        '_data': parameters[1]}
+    if len(parameters) == 1:
+        param = parameters[0]
+        if isinstance(param, dict):
+            # Structured array: array[field1:type|field2:type]
+            return {'_data': param}
+        elif isinstance(param, str):
+            # Could be shape ("5") or data type name ("float")
+            try:
+                int(param)
+                return {'_shape': param}
+            except ValueError:
+                return {'_data': param}
+        elif isinstance(param, Node):
+            # Schema node as data type: array[float] -> Float node
+            return {'_data': param}
+        else:
+            # Assume shape
+            return {'_shape': param}
+    elif len(parameters) >= 2:
+        # Shape + data: array[5,float] or array[5,field1:type|field2:type]
+        return {
+            '_shape': parameters[0],
+            '_data': parameters[1]}
 
 @dispatch
 def align_parameters(schema: Frame, parameters):
@@ -100,9 +125,27 @@ def align_parameters(schema: Link, parameters):
     return align
 
 @dispatch
+def align_parameters(schema: Range, parameters):
+    return {
+        '_min': parameters[0],
+        '_max': parameters[1]}
+
+@dispatch
+def align_parameters(schema: Number, parameters):
+    """float[fg] or integer[count] — single parameter is the unit string."""
+    if len(parameters) == 1:
+        return {'_units': parameters[0]}
+    return {}
+
+@dispatch
+def align_parameters(schema: Set, parameters):
+    return {
+        '_element': parameters[0]}
+
+@dispatch
 def align_parameters(schema: Node, parameters):
     align = {}
-    keys = schema_keys(schema)[1:]
+    keys = schema_keys(schema)
     for key, parameter in zip(keys, parameters):
         align[key] = parameter
     return align
@@ -112,6 +155,23 @@ def align_parameters(schema, parameters):
     raise Exception(f'unknown parameters for schema {schema}: {parameters}')
 
 @dispatch
+def reify_schema(core, schema: Range, parameters):
+    if '_min' in parameters:
+        schema._min = float(parameters['_min'])
+    if '_max' in parameters:
+        schema._max = float(parameters['_max'])
+    return schema
+
+@dispatch
+def reify_schema(core, schema: Number, parameters):
+    """Set the unit string verbatim — units are stored, not resolved as types."""
+    if '_units' in parameters:
+        units_param = parameters['_units']
+        if isinstance(units_param, str):
+            schema._units = units_param
+    return schema
+
+@dispatch
 def reify_schema(core, schema: Enum, parameters):
     if '_values' in parameters:
         schema._values = parameters['_values']
@@ -119,9 +179,6 @@ def reify_schema(core, schema: Enum, parameters):
 
 @dispatch
 def reify_schema(core, schema: Array, parameters):
-    if '|' in parameters.get('_shape', ''):
-        import ipdb; ipdb.set_trace()
-
     shape = parameters.get('_shape', (1,))
     if isinstance(shape, str):
         shape = int(shape)
@@ -136,6 +193,10 @@ def reify_schema(core, schema: Array, parameters):
 
     data = parameters.get('_data', 'float')
     data_schema = core.access(data)
+    # Lift _units from inner Number type to the Array itself.
+    # array[float[fg]] becomes Array(_data=float, _units='fg').
+    if isinstance(data_schema, Number) and data_schema._units:
+        schema._units = data_schema._units
     # if isinstance(data, Node):
     #     data = core.render(data)
     # schema._data = nf.descr_to_dtype(data)
@@ -194,7 +255,7 @@ def reify_schema(core, schema: Node, parameters):
 
 @dispatch
 def reify_schema(core, schema, parameters):
-    import ipdb; ipdb.set_trace()
+    raise Exception(f'cannot reify schema {schema} with parameters {parameters}')
 
 def handle_parameters(core, schema, parameters):
     align = align_parameters(schema, parameters)
