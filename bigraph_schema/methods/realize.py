@@ -507,6 +507,11 @@ def realize_link(core, schema: Link, encode, path=()):
             edge_instance = edge_class(config, core)
         except TypeError:
             edge_instance = edge_class(config)
+        # Ensure all instances have core for config_schema resolution
+        # (needed by serialize). Vivarium-style processes don't accept
+        # core in __init__ so we set it after construction.
+        if not hasattr(edge_instance, 'core') or edge_instance.core is None:
+            edge_instance.core = core
         decode = {
             'address': address,
             'config': config,

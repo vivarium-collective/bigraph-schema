@@ -276,7 +276,10 @@ def render(schema: Array, defaults=False):
         data_schema,
         defaults=defaults)
 
-    result = f'array[{shape},{data}]'
+    if shape:
+        result = f'array[{shape},{data}]'
+    else:
+        result = f'array[{data}]'
     return wrap_default(schema, result) if defaults else result
 
 @dispatch
@@ -324,6 +327,10 @@ def render(schema: Link, defaults=False):
 
 @dispatch
 def render(schema: dict, defaults=False):
+    if not schema:
+        # Empty dict {} is the open/unconstrained schema — render as
+        # "node" so it round-trips through parse correctly.
+        return 'node'
     if '_type' in schema:
         return schema
     else:
@@ -393,80 +400,111 @@ def render_associated(assoc):
     return assoc
 
 
-from bigraph_schema.methods.walk import walk as _walk
+# ── serialize dispatch ──
+# Each type has its own dispatch method. Container types call
+# serialize() recursively on their children — plum routes to
+# the correct method automatically. Custom types (registered in
+# downstream packages) add their own @dispatch methods.
 
 
-def _serialize_leaf(schema, state, path):
-    """Leaf serialization for atoms and special types."""
-    if isinstance(schema, Empty):
-        return NONE_SYMBOL
-    if isinstance(schema, Boolean):
-        return 'true' if state else 'false'
-    if isinstance(schema, NPRandom):
-        if isinstance(state, RandomState):
-            return serialize(schema.state, state.get_state())
-        elif isinstance(state, (list, tuple)):
-            return state
-        else:
-            raise Exception(f'cannot serialize NPRandom state: {state}')
-    if isinstance(schema, Complex):
-        return str(state)
-    if isinstance(schema, Number):
-        return state
-    if isinstance(schema, String):
-        return str(state)
-    if isinstance(schema, Atom):
-        return str(state)
-    if isinstance(schema, np.str_):
-        return str(state)
-    if isinstance(schema, Array):
-        if isinstance(state, np.ndarray):
-            return state.tolist()
-        elif isinstance(state, list):
-            return state
-        elif isinstance(state, dict):
-            return state.get('data', state)
-        else:
-            raise Exception(
-                f'serializing array:\n  {schema}\n'
-                f'but state is not an array?\n  {state}')
-    if isinstance(schema, Frame):
-        if state is None:
-            return {}
-        return state.to_dict(orient="list")
-    if isinstance(schema, Schema):
-        return render(state)
-    if isinstance(schema, Link):
-        return _serialize_link(schema, state)
-    if isinstance(schema, Node):
-        if isinstance(state, dict):
-            result = {}
-            for key in schema.__dataclass_fields__:
-                if is_schema_field(schema, key) and key in state:
-                    result[key] = serialize(getattr(schema, key), state[key])
-            return result
-        elif state is None:
-            return None
-        else:
-            return str(state)
-    if schema is None and state is None:
+@dispatch
+def serialize(schema: Empty, state):
+    return NONE_SYMBOL
+
+
+@dispatch
+def serialize(schema: Boolean, state):
+    if state is None:
         return None
+    return 'true' if state else 'false'
+
+
+@dispatch
+def serialize(schema: NPRandom, state):
+    if state is None:
+        return None
+    if isinstance(state, RandomState):
+        return serialize(schema.state, state.get_state())
+    if isinstance(state, (list, tuple)):
+        return state
+    raise Exception(f'cannot serialize NPRandom state: {state}')
+
+
+@dispatch
+def serialize(schema: Complex, state):
     return str(state) if state is not None else None
 
 
-def _serialize_combine(schema, children, path):
-    """Assemble serialized children into the parent structure."""
-    if isinstance(schema, Tuple):
-        return list(children)
-    if isinstance(schema, Set):
-        return sorted(children, key=str)
-    if isinstance(children, list):
-        return children
-    return children
+@dispatch
+def serialize(schema: Number, state):
+    if state is None:
+        return None
+    # ndarray — delegate to Array serialize (schema was too narrow)
+    if isinstance(state, np.ndarray):
+        return serialize(Array(), state)
+    if hasattr(state, 'item'):
+        return state.item()
+    return state
 
 
-def _serialize_link(schema, state):
-    """Special-case serialization for Link type."""
+@dispatch
+def serialize(schema: String, state):
+    if state is None:
+        return None
+    return str(state)
+
+
+@dispatch
+def serialize(schema: Atom, state):
+    if state is None:
+        return None
+    return str(state)
+
+
+@dispatch
+def serialize(schema: Array, state):
+    if state is None:
+        return None
+    if isinstance(state, np.ndarray):
+        result = state.tolist()
+        # tolist() on structured arrays with sub-array fields
+        # (e.g. dtype containing (int32, (2,))) leaves sub-arrays
+        # as ndarrays inside tuples. Recursively convert them.
+        if (isinstance(result, list) and result
+                and isinstance(result[0], tuple)):
+            result = [
+                tuple(
+                    v.tolist() if isinstance(v, np.ndarray) else v
+                    for v in row)
+                for row in result]
+        return result
+    if isinstance(state, list):
+        return state
+    if isinstance(state, dict):
+        return state.get('data', state)
+    raise Exception(
+        f'serializing array:\n  {schema}\n'
+        f'but state is not an array?\n  {state}')
+
+
+@dispatch
+def serialize(schema: Frame, state):
+    if state is None:
+        return {}
+    return state.to_dict(orient="list")
+
+
+@dispatch
+def serialize(schema: Schema, state):
+    return render(state)
+
+
+@dispatch
+def serialize(schema: Link, state):
+    """Serialize a Link (process/step declaration)."""
+    if not isinstance(state, dict):
+        return state
+
     address = serialize(schema.address, state.get('address'))
     instance = state.get('instance')
     unconfig = state.get('config')
@@ -477,14 +515,12 @@ def _serialize_link(schema, state):
         config_schema = instance.core.access(instance.config_schema)
 
     config = serialize(config_schema, unconfig)
-    _inputs = schema._inputs
-    _outputs = schema._outputs
 
     encode = {
         'address': address,
         'config': config,
-        '_inputs': render(_inputs),
-        '_outputs': render(_outputs)}
+        '_inputs': render(schema._inputs),
+        '_outputs': render(schema._outputs)}
 
     if state.get('inputs'):
         encode['inputs'] = state.get('inputs')
@@ -494,38 +530,133 @@ def _serialize_link(schema, state):
         encode['interval'] = state.get('interval')
     if state.get('priority'):
         encode['priority'] = state.get('priority')
+    if state.get('_triggers'):
+        encode['_triggers'] = state.get('_triggers')
 
     return encode
 
 
-def serialize(schema, state):
-    """Serialize state according to schema.
+@dispatch
+def serialize(schema: Maybe, state):
+    if state is None:
+        return NONE_SYMBOL
+    return serialize(schema._value, state)
 
-    Uses walk for container recursion, with type-specific
-    leaf handling for atoms and special types (Link, Frame, etc).
-    """
-    # Handle Maybe None before walk
-    if isinstance(schema, Maybe):
-        if state is None:
-            return NONE_SYMBOL
-        return serialize(schema._value, state)
 
-    # Map needs special key serialization
-    if isinstance(schema, Map) and isinstance(state, dict):
-        return {
-            serialize(schema._key, key): serialize(schema._value, value)
-            for key, value in state.items()}
+@dispatch
+def serialize(schema: Overwrite, state):
+    return serialize(schema._value, state)
 
-    # Special types that walk shouldn't recurse into
-    if isinstance(schema, (Link, Frame, Array, NPRandom, Schema)):
-        return _serialize_leaf(schema, state, ())
 
-    # dict schema with non-dict state
-    if isinstance(schema, dict) and not isinstance(state, dict):
+@dispatch
+def serialize(schema: Wrap, state):
+    return serialize(schema._value, state)
+
+
+@dispatch
+def serialize(schema: Quote, state):
+    return serialize(schema._value, state)
+
+
+@dispatch
+def serialize(schema: Const, state):
+    return serialize(schema._value, state)
+
+
+@dispatch
+def serialize(schema: Map, state):
+    if not isinstance(state, dict):
         return {}
+    return {
+        serialize(schema._key, key): serialize(schema._value, value)
+        for key, value in state.items()}
 
-    if schema is None:
-        return _serialize_leaf(schema, state, ())
 
-    return _walk(schema, state, _serialize_leaf, _serialize_combine)
+@dispatch
+def serialize(schema: Tree, state):
+    if isinstance(state, dict):
+        if check(schema._leaf, state):
+            return serialize(schema._leaf, state)
+        return {
+            k: serialize(schema, v)
+            for k, v in state.items()}
+    return serialize(schema._leaf, state)
+
+
+@dispatch
+def serialize(schema: Tuple, state):
+    if state is None:
+        return None
+    if isinstance(state, (list, tuple)):
+        return [serialize(schema._element, v) for v in state]
+    return state
+
+
+@dispatch
+def serialize(schema: List, state):
+    if state is None:
+        return None
+    if isinstance(state, (list, tuple)):
+        return [serialize(schema._element, v) for v in state]
+    return state
+
+
+@dispatch
+def serialize(schema: Set, state):
+    if state is None:
+        return None
+    if isinstance(state, (set, frozenset, list)):
+        return sorted([serialize(schema._element, v) for v in state], key=str)
+    return state
+
+
+@dispatch
+def serialize(schema: Union, state):
+    # Try each variant — return the first that doesn't error
+    for variant in schema._variants:
+        try:
+            return serialize(variant, state)
+        except Exception:
+            continue
+    return str(state) if state is not None else None
+
+
+@dispatch
+def serialize(schema: Node, state):
+    """Serialize a Node by walking its typed dataclass fields."""
+    if state is None:
+        return None
+    if isinstance(state, dict):
+        result = {}
+        for key in schema.__dataclass_fields__:
+            if is_schema_field(schema, key) and key in state:
+                result[key] = serialize(getattr(schema, key), state[key])
+        return result
+    return str(state)
+
+
+@dispatch
+def serialize(schema: dict, state):
+    """Serialize a dict schema by walking matching keys."""
+    if not isinstance(state, dict):
+        return {}
+    result = {}
+    for k, v in schema.items():
+        if isinstance(k, str) and k.startswith('_'):
+            continue
+        if k in state:
+            result[k] = serialize(v, state[k])
+    return result
+
+
+@dispatch
+def serialize(schema, state):
+    """Fallback: try to serialize based on state type."""
+    if state is None:
+        return None
+    if isinstance(state, (str, int, float, bool)):
+        return state
+    if hasattr(state, 'item'):
+        return state.item()
+    return str(state)
 

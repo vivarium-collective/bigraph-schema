@@ -132,6 +132,11 @@ def walk(schema, state, leaf_fn, combine_fn=None, path=()):
             children[k] = walk(v, state.get(k), leaf_fn, combine_fn, path + (k,))
         return _combine(schema, children, path)
 
+    # Links are opaque — serialize/realize handle them as a unit
+    # (config serialization needs access to the instance's config_schema)
+    if isinstance(schema, Link):
+        return leaf_fn(schema, state, path)
+
     # Structured Node with named fields
     if isinstance(schema, Node) and not isinstance(schema, Atom):
         fields = {
