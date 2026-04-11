@@ -439,9 +439,6 @@ def serialize(schema: Complex, state):
 def serialize(schema: Number, state):
     if state is None:
         return None
-    # ndarray — delegate to Array serialize (schema was too narrow)
-    if isinstance(state, np.ndarray):
-        return serialize(Array(), state)
     if hasattr(state, 'item'):
         return state.item()
     return state
