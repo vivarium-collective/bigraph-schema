@@ -36,6 +36,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    Object,
     schema_dtype,
     is_schema_field,
 )
@@ -165,6 +166,21 @@ def align_parameters(schema: Node, parameters):
     for key, parameter in zip(keys, parameters):
         align[key] = parameter
     return align
+
+@dispatch
+def align_parameters(schema: Object, parameters):
+    """object[module.path.ClassName] — single parameter is the class path."""
+    if len(parameters) == 1:
+        return {'_class': parameters[0]}
+    return {}
+
+@dispatch
+def reify_schema(core, schema: Object, parameters):
+    if '_class' in parameters:
+        cls_param = parameters['_class']
+        if isinstance(cls_param, str):
+            schema._class = cls_param
+    return schema
 
 @dispatch
 def align_parameters(schema, parameters):

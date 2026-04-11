@@ -25,6 +25,7 @@ from bigraph_schema.schema import (
     Maybe,
     Overwrite,
     List,
+    Set,
     Map,
     Tree,
     Array,
@@ -157,10 +158,15 @@ def infer(core, value: NoneType, path: tuple = ()):
 
 @dispatch
 def infer(core, value: set, path: tuple = ()):
-    return infer(
-        core,
-        list(value),
-        path)
+    if not value:
+        return Set(), []
+    # Infer element type from first element
+    sample = next(iter(value))
+    element_schema, merges = infer(core, sample, path)
+    if isinstance(element_schema, Node):
+        from dataclasses import replace as _replace
+        element_schema = _replace(element_schema, **{'_default': None})
+    return set_default(Set(_element=element_schema), value), merges
 
 
 def separate_keys(d):
@@ -191,7 +197,7 @@ def infer(core, value: dict, path: tuple = ()):
 
     else:
         subvalues = {}
-        distinct_subvalues = []
+        distinct_types = []
         merges = []
 
         for key, subvalue in value.items():
@@ -201,12 +207,26 @@ def infer(core, value: dict, path: tuple = ()):
                 path+(key,))
             merges += submerges
 
-            if len(distinct_subvalues) < 2 and subvalues[key] not in distinct_subvalues:
-                distinct_subvalues.append(
-                    subvalues[key])
+            # Compare types ignoring defaults — Float(_default=1.5)
+            # and Float(_default=2.0) are the same type for Map purposes
+            inferred = subvalues[key]
+            if isinstance(inferred, Node):
+                type_sig = type(inferred)
+            else:
+                type_sig = type(inferred)
 
-        if len(distinct_subvalues) == 1 and len(subvalues) > 1:
-            map_value = distinct_subvalues[0]
+            if len(distinct_types) < 2 and type_sig not in distinct_types:
+                distinct_types.append(type_sig)
+
+        if len(distinct_types) == 1 and len(subvalues) >= 1:
+            # All values are the same type — use Map
+            first_schema = next(iter(subvalues.values()))
+            # Strip the per-value default to get the clean type
+            if isinstance(first_schema, Node):
+                from dataclasses import replace as _replace
+                map_value = _replace(first_schema, **{'_default': None})
+            else:
+                map_value = first_schema
             schema = Map(_value=map_value)
             return set_default(schema, value), merges
         else:

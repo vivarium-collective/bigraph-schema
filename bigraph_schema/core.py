@@ -181,8 +181,15 @@ class CoreVisitor(NodeVisitor):
         return group_value if isinstance(group_value, (list, tuple, dict, Tuple)) else (group_value,)
 
     def visit_nest(self, node, visit):
-        """Handle `key:subtype` pairs (used in trees/maps)."""
-        return {visit[0]: visit[2]}
+        """Handle `key:subtype` pairs (used in trees/maps).
+
+        The left side of the colon is a dict key — always a plain string,
+        not a resolved type.  We use the raw text from the parse node
+        rather than the visited (type-resolved) value, since key names
+        like ``process`` may collide with registered type names.
+        """
+        key = node.children[0].text
+        return {key: visit[2]}
 
     def visit_type_name(self, node, visit):
         """Resolve base type, parameters, and defaults into schema nodes."""

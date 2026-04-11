@@ -44,6 +44,7 @@ from bigraph_schema.schema import (
     LocalProtocol,
     Schema,
     Link,
+    Object,
     is_schema_field,
 )
 
@@ -304,6 +305,19 @@ def realize(core, schema: Set, encode, path=()):
         return schema, None, []
 
 @dispatch
+def _realize_map_key(core, key_schema, key_str):
+    """Realize a map key from its serialized string form.
+
+    Inverts ``_serialize_map_key``: passes the string through
+    ``realize(key_schema, key_str)`` which knows how to convert
+    ``'42'`` → ``42`` for Integer, ``'[0, "minimal"]'`` → ``(0, 'minimal')``
+    for Tuple, etc.
+    """
+    _, realized_key, _ = realize(core, key_schema, key_str, path=())
+    return realized_key
+
+
+@dispatch
 def realize(core, schema: Map, encode, path=()):
     if encode is None:
         encode = default(schema)
@@ -321,9 +335,10 @@ def realize(core, schema: Map, encode, path=()):
             if isinstance(key, str) and key.startswith('_'):
                 continue
             else:
+                realized_key = _realize_map_key(core, schema._key, key)
                 subschema, substate, submerges = realize(core, schema._value, value, path+(key,))
                 value_schemas.append(subschema)
-                decode[key] = substate
+                decode[realized_key] = substate
                 merges += submerges
 
         if value_schemas:
@@ -674,6 +689,63 @@ def realize(core, schema: None, encode, path=()):
         infer_schema, merges = core.infer_merges(
             encode, path=path)
         return infer_schema, encode, merges
+
+@dispatch
+def realize(core, schema: Object, encode, path=()):
+    """Realize a Python object from its serialized form.
+
+    The serialized form is::
+
+        {"_class": "module.Class",
+         "_schema": {"field": "type_string", ...},
+         "fields": {"field": serialized_value, ...}}
+
+    Imports the class, creates a blank instance via ``__new__``,
+    realizes each field through its schema, then sets ``__dict__``.
+    """
+    # Already an instance of the target class
+    if encode is not None and not isinstance(encode, dict):
+        return schema, encode, []
+
+    if encode is None:
+        return schema, None, []
+
+    class_path = encode.get('_class') or schema._class
+    field_schemas = encode.get('_schema', {})
+    fields = encode.get('fields', {})
+
+    if not class_path:
+        return schema, encode, []
+
+    # Import the class
+    import importlib
+    module_path, class_name = class_path.rsplit('.', 1)
+    mod = importlib.import_module(module_path)
+    cls = getattr(mod, class_name)
+
+    # Create blank instance (bypasses __init__)
+    instance = cls.__new__(cls)
+
+    # Realize each field through its schema
+    all_merges = []
+    realized_dict = {}
+    for key, value in fields.items():
+        if key in field_schemas:
+            field_schema = core.access(field_schemas[key])
+            _, realized_value, merges = realize(
+                core, field_schema, value, path + (key,))
+            all_merges += merges
+        else:
+            realized_value = value
+        realized_dict[key] = realized_value
+
+    instance.__dict__ = realized_dict
+
+    # Update schema with inferred class and schema info
+    schema = Object(_class=class_path, _schema=field_schemas)
+
+    return schema, instance, all_merges
+
 
 @dispatch
 def realize(core, schema: dict, encode, path=()):

@@ -60,6 +60,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    Object,
     is_schema_field,
 )
 from bigraph_schema.methods.serialize import serialize, render
@@ -254,8 +255,9 @@ def bundle(schema: Const, state, context: Optional[BundleContext] = None):
 def bundle(schema: Map, state, context: Optional[BundleContext] = None):
     if not isinstance(state, dict):
         return {}
+    from bigraph_schema.methods.serialize import _serialize_map_key
     return {
-        serialize(schema._key, k): bundle(schema._value, v, context)
+        _serialize_map_key(schema._key, k): bundle(schema._value, v, context)
         for k, v in state.items()}
 
 
@@ -351,6 +353,43 @@ def bundle(schema: Link, state, context: Optional[BundleContext] = None):
         encode['_triggers'] = state.get('_triggers')
 
     return encode
+
+
+# ---------------------------------------------------------------------------
+# Object — serialize Python objects via __dict__ with inferred schemas
+# ---------------------------------------------------------------------------
+
+@dispatch
+def bundle(schema: Object, state, context: Optional[BundleContext] = None):
+    """Bundle a Python object by walking its ``__dict__``.
+
+    Infers a schema for each field, bundles the value (arrays go to
+    parquet), and produces the serialized form with embedded schemas.
+    """
+    if state is None:
+        return None
+    if isinstance(state, dict):
+        return state
+
+    from bigraph_schema.methods.infer import infer
+    from bigraph_schema.methods.serialize import render
+
+    cls = type(state)
+    class_path = f'{cls.__module__}.{cls.__name__}'
+    obj_dict = state.__dict__
+
+    field_schemas = {}
+    field_values = {}
+    for key, value in obj_dict.items():
+        inferred_schema, _ = infer(None, value)
+        field_schemas[key] = render(inferred_schema)
+        field_values[key] = bundle(inferred_schema, value, context)
+
+    return {
+        '_class': class_path,
+        '_schema': field_schemas,
+        'fields': field_values,
+    }
 
 
 # ---------------------------------------------------------------------------

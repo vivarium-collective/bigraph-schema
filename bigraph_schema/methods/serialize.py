@@ -36,6 +36,7 @@ from bigraph_schema.schema import (
     Wires,
     Schema,
     Link,
+    Object,
     dtype_schema,
     is_schema_field,
 )
@@ -608,12 +609,25 @@ def serialize(schema: Const, state):
     return serialize(schema._value, state)
 
 
+def _serialize_map_key(schema, key):
+    """Serialize a map key to a JSON-compatible string.
+
+    JSON only supports string keys, so all keys are serialized through
+    the schema and then converted to ``str``.  On load, ``realize``
+    reverses this — e.g. ``realize(Integer, '42')`` → ``42``.
+    """
+    serialized = serialize(schema, key)
+    if isinstance(serialized, str):
+        return serialized
+    return str(serialized)
+
+
 @dispatch
 def serialize(schema: Map, state):
     if not isinstance(state, dict):
         return {}
     return {
-        serialize(schema._key, key): serialize(schema._value, value)
+        _serialize_map_key(schema._key, key): serialize(schema._value, value)
         for key, value in state.items()}
 
 
@@ -642,7 +656,7 @@ def serialize(schema: Tuple, state):
 def serialize(schema: List, state):
     if state is None:
         return None
-    if isinstance(state, (list, tuple)):
+    if isinstance(state, (list, tuple, set, frozenset)):
         return [serialize(schema._element, v) for v in state]
     return state
 
@@ -693,6 +707,50 @@ def serialize(schema: dict, state):
         if k in state:
             result[k] = serialize(v, state[k])
     return result
+
+
+@dispatch
+def render(schema: Object, defaults=False):
+    if schema._class:
+        result = f'object[{schema._class}]'
+    else:
+        result = 'object'
+    return wrap_default(schema, result) if defaults else result
+
+
+@dispatch
+def serialize(schema: Object, state):
+    """Serialize a Python object by walking its ``__dict__``.
+
+    Produces ``{"_class": "...", "_schema": {...}, "fields": {...}}``
+    where ``_schema`` maps field names to their rendered type strings
+    and ``fields`` contains the serialized values.
+    """
+    if state is None:
+        return None
+    if isinstance(state, dict):
+        # Already serialized form
+        return state
+
+    from bigraph_schema.methods.infer import infer
+
+    cls = type(state)
+    class_path = f'{cls.__module__}.{cls.__name__}'
+    obj_dict = state.__dict__
+
+    field_schemas = {}
+    field_values = {}
+    for key, value in obj_dict.items():
+        # Infer schema for each field
+        inferred_schema, _ = infer(None, value)
+        field_schemas[key] = render(inferred_schema)
+        field_values[key] = serialize(inferred_schema, value)
+
+    return {
+        '_class': class_path,
+        '_schema': field_schemas,
+        'fields': field_values,
+    }
 
 
 @dispatch

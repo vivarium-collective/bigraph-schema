@@ -435,6 +435,33 @@ class Quote(Wrap):
     pass
 
 
+@dataclass(kw_only=True)
+class Object(Node):
+    """Serializable Python object — reconstructed from its ``__dict__``.
+
+    Type parameters:
+        _class: Fully qualified class name (e.g.
+            ``reconstruction.ecoli.dataclasses.process.metabolism.Metabolism``)
+        _schema: Dict mapping field names to their schema types.  Determined
+            at save time from ``infer()`` on each field of ``__dict__``.
+
+    Serialize/bundle walks ``__dict__`` using ``_schema`` to serialize each
+    field.  Realize imports the class, creates a blank instance via
+    ``__new__``, then sets ``__dict__`` from the realized fields.
+
+    Usage::
+
+        object[reconstruction.ecoli.dataclasses.process.metabolism.Metabolism]
+
+    The ``_schema`` is populated at infer/serialize time and stored in the
+    document alongside the data, so realize knows exactly how to
+    reconstruct every field.
+    """
+    _schema_keys = Node._schema_keys | frozenset({'_class', '_schema'})
+    _class: str = ''
+    _schema: typing.Dict = field(default_factory=dict)
+
+
 BASE_TYPES = {
     'node': Node,
     'atom': Atom,
@@ -472,6 +499,7 @@ BASE_TYPES = {
     'local': LocalProtocol,
     'schema': Schema,
     'link': Link,
-    'quote': Quote}
+    'quote': Quote,
+    'object': Object}
 
 
