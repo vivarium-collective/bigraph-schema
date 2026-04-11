@@ -97,7 +97,9 @@ from bigraph_schema.methods import (
     jump,
     traverse,
     apply,
-    reconcile)
+    reconcile,
+    bundle,
+    BundleContext)
 
 from bigraph_schema.package import discover_packages
 
@@ -584,6 +586,22 @@ class Core:
         """
         found = self.access(schema)
         return serialize(found, state)
+
+    def bundle(self, schema, state, context=None):
+        """Serialize state to a bundle — large arrays go to Parquet files.
+
+        Like ``serialize`` but dispatches through the ``bundle`` method,
+        which writes large arrays directly to Parquet instead of
+        converting them to Python lists. Small values stay inline.
+
+        Args:
+            schema: The schema to serialize against.
+            state: The state to serialize.
+            context: A ``BundleContext`` with the output directory and
+                dedup map. If *None*, behaves like ``serialize``.
+        """
+        found = self.access(schema)
+        return bundle(found, state, context)
 
     def realize(self, schema, state, path=()):
         """Convert an encoded representation back into structured Python values.

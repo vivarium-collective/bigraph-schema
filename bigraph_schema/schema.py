@@ -72,14 +72,26 @@ class Xor(Boolean):
 
 @dataclass(kw_only=True)
 class Number(Atom):
-    """Numeric types may carry an optional pint-parseable unit string.
+    """Numeric types with optional precision and unit annotations.
 
-    Empty string means "no unit declared" (accept anything). Non-empty
-    means a specific unit; wires between Numbers with different units
-    are auto-scaled at wire-build time so runtime apply stays unit-blind.
+    Parameters:
+        _bits: Bit width (8, 16, 32, 64, 128). 0 means language default
+            (Python arbitrary-precision int / 64-bit float).
+        _units: Pint-parseable unit string. Empty means "no unit declared".
+
+    Schema syntax::
+
+        integer          # Python int (arbitrary precision)
+        integer[64]      # numpy int64
+        integer[8]       # numpy int8
+        float            # Python float (64-bit)
+        float[32]        # numpy float32
+        float[64,fg]     # numpy float64, femtograms
+        float[fg]        # Python float, femtograms (backward compatible)
     """
-    _schema_keys = Atom._schema_keys | frozenset({'_units'})
+    _schema_keys = Atom._schema_keys | frozenset({'_units', '_bits'})
     _units: str = ''
+    _bits: int = 0
 
 @dataclass(kw_only=True)
 class Integer(Number):

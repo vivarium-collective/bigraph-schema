@@ -130,12 +130,28 @@ def align_parameters(schema: Range, parameters):
         '_min': parameters[0],
         '_max': parameters[1]}
 
+_VALID_BITS = {'8', '16', '32', '64', '128'}
+
 @dispatch
 def align_parameters(schema: Number, parameters):
-    """float[fg] or integer[count] — single parameter is the unit string."""
-    if len(parameters) == 1:
-        return {'_units': parameters[0]}
-    return {}
+    """Parse numeric type parameters: bits and/or units.
+
+    Examples::
+
+        integer[64]      → _bits=64
+        float[32]        → _bits=32
+        float[fg]        → _units='fg'
+        float[64,fg]     → _bits=64, _units='fg'
+    """
+    result = {}
+    for p in parameters:
+        if isinstance(p, str) and p in _VALID_BITS:
+            result['_bits'] = p
+        elif isinstance(p, (int, float)) and str(int(p)) in _VALID_BITS:
+            result['_bits'] = str(int(p))
+        else:
+            result['_units'] = p
+    return result
 
 @dispatch
 def align_parameters(schema: Set, parameters):
@@ -164,7 +180,10 @@ def reify_schema(core, schema: Range, parameters):
 
 @dispatch
 def reify_schema(core, schema: Number, parameters):
-    """Set the unit string verbatim — units are stored, not resolved as types."""
+    """Set bit width and/or unit string on a Number schema."""
+    if '_bits' in parameters:
+        bits_param = parameters['_bits']
+        schema._bits = int(bits_param) if isinstance(bits_param, str) else bits_param
     if '_units' in parameters:
         units_param = parameters['_units']
         if isinstance(units_param, str):

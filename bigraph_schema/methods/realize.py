@@ -167,6 +167,10 @@ def realize(core, schema: Boolean, encode, path=()):
     else:
         return schema, encode, []
         
+_INT_DTYPES = {8: np.int8, 16: np.int16, 32: np.int32, 64: np.int64}
+_FLOAT_DTYPES = {16: np.float16, 32: np.float32, 64: np.float64}
+_COMPLEX_DTYPES = {64: np.complex64, 128: np.complex128}
+
 @dispatch
 def realize(core, schema: Integer, encode, path=()):
     if encode is None:
@@ -176,7 +180,11 @@ def realize(core, schema: Integer, encode, path=()):
         return realize_default(core, schema, encode, path=path)
 
     try:
-        result = int(encode)
+        bits = getattr(schema, '_bits', 0)
+        if bits and bits in _INT_DTYPES:
+            result = _INT_DTYPES[bits](encode)
+        else:
+            result = int(encode)
         return schema, result, []
     except Exception:
         return schema, None, []
@@ -190,7 +198,11 @@ def realize(core, schema: Float, encode, path=()):
         return realize_default(core, schema, encode, path=path)
     else:
         try:
-            result = float(encode)
+            bits = getattr(schema, '_bits', 0)
+            if bits and bits in _FLOAT_DTYPES:
+                result = _FLOAT_DTYPES[bits](encode)
+            else:
+                result = float(encode)
             return schema, result, []
         except Exception:
             return schema, None, []
@@ -204,7 +216,11 @@ def realize(core, schema: Complex, encode, path=()):
         return realize_default(core, schema, encode, path=path)
     else:
         try:
-            result = complex(encode)
+            bits = getattr(schema, '_bits', 0)
+            if bits and bits in _COMPLEX_DTYPES:
+                result = _COMPLEX_DTYPES[bits](encode)
+            else:
+                result = complex(encode)
             return schema, result, []
         except Exception:
             return schema, None, []

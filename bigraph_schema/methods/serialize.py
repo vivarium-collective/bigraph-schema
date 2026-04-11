@@ -155,35 +155,39 @@ def render(schema: Boolean, defaults=False):
     result = 'boolean'
     return wrap_default(schema, result) if defaults else result
 
+def _render_number(name, schema, defaults=False):
+    """Render a numeric type with optional [bits] and [bits,units] parameters."""
+    parts = []
+    if schema._bits:
+        parts.append(str(schema._bits))
+    if schema._units:
+        parts.append(schema._units)
+    result = f'{name}[{",".join(parts)}]' if parts else name
+    return wrap_default(schema, result) if defaults else result
+
 @dispatch
 def render(schema: Integer, defaults=False):
-    result = 'integer'
-    return wrap_default(schema, result) if defaults else result
+    return _render_number('integer', schema, defaults)
 
 @dispatch
 def render(schema: Delta, defaults=False):
-    result = 'delta'
-    return wrap_default(schema, result) if defaults else result
+    return _render_number('delta', schema, defaults)
 
 @dispatch
 def render(schema: Nonnegative, defaults=False):
-    result = 'nonnegative'
-    return wrap_default(schema, result) if defaults else result
+    return _render_number('nonnegative', schema, defaults)
 
 @dispatch
 def render(schema: Float, defaults=False):
-    result = 'float'
-    return wrap_default(schema, result) if defaults else result
+    return _render_number('float', schema, defaults)
 
 @dispatch
 def render(schema: Complex, defaults=False):
-    result = 'complex'
-    return wrap_default(schema, result) if defaults else result
+    return _render_number('complex', schema, defaults)
 
 @dispatch
 def render(schema: Number, defaults=False):
-    result = 'number'
-    return wrap_default(schema, result) if defaults else result
+    return _render_number('number', schema, defaults)
 
 @dispatch
 def render(schema: Range, defaults=False):
@@ -439,9 +443,53 @@ def serialize(schema: Complex, state):
 def serialize(schema: Number, state):
     if state is None:
         return None
-    if hasattr(state, 'item'):
-        return state.item()
     return state
+
+
+@dispatch
+def serialize(schema: Integer, state: np.integer):
+    """numpy integer scalar → Python int."""
+    return int(state)
+
+
+@dispatch
+def serialize(schema: Float, state: np.floating):
+    """numpy float scalar → Python float."""
+    return float(state)
+
+
+@dispatch
+def serialize(schema: Number, state: np.integer):
+    return int(state)
+
+
+@dispatch
+def serialize(schema: Number, state: np.floating):
+    return float(state)
+
+
+@dispatch
+def serialize(schema: String, state: np.integer):
+    """numpy int used as map key with String schema."""
+    return str(int(state))
+
+
+@dispatch
+def serialize(schema: String, state: np.floating):
+    """numpy float used as map key with String schema."""
+    return str(float(state))
+
+
+@dispatch
+def serialize(schema: Atom, state: np.integer):
+    """numpy integer with generic Atom schema."""
+    return int(state)
+
+
+@dispatch
+def serialize(schema: Atom, state: np.floating):
+    """numpy float with generic Atom schema."""
+    return float(state)
 
 
 @dispatch
@@ -585,7 +633,8 @@ def serialize(schema: Tuple, state):
     if state is None:
         return None
     if isinstance(state, (list, tuple)):
-        return [serialize(schema._element, v) for v in state]
+        # Fixed-length: per-element schemas in _values
+        return [serialize(s, v) for s, v in zip(schema._values, state)]
     return state
 
 

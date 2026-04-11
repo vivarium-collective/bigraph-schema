@@ -62,10 +62,13 @@ def set_default(schema, value):
 
 @dispatch
 def infer(core,
-          value: (int | np.int32 | np.int64 |
+          value: (int | np.int8 | np.int16 | np.int32 | np.int64 |
                   np.dtypes.Int32DType | np.dtypes.Int64DType),
           path: tuple = ()):
-    schema = Integer()
+    bits = 0
+    if isinstance(value, np.integer):
+        bits = value.dtype.itemsize * 8
+    schema = Integer(_bits=bits)
     return set_default(schema, value), []
 
 @dispatch
@@ -75,15 +78,21 @@ def infer(core, value: bool, path: tuple = ()):
 
 @dispatch
 def infer(core,
-          value: (float | np.float32 | np.float64 |
+          value: (float | np.float16 | np.float32 | np.float64 |
                   np.dtypes.Float32DType | np.dtypes.Float64DType),
           path: tuple = ()):
-    schema = Float()
+    bits = 0
+    if isinstance(value, np.floating):
+        bits = value.dtype.itemsize * 8
+    schema = Float(_bits=bits)
     return set_default(schema, value), []
 
 @dispatch
 def infer(core, value: complex, path: tuple = ()):
-    schema = Complex()
+    bits = 0
+    if isinstance(value, np.complexfloating):
+        bits = value.dtype.itemsize * 8
+    schema = Complex(_bits=bits)
     return set_default(schema, value), []
 
 @dispatch
