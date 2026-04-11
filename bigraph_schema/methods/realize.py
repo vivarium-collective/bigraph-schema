@@ -1,4 +1,3 @@
-from ast import literal_eval
 from pprint import pformat as pf
 from plum import dispatch
 import numpy as np
@@ -45,6 +44,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     Object,
+    Dtype,
     is_schema_field,
 )
 
@@ -126,9 +126,6 @@ def realize(core, schema: Union, encode, path=()):
 @dispatch
 def realize(core, schema: Tuple, encode, path=()):
     merges = []
-
-    if isinstance(encode, str):
-        encode = literal_eval(encode)
 
     if isinstance(encode, (list, tuple)):
         subvalues = []
@@ -242,6 +239,18 @@ def realize(core, schema: Range, encode, path=()):
             return schema, None, []
 
 @dispatch
+def realize(core, schema: Dtype, encode, path=()):
+    """Realize a numpy dtype from its string representation."""
+    if isinstance(encode, np.dtype):
+        return schema, encode, []
+    if encode is None:
+        return schema, None, []
+    try:
+        return schema, np.dtype(encode), []
+    except Exception:
+        return schema, encode, []
+
+@dispatch
 def realize(core, schema: String, encode, path=()):
     if isinstance(encode, dict):
         return realize_default(core, schema, encode, path=path)
@@ -274,9 +283,6 @@ def realize(core, schema: NPRandom, encode, path=()):
 def realize(core, schema: List, encode, path=()):
     decode = []
     merges = []
-
-    if isinstance(encode, str):
-        encode = literal_eval(encode)
 
     if isinstance(encode, (list, tuple)):
         for index, element in enumerate(encode):
@@ -322,9 +328,6 @@ def realize(core, schema: Map, encode, path=()):
     if encode is None:
         encode = default(schema)
 
-    if isinstance(encode, str):
-        encode = literal_eval(encode)
-
     if isinstance(encode, dict):
         decode = {}
         merges = []
@@ -358,12 +361,6 @@ def realize(core, schema: Map, encode, path=()):
 def realize(core, schema: Tree, encode, path=()):
     decode = {}
 
-    if isinstance(encode, str):
-        try:
-            encode = literal_eval(encode)
-        except:
-            pass
-
     leaf_schema, leaf_state, merges = realize(core, schema._leaf, encode)
     if leaf_state is not None:
         return leaf_schema, leaf_state, merges
@@ -395,6 +392,12 @@ def realize(core, schema: Array, encode, path=()):
         return schema, encode, []
     elif isinstance(encode, dict):
         encode = dict_values(encode)
+
+    # Structured dtypes (named fields) need tuples, not lists
+    if (isinstance(schema._data, np.dtype) and schema._data.names
+            and isinstance(encode, list) and encode
+            and isinstance(encode[0], list)):
+        encode = [tuple(row) for row in encode]
 
     state = np.array(
         encode,
@@ -521,13 +524,7 @@ def realize_link(core, schema: Link, encode, path=()):
         encode_config = encode.get('config', {})
 
         if config_schema:
-            try:
-                _, decode_config = core.realize(config_schema, encode_config)
-                config = core.fill(config_schema, decode_config)
-            except Exception:
-                # Complex configs (sim_data references, CSR matrices,
-                # numpy arrays) may fail realize/fill. Pass through.
-                config = encode_config
+            _, config = core.realize(config_schema, encode_config)
         else:
             config = encode_config
 
@@ -633,10 +630,7 @@ def realize(core, schema: Link, encode, path=()):
 @dispatch
 def realize(core, schema: Node, encode, path=()):
     if isinstance(encode, str):
-        try:
-            encode = literal_eval(encode)
-        except Exception as e:
-            return schema, encode, []
+        return schema, encode, []
 
     result = {}
     merges = []
@@ -753,10 +747,7 @@ def realize(core, schema: dict, encode, path=()):
         encode = default(schema)
 
     if isinstance(encode, str):
-        try:
-            encode = literal_eval(encode)
-        except Exception as e:
-            return schema, encode, []
+        return schema, encode, []
 
     result_schema = {}
     result_state = {}

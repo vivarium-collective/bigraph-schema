@@ -63,8 +63,7 @@ def set_default(schema, value):
 
 @dispatch
 def infer(core,
-          value: (int | np.int8 | np.int16 | np.int32 | np.int64 |
-                  np.dtypes.Int32DType | np.dtypes.Int64DType),
+          value: (int | np.int8 | np.int16 | np.int32 | np.int64),
           path: tuple = ()):
     bits = 0
     if isinstance(value, np.integer):
@@ -79,8 +78,7 @@ def infer(core, value: bool, path: tuple = ()):
 
 @dispatch
 def infer(core,
-          value: (float | np.float16 | np.float32 | np.float64 |
-                  np.dtypes.Float32DType | np.dtypes.Float64DType),
+          value: (float | np.float16 | np.float32 | np.float64),
           path: tuple = ()):
     bits = 0
     if isinstance(value, np.floating):
@@ -102,10 +100,17 @@ def infer(core, value: str, path: tuple = ()):
     return set_default(schema, value), []
 
 @dispatch
+def infer(core, value: np.dtype, path: tuple = ()):
+    """numpy dtype — infer as the 'dtype' type."""
+    from bigraph_schema.schema import Dtype
+    schema = Dtype()
+    return set_default(schema, value), []
+
+@dispatch
 def infer(core, value: np.ndarray, path: tuple = ()):
     schema = Array(
         _shape=value.shape,
-        _data=value.dtype) # Dtype(_fields=value.dtype))
+        _data=value.dtype)
 
     return set_default(schema, value), []
 
@@ -235,6 +240,9 @@ def infer(core, value: dict, path: tuple = ()):
 
 @dispatch
 def infer(core, value: object, path: tuple = ()):
+    from bigraph_schema.schema import Object
+    from bigraph_schema.methods.serialize import render
+
     # If the object looks like a process/step instance (has ports_schema,
     # next_update, update, etc.), treat it as opaque to avoid walking
     # into expensive simData internals.
@@ -248,31 +256,38 @@ def infer(core, value: object, path: tuple = ()):
         schema = Quote(_value=Node())
         return set_default(schema, value), []
 
+    cls = type(value)
+    class_path = f'{cls.__module__}.{cls.__name__}'
     value_keys = value.__dict__.keys()
-    value_schema = {}
+    field_schemas = {}
 
     merges = []
 
     for key in value_keys:
-        if not key.startswith('_'):
-            try:
-                value_schema[key], submerges = infer(
-                    core,
-                    getattr(value, key),
-                    path + (key,))
-                merges += submerges
+        try:
+            field_schemas[key], submerges = infer(
+                core,
+                getattr(value, key),
+                path + (key,))
+            merges += submerges
 
-            except Exception as e:
-                traceback.print_exc()
-                print(e)
+        except Exception as e:
+            traceback.print_exc()
+            print(e)
 
-                if type_name not in MISSING_TYPES:
-                    MISSING_TYPES[type_name] = set([])
+            if type_name not in MISSING_TYPES:
+                MISSING_TYPES[type_name] = set([])
 
-                MISSING_TYPES[type_name].add(
-                    path)
+            MISSING_TYPES[type_name].add(
+                path)
 
-                value_schema[key] = Node()
+            field_schemas[key] = Node()
 
-    return value_schema, merges
+    # Render each field schema to a string for the _schema dict
+    rendered_schemas = {}
+    for key, fs in field_schemas.items():
+        rendered_schemas[key] = render(fs)
+
+    schema = Object(_class=class_path, _schema=rendered_schemas)
+    return set_default(schema, value), merges
 

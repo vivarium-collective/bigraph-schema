@@ -37,6 +37,7 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     Object,
+    Dtype,
     dtype_schema,
     is_schema_field,
 )
@@ -269,6 +270,22 @@ def render(schema: NPRandom, defaults=False):
 
 
 @dispatch
+def render(schema: Dtype, defaults=False):
+    result = 'dtype'
+    return wrap_default(schema, result) if defaults else result
+
+
+@dispatch
+def serialize(schema: Dtype, state):
+    """Serialize a numpy dtype as its string representation."""
+    if state is None:
+        return None
+    if isinstance(state, np.dtype):
+        return str(state)
+    return str(state)
+
+
+@dispatch
 def render(schema: np.dtype, defaults=False):
     dtype = dtype_schema(schema)
     return render(dtype, defaults=defaults)
@@ -355,23 +372,34 @@ def render(schema: np.str_, defaults=False):
 
 @dispatch
 def render(schema: Node, defaults=False):
-    subrender = {}
-
-    # Emit _type for registered Node subclasses so roundtrip works
     type_name = _node_type_name(type(schema))
+
+    # Collect schema fields that have non-default values
+    field_renders = {}
+    for key in schema.__dataclass_fields__:
+        if not is_schema_field(schema, key):
+            continue
+        value = getattr(schema, key)
+        field_renders[key] = render(value, defaults=defaults)
+
+    has_default = schema._default is not None if hasattr(schema, '_default') else False
+
+    # If this is a known type with no additional fields, just return
+    # the type name string — access() can reconstruct it.
+    if type_name and not field_renders and not (defaults and has_default):
+        return wrap_default(schema, type_name) if defaults else type_name
+
+    # Otherwise build a dict with _type + fields
+    subrender = {}
     if type_name:
         subrender['_type'] = type_name
 
-    for key in schema.__dataclass_fields__:
-        if not is_schema_field(schema, key):
-            if key == '_default':
-                value = getattr(schema, key)
-                default_render = serialize(schema, value)
-                if default_render:
-                    subrender['_default'] = default_render
-            continue
-        value = getattr(schema, key)
-        subrender[key] = render(value, defaults=defaults)
+    if defaults and has_default:
+        default_render = serialize(schema, schema._default)
+        if default_render:
+            subrender['_default'] = default_render
+
+    subrender.update(field_renders)
 
     return wrap_default(schema, subrender) if defaults else subrender
 

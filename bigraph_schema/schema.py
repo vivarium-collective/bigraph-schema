@@ -114,6 +114,13 @@ class Nonnegative(Float):
     pass
 
 @dataclass(kw_only=True)
+class Dtype(Atom):
+    """Numpy dtype descriptor.  Serializes as its string form
+    (e.g. ``'float64'``, ``'[(\\'x\\', \\'<f8\\'), (\\'y\\', \\'<i4\\')]'``).
+    Realize reconstructs the ``np.dtype`` from that string."""
+    pass
+
+@dataclass(kw_only=True)
 class Range(Float):
     """Bounded float with min/max constraints."""
     _schema_keys = Float._schema_keys | frozenset({'_min', '_max'})
@@ -331,6 +338,8 @@ def dtype_schema(dtype: np.dtype):
             return Integer()
         elif 'F' in data or 'D' in data:
             return Complex()
+        elif 'O' in data or 'V' in data:
+            return Node()  # object dtype — heterogeneous elements
         else:
             raise Exception(f'unknown dtype {data}')
 
@@ -379,6 +388,10 @@ def schema_dtype(schema: Boolean):
 @dispatch
 def schema_dtype(schema: String):
     return np.dtype('unicode')
+
+@dispatch
+def schema_dtype(schema: Node):
+    return np.dtype('object')
 
 @dispatch
 def schema_dtype(schema: Array):
@@ -500,6 +513,7 @@ BASE_TYPES = {
     'schema': Schema,
     'link': Link,
     'quote': Quote,
-    'object': Object}
+    'object': Object,
+    'dtype': Dtype}
 
 
