@@ -287,7 +287,11 @@ def realize(core, schema: NPRandom, encode, path=()):
         return schema, RandomState(), []
 
     # Restore from a valid state dict
-    _, state, _ = realize(core, schema.state, encode.get('state', encode) if isinstance(encode, dict) else encode)
+    raw = encode.get('state', encode) if isinstance(encode, dict) else encode
+    _, state, _ = realize(core, schema.state, raw)
+    if not isinstance(state, (dict, tuple)):
+        print(f'NPRandom realize: path={path}, state type={type(state).__name__}, encode type={type(encode).__name__}', flush=True)
+        return schema, RandomState(), []
     random = RandomState()
     random.set_state(state)
     return schema, random, []
