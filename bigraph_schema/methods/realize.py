@@ -842,6 +842,10 @@ def realize(core, schema: dict, encode, path=()):
 
         for key, subschema in schema.items():
             if is_schema_field(schema, key):
+                # Compile string schemas (e.g. 'bulk_array') into
+                # Node objects so realize dispatches correctly.
+                if isinstance(subschema, str):
+                    subschema = core.access(subschema)
                 if key in encode:
                     outcome_schema, outcome_state, submerges = realize(
                         core,
