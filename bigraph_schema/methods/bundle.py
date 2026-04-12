@@ -360,11 +360,59 @@ def bundle(schema: Link, state, context: Optional[BundleContext] = None):
 # ---------------------------------------------------------------------------
 
 @dispatch
+def _resolve_derived_function(key, obj_dict):
+    """Figure out source_field and builder for a derived function field.
+
+    Uses naming conventions:
+    - Field ending in '_jacobian' → source is 'symbolic_rates_jacobian'
+    - Otherwise → source is 'symbolic_rates'
+    - Builder is determined by the function's signature (co_varnames).
+    """
+    # Find the sympy source field
+    if 'jacobian' in key:
+        source_field = 'symbolic_rates_jacobian'
+    else:
+        source_field = 'symbolic_rates'
+
+    # Verify the source field exists
+    if source_field not in obj_dict:
+        return None, None, None
+
+    # Determine builder from the function's argument signature
+    value = obj_dict[key]
+    # Handle tuples of functions
+    func = value[0] if isinstance(value, tuple) else value
+    if not callable(func) or not hasattr(func, '__code__'):
+        return None, None, None
+
+    args = func.__code__.co_varnames[:func.__code__.co_argcount]
+    if args == ('t', 'y', 'kf', 'kr'):
+        if 'jacobian' in key:
+            builder = 'wholecell.utils.build_ode.rates_jacobian'
+        else:
+            builder = 'wholecell.utils.build_ode.rates'
+    elif args == ('y', 't'):
+        if 'jacobian' in key:
+            builder = 'wholecell.utils.build_ode.derivatives_jacobian'
+        else:
+            builder = 'wholecell.utils.build_ode.derivatives'
+    else:
+        return None, None, None
+
+    # Index: if the value is a tuple, we store just the recipe and
+    # rebuild produces a tuple
+    return source_field, builder, isinstance(value, tuple)
+
+
+@dispatch
 def bundle(schema: Object, state, context: Optional[BundleContext] = None):
     """Bundle a Python object by walking its ``__dict__``.
 
     Infers a schema for each field, bundles the value (arrays go to
     parquet), and produces the serialized form with embedded schemas.
+
+    DerivedFunction fields are stored as recipes pointing to their
+    sympy source field + builder function.
     """
     if state is None:
         return None
@@ -378,12 +426,49 @@ def bundle(schema: Object, state, context: Optional[BundleContext] = None):
     class_path = f'{cls.__module__}.{cls.__name__}'
     obj_dict = state.__dict__
 
+    # First pass: infer schemas for all fields
+    inferred = {}
+    for key, value in obj_dict.items():
+        inferred[key] = infer(None, value)
+
     field_schemas = {}
     field_values = {}
     for key, value in obj_dict.items():
-        inferred_schema, _ = infer(None, value)
-        field_schemas[key] = render(inferred_schema)
-        field_values[key] = bundle(inferred_schema, value, context)
+        inferred_schema, _ = inferred[key]
+        rendered = render(inferred_schema)
+
+        # Check if this is a DerivedFunction — resolve the recipe
+        if rendered == 'derived_function' or (
+                isinstance(inferred_schema, Node)
+                and type(inferred_schema).__name__ == 'DerivedFunction'):
+            source_field, builder, is_tuple = _resolve_derived_function(key, obj_dict)
+            if source_field:
+                field_schemas[key] = 'derived_function'
+                field_values[key] = {
+                    'source_field': source_field,
+                    'builder': builder,
+                    'is_tuple': is_tuple,
+                }
+                continue
+
+        # Check for tuples containing DerivedFunctions
+        if isinstance(value, tuple) and len(value) > 0:
+            first = value[0]
+            if (callable(first) and hasattr(first, '__code__')
+                    and getattr(first.__code__, 'co_filename', '') == '<string>'):
+                source_field, builder, is_tuple = _resolve_derived_function(key, obj_dict)
+                if source_field:
+                    field_schemas[key] = 'derived_function'
+                    field_values[key] = {
+                        'source_field': source_field,
+                        'builder': builder,
+                        'is_tuple': is_tuple,
+                    }
+                    continue
+
+        bundled = bundle(inferred_schema, value, context)
+        field_schemas[key] = rendered
+        field_values[key] = bundled
 
     return {
         '_class': class_path,

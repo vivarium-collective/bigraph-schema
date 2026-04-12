@@ -127,6 +127,19 @@ def realize(core, schema: Union, encode, path=()):
 def realize(core, schema: Tuple, encode, path=()):
     merges = []
 
+    if isinstance(encode, str):
+        import json
+        if encode.startswith('['):
+            try:
+                encode = json.loads(encode)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        elif encode.startswith('('):
+            try:
+                encode = json.loads('[' + encode[1:-1] + ']')
+            except (json.JSONDecodeError, ValueError):
+                pass
+
     if isinstance(encode, (list, tuple)):
         subvalues = []
         subtuple = []
@@ -284,6 +297,13 @@ def realize(core, schema: List, encode, path=()):
     decode = []
     merges = []
 
+    if isinstance(encode, str) and encode.startswith('['):
+        import json
+        try:
+            encode = json.loads(encode)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
     if isinstance(encode, (list, tuple)):
         for index, element in enumerate(encode):
             subschema, substate, submerges = realize(core, schema._element, element, path+(index,))
@@ -327,6 +347,13 @@ def _realize_map_key(core, key_schema, key_str):
 def realize(core, schema: Map, encode, path=()):
     if encode is None:
         encode = default(schema)
+
+    if isinstance(encode, str) and encode.startswith('{'):
+        import json
+        try:
+            encode = json.loads(encode)
+        except (json.JSONDecodeError, ValueError):
+            pass
 
     if isinstance(encode, dict):
         decode = {}
@@ -630,15 +657,24 @@ def realize(core, schema: Link, encode, path=()):
 @dispatch
 def realize(core, schema: Node, encode, path=()):
     if isinstance(encode, str):
-        return schema, encode, []
+        if encode.startswith('{') or encode.startswith('['):
+            import json
+            try:
+                encode = json.loads(encode)
+            except (json.JSONDecodeError, ValueError):
+                return schema, encode, []
+        else:
+            return schema, encode, []
 
     result = {}
     merges = []
 
     if isinstance(encode, dict):
         for key in schema.__dataclass_fields__:
-            if is_schema_field(schema, key) and key in encode:
-                attr = getattr(schema, key)
+            if not is_schema_field(schema, key):
+                continue
+            attr = getattr(schema, key)
+            if key in encode:
                 subschema, substate, submerges = realize(
                     core,
                     attr,
@@ -646,6 +682,13 @@ def realize(core, schema: Node, encode, path=()):
                     path+(key,))
                 schema = replace(schema, **{
                     key: core.resolve(attr, subschema)})
+                result[key] = substate
+                merges += submerges
+            else:
+                # Schema field missing from state — fill with default
+                subschema, substate, submerges = core.default_merges(
+                    attr, path=path+(key,))
+                schema = replace(schema, **{key: subschema})
                 result[key] = substate
                 merges += submerges
 
@@ -717,21 +760,49 @@ def realize(core, schema: Object, encode, path=()):
     mod = importlib.import_module(module_path)
     cls = getattr(mod, class_name)
 
-    # Create blank instance (bypasses __init__)
-    instance = cls.__new__(cls)
+    # Create blank instance (bypasses __init__).
+    # Use object.__new__ for classes that override __new__ with required args.
+    try:
+        instance = cls.__new__(cls)
+    except TypeError:
+        instance = object.__new__(cls)
 
-    # Realize each field through its schema
+    # Realize each field through its schema.
+    # DerivedFunction fields are deferred until after all other fields
+    # are realized, since they depend on sibling field values.
     all_merges = []
     realized_dict = {}
+    derived_fields = {}  # key -> recipe dict
     for key, value in fields.items():
-        if key in field_schemas:
-            field_schema = core.access(field_schemas[key])
+        field_schema_str = field_schemas.get(key)
+        if field_schema_str == 'derived_function':
+            derived_fields[key] = value
+            continue
+        if field_schema_str:
+            field_schema = core.access(field_schema_str)
             _, realized_value, merges = realize(
                 core, field_schema, value, path + (key,))
             all_merges += merges
         else:
             realized_value = value
         realized_dict[key] = realized_value
+
+    # Rebuild derived functions from their sympy source fields
+    for key, recipe in derived_fields.items():
+        if isinstance(recipe, dict):
+            source_field = recipe.get('source_field')
+            builder_path = recipe.get('builder')
+            is_tuple = recipe.get('is_tuple', False)
+
+            source_value = realized_dict.get(source_field)
+            if source_value is not None and builder_path:
+                module_path, func_name = builder_path.rsplit('.', 1)
+                mod = importlib.import_module(module_path)
+                builder = getattr(mod, func_name)
+                result = builder(source_value)
+                if is_tuple and not isinstance(result, tuple):
+                    result = (result,)
+                realized_dict[key] = result
 
     instance.__dict__ = realized_dict
 
@@ -747,7 +818,14 @@ def realize(core, schema: dict, encode, path=()):
         encode = default(schema)
 
     if isinstance(encode, str):
-        return schema, encode, []
+        if encode.startswith('{') or encode.startswith('['):
+            import json
+            try:
+                encode = json.loads(encode)
+            except (json.JSONDecodeError, ValueError):
+                return schema, encode, []
+        else:
+            return schema, encode, []
 
     result_schema = {}
     result_state = {}

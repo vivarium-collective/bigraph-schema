@@ -2290,7 +2290,7 @@ class TestInfer:
 
     def test_infer_set(self, core):
         schema, _ = infer(core, {1, 2, 3})
-        assert isinstance(schema, List)
+        assert isinstance(schema, Set)
 
     def test_infer_np_int(self, core):
         schema, _ = infer(core, np.int64(5))

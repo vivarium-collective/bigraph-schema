@@ -701,7 +701,7 @@ def serialize(schema: Set, state):
 @dispatch
 def serialize(schema: Union, state):
     # Try each variant — return the first that doesn't error
-    for variant in schema._variants:
+    for variant in schema._options:
         try:
             return serialize(variant, state)
         except Exception:
@@ -769,9 +769,39 @@ def serialize(schema: Object, state):
     field_schemas = {}
     field_values = {}
     for key, value in obj_dict.items():
-        # Infer schema for each field
         inferred_schema, _ = infer(None, value)
-        field_schemas[key] = render(inferred_schema)
+        rendered = render(inferred_schema)
+
+        # DerivedFunction: use bundle's resolver for the recipe
+        if rendered == 'derived_function':
+            from bigraph_schema.methods.bundle import _resolve_derived_function
+            source_field, builder, is_tuple = _resolve_derived_function(key, obj_dict)
+            if source_field:
+                field_schemas[key] = 'derived_function'
+                field_values[key] = {
+                    'source_field': source_field,
+                    'builder': builder,
+                    'is_tuple': is_tuple,
+                }
+                continue
+
+        # Same check for tuples of derived functions
+        if isinstance(value, tuple) and len(value) > 0:
+            first = value[0]
+            if (callable(first) and hasattr(first, '__code__')
+                    and getattr(first.__code__, 'co_filename', '') == '<string>'):
+                from bigraph_schema.methods.bundle import _resolve_derived_function
+                source_field, builder, is_tuple = _resolve_derived_function(key, obj_dict)
+                if source_field:
+                    field_schemas[key] = 'derived_function'
+                    field_values[key] = {
+                        'source_field': source_field,
+                        'builder': builder,
+                        'is_tuple': is_tuple,
+                    }
+                    continue
+
+        field_schemas[key] = rendered
         field_values[key] = serialize(inferred_schema, value)
 
     return {
