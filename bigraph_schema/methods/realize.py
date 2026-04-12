@@ -271,29 +271,49 @@ def realize(core, schema: String, encode, path=()):
 
 @dispatch
 def realize(core, schema: NPRandom, encode, path=()):
+    import numpy as _np
+
     if isinstance(encode, RandomState):
         return schema, encode, []
 
-    # No valid state to restore from — create a fresh RandomState
     if encode is None:
         return schema, RandomState(), []
-    if isinstance(encode, tuple) and len(encode) == 0:
-        return schema, RandomState(), []
+
+    # Dict produced by serialize(NPRandom): direct reconstruction.
+    if isinstance(encode, dict) and 'alg' in encode and 'key' in encode:
+        rs = RandomState()
+        key_arr = _np.asarray(encode['key'], dtype=_np.uint32)
+        rs.set_state((
+            encode['alg'],
+            key_arr,
+            int(encode['pos']),
+            int(encode['has_gauss']),
+            float(encode['cached_gauss']),
+        ))
+        return schema, rs, []
+
+    # Legacy: nested {'state': ...} wrapper with empty state → fresh RNG.
     if isinstance(encode, dict) and (
         not encode.get('state') or
-        (isinstance(encode.get('state'), tuple) and len(encode['state']) == 0)
+        (isinstance(encode.get('state'), (tuple, list)) and len(encode['state']) == 0)
     ):
         return schema, RandomState(), []
 
-    # Restore from a valid state dict
-    raw = encode.get('state', encode) if isinstance(encode, dict) else encode
-    _, state, _ = realize(core, schema.state, raw)
-    if not isinstance(state, (dict, tuple)):
-        print(f'NPRandom realize: path={path}, state type={type(state).__name__}, encode type={type(encode).__name__}', flush=True)
+    if isinstance(encode, tuple) and len(encode) == 0:
         return schema, RandomState(), []
-    random = RandomState()
-    random.set_state(state)
-    return schema, random, []
+
+    # Legacy: raw 5-tuple as produced by RandomState.get_state().
+    if isinstance(encode, (tuple, list)) and len(encode) == 5:
+        alg, key, pos, has_gauss, cached = encode
+        rs = RandomState()
+        rs.set_state((
+            alg, _np.asarray(key, dtype=_np.uint32),
+            int(pos), int(has_gauss), float(cached),
+        ))
+        return schema, rs, []
+
+    print(f'NPRandom realize: unexpected encode type={type(encode).__name__}, path={path}', flush=True)
+    return schema, RandomState(), []
 
 @dispatch
 def realize(core, schema: List, encode, path=()):

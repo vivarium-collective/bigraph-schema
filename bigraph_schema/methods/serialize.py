@@ -476,7 +476,21 @@ def serialize(schema: NPRandom, state):
     if state is None:
         return None
     if isinstance(state, RandomState):
-        return serialize(schema.state, state.get_state())
+        # RandomState.get_state() is a 5-tuple:
+        #   (alg_name, key_array_uint32[624], pos, has_gauss, cached_gauss)
+        # The Tuple schema on NPRandom has no declared _values, so we
+        # serialize directly here into a stable dict layout that
+        # realize(NPRandom) can reconstruct bit-for-bit.
+        alg, key, pos, has_gauss, cached = state.get_state()
+        return {
+            'alg': alg,
+            'key': key.tolist(),
+            'pos': int(pos),
+            'has_gauss': int(has_gauss),
+            'cached_gauss': float(cached),
+        }
+    if isinstance(state, dict):
+        return state
     if isinstance(state, (list, tuple)):
         return state
     raise Exception(f'cannot serialize NPRandom state: {state}')
