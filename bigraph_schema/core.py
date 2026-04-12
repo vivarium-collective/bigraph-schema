@@ -702,20 +702,35 @@ class Core:
         else:
             return merge(merge_schema, base_state, state)
 
-    def view_ports(self, schema, state, path, ports_schema, wires):
+    def view_ports(self, schema, state, path, declared_schema, wires):
+        """Return the state visible through a port.
+
+        `declared_schema` is the schema the process declared via inputs()
+        or outputs() for this port. The wire may land anywhere above the
+        declared leaves; this function always returns a value shaped to
+        match `declared_schema`, projecting the traversed subtree down to
+        just the declared sub-fields.
+        """
         if isinstance(wires, str):
             wires = [wires]
 
         if isinstance(wires, (list, tuple)):
             _, result = self.traverse(schema, state, list(path) + list(wires))
+            result = self._project_through_schema(result, declared_schema)
 
         elif isinstance(wires, dict):
             result = {}
             for port_key, subport in wires.items():
                 subschema, subwires = self.jump(
-                    ports_schema,
+                    declared_schema,
                     wires,
                     port_key)
+
+                # If the port isn't declared in inputs() / outputs(), the
+                # process can't read/write it — skip so the view shape
+                # matches the declared schema.
+                if subschema is None:
+                    continue
 
                 inner_view = self.view_ports(
                     schema,
@@ -728,9 +743,38 @@ class Core:
                     result[port_key] = inner_view
 
         else:
-            raise Exception(f'trying to view state at path {path} with these ports:\n{ports_schema}\nbut not sure what these wires are:\n{wires}')
+            raise Exception(f'trying to view state at path {path} with these ports:\n{declared_schema}\nbut not sure what these wires are:\n{wires}')
 
         return result
+
+    def _project_through_schema(self, value, declared_schema):
+        """Project `value` down to only what `declared_schema` declares.
+
+        - If `declared_schema` is a leaf (string type ref, or dict with
+          `_type` / no non-underscore keys), return `value` unchanged.
+        - If `declared_schema` is a branch (nested dict of port_name →
+          sub-schema), return a dict containing only the declared keys,
+          with each sub-value recursively projected.
+        - If `value` is not a dict where a branch is expected, return it
+          as-is (the process is reading a leaf that we can't subselect).
+        """
+        if isinstance(declared_schema, str):
+            return value
+        if not isinstance(declared_schema, dict):
+            return value
+        if '_type' in declared_schema:
+            return value
+        non_meta_keys = [k for k in declared_schema if not k.startswith('_')]
+        if not non_meta_keys:
+            return value
+        if not isinstance(value, dict):
+            return value
+        projected = {}
+        for key in non_meta_keys:
+            if key in value:
+                projected[key] = self._project_through_schema(
+                    value[key], declared_schema[key])
+        return projected
 
     def view(self, schema, state, link_path, ports_key='inputs'):
         found = self.access(schema)
