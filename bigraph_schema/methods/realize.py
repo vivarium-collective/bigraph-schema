@@ -449,9 +449,17 @@ def realize(core, schema: Array, encode, path=()):
             and isinstance(encode[0], list)):
         encode = [tuple(row) for row in encode]
 
-    state = np.array(
-        encode,
-        dtype=schema._data)
+    try:
+        state = np.array(
+            encode,
+            dtype=schema._data)
+    except OverflowError as _oe:
+        inferred = np.array(encode)
+        raise OverflowError(
+            f'realize Array: saved dtype {inferred.dtype} cannot fit into '
+            f'declared schema dtype {schema._data} at path={path}. Fix the '
+            f'schema to match the actual runtime dtype.'
+        ) from _oe
 
     if state.size > 0 and state.shape != schema._shape:
         try:

@@ -562,7 +562,10 @@ def bundle(schema: dict, state, context: Optional[BundleContext] = None):
         if isinstance(k, str) and k.startswith('_'):
             continue
         if k in state:
-            result[k] = bundle(v, state[k], context)
+            try:
+                result[k] = bundle(v, state[k], context)
+            except Exception as e:
+                raise Exception(f'bundle failed at key {k!r}: {e}') from e
             schema_keys.add(k)
     # Handle extra state keys not in schema
     for k in state:
