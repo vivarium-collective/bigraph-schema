@@ -425,9 +425,28 @@ def render(schema: str, defaults=False):
 def render(schema, defaults=False):
     return schema
 
+def _has_toplevel_pipe(s):
+    """Check if string contains '|' at the top level (not inside [] or ())."""
+    depth = 0
+    for ch in s:
+        if ch in '[(':
+            depth += 1
+        elif ch in '])':
+            depth -= 1
+        elif ch == '|' and depth == 0:
+            return True
+    return False
+
+
 def render_associated(assoc):
     if all([isinstance(key, str) and isinstance(value, str) for key, value in assoc.items()]):
-        parts = [f'{key}:{value}' for key, value in assoc.items()]
+        parts = []
+        for key, value in assoc.items():
+            # Wrap values with top-level '|' in parens to preserve nesting.
+            # A '|' inside '[...]' or '(...)' is already scoped, so no wrap.
+            if _has_toplevel_pipe(value):
+                value = f'({value})'
+            parts.append(f'{key}:{value}')
         assoc = '|'.join(parts)
 
     return assoc
