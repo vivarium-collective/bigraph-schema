@@ -881,7 +881,7 @@ def test_frame(core):
     df = pd.DataFrame(_dict)
     schema = core.infer(df)
 
-    from_string = core.access('dataframe[a:float|b:integer|c:boolean]')
+    from_string = core.access('dataframe[a:float|b:integer[64]|c:boolean]')
 
     assert schema == from_string
 

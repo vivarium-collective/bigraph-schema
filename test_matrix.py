@@ -59,7 +59,7 @@ class TestEmpty:
         assert render(Empty(), defaults=True) == 'empty'
 
     def test_serialize(self):
-        assert serialize(Empty(), None) == '__nil__'
+        assert serialize(Empty(), None) is None
 
     def test_realize(self, core):
         schema, state, merges = realize(core, Empty(), None)
@@ -807,7 +807,7 @@ class TestMaybe:
         assert 'maybe' in str(r)
 
     def test_serialize_none(self):
-        assert serialize(Maybe(_value=Float()), None) == '__nil__'
+        assert serialize(Maybe(_value=Float()), None) is None
 
     def test_serialize_value(self):
         assert serialize(Maybe(_value=Float()), 3.14) == 3.14
@@ -2840,7 +2840,7 @@ class TestCoreSerializeRealize:
     def test_maybe_none(self, core):
         s = core.access('maybe[float]')
         encoded = serialize(s, None)
-        assert encoded == '__nil__'
+        assert encoded is None
         schema, decoded, _ = realize(core, s, encoded)
         assert isinstance(schema, Maybe)
 

@@ -461,7 +461,7 @@ def render_associated(assoc):
 
 @dispatch
 def serialize(schema: Empty, state):
-    return NONE_SYMBOL
+    return None
 
 
 @dispatch
@@ -632,7 +632,7 @@ def serialize(schema: Link, state):
 @dispatch
 def serialize(schema: Maybe, state):
     if state is None:
-        return NONE_SYMBOL
+        return None
     return serialize(schema._value, state)
 
 

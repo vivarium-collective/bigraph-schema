@@ -138,7 +138,7 @@ def bundle(schema, state, context: Optional[BundleContext] = None):
 
 @dispatch
 def bundle(schema: Empty, state, context: Optional[BundleContext] = None):
-    return NONE_SYMBOL
+    return None
 
 
 # ---------------------------------------------------------------------------

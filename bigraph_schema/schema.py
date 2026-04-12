@@ -328,16 +328,18 @@ def dtype_schema(dtype: np.dtype):
     data = nf.dtype_to_descr(dtype)
 
     if isinstance(data, str):
+        # Preserve precision via _bits parameter
+        bits = dtype.itemsize * 8
         if 'f' in data or 'd' in data:
-            return Float()
+            return Float(_bits=bits if bits != 64 else 0)
         elif 'U' in data:
             return String()
         elif 'b1' in data:
             return Boolean()
         elif 'i' in data or 'b' in data or 'h' in data or 'u' in data:
-            return Integer()
+            return Integer(_bits=bits if bits != 32 else 0)
         elif 'F' in data or 'D' in data:
-            return Complex()
+            return Complex(_bits=bits if bits != 128 else 0)
         elif 'O' in data or 'V' in data:
             return Node()  # object dtype — heterogeneous elements
         else:
@@ -371,14 +373,29 @@ def make_default(schema, state):
 
 @dispatch
 def schema_dtype(schema: Complex):
+    bits = getattr(schema, '_bits', 0)
+    if bits == 64:
+        return np.dtype('complex64')
     return np.dtype('complex128')
 
 @dispatch
 def schema_dtype(schema: Float):
+    bits = getattr(schema, '_bits', 0)
+    if bits == 16:
+        return np.dtype('float16')
+    if bits == 32:
+        return np.dtype('float32')
     return np.dtype('float64')
 
 @dispatch
 def schema_dtype(schema: Integer):
+    bits = getattr(schema, '_bits', 0)
+    if bits == 8:
+        return np.dtype('int8')
+    if bits == 16:
+        return np.dtype('int16')
+    if bits == 64:
+        return np.dtype('int64')
     return np.dtype('int32')
 
 @dispatch

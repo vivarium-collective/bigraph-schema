@@ -104,8 +104,7 @@ def realize(core, schema: Empty, encode, path=()):
 def realize(core, schema: Maybe, encode, path=()):
     if encode is not None and encode != NONE_SYMBOL:
         return realize(core, schema._value, encode)
-    else:
-        return schema, encode, []
+    return schema, None, []
 
 @dispatch
 def realize(core, schema: Wrap, encode, path=()):
