@@ -311,6 +311,40 @@ def test_reconcile_nested(core):
     assert result['inner']['b'] == 2.0
 
 
+def test_reconcile_preserves_divide_sentinel_dict(core):
+    """_divide, _add, _remove, _type are apply-layer directives —
+    reconcile must pass them through even though ``is_schema_field``
+    treats leading-underscore keys on dicts as metadata."""
+    schema = {'0': {'mass': Float()}}
+    update = {
+        '_divide': {
+            'mother': '0',
+            'daughters': [{'key': '00'}, {'key': '01'}],
+        }
+    }
+    result = reconcile(schema, [update])
+    assert result is not None
+    assert '_divide' in result
+    assert result['_divide']['mother'] == '0'
+
+
+def test_reconcile_preserves_divide_sentinel_map(core):
+    """Same for Map-typed stores — _divide must survive reconcile
+    alongside _add/_remove."""
+    schema = Map(_value=Float())
+    update = {
+        '_divide': {
+            'mother': '0',
+            'daughters': [{'key': '00'}, {'key': '01'}],
+        },
+        '_add': {'2': 5.0},
+    }
+    result = reconcile(schema, [update])
+    assert result is not None
+    assert result['_divide']['mother'] == '0'
+    assert result['_add'] == {'2': 5.0}
+
+
 def test_infer(core):
     default_schema, default_state = core.default(node_schema)
     node_inferred = core.infer(default_state)

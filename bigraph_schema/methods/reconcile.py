@@ -196,9 +196,14 @@ def reconcile(schema: Map, updates: list):
     reconciled using the map's value schema instead of last-write-wins.
     This is essential when multiple processes write to different fields
     of the same map entry within a single timestep.
+
+    Structural sentinels (``_add``/``_remove``/``_divide``) are carved
+    out because ``apply(Map, ...)`` handles them holistically — they
+    are not per-key value updates.
     """
     adds = {}
     removes = []
+    divide = None  # Last non-None _divide wins.
     # Group regular key updates by key so multiple updates to the same
     # key can be recursively reconciled.
     grouped_value_updates = {}
@@ -216,9 +221,11 @@ def reconcile(schema: Map, updates: list):
                         adds[k] = v
             if '_remove' in update:
                 removes.extend(update['_remove'])
+            if '_divide' in update and update['_divide'] is not None:
+                divide = update['_divide']
             # Regular key updates: collect ALL updates per key, not just the last
             for key, value in update.items():
-                if key not in ('_add', '_remove'):
+                if key not in ('_add', '_remove', '_divide'):
                     grouped_value_updates.setdefault(key, []).append(value)
 
     # Recursively reconcile multiple updates targeting the same key
@@ -237,6 +244,8 @@ def reconcile(schema: Map, updates: list):
         result['_add'] = adds
     if removes:
         result['_remove'] = removes
+    if divide is not None:
+        result['_divide'] = divide
     result.update(value_updates)
     return result if result else None
 
@@ -253,9 +262,18 @@ def reconcile(schema: Wrap, updates: list):
     return reconcile(schema._value, updates)
 
 
+_STRUCTURAL_SENTINELS = frozenset({'_add', '_remove', '_divide', '_type'})
+
+
 @dispatch
 def reconcile(schema: dict, updates: list):
-    """Reconcile dict schema: group updates by key, reconcile each."""
+    """Reconcile dict schema: group updates by key, reconcile each.
+
+    Structural sentinels (``_add``/``_remove``/``_divide``/``_type``)
+    are preserved as-is — they are apply-layer directives, not schema
+    fields. Without this carve-out, ``is_schema_field`` filters them
+    out and the structural change (e.g., cell division) never reaches
+    apply."""
     from bigraph_schema.schema import is_schema_field
 
     # Collect all keys across updates
@@ -266,6 +284,15 @@ def reconcile(schema: dict, updates: list):
 
     result = {}
     for key in all_keys:
+        if key in _STRUCTURAL_SENTINELS:
+            # Last non-None wins for structural directives — they
+            # don't need to be deep-merged because apply() handles
+            # them holistically.
+            for update in reversed(updates):
+                if isinstance(update, dict) and key in update and update[key] is not None:
+                    result[key] = update[key]
+                    break
+            continue
         if not is_schema_field(schema, key):
             continue
         key_updates = []
