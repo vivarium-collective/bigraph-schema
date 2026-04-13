@@ -39,6 +39,7 @@ from bigraph_schema.schema import (
     Tree,
     Array,
     Link,
+    Quantity,
 )
 
 
@@ -286,3 +287,27 @@ def divide(schema: Link, state, context=None, path=(), rng=None):
     d1 = {k: v for k, v in state.items() if k != 'instance'}
     d2 = {k: v for k, v in state.items() if k != 'instance'}
     return d1, d2
+
+
+@dispatch
+def divide(schema: Quantity, state, context=None, path=(), rng=None):
+    """Unit-aware split: extensive (mass/amount/volume) halves, intensive
+    (concentration, rate, time, dimensionless) shares.
+
+    Computed from ``state.dimensionality``: scale factor =
+    ``mass_exp + substance_exp + length_exp / 3``. Positive →
+    extensive → halve; otherwise intensive → share."""
+    import pint
+    if state is None:
+        return None, None
+    if not isinstance(state, pint.Quantity):
+        return state, state
+    dim = dict(state.dimensionality)
+    mass = float(dim.get('[mass]', 0))
+    substance = float(dim.get('[substance]', 0))
+    length = float(dim.get('[length]', 0))
+    scale = mass + substance + length / 3.0
+    if scale > 0:
+        half = state / 2
+        return half, half
+    return state, state

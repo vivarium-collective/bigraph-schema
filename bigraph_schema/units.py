@@ -11,6 +11,27 @@ from pint import UnitRegistry
 
 units = UnitRegistry()
 
+# Module-level handle that ``Quantity``'s realize/serialize use to
+# build ``pint.Quantity`` instances. Defaults to bigraph-schema's own
+# registry; downstream packages can swap it out via
+# ``set_quantity_registry`` so quantities they construct elsewhere
+# (e.g. ``vivarium.library.units``) interoperate with framework code.
+_quantity_registry = units
+
+
+def get_quantity_registry():
+    return _quantity_registry
+
+
+def set_quantity_registry(registry):
+    """Override the registry used by ``Quantity`` realize/serialize.
+
+    Pint's ``Quantity`` instances are tied to the registry that created
+    them; mixing instances from different registries raises. Set this
+    to your project's registry at import time."""
+    global _quantity_registry
+    _quantity_registry = registry
+
 
 def render_coefficient(original_power):
     power = abs(original_power)

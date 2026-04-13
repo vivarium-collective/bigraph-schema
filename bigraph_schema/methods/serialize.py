@@ -37,6 +37,8 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     Object,
+    Function,
+    Quantity,
     Dtype,
     dtype_schema,
     is_schema_field,
@@ -785,6 +787,61 @@ def render(schema: Object, defaults=False):
     else:
         result = 'object'
     return wrap_default(schema, result) if defaults else result
+
+
+@dispatch
+def render(schema: Function, defaults=False):
+    result = 'function'
+    return wrap_default(schema, result) if defaults else result
+
+
+@dispatch
+def render(schema: Quantity, defaults=False):
+    data = {
+        '_type': 'quantity',
+        'units': schema.units,
+        'magnitude': render(schema.magnitude)}
+    return wrap_default(schema, data) if defaults else data
+
+
+@dispatch
+def serialize(schema: Quantity, state):
+    """Serialize a ``pint.Quantity`` (or numeric) as ``{units, magnitude}``."""
+    import pint
+    if isinstance(state, dict):
+        return state
+    if isinstance(state, pint.Quantity):
+        units = dict(state.unit_items()) or schema.units
+        return {'units': units, 'magnitude': float(state.magnitude)}
+    if isinstance(state, (int, float)):
+        return {'units': schema.units, 'magnitude': state}
+    return {'units': schema.units, 'magnitude': state}
+
+
+@dispatch
+def serialize(schema: Function, state):
+    """Serialize a callable as ``{module, instance, attribute}``.
+
+    Bound methods produce ``instance = state.__self__.__class__.__name__``;
+    standalone functions get ``instance = None``."""
+    if isinstance(state, dict):
+        return state
+    if state is None:
+        return None
+    if callable(state):
+        if hasattr(state, '__self__'):
+            return {
+                'module': state.__module__,
+                'instance': state.__self__.__class__.__name__,
+                'attribute': state.__func__.__name__}
+        return {
+            'module': state.__module__,
+            'instance': None,
+            'attribute': state.__name__}
+    return {
+        'module': str(schema.module),
+        'instance': str(schema.instance),
+        'attribute': str(schema.attribute)}
 
 
 @dispatch

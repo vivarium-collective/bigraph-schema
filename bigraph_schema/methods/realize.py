@@ -44,6 +44,8 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     Object,
+    Function,
+    Quantity,
     Dtype,
     is_schema_field,
 )
@@ -779,6 +781,65 @@ def realize(core, schema: None, encode, path=()):
         infer_schema, merges = core.infer_merges(
             encode, path=path)
         return infer_schema, encode, merges
+
+@dispatch
+def realize(core, schema: Quantity, encode, path=()):
+    """Realize a ``pint.Quantity`` from one of:
+    - existing ``pint.Quantity`` (returned as-is)
+    - ``{units: {...}, magnitude: ...}`` dict
+    - bare numeric (uses ``schema.units``)
+    - parseable string like ``'2.1 millimolar'``
+    Uses the registry from ``bigraph_schema.units.set_quantity_registry``."""
+    import pint
+    from bigraph_schema.units import get_quantity_registry
+    if isinstance(encode, pint.Quantity):
+        return schema, encode, []
+    ureg = get_quantity_registry()
+    if isinstance(encode, dict) and 'magnitude' in encode:
+        magnitude = encode['magnitude']
+        if isinstance(magnitude, str):
+            magnitude = float(magnitude)
+        decode = (magnitude, tuple(encode.get('units', schema.units).items()))
+        return schema, ureg.Quantity.from_tuple(decode), []
+    if isinstance(encode, (int, float)):
+        decode = (encode, tuple(schema.units.items()))
+        return schema, ureg.Quantity.from_tuple(decode), []
+    if isinstance(encode, str):
+        try:
+            return schema, ureg.parse_expression(encode), []
+        except Exception:
+            pass
+    return schema, encode, []
+
+
+@dispatch
+def realize(core, schema: Function, encode, path=()):
+    """Resolve a Function reference to its actual callable.
+
+    Encode forms accepted:
+      - already-callable: returned as-is
+      - dict with ``module`` + ``attribute`` (and optional ``instance``):
+        import the module, optionally drill into the class, return the
+        attribute.
+    Anything else is passed through unchanged."""
+    import importlib
+    if callable(encode):
+        return schema, encode, []
+    if not isinstance(encode, dict):
+        return schema, encode, []
+    module_name = encode.get('module')
+    attribute_name = encode.get('attribute')
+    if not module_name or not attribute_name:
+        return schema, encode, []
+    instance_name = encode.get('instance')
+    mod = importlib.import_module(module_name)
+    if instance_name and instance_name != 'None':
+        cls = getattr(mod, instance_name)
+        func = getattr(cls, attribute_name)
+    else:
+        func = getattr(mod, attribute_name)
+    return schema, func, []
+
 
 @dispatch
 def realize(core, schema: Object, encode, path=()):

@@ -466,6 +466,49 @@ class Quote(Wrap):
 
 
 @dataclass(kw_only=True)
+class Quantity(Node):
+    """Pint ``Quantity`` — runtime value carries units alongside magnitude.
+
+    Different from ``Number._units`` which is metadata only (the runtime
+    value is a plain float and the unit string lives on the schema). A
+    ``Quantity`` value is a ``pint.Quantity`` instance — ``.to(other)``,
+    ``.dimensionality``, etc. are available at runtime.
+
+    Type parameters:
+        units: Dict of unit symbol → exponent (e.g. ``{'mol': 1, 'L': -1}``).
+        magnitude: Schema for the numeric magnitude (typically ``Float``).
+    """
+    _schema_keys = Node._schema_keys | frozenset({'units', 'magnitude'})
+    units: typing.Dict = field(default_factory=dict)
+    magnitude: 'Node' = field(default_factory=lambda: Float())
+
+
+@dataclass(kw_only=True)
+class Function(Node):
+    """Reference to a standalone callable, serialized by import path.
+
+    Type parameters:
+        module: Fully qualified module name (e.g. ``numpy.random``).
+        instance: Optional class name when the callable is a classmethod
+            or staticmethod attached to a class. ``None`` for module-level
+            functions.
+        attribute: Function/method name on the module or class.
+
+    Realize imports the module and looks up the attribute. Bound methods
+    are not supported here — use a domain-specific ``Method`` type for
+    those (instance state isn't carried in the schema).
+
+    Usage::
+
+        function          # serialized as {'module', 'instance', 'attribute'}
+    """
+    _schema_keys = Node._schema_keys | frozenset({'module', 'instance', 'attribute'})
+    module: str = ''
+    instance: typing.Optional[str] = None
+    attribute: str = ''
+
+
+@dataclass(kw_only=True)
 class Object(Node):
     """Serializable Python object — reconstructed from its ``__dict__``.
 
@@ -531,6 +574,8 @@ BASE_TYPES = {
     'link': Link,
     'quote': Quote,
     'object': Object,
+    'function': Function,
+    'quantity': Quantity,
     'dtype': Dtype}
 
 
