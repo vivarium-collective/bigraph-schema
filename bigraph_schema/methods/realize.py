@@ -170,13 +170,17 @@ def realize(core, schema: Boolean, encode, path=()):
         return schema, state, []
     elif isinstance(encode, dict):
         return realize_default(core, schema, encode, path=path)
+    elif isinstance(encode, (bool, np.bool_)):
+        return schema, bool(encode), []
     elif encode == 'true':
         return schema, True, []
     elif encode == 'false':
         return schema, False, []
     else:
-        return schema, encode, []
-        
+        # Signal "not a boolean" so Union can try other options.
+        return schema, None, []
+
+
 _INT_DTYPES = {8: np.int8, 16: np.int16, 32: np.int32, 64: np.int64}
 _FLOAT_DTYPES = {16: np.float16, 32: np.float32, 64: np.float64}
 _COMPLEX_DTYPES = {64: np.complex64, 128: np.complex128}
@@ -188,6 +192,15 @@ def realize(core, schema: Integer, encode, path=()):
         return schema, state, []
     if isinstance(encode, dict):
         return realize_default(core, schema, encode, path=path)
+
+    # Strict about what qualifies as an integer: reject bool (it's an
+    # int subclass in Python but semantically separate in unions) and
+    # reject arbitrary strings that don't look numeric. Still accept
+    # int/numpy-integer directly and numeric strings via int().
+    if isinstance(encode, bool):
+        return schema, None, []
+    if not isinstance(encode, (int, np.integer, str)):
+        return schema, None, []
 
     try:
         bits = getattr(schema, '_bits', 0)
@@ -207,6 +220,11 @@ def realize(core, schema: Float, encode, path=()):
     elif isinstance(encode, dict):
         return realize_default(core, schema, encode, path=path)
     else:
+        # Reject bool so unions can distinguish boolean from float.
+        if isinstance(encode, bool):
+            return schema, None, []
+        if not isinstance(encode, (int, float, np.integer, np.floating, str)):
+            return schema, None, []
         try:
             bits = getattr(schema, '_bits', 0)
             if bits and bits in _FLOAT_DTYPES:
@@ -266,8 +284,13 @@ def realize(core, schema: Dtype, encode, path=()):
 def realize(core, schema: String, encode, path=()):
     if isinstance(encode, dict):
         return realize_default(core, schema, encode, path=path)
-
-    return schema, encode, []
+    if encode is None:
+        schema, state = core.default(schema, path=path)
+        return schema, state, []
+    if isinstance(encode, str):
+        return schema, encode, []
+    # Non-string: signal miss so Union dispatch can try other options.
+    return schema, None, []
 
 @dispatch
 def realize(core, schema: NPRandom, encode, path=()):

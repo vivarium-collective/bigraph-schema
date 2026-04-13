@@ -770,6 +770,165 @@ def test_realize_coerces_list_to_ndarray_via_port(core):
     np.testing.assert_array_equal(realized['arr'], [1.0, 2.0, 3.0])
 
 
+def test_resolve_union_accepts_option_type(core):
+    """A Union schema resolved against one of its option types should
+    keep the Union — the concrete type is still a valid instance of
+    the union."""
+    union_schema = core.access('union[boolean,string,float]')
+    bool_schema = core.access('boolean')
+    # Forward and reverse both work
+    r1 = core.resolve(union_schema, bool_schema)
+    r2 = core.resolve(bool_schema, union_schema)
+    assert r1.__class__.__name__ == 'Union'
+    assert r2.__class__.__name__ == 'Union'
+
+
+def test_resolve_union_rejects_type_outside_options(core):
+    """A Union with options [boolean, string] resolved against a Float
+    should fail — the float isn't one of the declared options."""
+    union_schema = core.access('union[boolean,string]')
+    float_schema = core.access('float')
+    raised = False
+    try:
+        core.resolve(union_schema, float_schema)
+    except Exception:
+        raised = True
+    assert raised, 'expected resolve to reject type outside union options'
+
+
+def test_resolve_union_with_union(core):
+    """Resolving two Unions yields a Union whose options are the
+    deduplicated concatenation."""
+    u1 = core.access('union[boolean,string]')
+    u2 = core.access('union[string,float]')
+    merged = core.resolve(u1, u2)
+    option_types = {type(o).__name__ for o in merged._options}
+    assert 'Boolean' in option_types
+    assert 'String' in option_types
+    assert 'Float' in option_types
+
+
+# Union type — comprehensive coverage ------------------------------------
+#
+# Ordering contract: ``union[a,b,c]`` tries options left-to-right and
+# returns the first option whose ``realize()`` accepts the value.
+# Primitive realize functions (Boolean/Integer/Float/String) are strict
+# about which Python types they accept, so the "accepts" test is based
+# on actual type compatibility, not arbitrary coercion.
+
+def test_union_realize_bool_matches_boolean(core):
+    """In ``union[boolean,string,float]``, a bool value realizes to the
+    Boolean option (not String, not Float)."""
+    _, state = core.realize('union[boolean,string,float]', True)
+    assert state is True
+
+
+def test_union_realize_str_matches_string(core):
+    _, state = core.realize('union[boolean,string,float]', 'hello')
+    assert state == 'hello'
+
+
+def test_union_realize_float_matches_float(core):
+    _, state = core.realize('union[boolean,string,float]', 1.5)
+    assert state == 1.5
+
+
+def test_union_realize_int_matches_float_not_boolean(core):
+    """A plain int in ``union[boolean,float]`` should realize as Float
+    (not Boolean — Boolean now rejects non-bool values)."""
+    _, state = core.realize('union[boolean,float]', 7)
+    assert state == 7.0
+    assert isinstance(state, float)
+
+
+def test_union_realize_ordering_first_match_wins(core):
+    """If two options both accept a value, the first option in the
+    declared order wins. Here ``union[float,integer]`` with value 5
+    realizes as Float (first match)."""
+    _, state = core.realize('union[float,integer]', 5)
+    assert isinstance(state, float)
+    assert state == 5.0
+
+
+def test_union_realize_ordering_reverse(core):
+    """Swap the order — now Integer wins for int values."""
+    _, state = core.realize('union[integer,float]', 5)
+    assert isinstance(state, int)
+    assert state == 5
+
+
+def test_union_realize_bool_rejected_by_float(core):
+    """Float option rejects bool (so unions can distinguish them)."""
+    schema = core.access('float')
+    from bigraph_schema.methods.realize import realize as realize_fn
+    _, result, _ = realize_fn(core, schema, True)
+    assert result is None
+
+
+def test_union_realize_non_string_rejected_by_string(core):
+    """String option rejects non-str values."""
+    schema = core.access('string')
+    from bigraph_schema.methods.realize import realize as realize_fn
+    _, result, _ = realize_fn(core, schema, 42)
+    assert result is None
+
+
+def test_union_render_round_trip(core):
+    """A union schema renders to a string form that re-parses to the
+    same type graph (option types preserved in declared order)."""
+    original = core.access('union[boolean,string,float]')
+    rendered = core.render(original, defaults=True)
+    reparsed = core.access(rendered)
+    assert [type(o).__name__ for o in reparsed._options] == [
+        'Boolean', 'String', 'Float']
+
+
+def test_union_realize_dispatch_no_match_returns_none_state(core):
+    """If no option accepts the value, the Union returns state=None so
+    the caller can fall back to a default."""
+    from bigraph_schema.methods.realize import realize as realize_fn
+    schema = core.access('union[boolean,string]')
+    _, state, _ = realize_fn(core, schema, 3.14)
+    assert state is None
+
+
+def test_union_realize_in_nested_dict(core):
+    """Union embedded in a dict schema realizes the right option for
+    each state value."""
+    schema = {'val': 'union[boolean,string,float]'}
+    _, a = core.realize(schema, {'val': True})
+    _, b = core.realize(schema, {'val': 'mass_distribution'})
+    _, c = core.realize(schema, {'val': 123.456})
+    assert a['val'] is True
+    assert b['val'] == 'mass_distribution'
+    assert c['val'] == 123.456
+
+
+def test_union_inside_overwrite(core):
+    """``overwrite[union[...]]`` is a common v2 pattern — parsing it
+    must not error on the internal resolve between Overwrite's bare
+    Node placeholder and the inner Union."""
+    schema = core.access('overwrite[union[boolean,string,float]]')
+    # Should round-trip without exception
+    rendered = core.render(schema, defaults=True)
+    re = core.access(rendered)
+    assert re is not None
+
+
+def test_union_resolve_against_bare_node(core):
+    """A bare Node (empty placeholder) resolved with a Union should
+    yield the Union — the bare Node carries no type constraint."""
+    from bigraph_schema.schema import Node
+    union_schema = core.access('union[boolean,string,float]')
+    bare = Node()
+    # Forward: bare Node + Union → Union
+    r1 = core.resolve(bare, union_schema)
+    assert r1.__class__.__name__ == 'Union'
+    # Reverse: Union + bare Node → Union
+    r2 = core.resolve(union_schema, bare)
+    assert r2.__class__.__name__ == 'Union'
+
+
 def test_unify(core):
     default_hello = 'string{hello}'
 

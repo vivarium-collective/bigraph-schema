@@ -176,6 +176,29 @@ def resolve(current: Boolean, update: Boolean, path=None):
     else:
         return update
 
+
+def _union_accepts(union: Union, other):
+    """True when ``other`` is an instance of (or subclass-compatible
+    with) one of the union's options."""
+    for option in union._options:
+        option_type = type(option) if not isinstance(option, type) else option
+        if isinstance(other, option_type):
+            return True
+    return False
+
+
+@dispatch
+def resolve(current: Union, update: Union, path=None):
+    if path:
+        return resolve_subclass(current, update)
+    merged = list(current._options)
+    seen = {type(o) for o in merged}
+    for option in update._options:
+        if type(option) not in seen:
+            merged.append(option)
+            seen.add(type(option))
+    return replace(current, _options=tuple(merged))
+
 @dispatch
 def resolve(current: Wrap, update: Node, path=None):
     value = resolve(current._value, update, path=path)
@@ -242,6 +265,26 @@ def resolve(current: Node, update: Node, path=None):
                 **{'_default': default_value})
         else:
             return current
+
+    # Union handling: if one side is a Union and the other is one of
+    # the declared option types (or a bare Node placeholder), keep the
+    # Union. Handling this in the generic (Node, Node) dispatch avoids
+    # a combinatorial ambiguity explosion with (Map, Node), (Array, Node),
+    # (Wrap, Node), etc.
+    elif isinstance(current, Union):
+        if update_type is Node or _union_accepts(current, update):
+            return current
+        raise Exception(
+            f'\ncannot resolve union with type outside its options:\n'
+            f'{read_link_path(current)}: {current}\n'
+            f'{read_link_path(update)}: {update}\n')
+    elif isinstance(update, Union):
+        if current_type is Node or _union_accepts(update, current):
+            return update
+        raise Exception(
+            f'\ncannot resolve type outside union options:\n'
+            f'{read_link_path(current)}: {current}\n'
+            f'{read_link_path(update)}: {update}\n')
 
     else:
         raise Exception(f'\ncannot resolve types:\n{read_link_path(current)}: {current}\n{read_link_path(update)}: {update}\n')
