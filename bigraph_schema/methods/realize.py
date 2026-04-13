@@ -193,13 +193,12 @@ def realize(core, schema: Integer, encode, path=()):
     if isinstance(encode, dict):
         return realize_default(core, schema, encode, path=path)
 
-    # Strict about what qualifies as an integer: reject bool (it's an
-    # int subclass in Python but semantically separate in unions) and
-    # reject arbitrary strings that don't look numeric. Still accept
-    # int/numpy-integer directly and numeric strings via int().
+    # Reject bool: in Python ``bool`` is an ``int`` subclass, but we
+    # want Union[Boolean, Integer] to route True/False to Boolean.
+    # Everything else that ``int()`` can coerce is accepted so schemas
+    # that mis-type a float as int don't silently blow up in save_bundle
+    # with None-valued numerics.
     if isinstance(encode, bool):
-        return schema, None, []
-    if not isinstance(encode, (int, np.integer, str)):
         return schema, None, []
 
     try:

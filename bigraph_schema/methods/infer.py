@@ -229,13 +229,16 @@ def infer(core, value: dict, path: tuple = ()):
             # superset that accepts all of them. Picking the first
             # schema alone mis-types maps whose entries have mixed
             # internals (e.g., Unum magnitudes that are int in one
-            # recipe and float in another).
+            # recipe and float in another). ``resolve`` is imported
+            # lazily because ``bundle(Object)`` calls infer() with
+            # core=None, so we can't route through core.resolve here.
             from dataclasses import replace as _replace
+            from bigraph_schema.methods.resolve import resolve as _resolve
             subs = list(subvalues.values())
             map_value = subs[0]
             for other in subs[1:]:
                 try:
-                    map_value = core.resolve(map_value, other)
+                    map_value = _resolve(map_value, other)
                 except Exception:
                     # Incompatible entries — leave the first as-is
                     # rather than dropping the Map inference entirely.
