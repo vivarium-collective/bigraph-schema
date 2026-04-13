@@ -674,13 +674,17 @@ def _serialize_map_key(schema, key):
     """Serialize a map key to a JSON-compatible string.
 
     JSON only supports string keys, so all keys are serialized through
-    the schema and then converted to ``str``.  On load, ``realize``
-    reverses this — e.g. ``realize(Integer, '42')`` → ``42``.
+    the schema and then converted to a string. Non-string serialized
+    forms (lists from Tuple, ints, etc.) are JSON-encoded so that
+    ``realize`` can round-trip them via ``json.loads`` — plain
+    ``str(serialized)`` produces Python repr (single quotes) which
+    breaks JSON parsing.
     """
     serialized = serialize(schema, key)
     if isinstance(serialized, str):
         return serialized
-    return str(serialized)
+    import json
+    return json.dumps(serialized)
 
 
 @dispatch

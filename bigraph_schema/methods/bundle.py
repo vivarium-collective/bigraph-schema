@@ -204,6 +204,38 @@ def bundle(schema: Array, state, context: Optional[BundleContext] = None):
     if state is None:
         return None
     if isinstance(state, np.ndarray):
+        # Strict dtype check: if the schema declares a specific dtype,
+        # runtime data MUST match it. Silent narrowing (int64 → int32)
+        # or wrong kind (bool → int32) produced correctness bugs in the
+        # v1/v2 bundle roundtrip.
+        declared = getattr(schema, '_data', None)
+        # String arrays always round-trip through lists-of-strings, so
+        # the declared length (<U0) vs runtime length (<U50) varies by
+        # the actual data and is NOT a schema bug. Only check non-string
+        # kinds.
+        _dtype_differs = (
+            isinstance(declared, np.dtype)
+            and state.dtype != declared
+            and declared.kind != 'U'
+            and state.dtype.kind != 'U')
+        if _dtype_differs:
+            import os as _os
+            _mode = _os.environ.get('BUNDLE_DTYPE_MODE', 'raise')
+            import bigraph_schema.methods.bundle as _bm
+            _path = '.'.join(getattr(_bm, '_path_stack', []))
+            msg = (
+                f'bundle(Array) dtype mismatch at {_path}: schema declares '
+                f'{declared}, runtime state has {state.dtype}. '
+                f'Fix the schema to match the actual runtime dtype.')
+            if _mode == 'collect':
+                # Accumulate so the caller can gather every mismatch
+                # in a single bundle pass instead of one per run.
+                import bigraph_schema.methods.bundle as _bm
+                if not hasattr(_bm, '_dtype_mismatches'):
+                    _bm._dtype_mismatches = []
+                _bm._dtype_mismatches.append(msg)
+            else:
+                raise TypeError(msg)
         if context is not None and state.nbytes >= context.min_bytes:
             return context.save_array(state, 'array')
         # Small array — inline as list
@@ -558,14 +590,21 @@ def bundle(schema: dict, state, context: Optional[BundleContext] = None):
         return {}
     result = {}
     schema_keys = set()
+    import bigraph_schema.methods.bundle as _bm
+    if not hasattr(_bm, '_path_stack'):
+        _bm._path_stack = []
     for k, v in schema.items():
         if isinstance(k, str) and k.startswith('_'):
             continue
         if k in state:
+            _bm._path_stack.append(str(k))
             try:
-                result[k] = bundle(v, state[k], context)
-            except Exception as e:
-                raise Exception(f'bundle failed at key {k!r}: {e}') from e
+                try:
+                    result[k] = bundle(v, state[k], context)
+                except Exception as e:
+                    raise Exception(f'bundle failed at key {k!r}: {e}') from e
+            finally:
+                _bm._path_stack.pop()
             schema_keys.add(k)
     # Handle extra state keys not in schema
     for k in state:

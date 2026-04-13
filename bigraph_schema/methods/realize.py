@@ -837,6 +837,17 @@ def realize(core, schema: Object, encode, path=()):
 
     instance.__dict__ = realized_dict
 
+    # Let classes restore lazy/derived attributes that weren't serialized
+    # (compiled lambdas, caches, etc.). Called after __dict__ is populated
+    # so the hook can read from realized fields.
+    post = getattr(cls, '__post_realize__', None)
+    if callable(post):
+        try:
+            post(instance)
+        except Exception as _pr:
+            print(f'[realize Object] __post_realize__ failed for '
+                  f'{class_path}: {_pr}', flush=True)
+
     # Update schema with inferred class and schema info
     schema = Object(_class=class_path, _schema=field_schemas)
 
