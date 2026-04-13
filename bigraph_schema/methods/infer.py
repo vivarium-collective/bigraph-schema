@@ -224,14 +224,25 @@ def infer(core, value: dict, path: tuple = ()):
                 distinct_types.append(type_sig)
 
         if len(distinct_types) == 1 and len(subvalues) >= 1:
-            # All values are the same type — use Map
-            first_schema = next(iter(subvalues.values()))
+            # All values are the same type — use Map. Resolve every
+            # entry's schema into one so the Map's value type is a
+            # superset that accepts all of them. Picking the first
+            # schema alone mis-types maps whose entries have mixed
+            # internals (e.g., Unum magnitudes that are int in one
+            # recipe and float in another).
+            from dataclasses import replace as _replace
+            subs = list(subvalues.values())
+            map_value = subs[0]
+            for other in subs[1:]:
+                try:
+                    map_value = core.resolve(map_value, other)
+                except Exception:
+                    # Incompatible entries — leave the first as-is
+                    # rather than dropping the Map inference entirely.
+                    break
             # Strip the per-value default to get the clean type
-            if isinstance(first_schema, Node):
-                from dataclasses import replace as _replace
-                map_value = _replace(first_schema, **{'_default': None})
-            else:
-                map_value = first_schema
+            if isinstance(map_value, Node):
+                map_value = _replace(map_value, **{'_default': None})
             schema = Map(_value=map_value)
             return set_default(schema, value), merges
         else:
