@@ -561,6 +561,12 @@ class Core:
         except ValueError:
             # numpy grumble grumble
             result = resolve(current, update)
+        except Exception:
+            # Unum raises IncompatibleUnitsError on `unum_a == unum_b`
+            # when their units differ, rather than returning False.
+            # Any comparison failure means "not equal" — fall through
+            # to the dispatched resolve.
+            result = resolve(current, update)
 
         if cache_key is not None:
             self._resolve_cache[cache_key] = (current, update, result)
@@ -610,28 +616,40 @@ class Core:
         found = self.access(schema)
         return bundle(found, state, context)
 
-    def realize(self, schema, state, path=()):
-        """Convert an encoded representation back into structured Python values.
-
-        Decodes strings, numbers, and nested structures into their appropriate types,
-        guided by the provided schema.
+    def discover(self, schema, state, path=()):
+        """First of two realize phases: walk state + schema, coerce
+        existing values to match their declared types, and collect
+        ``port_merges`` from any ``Link`` nodes encountered. Does NOT
+        fill missing schema keys with their defaults — that's
+        ``realize``'s job, and deferring it lets port_merges supply a
+        better default on the second phase.
         """
+        from bigraph_schema.methods.realize import discover as _discover
         found = self.access(schema)
+        return _discover(self, found, state, path=path)
 
-        decode_schema, decode_state, merges = realize(
-            self,
-            found,
-            state,
-            path=path)
+    def realize(self, schema, state, path=()):
+        """Two-phase realization: ``discover`` + fill/coerce.
+
+        Port-level defaults (declared on a wire's input/output schema,
+        e.g. ``'float{5.5}'``) only appear via ``port_merges`` returned
+        from Link realization. If the bare schema's defaults were
+        pre-filled eagerly, port_merges would have nothing to override
+        — hence the split.
+        """
+        # Phase 1 — walk state, coerce existing values, collect merges.
+        decode_schema, decode_state, merges = self.discover(
+            schema, state, path=path)
 
         if merges:
             merge_schema = self.resolve_merges({}, merges)
             decode_schema = self.resolve(decode_schema, merge_schema)
-            merge_state = self.fill(merge_schema, decode_state)
-        else:
-            merge_state = decode_state
 
-        return decode_schema, merge_state
+        # Phase 2 — fill missing defaults (now port-enhanced) + coerce.
+        decode_schema, decode_state, _ = realize(
+            self, decode_schema, decode_state, path=path)
+
+        return decode_schema, decode_state
 
     def generalize_merges(self, schema, merges):
         if len(merges) > 0:

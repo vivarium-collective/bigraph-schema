@@ -133,3 +133,130 @@ def strip_schema_keys(state):
         k: strip_schema_keys(v)
         for k, v in state.items()
         if not is_schema_key(k)}
+
+
+def class_address(cls):
+    """Return the ``local:!module.Class`` address used by realize() to
+    import a Python class by dotted path.
+    """
+    return f'local:!{cls.__module__}.{cls.__name__}'
+
+
+def tuples_to_lists(value):
+    """Recursively convert tuples to lists in a tree. Useful for
+    converting vivarium-style topology tuples into process-bigraph
+    wire lists (JSON-friendly)."""
+    if isinstance(value, tuple):
+        return [tuples_to_lists(v) for v in value]
+    if isinstance(value, list):
+        return [tuples_to_lists(v) for v in value]
+    if isinstance(value, dict):
+        return {k: tuples_to_lists(v) for k, v in value.items()}
+    return value
+
+
+def make_arrays_writeable(state):
+    """Recursively replace any read-only numpy arrays in a state tree
+    with writeable copies. Parquet-loaded arrays are read-only by
+    default, which breaks processes that mutate them in place.
+    """
+    import numpy as _np
+    if isinstance(state, dict):
+        for key, value in state.items():
+            if isinstance(value, _np.ndarray):
+                if not value.flags.writeable:
+                    state[key] = value.copy()
+                    state[key].flags.writeable = True
+            elif isinstance(value, dict):
+                make_arrays_writeable(value)
+    return state
+
+
+def capture_object_state(instance, skip=None, debug=False):
+    """Snapshot the JSON-safe portion of a Python object's ``__dict__``.
+
+    Objects that round-trip through ``__new__`` + ``__dict__`` (e.g. the
+    ``Object`` / ``SharedProcess`` schemas) lose lazy/derived instance
+    attributes unless they're in the declared config. This walks the
+    instance's ``__dict__`` and returns a dict of capturable attrs:
+    Python scalars, strings, ``None``, numpy scalars/arrays.
+
+    Args:
+        instance: the object to snapshot.
+        skip: iterable of attribute names to skip. Defaults to skipping
+            ``parameters`` keys (usually already in config), plus
+            ``core``, ``parameters``, ``random_state``, ``schema``.
+            Underscore-prefixed attributes are always skipped.
+        debug: if True, prints captured and skipped attribute lists.
+
+    Returns:
+        dict of ``{attr_name: JSON-safe value}`` ready to be stored
+        alongside the config for later restoration via
+        :func:`restore_object_value`.
+    """
+    import numpy as _np
+    snap = {}
+    skipped = []
+    # Default skip set: declared config + framework-attached bookkeeping.
+    params = getattr(instance, 'parameters', None)
+    params_keys = set(params.keys()) if isinstance(params, dict) else set()
+    framework = {'core', 'parameters', 'random_state', 'schema'}
+    extra_skip = set(skip or ())
+    for attr, value in instance.__dict__.items():
+        if attr.startswith('_'):
+            skipped.append((attr, 'underscore')); continue
+        if attr in params_keys:
+            skipped.append((attr, 'in params')); continue
+        if attr in framework or attr in extra_skip:
+            skipped.append((attr, 'framework')); continue
+        # ndarray first — numpy scalar ints subclass Python int.
+        if isinstance(value, _np.ndarray):
+            if value.ndim <= 2 and value.dtype.kind in ('i', 'u', 'f', 'b'):
+                snap[attr] = {
+                    '__ndarray__': True,
+                    'data': value.tolist(),
+                    'dtype': str(value.dtype),
+                    'shape': list(value.shape),
+                }
+            else:
+                skipped.append((attr, f'ndarray dtype={value.dtype} ndim={value.ndim}'))
+        elif isinstance(value, (bool, int, float, str)) or value is None:
+            snap[attr] = value
+        elif isinstance(value, _np.integer):
+            snap[attr] = {
+                '__npint__': True,
+                'value': int(value),
+                'dtype': str(value.dtype),
+            }
+        elif isinstance(value, _np.floating):
+            snap[attr] = {
+                '__npfloat__': True,
+                'value': float(value),
+                'dtype': str(value.dtype),
+            }
+        elif isinstance(value, _np.bool_):
+            snap[attr] = bool(value)
+        else:
+            skipped.append((attr, type(value).__name__))
+    if debug:
+        cls = type(instance).__name__
+        print(f'[capture_object_state] {cls}: captured={list(snap.keys())} '
+              f'skipped={skipped}', flush=True)
+    return snap
+
+
+def restore_object_value(value):
+    """Inverse of the per-attribute encoding produced by
+    :func:`capture_object_state` — turns the JSON-safe wrapper back
+    into the original numpy object (scalar or ndarray). Plain values
+    pass through unchanged.
+    """
+    import numpy as _np
+    if isinstance(value, dict):
+        if value.get('__ndarray__'):
+            return _np.asarray(value['data'], dtype=value['dtype']).reshape(value['shape'])
+        if value.get('__npint__'):
+            return _np.dtype(value['dtype']).type(value['value'])
+        if value.get('__npfloat__'):
+            return _np.dtype(value['dtype']).type(value['value'])
+    return value

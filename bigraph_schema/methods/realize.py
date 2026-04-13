@@ -856,7 +856,22 @@ def realize(core, schema: Object, encode, path=()):
 
 @dispatch
 def realize(core, schema: dict, encode, path=()):
-    if encode is None and schema:
+    return _realize_dict(core, schema, encode, path=path, fill_missing=True)
+
+
+def _realize_dict(core, schema, encode, path=(), fill_missing=True):
+    """Shared implementation for dict realize and discover.
+
+    When ``fill_missing=True`` (normal realize), missing schema keys
+    get their schema defaults via ``default_merges``. When
+    ``fill_missing=False`` (discover phase), missing keys stay missing
+    so port_merges can supply better defaults in a follow-up pass.
+
+    In discover mode, recursive dict calls use discover; non-dict
+    sub-schemas delegate to realize (they just coerce existing values
+    and don't fill anything missing on their own).
+    """
+    if encode is None and schema and fill_missing:
         encode = default(schema)
 
     if isinstance(encode, str):
@@ -876,20 +891,18 @@ def realize(core, schema: dict, encode, path=()):
     if isinstance(encode, dict):
         if '_type' in encode:
             schema = core.access_type(encode)
-            result = {}
 
         for key, subschema in schema.items():
             if is_schema_field(schema, key):
-                # Compile string schemas (e.g. 'bulk_array') into
-                # Node objects so realize dispatches correctly.
                 if isinstance(subschema, str):
                     subschema = core.access(subschema)
                 if key in encode:
-                    outcome_schema, outcome_state, submerges = realize(
-                        core,
-                        subschema,
-                        encode[key],
-                        path+(key,))
+                    if fill_missing:
+                        outcome_schema, outcome_state, submerges = realize(
+                            core, subschema, encode[key], path+(key,))
+                    else:
+                        outcome_schema, outcome_state, submerges = _discover_dispatch(
+                            core, subschema, encode[key], path+(key,))
 
                     if outcome_state is not None:
                         result_schema[key] = core.resolve(subschema, outcome_schema)
@@ -897,21 +910,58 @@ def realize(core, schema: dict, encode, path=()):
                         merges += submerges
 
                 else:
-                    result_schema[key], result_state[key], submerges = core.default_merges(
-                        subschema,
-                        path=path+(key,))
+                    # Always collect merges here — Link subschemas
+                    # emit port_merges even when their state is
+                    # absent (default_merges realizes the link's
+                    # default and its port wires contribute paths).
+                    # In discovery mode we keep the schema + merges
+                    # but discard the filled state; realize's second
+                    # phase does the filling with port-enhanced
+                    # defaults.
+                    default_schema, default_state, submerges = core.default_merges(
+                        subschema, path=path+(key,))
                     merges += submerges
+                    if fill_missing:
+                        result_schema[key] = default_schema
+                        result_state[key] = default_state
+                    else:
+                        result_schema[key] = subschema
 
         for key in encode.keys():
             if (isinstance(key, str) and not key.startswith('_')) and not key in schema:
-                result_schema[key], result_state[key], submerges = realize(
-                    core, None, encode[key], path+(key,))
+                if fill_missing:
+                    result_schema[key], result_state[key], submerges = realize(
+                        core, None, encode[key], path+(key,))
+                else:
+                    result_schema[key], result_state[key], submerges = _discover_dispatch(
+                        core, None, encode[key], path+(key,))
                 merges += submerges
 
-        if result_state:
+        if result_state or not fill_missing:
             return result_schema, result_state, merges
 
     return schema, encode, merges
-            
-    
+
+
+def _discover_dispatch(core, subschema, value, path):
+    """Route to the discover dispatch for dict subschemas, else fall
+    through to realize for non-dict types (they don't need a
+    discovery-mode variant since they only coerce existing values)."""
+    if isinstance(subschema, dict):
+        return _realize_dict(core, subschema, value, path=path, fill_missing=False)
+    return realize(core, subschema, value, path=path)
+
+
+def discover(core, schema, state, path=()):
+    """Walk ``state`` against ``schema``, coercing existing values and
+    collecting port_merges, but leaving missing schema keys missing.
+    Used as the first phase of ``core.realize`` so port_merges can
+    supply better defaults than the bare schema defaults.
+    """
+    if isinstance(schema, dict):
+        return _realize_dict(core, schema, state, path=path, fill_missing=False)
+    return realize(core, schema, state, path=path)
+
+
+
 

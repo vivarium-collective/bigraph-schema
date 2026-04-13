@@ -690,6 +690,86 @@ def test_resolve_conflict(core):
     assert conflict
 
 
+def test_discover_skips_defaults(core):
+    """``core.discover`` is the first phase of realize — it walks
+    state + schema, coerces existing values, and collects port_merges,
+    but does NOT fill missing schema keys with their defaults. That
+    way, a later pass can supply port-enhanced defaults instead.
+    """
+    schema = {
+        'present': 'float',
+        'missing': 'float',
+    }
+    state = {'present': 1.5}
+
+    decode_schema, decode_state, merges = core.discover(schema, state)
+
+    # `present` stays (coerced through Float)
+    assert decode_state['present'] == 1.5
+    # `missing` is NOT filled by discover (would be 0.0 from Float default)
+    assert 'missing' not in decode_state
+    # schema still records the missing key so later phases can find it
+    assert 'missing' in decode_schema
+
+
+def test_discover_collects_port_merges(core):
+    """A ``Link`` declared in state contributes port_merges during
+    discover even when the target store is absent (so port defaults
+    can be applied on the completion pass)."""
+    schema = {'A': 'float'}
+    state = {
+        'edge': {
+            '_type': 'link',
+            '_inputs': {'n': 'float{5.5}'},
+            'inputs': {'n': ['A']},
+        },
+    }
+    _, _, merges = core.discover(schema, state)
+    # port_merges should include a contribution for the `A` path
+    target_paths = [m[0] for m in merges]
+    assert any('A' in str(p) for p in target_paths), (
+        f'expected port_merge targeting `A`, got {target_paths}')
+
+
+def test_realize_port_default_overrides_schema_default(core):
+    """Port-level defaults from a wire's input schema override the
+    bare schema defaults. This is the reason realize is split into
+    discover + completion — if defaults were pre-filled in one pass,
+    port_merges would have nothing to override."""
+    schema = {'A': 'float'}  # bare default would be 0.0
+    state = {
+        'link': {
+            '_type': 'link',
+            '_inputs': {'n': 'float{5.5}'},
+            'inputs': {'n': ['A']},
+        },
+    }
+    _, realized = core.realize(schema, state)
+    # Port-level default 5.5 must win over the bare Float default 0.0
+    assert realized['A'] == 5.5
+
+
+def test_realize_coerces_list_to_ndarray_via_port(core):
+    """When a port declares an ``Array`` schema for a target store that
+    was seeded with a Python list, realize's second pass should coerce
+    the list to an ndarray of the declared dtype."""
+    import numpy as np
+    schema = {'arr': 'list[float]'}  # loose initial schema
+    state = {
+        'arr': [1.0, 2.0, 3.0],
+        'edge': {
+            '_type': 'link',
+            '_outputs': {'a': 'array[float[64]]'},
+            'outputs': {'a': ['arr']},
+        },
+    }
+    _, realized = core.realize(schema, state)
+    assert isinstance(realized['arr'], np.ndarray), (
+        f'expected ndarray, got {type(realized["arr"]).__name__}')
+    assert realized['arr'].dtype == np.dtype('float64')
+    np.testing.assert_array_equal(realized['arr'], [1.0, 2.0, 3.0])
+
+
 def test_unify(core):
     default_hello = 'string{hello}'
 
