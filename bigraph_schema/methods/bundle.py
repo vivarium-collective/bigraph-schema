@@ -391,49 +391,46 @@ def bundle(schema: Link, state, context: Optional[BundleContext] = None):
 # Object — serialize Python objects via __dict__ with inferred schemas
 # ---------------------------------------------------------------------------
 
-@dispatch
-def _resolve_derived_function(key, obj_dict):
-    """Figure out source_field and builder for a derived function field.
+# Registry of ``(obj_dict, field_name) -> (source_field, builder, is_tuple)``
+# resolvers. Bundling a Python object with a DerivedFunction-typed field
+# asks each registered resolver in turn; the first that returns a
+# non-None triple is used. Downstream projects (e.g. vEcoli) register
+# project-specific resolvers via :func:`register_derived_function_resolver`.
+_derived_function_resolvers = []
 
-    Uses naming conventions:
-    - Field ending in '_jacobian' → source is 'symbolic_rates_jacobian'
-    - Otherwise → source is 'symbolic_rates'
-    - Builder is determined by the function's signature (co_varnames).
+
+def register_derived_function_resolver(resolver):
+    """Register a resolver for derived-function fields during bundling.
+
+    A resolver is a callable ``(key: str, obj_dict: dict) ->
+    (source_field: str | None, builder: str | None, is_tuple: bool)``.
+    When asked to bundle an Object with a DerivedFunction-typed field,
+    ``_resolve_derived_function`` iterates registered resolvers and
+    uses the first that returns a non-None ``source_field``.
+
+    This is how downstream projects plug in naming conventions without
+    baking them into bigraph-schema (e.g. vEcoli's ``symbolic_rates``
+    ↔ ``wholecell.utils.build_ode.rates`` mapping).
     """
-    # Find the sympy source field
-    if 'jacobian' in key:
-        source_field = 'symbolic_rates_jacobian'
-    else:
-        source_field = 'symbolic_rates'
+    if resolver not in _derived_function_resolvers:
+        _derived_function_resolvers.append(resolver)
+    return resolver
 
-    # Verify the source field exists
-    if source_field not in obj_dict:
-        return None, None, None
 
-    # Determine builder from the function's argument signature
-    value = obj_dict[key]
-    # Handle tuples of functions
-    func = value[0] if isinstance(value, tuple) else value
-    if not callable(func) or not hasattr(func, '__code__'):
-        return None, None, None
-
-    args = func.__code__.co_varnames[:func.__code__.co_argcount]
-    if args == ('t', 'y', 'kf', 'kr'):
-        if 'jacobian' in key:
-            builder = 'wholecell.utils.build_ode.rates_jacobian'
-        else:
-            builder = 'wholecell.utils.build_ode.rates'
-    elif args == ('y', 't'):
-        if 'jacobian' in key:
-            builder = 'wholecell.utils.build_ode.derivatives_jacobian'
-        else:
-            builder = 'wholecell.utils.build_ode.derivatives'
-    else:
-        return None, None, None
-
-    # Index: if the value is a tuple, we store just the recipe and
-    # rebuild produces a tuple
-    return source_field, builder, isinstance(value, tuple)
+def _resolve_derived_function(key, obj_dict):
+    """Ask each registered resolver whether ``key`` is a derived
+    function field; return the first non-None ``(source_field, builder,
+    is_tuple)`` triple. Returns ``(None, None, None)`` if no resolver
+    matches — meaning the field will fall through to standard bundle.
+    """
+    for resolver in _derived_function_resolvers:
+        try:
+            source_field, builder, is_tuple = resolver(key, obj_dict)
+        except Exception:
+            continue
+        if source_field is not None:
+            return source_field, builder, is_tuple
+    return None, None, None
 
 
 @dispatch
