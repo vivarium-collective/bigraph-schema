@@ -131,7 +131,11 @@ def render(schema: Union, defaults=False):
         render(option, defaults=defaults)
         for option in schema._options]
     if all([isinstance(option,str) for option in options]):
-        result = '~'.join(options)
+        # Use ``union[a,b,c]`` rather than ``a~b~c``. The tilde form
+        # doesn't survive embedding in a merge (``a|b``) because the
+        # parser treats merge and union as sibling alternatives — a
+        # raw union inside a merge leaves a stray ``|`` unconsumed.
+        result = f'union[{",".join(options)}]'
     else:
         result = {
             '_type': 'union',

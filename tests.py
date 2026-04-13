@@ -929,6 +929,19 @@ def test_union_resolve_against_bare_node(core):
     assert r2.__class__.__name__ == 'Union'
 
 
+def test_union_render_survives_merge_embedding(core):
+    """A Union used inside a merge-typed Tree (e.g.,
+    ``a:union[b,c]|d:string``) must round-trip. The older tilde form
+    (``a:b~c|d:string``) breaks the parser because merge and union
+    are sibling alternatives at the same precedence level — nesting
+    one inside the other without parentheses leaves a stray ``|``."""
+    schema_expr = 'a:union[boolean,string,float]|d:string'
+    schema = core.access(schema_expr)
+    rendered = core.render(schema)
+    # Must re-parse without the original error
+    core.access(rendered)
+
+
 def test_unify(core):
     default_hello = 'string{hello}'
 
