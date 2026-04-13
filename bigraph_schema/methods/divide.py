@@ -31,6 +31,7 @@ from bigraph_schema.schema import (
     Number,
     Integer,
     Float,
+    Delta,
     String,
     List,
     Set,
@@ -158,7 +159,21 @@ def divide(schema: Integer, state, context=None, path=(), rng=None):
 
 @dispatch
 def divide(schema: Float, state, context=None, path=(), rng=None):
-    """Floating-point: split in half."""
+    """Default: share (each daughter gets the same value).
+
+    Halving only makes sense for additive/extensive quantities
+    (masses, concentrations × volume). Plain floats often represent
+    intensive quantities (time, rates, ratios) where halving corrupts
+    the value. Explicit ``Delta`` fields opt into halving; other
+    extensive quantities should declare a custom ``divide`` dispatch
+    (like ``BulkArray``'s binomial split)."""
+    return state, state
+
+
+@dispatch
+def divide(schema: Delta, state, context=None, path=(), rng=None):
+    """Additive-change type: halve so the two daughters sum to the
+    mother's total (mass, cumulative growth, etc.)."""
     if state is None:
         return None, None
     return state / 2.0, state / 2.0
@@ -166,12 +181,10 @@ def divide(schema: Float, state, context=None, path=(), rng=None):
 
 @dispatch
 def divide(schema: Number, state, context=None, path=(), rng=None):
-    if state is None:
-        return None, None
-    if hasattr(state, 'dtype') and np.issubdtype(state.dtype, np.integer):
-        rng = rng or np.random.default_rng()
-        return _binomial_split(rng, state)
-    return state / 2.0, state / 2.0
+    """Numeric default: share. Integer counts should flow through
+    ``BulkArray``/``Integer`` dispatches; this catch-all preserves
+    values (e.g. bit-widths of scalars) rather than mutating them."""
+    return state, state
 
 
 @dispatch
