@@ -159,6 +159,20 @@ class Const(Wrap):
     pass
 
 @dataclass(kw_only=True)
+class DivideReset(Wrap):
+    """Wrapper that resets the inner value to its default on division.
+
+    Mirrors v1's ``_divider: {set_value: <default>}`` behavior. Use this
+    for fields that should not propagate from mother to daughter unchanged
+    — e.g. ``divide`` flags, ``has_triggered_division`` markers, or any
+    flag whose semantics tie it to the mother's pre-division phase.
+
+    All other dispatched methods (apply, merge, serialize, realize)
+    delegate to the inner type — only ``divide`` differs.
+    """
+    pass
+
+@dataclass(kw_only=True)
 class List(Node):
     _schema_keys =Node._schema_keys | frozenset({'_element'})
     _element: Node = field(default_factory=Node)
@@ -560,6 +574,7 @@ BASE_TYPES = {
     'maybe': Maybe,
     'overwrite': Overwrite,
     'const': Const,
+    'divide_reset': DivideReset,
     'list': List,
     'set': Set,
     'map': Map,

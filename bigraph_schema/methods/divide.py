@@ -40,7 +40,10 @@ from bigraph_schema.schema import (
     Array,
     Link,
     Quantity,
+    Wrap,
+    DivideReset,
 )
+from bigraph_schema.methods.default import default
 
 
 def _binomial_split(rng, total):
@@ -132,6 +135,25 @@ def divide(schema: dict, state, context=None, path=(), rng=None):
         else:
             a[k], b[k] = divide(sub_schema, v, inner_context, path + (k,), rng)
     return a, b
+
+
+@dispatch
+def divide(schema: Wrap, state, context=None, path=(), rng=None):
+    """Wrap subclasses delegate divide to their inner type. This lets
+    nested wrappers like ``overwrite[divide_reset[boolean]]`` dispatch
+    to the innermost type-specific divide (e.g. DivideReset)."""
+    return divide(schema._value, state, context, path, rng)
+
+
+@dispatch
+def divide(schema: DivideReset, state, context=None, path=(), rng=None):
+    """Reset the inner value to its default on division.
+
+    Mirrors v1's ``_divider: {set_value: <default>}``. Both daughters
+    receive the inner type's default rather than the mother's value.
+    """
+    reset = default(schema)
+    return reset, reset
 
 
 @dispatch
