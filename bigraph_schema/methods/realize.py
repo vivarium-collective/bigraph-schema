@@ -484,6 +484,15 @@ def realize(core, schema: Array, encode, path=()):
             f'declared schema dtype {schema._data} at path={path}. Fix the '
             f'schema to match the actual runtime dtype.'
         ) from _oe
+    except ValueError as _ve:
+        raise ValueError(
+            f'realize Array at path={path}: np.array failed. '
+            f'encode type={type(encode).__name__}, '
+            f'len={len(encode) if hasattr(encode, "__len__") else "?"}, '
+            f'first_row_type={type(encode[0]).__name__ if encode else "empty"}, '
+            f'first_row_len={len(encode[0]) if encode and hasattr(encode[0], "__len__") else "?"}, '
+            f'dtype={schema._data}. Original: {_ve}'
+        ) from _ve
 
     if state.size > 0 and state.shape != schema._shape:
         try:
