@@ -385,8 +385,21 @@ def _realize_map_key(core, key_schema, key_str):
     ``realize(key_schema, key_str)`` which knows how to convert
     ``'42'`` → ``42`` for Integer, ``'[0, "minimal"]'`` → ``(0, 'minimal')``
     for Tuple, etc.
+
+    Raises if the key fails realize (becomes None when input was not
+    None) — this catches schema/data type mismatches that would
+    otherwise silently collapse all map entries onto a single ``None``
+    key (e.g. ``map[float]`` keyed by ``np.int64`` collapses 17
+    entries into one with key ``None``).
     """
     _, realized_key, _ = realize(core, key_schema, key_str, path=())
+    if realized_key is None and key_str is not None:
+        raise TypeError(
+            f"map key {key_str!r} (type {type(key_str).__name__}) "
+            f"could not be realized under key schema {key_schema!r}. "
+            f"Silent coercion to None would collapse all entries onto "
+            f"the same key. Fix the schema (e.g. ``map[integer, X]``) "
+            f"or convert the keys before passing.")
     return realized_key
 
 
