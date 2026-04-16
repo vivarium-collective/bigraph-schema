@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 
 from bigraph_schema import Edge, allocate_core, BASE_TYPES
-from bigraph_schema.schema import Float, String, Map, Tree, Link, Array, Overwrite, Node
+from bigraph_schema.schema import (
+    Float, String, Map, Tree, Link, Array, Overwrite, Node, Empty,
+    Site, InnerName, OuterName, Interface)
 from bigraph_schema.methods import check, render, serialize, apply, reconcile
 
 
@@ -1201,6 +1203,99 @@ def test_apply(core):
     core
 
 
+# Milner bigraph structural types (Site, InnerName, OuterName, Interface)
+# ================================================================
+# These extend bigraph-schema from Milner's "ground bigraph" shape
+# (g : ε → I) toward his full formalism where a bigraph arrow
+# F : I → J can be composed. See Milner, *Space and Motion of
+# Communicating Agents* (2008), §2.1 Defs. 2.1–2.3, and the plan in
+# .claude/plans/milner-formalism.md.
+#
+# All four types inherit from Empty because they carry no state on
+# their own — they are schema-level markers that become state-bearing
+# only through composition. The only per-type override is `render`,
+# which has to emit the specific type name rather than 'empty'.
+
+
+def test_bigraph_structural_types_in_registry(core):
+    """The four structural types are registered under their canonical
+    names and access returns instances of the expected classes."""
+    assert isinstance(core.access('site'), Site)
+    assert isinstance(core.access('inner_name'), InnerName)
+    assert isinstance(core.access('outer_name'), OuterName)
+    assert isinstance(core.access('interface'), Interface)
+
+
+def test_bigraph_structural_types_are_empty(core):
+    """Inheriting from Empty means these types have no realizable
+    state — default is None and only None checks through."""
+    for type_name in ('site', 'inner_name', 'outer_name', 'interface'):
+        schema = core.access(type_name)
+        assert isinstance(schema, Empty), (
+            f'{type_name} should inherit from Empty (got {type(schema)})')
+        _, state = core.default(schema)
+        assert state is None, (
+            f'default({type_name}) should be None, got {state!r}')
+        assert core.check(schema, None) is True
+        assert core.check(schema, 'anything else') is False
+
+
+def test_bigraph_structural_bare_round_trip(core):
+    """A bare (unsorted, empty) structural schema renders as just its
+    type name and round-trips cleanly."""
+    for type_name in ('site', 'inner_name', 'outer_name', 'interface'):
+        schema = core.access(type_name)
+        rendered = core.render(schema)
+        assert rendered == type_name, (
+            f'bare render({type_name}) should be {type_name!r}, got {rendered!r}')
+        back = core.access(rendered)
+        assert type(back) is type(schema)
+
+
+def test_bigraph_structural_sorted_round_trip(core):
+    """Site/InnerName/OuterName carry a `_sort` label — render must
+    preserve it, and the dict form must round-trip."""
+    for type_name, cls in (
+            ('site', Site),
+            ('inner_name', InnerName),
+            ('outer_name', OuterName)):
+        schema = core.access({'_type': type_name, '_sort': 'cell'})
+        assert isinstance(schema, cls)
+        assert schema._sort == 'cell'
+        rendered = core.render(schema)
+        assert rendered == {'_type': type_name, '_sort': 'cell'}
+        back = core.access(rendered)
+        assert isinstance(back, cls)
+        assert back._sort == 'cell'
+
+
+def test_interface_direct_construction(core):
+    """Interface's inner structure (`_places` tuple, `_names` dict) is
+    built directly in Python — the dict-access path for a populated
+    interface is deferred until the composition machinery lands.
+    Render must still emit the internal structure so it is visible."""
+    iface = Interface(
+        _places=(Site(), Site(_sort='cell')),
+        _names={'x': '', 'y': 'cell'})
+    rendered = core.render(iface)
+    assert rendered == {
+        '_type': 'interface',
+        '_places': ['site', {'_type': 'site', '_sort': 'cell'}],
+        '_names': {'x': '', 'y': 'cell'}}
+    # Empty state still the right answer — this Interface is a
+    # schema-level descriptor, not a state container.
+    _, state = core.default(iface)
+    assert state is None
+
+
+def test_bigraph_structural_types_present_in_base_types(core):
+    """BASE_TYPES registry wires the four type names to their classes."""
+    assert BASE_TYPES['site'] is Site
+    assert BASE_TYPES['inner_name'] is InnerName
+    assert BASE_TYPES['outer_name'] is OuterName
+    assert BASE_TYPES['interface'] is Interface
+
+
 if __name__ == '__main__':
     core = allocate_core()
 
@@ -1234,5 +1329,12 @@ if __name__ == '__main__':
 
     test_access_tuple(core)
     test_serialize_realize_shape(core)
+
+    test_bigraph_structural_types_in_registry(core)
+    test_bigraph_structural_types_are_empty(core)
+    test_bigraph_structural_bare_round_trip(core)
+    test_bigraph_structural_sorted_round_trip(core)
+    test_interface_direct_construction(core)
+    test_bigraph_structural_types_present_in_base_types(core)
 
     test_resolve_conflict(core)

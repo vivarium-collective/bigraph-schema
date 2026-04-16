@@ -6,6 +6,10 @@ from bigraph_schema.schema import (
     Node,
     Atom,
     Empty,
+    Site,
+    InnerName,
+    OuterName,
+    Interface,
     NONE_SYMBOL,
     Union,
     Tuple,
@@ -72,6 +76,42 @@ def wrap_default(schema, result):
 @dispatch
 def render(schema: Empty, defaults=False):
     return 'empty'
+
+# Milner bigraph structural types inherit from Empty for their state
+# behaviour (no state → all state methods do the right thing via MRO)
+# but each has its own identity at the type level — render must emit
+# the right type name so schemas round-trip. ``_sort`` is optional
+# metadata carried on the schema.
+
+def _render_bigraph_structural(schema, type_name, defaults=False):
+    if getattr(schema, '_sort', ''):
+        result = {'_type': type_name, '_sort': schema._sort}
+    else:
+        result = type_name
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: Site, defaults=False):
+    return _render_bigraph_structural(schema, 'site', defaults)
+
+@dispatch
+def render(schema: InnerName, defaults=False):
+    return _render_bigraph_structural(schema, 'inner_name', defaults)
+
+@dispatch
+def render(schema: OuterName, defaults=False):
+    return _render_bigraph_structural(schema, 'outer_name', defaults)
+
+@dispatch
+def render(schema: Interface, defaults=False):
+    result = {'_type': 'interface'}
+    if schema._places:
+        result['_places'] = [render(p, defaults=defaults) for p in schema._places]
+    if schema._names:
+        result['_names'] = dict(schema._names)
+    if len(result) == 1:  # only _type
+        result = 'interface'
+    return wrap_default(schema, result) if defaults else result
 
 @dispatch
 def render(schema: Maybe, defaults=False):

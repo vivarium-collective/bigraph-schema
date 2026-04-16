@@ -549,6 +549,103 @@ class Object(Node):
     _schema: typing.Dict = field(default_factory=dict)
 
 
+# Milner bigraph structural types
+# ================================
+# These introduce open interfaces on both the place graph and the link
+# graph, turning a schema from a ground bigraph (g : ε → I) into an
+# arrow (F : I → J) that can be composed with another arrow.
+# See Milner, *Space and Motion of Communicating Agents* (2008),
+# §2.1 Defs. 2.1–2.3 (pp. 16–17) for the formal definitions, and
+# .claude/plans/milner-formalism.md for the design rationale.
+
+
+@dataclass(kw_only=True)
+class Site(Empty):
+    """A hole in the place graph — an open inner-face position.
+
+    In Milner's Def. 2.1 (p. 16), a place graph ``F : m → n`` has an
+    inner face ``m`` indexing *sites*. Each site is a slot that a root
+    of another bigraph plugs into during composition. A schema that
+    contains ``Site``s is ungrounded: it describes a *context* into
+    which another bigraph can be placed, not a runnable state tree.
+
+    Inherits from ``Empty``: a site carries no state on its own.
+    Composition substitutes the filler's schema into the site's
+    position, so ``Site`` never coexists with runtime state — once a
+    site is filled, there is no site anymore.
+
+    ``_sort`` carries an optional place-sort label for signatures that
+    classify places (Milner Ch. 6). Empty string means unsorted, which
+    is the only option for a basic signature.
+    """
+    _schema_keys = Empty._schema_keys | frozenset({'_sort'})
+    _sort: str = ''
+
+
+@dataclass(kw_only=True)
+class InnerName(Empty):
+    """An open link-graph endpoint facing inward.
+
+    Inner names are the domain side of the link map (Def. 2.2, p. 16):
+    ``link : X ⊎ P → E ⊎ Y`` sends each inner name in ``X`` to an edge
+    or an outer name. During composition ``G ∘ F``, each outer name of
+    ``F`` is connected to the inner name of ``G`` of the same name; the
+    common face disappears.
+
+    Inherits from ``Empty``: the name itself is the identifier, held
+    on the schema. The schema marks "there is a link endpoint here
+    addressable by this name" — the link's binding is held on a
+    ``Link`` node, not here.
+
+    ``_sort`` is the optional link-sort label (Milner §6.2). Empty
+    means unsorted.
+    """
+    _schema_keys = Empty._schema_keys | frozenset({'_sort'})
+    _sort: str = ''
+
+
+@dataclass(kw_only=True)
+class OuterName(Empty):
+    """An open link-graph endpoint facing outward.
+
+    Outer names are the codomain side of the link map alongside edges
+    (Def. 2.2, p. 16). A link ending at an outer name escapes the
+    bigraph and can be joined to another bigraph's inner name of the
+    same name during composition. By convention Milner draws outer
+    names above a bigraph diagram and inner names below.
+
+    Inherits from ``Empty`` — see ``InnerName`` for the reasoning.
+    """
+    _schema_keys = Empty._schema_keys | frozenset({'_sort'})
+    _sort: str = ''
+
+
+@dataclass(kw_only=True)
+class Interface(Empty):
+    """A bigraphical interface ``I = ⟨m, X⟩``.
+
+    Def. 2.3 (p. 16): an interface pairs a place-graph face — here an
+    ordered tuple of sites or roots of width ``m`` — with a link-graph
+    face, a finite name-set ``X``. The trivial interface
+    ``ε = ⟨0, ∅⟩`` is ``Interface()`` with neither places nor names.
+
+    The same dataclass is used for both inner and outer faces: which
+    side it represents is determined by how it is attached to a
+    bigraph (``_inner_face`` vs ``_outer_face`` on a composite schema).
+    For an inner face the ``_places`` are typically ``Site`` schemas;
+    for an outer face they are the schemas of the root regions.
+
+    Inherits from ``Empty``: an ``Interface`` is a structural
+    descriptor of shape; the state lives on the bigraph that bears
+    this face and on the sub-schemas in ``_places`` / ``_names``.
+
+    ``_names`` maps name strings to optional sort labels.
+    """
+    _schema_keys = Empty._schema_keys | frozenset({'_places', '_names'})
+    _places: typing.Tuple = field(default_factory=tuple)
+    _names: typing.Dict = field(default_factory=dict)
+
+
 BASE_TYPES = {
     'node': Node,
     'atom': Atom,
@@ -591,6 +688,10 @@ BASE_TYPES = {
     'object': Object,
     'function': Function,
     'quantity': Quantity,
-    'dtype': Dtype}
+    'dtype': Dtype,
+    'site': Site,
+    'inner_name': InnerName,
+    'outer_name': OuterName,
+    'interface': Interface}
 
 
