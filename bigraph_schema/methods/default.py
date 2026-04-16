@@ -34,6 +34,8 @@ from bigraph_schema.schema import (
     LocalProtocol,
     Schema,
     Link,
+    Object,
+    Function,
     schema_dtype,
     is_schema_field,
 )
@@ -84,6 +86,15 @@ def default(schema: Boolean):
         return schema._default
     else:
         return False
+
+@dispatch
+def default(schema: Number):
+    # The bare ``number`` type, a parent of Integer/Float/etc. Subclasses
+    # override with specific zeros (0, 0.0, 0+0j); this is the fallback.
+    if schema._default is not None:
+        return schema._default
+    else:
+        return 0
 
 @dispatch
 def default(schema: Integer):
@@ -217,6 +228,27 @@ def default_link(schema: Link):
 @dispatch
 def default(schema: Link):
     return default_link(schema)
+
+@dispatch
+def default(schema: Object):
+    # An Object holds a serialized Python instance reconstructed from
+    # ``_class`` + per-field values. Without those, no instance can be
+    # produced — the default state is None, matching what
+    # ``realize(Object, None)`` yields.
+    if schema._default is not None:
+        return schema._default
+    else:
+        return None
+
+@dispatch
+def default(schema: Function):
+    # A Function identifies a callable by import path (module +
+    # optional instance + attribute). Absent those, no callable can be
+    # resolved, so the default is None.
+    if schema._default is not None:
+        return schema._default
+    else:
+        return None
 
 @dispatch
 def default(schema: dict):

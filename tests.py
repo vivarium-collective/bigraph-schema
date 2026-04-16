@@ -1296,6 +1296,75 @@ def test_bigraph_structural_types_present_in_base_types(core):
     assert BASE_TYPES['interface'] is Interface
 
 
+def test_interface_dict_form_access(core):
+    """Populated Interface schemas built via the dict-access path:
+    ``{'_type': 'interface', '_places': [...], '_names': {...}}``.
+    Requires the resolve(tuple, list) dispatcher to merge the incoming
+    list of sub-schemas with the default empty ``_places`` tuple."""
+    iface = core.access({
+        '_type': 'interface',
+        '_places': [core.access('site'), core.access('site')],
+        '_names': {'x': '', 'y': 'cell'}})
+    assert isinstance(iface, Interface)
+    assert len(iface._places) == 2
+    for place in iface._places:
+        assert isinstance(place, Site)
+    # Empty-string sort labels pass through access() and become None
+    # (``access('')`` → None), so ``{'x': ''}`` normalizes to
+    # ``{'x': None}``. Both mean "unsorted" in Milner's terms.
+    assert iface._names == {'x': None, 'y': 'cell'}
+
+
+def test_number_object_function_defaults(core):
+    """Default dispatchers for types whose schema fields include
+    primitive metadata — Number (_bits/_units), Object (_class/_schema),
+    Function (module/instance/attribute). Without their custom default
+    handlers, the generic Node walker would recurse into those
+    primitive fields and crash with ``default('')``."""
+    _, number_state = core.default('number')
+    assert number_state == 0
+
+    _, object_state = core.default('object')
+    assert object_state is None
+
+    _, function_state = core.default('function')
+    assert function_state is None
+
+
+def test_assembly_identity_laws():
+    """Identity laws on composition (Milner Def. 2.8 C3): for any
+    composable arrow ``f``, ``id ∘ f = f`` and ``f ∘ id = f``. M1.4
+    only implements the trivial ``id_ε`` case; full composition comes
+    in M2 with the elementary bigraphs."""
+    from bigraph_schema.assembly import EPSILON, identity, compose
+
+    # EPSILON is the origin interface ⟨0, ∅⟩.
+    assert EPSILON == Interface()
+    assert EPSILON._places == ()
+    assert EPSILON._names == {}
+
+    # identity(ε) is ε itself at this milestone (no separate Bigraph
+    # schema yet) — what matters is that the composition laws hold.
+    id_eps = identity(EPSILON)
+    assert id_eps == EPSILON
+
+    # Right identity: f ∘ id_ε = f (on the origin case, f is ε too).
+    assert compose(EPSILON, id_eps) == EPSILON
+
+    # Left identity: id_ε ∘ f = f.
+    g = Interface(_names={'x': None})
+    assert compose(identity(EPSILON), g) == g
+
+    # Right identity on a non-ε outer: g ∘ id_ε = g (because id_ε has
+    # no sites/names, plugging nothing into g leaves g unchanged).
+    assert compose(g, identity(EPSILON)) == g
+
+    # Non-trivial composition is not yet implemented.
+    import pytest
+    with pytest.raises(NotImplementedError):
+        compose(Interface(_names={'x': None}), Interface(_names={'y': None}))
+
+
 if __name__ == '__main__':
     core = allocate_core()
 
@@ -1336,5 +1405,8 @@ if __name__ == '__main__':
     test_bigraph_structural_sorted_round_trip(core)
     test_interface_direct_construction(core)
     test_bigraph_structural_types_present_in_base_types(core)
+    test_interface_dict_form_access(core)
+    test_number_object_function_defaults(core)
+    test_assembly_identity_laws()
 
     test_resolve_conflict(core)

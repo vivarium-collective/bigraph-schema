@@ -897,7 +897,7 @@ def resolve(current: tuple, update: tuple, path=None):
     index = 0
 
     for subcurrent, subelement in zip(current, update):
-        subresolve = resolve(subcurrent, subupdate, path=path)
+        subresolve = resolve(subcurrent, subelement, path=path)
         result.append(subresolve)
         index += 1
 
@@ -907,6 +907,15 @@ def resolve(current: tuple, update: tuple, path=None):
         result += list(update[index:])
 
     return tuple(result)
+
+
+@dispatch
+def resolve(current: tuple, update: list, path=None):
+    # Resolving a schema-defined tuple field (e.g. ``Interface._places``)
+    # against an update coming in as a Python list: treat the list as
+    # an ordered set of positional replacements by coercing to tuple,
+    # then element-wise resolve using the tuple/tuple handler.
+    return resolve(current, tuple(update), path=path)
 
 
 @dispatch
