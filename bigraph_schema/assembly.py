@@ -25,6 +25,9 @@ formal definitions.
 """
 
 import copy
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Tuple as TypingTuple
+
 from bigraph_schema.schema import (
     Node, Empty, Site, Interface, Link, Wires, Path, Place,
     Map, List, Set, Tree, Tuple, Wrap, Union,
@@ -355,6 +358,133 @@ def closure(core, name):
         '_type': 'link',
         '_inputs': {name: 'node'},
         '_outputs': {}}})
+
+
+# ── Dynamic signatures and activity ─────────────────────────────────
+# Milner Def. 8.2 (p. 81): a signature is *dynamic* if each control
+# has a status in {atomic, passive, active}. A bigraph G is *active*
+# at site i iff every ancestor node of i has an active control.
+#
+# In our model the type registry IS the signature. We layer dynamic
+# status on top via a dict mapping type names → status strings.
+# Controls not listed default to 'active'.
+
+ACTIVE = 'active'
+PASSIVE = 'passive'
+ATOMIC = 'atomic'
+
+
+def _control_name(node):
+    """Return the control name (type name) for a schema node."""
+    if isinstance(node, Link):
+        return 'link'
+    cls = type(node)
+    # Walk BASE_TYPES reverse lookup
+    from bigraph_schema.schema import BASE_TYPES
+    for name, typ in BASE_TYPES.items():
+        if typ is cls:
+            return name
+    return cls.__name__.lower()
+
+
+def is_active(schema, path, control_status=None):
+    """Check whether ``path`` is active — every ancestor has an active
+    control. (Milner Def. 8.2.)
+
+    ``control_status`` maps control names to status strings
+    (``'active'``, ``'passive'``, ``'atomic'``). Controls not in the
+    dict default to ``'active'``.
+
+    Control names can be:
+
+    - **Type names** (``'link'``, ``'float'``, a registered type) —
+      matched against the node's schema type.
+    - **Key names** (``'room'``, ``'agent'``) — matched against the
+      dict key at which a node sits. Useful for plain-dict schemas
+      where the control is implicit in the key, as in Milner's
+      built-environment example (A:agent, B:building, R:room, etc.).
+
+    A reaction can only fire at a location where ``is_active`` is
+    True — passive ancestors block reactions inside them.
+    """
+    if control_status is None:
+        control_status = {}
+
+    node = schema
+    for step in path:
+        # Check by node type
+        status = control_status.get(_control_name(node), None)
+        # Also check by the key we're stepping into — for plain dicts
+        # the key IS the control label in the Milner sense.
+        if status is None:
+            status = control_status.get(step, ACTIVE)
+        if status != ACTIVE:
+            return False
+        # Descend
+        if isinstance(node, dict):
+            if step not in node:
+                return True
+            node = node[step]
+        elif hasattr(node, step):
+            node = getattr(node, step)
+        else:
+            return True
+
+    return True
+
+
+# ── Reaction rules ──────────────────────────────────────────────────
+# Milner Def. 8.5 (p. 84): a parametric reaction rule is a triple
+# (R : m → J,  R' : m' → J,  η : m' → m) where R is the parametric
+# redex, R' the parametric reactum, and η the instantiation map.
+#
+# In our model:
+#   - redex and reactum are schemas (dicts) with Sites for parameters
+#   - instantiation maps reactum site keys to redex site keys
+#   - rate is an optional stochastic weight (Milner §11.4)
+
+
+@dataclass
+class ReactionRule:
+    """A parametric reaction rule.
+
+    Attributes:
+        redex: Schema pattern to match. Sites in the redex are
+            parameters — they match arbitrary subtrees.
+        reactum: Schema to substitute when the rule fires. Sites in
+            the reactum are filled via ``instantiation``.
+        instantiation: Maps each reactum site key to the redex site
+            key whose matched subtree should fill it. If a redex
+            site key appears multiple times, its content is shared
+            (Milner §8.1, p. 83). If a redex site key is absent
+            from the values, its matched content is discarded.
+        rate: Optional stochastic rate for Gillespie-style selection
+            among competing rules (Milner §11.4).
+        label: Human-readable name for the rule.
+    """
+    redex: dict
+    reactum: dict
+    instantiation: Dict[str, str] = field(default_factory=dict)
+    rate: Optional[float] = None
+    label: str = ''
+
+    def __post_init__(self):
+        if not self.instantiation:
+            # Default: identity map — reactum site keys match redex
+            # site keys by name.
+            redex_inner, _ = interfaces(self.redex)
+            reactum_inner, _ = interfaces(self.reactum)
+            redex_sites = {p: s for p, s in redex_inner._places}
+            reactum_sites = {p: s for p, s in reactum_inner._places}
+            self.instantiation = {}
+            for rpath in reactum_sites:
+                # Match by site key (last path element)
+                rkey = rpath[-1] if rpath else None
+                for dpath in redex_sites:
+                    dkey = dpath[-1] if dpath else None
+                    if rkey == dkey:
+                        self.instantiation[rkey] = dkey
+                        break
 
 
 # ── Helpers ─────────────────────────────────────────────────────────

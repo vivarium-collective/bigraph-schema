@@ -1567,6 +1567,92 @@ def test_category_laws(core):
         'S (symmetry): a⊗b should equal b⊗a for dicts'
 
 
+def test_control_status_activity(core):
+    """Dynamic control status (Milner Def. 8.2): reactions can only fire
+    at locations where every ancestor has an active control. Controls
+    are matched by type name or by dict key name."""
+    from bigraph_schema.assembly import is_active, ACTIVE, PASSIVE, ATOMIC
+
+    building = {
+        'building': {
+            'room': {
+                'agent': core.access('float'),
+                'computer': core.access('float')}}}
+
+    # All active by default
+    assert is_active(building, ('building', 'room', 'agent'))
+
+    # Room is passive — agent inside is blocked
+    status = {'room': PASSIVE}
+    assert not is_active(building, ('building', 'room', 'agent'), status)
+
+    # Building itself is still reachable
+    assert is_active(building, ('building',), status)
+
+    # Atomic control — Link ports typed 'float' are atomic leaves
+    assert is_active(building, ('building', 'room'), {'float': ATOMIC})
+    # The float node itself is reachable but is atomic — nothing below
+    # it can host reactions (there's nothing below it anyway).
+
+
+def test_reaction_rule_construction(core):
+    """ReactionRule bundles a redex, reactum, and instantiation map.
+    Default instantiation matches sites by key name."""
+    from bigraph_schema.assembly import ReactionRule, interfaces
+
+    # Simple rule: a site is replaced by a different structure
+    redex = {'slot': Site()}
+    reactum = {'slot': Site()}
+    rule = ReactionRule(redex=redex, reactum=reactum, label='identity')
+    assert rule.label == 'identity'
+    assert rule.rate is None
+    assert 'slot' in rule.instantiation
+
+    # Rule with explicit instantiation
+    redex2 = {'a': Site(), 'b': Site()}
+    reactum2 = {'x': Site(), 'y': Site()}
+    rule2 = ReactionRule(
+        redex=redex2, reactum=reactum2,
+        instantiation={'x': 'a', 'y': 'b'},
+        rate=1.5,
+        label='swap')
+    assert rule2.instantiation == {'x': 'a', 'y': 'b'}
+    assert rule2.rate == 1.5
+
+
+def test_reaction_rule_built_environment(core):
+    """Milner Ch. 1 (p. 8): rules B1–B3 for the built environment.
+
+    B1: agent leaves a conference call (unlinking).
+    B2: agent connects to a computer (linking).
+    B3: agent enters a room (place change).
+
+    We encode B3 here since it's the most interesting — it changes
+    the place graph by moving the agent inside the room.
+    """
+    from bigraph_schema.assembly import ReactionRule, interfaces, compose
+
+    # B3 redex: agent and room are siblings in the same building.
+    # The room has a site for its existing contents.
+    redex = {'agent': Site(), 'room': {'content': Site()}}
+    # B3 reactum: agent is now inside the room.
+    reactum = {'room': {'content': Site(), 'agent': Site()}}
+
+    b3 = ReactionRule(redex=redex, reactum=reactum, label='B3')
+
+    # The instantiation preserves both parameters: the agent subtree
+    # fills 'agent' in the reactum, and existing room content fills
+    # 'content' in the reactum.
+    assert b3.instantiation.get('agent') == 'agent'
+    assert b3.instantiation.get('content') == 'content'
+
+    # Redex has 2 sites (agent + room content), reactum has 2 sites
+    ri, _ = interfaces(b3.redex)
+    qi, _ = interfaces(b3.reactum)
+    assert len(ri._places) == 2
+    assert len(qi._places) == 2
+
+
 def test_interfaces_container_traversal(core):
     """The interfaces() walker descends into container value schemas
     (Map._value, List._element, Tree._leaf, Wrap._value) so that
@@ -1660,5 +1746,8 @@ if __name__ == '__main__':
     test_compose_identity_on_schemas(core)
     test_interfaces_container_traversal(core)
     test_category_laws(core)
+    test_control_status_activity(core)
+    test_reaction_rule_construction(core)
+    test_reaction_rule_built_environment(core)
 
     test_resolve_conflict(core)
