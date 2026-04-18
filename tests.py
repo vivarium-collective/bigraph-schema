@@ -1359,10 +1359,248 @@ def test_assembly_identity_laws():
     # no sites/names, plugging nothing into g leaves g unchanged).
     assert compose(g, identity(EPSILON)) == g
 
-    # Non-trivial composition is not yet implemented.
+    # Non-trivial Interface-only composition is not supported — compose
+    # operates on dict schemas.
     import pytest
     with pytest.raises(NotImplementedError):
         compose(Interface(_names={'x': None}), Interface(_names={'y': None}))
+
+
+# ── M2: interface derivation, elementary bigraphs, composition ──────
+
+def test_interfaces_ground_schema(core):
+    """A plain schema with no Sites and all ports wired is ground."""
+    from bigraph_schema.assembly import interfaces, is_ground
+    schema = {'cell': {'mass': core.access('float')}}
+    inner, outer = interfaces(schema)
+    assert inner._places == ()
+    assert inner._names == {}
+    assert 'cell' in outer._places
+    assert is_ground(schema)
+
+
+def test_interfaces_with_sites(core):
+    """Sites in the tree show up as inner face places."""
+    from bigraph_schema.assembly import interfaces, is_ground
+    schema = {'container': {'data': core.access('float'), 'hole': Site()}}
+    inner, outer = interfaces(schema)
+    assert len(inner._places) == 1
+    path, site = inner._places[0]
+    assert path == ('container', 'hole')
+    assert isinstance(site, Site)
+    assert not is_ground(schema)
+
+
+def test_interfaces_unwired_ports(core):
+    """Unwired Link ports are inner/outer names in the interface."""
+    from bigraph_schema.assembly import interfaces
+    schema = core.access({
+        'proc': {
+            '_type': 'link',
+            '_inputs': {'x': 'float', 'y': 'float'},
+            '_outputs': {'z': 'delta'},
+            'inputs': {'x': ['store', 'x']}}})
+    inner, outer = interfaces(schema)
+    assert 'y' in inner._names    # unwired input → inner name
+    assert 'x' not in inner._names  # wired → not open
+    assert 'z' in outer._names    # unwired output → outer name
+
+
+def test_elementary_barren(core):
+    """barren() is 1 : ε → ⟨1, ∅⟩. One empty root, ground."""
+    from bigraph_schema.assembly import barren, interfaces, is_ground
+    b = barren()
+    inner, outer = interfaces(b)
+    assert inner._places == () and inner._names == {}
+    assert len(outer._places) == 1
+    assert is_ground(b)
+
+
+def test_elementary_merge(core):
+    """merge(n) has n sites under one root."""
+    from bigraph_schema.assembly import merge, interfaces
+    m = merge(3)
+    inner, outer = interfaces(m)
+    assert len(inner._places) == 3
+    assert len(outer._places) == 1
+
+
+def test_elementary_ion(core):
+    """ion has 1 site and outer names from its ports."""
+    from bigraph_schema.assembly import ion, interfaces
+    i = ion(core, 'K', ('x', 'y'))
+    inner, outer = interfaces(i)
+    assert len(inner._places) == 1
+    assert set(outer._names.keys()) == {'x', 'y'}
+
+
+def test_elementary_substitution_closure(core):
+    """substitution has inner names X and outer name y.
+    closure has inner name x and no outer names."""
+    from bigraph_schema.assembly import substitution, closure, interfaces
+    s = substitution(core, 'y', ('a', 'b'))
+    inner_s, outer_s = interfaces(s)
+    assert set(inner_s._names.keys()) == {'a', 'b'}
+    assert set(outer_s._names.keys()) == {'y'}
+
+    c = closure(core, 'x')
+    inner_c, outer_c = interfaces(c)
+    assert 'x' in inner_c._names
+    assert outer_c._names == {}
+
+
+def test_compose_fills_sites(core):
+    """Composing merge(2) with two barren roots fills both sites."""
+    from bigraph_schema.assembly import merge, barren, tensor, compose, interfaces, is_ground
+    outer = merge(2)
+    inner = tensor(barren('a'), barren('b'))
+    result = compose(outer, inner)
+    assert is_ground(result)
+    # The two sites were replaced by the two barren roots' content
+    region = result['region0']
+    assert 'site0' in region
+    assert 'site1' in region
+
+
+def test_compose_atom(core):
+    """ion ∘ barren produces a K-atom (ion with site filled)."""
+    from bigraph_schema.assembly import ion, barren, compose, interfaces, is_ground
+    k = ion(core, 'K', ('x', 'y'))
+    filler = barren('root')
+    atom = compose(k, filler)
+    inner, outer = interfaces(atom)
+    assert inner._places == ()  # no more sites
+    assert set(outer._names.keys()) == {'x', 'y'}  # names preserved
+
+
+def test_tensor_disjoint(core):
+    """Tensor product merges two schemas with disjoint keys."""
+    from bigraph_schema.assembly import barren, tensor, interfaces
+    t = tensor(barren('a'), barren('b'))
+    _, outer = interfaces(t)
+    assert set(outer._places) == {'a', 'b'}
+
+
+def test_tensor_overlap_raises(core):
+    """Tensor rejects schemas with overlapping keys."""
+    from bigraph_schema.assembly import barren, tensor
+    import pytest
+    with pytest.raises(ValueError, match='disjoint'):
+        tensor(barren('a'), barren('a'))
+
+
+def test_compose_identity_on_schemas(core):
+    """Category law C3: g ∘ id = g for dict schemas.
+    A ground schema composed with EPSILON returns itself."""
+    from bigraph_schema.assembly import compose, EPSILON
+    g = {'cell': {'mass': core.access('float')}}
+    assert compose(g, EPSILON) is g
+
+
+def test_category_laws(core):
+    """Verify the categorical axioms from Milner Defs. 2.8–2.11.
+
+    These are the algebraic laws that make bigraph schemas a symmetric
+    partial monoidal (spm) category with composition (∘) and tensor
+    product (⊗). All laws are tested on elementary bigraphs built
+    from the constructors in assembly.py.
+    """
+    from bigraph_schema.assembly import (
+        interfaces, barren, merge, ion, tensor, compose, EPSILON)
+
+    # ── C2: associativity of composition ──
+    # h ∘ (g ∘ f) = (h ∘ g) ∘ f
+    #
+    # f: ε → ⟨2⟩   (two barren roots, ground)
+    # g: ⟨2⟩ → ⟨1⟩ (merge two sites into one root)
+    # h: ⟨1⟩ → ⟨1⟩ (one site wrapped in structure)
+    f = tensor(barren('a'), barren('b'))
+    g = merge(2)
+    h = {'wrapper': {'content': Site(), 'extra': core.access('string')}}
+
+    assert compose(h, compose(g, f)) == compose(compose(h, g), f), \
+        'C2 (associativity): h∘(g∘f) != (h∘g)∘f'
+
+    # ── C3: identity laws ──
+    # id ∘ f = f  and  f ∘ id = f
+    # For dict schemas, EPSILON (empty Interface) is the identity.
+    schema = {'cell': {'mass': core.access('float')}}
+    assert compose(schema, EPSILON) is schema, \
+        'C3 (right identity): f∘id != f'
+    assert compose(EPSILON, schema) is schema, \
+        'C3 (left identity): id∘f != f'
+
+    # ── M1: associativity of tensor ──
+    # f ⊗ (g ⊗ h) = (f ⊗ g) ⊗ h
+    a, b, c = barren('x'), barren('y'), barren('z')
+    assert tensor(a, tensor(b, c)) == tensor(tensor(a, b), c), \
+        'M1 (tensor associativity)'
+
+    # ── M2: tensor unit ──
+    # {} ⊗ f = f  and  f ⊗ {} = f
+    assert tensor({}, barren('a')) == barren('a'), \
+        'M2 (left unit): {}⊗f != f'
+    assert tensor(barren('a'), {}) == barren('a'), \
+        'M2 (right unit): f⊗{} != f'
+
+    # ── M3: interchange (tensor commutes with composition) ──
+    # (f₁ ⊗ g₁) ∘ (f₀ ⊗ g₀) = (f₁ ∘ f₀) ⊗ (g₁ ∘ g₀)
+    #
+    # f₀ = barren('a'), g₀ = barren('b')  (ground)
+    # f₁ = {fa: {hole: Site()}}, g₁ = {gb: {hole: Site()}}
+    f0 = barren('a')
+    g0 = barren('b')
+    f1 = {'fa': {'hole': Site()}}
+    g1 = {'gb': {'hole': Site()}}
+
+    lhs = compose(tensor(f1, g1), tensor(f0, g0))
+    rhs = tensor(compose(f1, f0), compose(g1, g0))
+    assert lhs == rhs, \
+        'M3 (interchange): (f₁⊗g₁)∘(f₀⊗g₀) != (f₁∘f₀)⊗(g₁∘g₀)'
+
+    # ── S1–S4: symmetry ──
+    # In our dict-based model, tensor is dict merge and dict keys are
+    # unordered (semantically). The symmetry γ_{I,J} is the identity —
+    # swapping the order of tensor factors doesn't change the dict.
+    # So S1–S4 are trivially satisfied:
+    assert tensor(barren('a'), barren('b')) == tensor(barren('b'), barren('a')), \
+        'S (symmetry): a⊗b should equal b⊗a for dicts'
+
+
+def test_interfaces_container_traversal(core):
+    """The interfaces() walker descends into container value schemas
+    (Map._value, List._element, Tree._leaf, Wrap._value) so that
+    Sites and Links inside containers are found."""
+    from bigraph_schema.assembly import interfaces
+
+    # Map whose values are Sites → every entry is a hole
+    schema = {'pool': core.access({'_type': 'map', '_value': 'site'})}
+    inner, _ = interfaces(schema)
+    assert len(inner._places) == 1
+    path, site = inner._places[0]
+    assert path == ('pool', '*')
+
+    # List of Links → ports found with wildcard path
+    schema2 = core.access({'procs': {
+        '_type': 'list',
+        '_element': {
+            '_type': 'link',
+            '_inputs': {'x': 'float'},
+            '_outputs': {'y': 'delta'}}}})
+    inner2, outer2 = interfaces(schema2)
+    assert 'x' in inner2._names
+    assert inner2._names['x'] == ('procs', '*')
+
+    # Maybe wrapping a Site → found at container path (no wildcard)
+    schema3 = {'slot': core.access('maybe[site]')}
+    inner3, _ = interfaces(schema3)
+    assert len(inner3._places) == 1
+
+    # Tree whose leaves are Sites
+    schema4 = {'hier': core.access({'_type': 'tree', '_leaf': 'site'})}
+    inner4, _ = interfaces(schema4)
+    assert len(inner4._places) == 1
+    assert inner4._places[0][0] == ('hier', '*')
 
 
 if __name__ == '__main__':
@@ -1408,5 +1646,19 @@ if __name__ == '__main__':
     test_interface_dict_form_access(core)
     test_number_object_function_defaults(core)
     test_assembly_identity_laws()
+    test_interfaces_ground_schema(core)
+    test_interfaces_with_sites(core)
+    test_interfaces_unwired_ports(core)
+    test_elementary_barren(core)
+    test_elementary_merge(core)
+    test_elementary_ion(core)
+    test_elementary_substitution_closure(core)
+    test_compose_fills_sites(core)
+    test_compose_atom(core)
+    test_tensor_disjoint(core)
+    test_tensor_overlap_raises(core)
+    test_compose_identity_on_schemas(core)
+    test_interfaces_container_traversal(core)
+    test_category_laws(core)
 
     test_resolve_conflict(core)

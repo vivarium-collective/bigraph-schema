@@ -91,14 +91,25 @@ def resolve_empty(empty, update, path=None):
 
 @dispatch
 def resolve(current: Empty, update: Empty, path=None):
+    # If the types differ (e.g. Empty vs Site), the more specific wins.
+    if type(current) is Empty:
+        return update
+    if type(update) is Empty:
+        return current
     return resolve_empty(current, update, path=path)
 
 @dispatch
 def resolve(current: Empty, update: Node, path=None):
+    # An Empty subclass (Site, InnerName, etc.) IS a specific type —
+    # only bare Empty() should yield to the other side.
+    if type(current) is not Empty:
+        return current
     return resolve_empty(current, update, path=path)
 
 @dispatch
 def resolve(current: Node, update: Empty, path=None):
+    if type(update) is not Empty:
+        return update
     return resolve_empty(update, current, path=path)
 
 # Disambiguate (SubType, Empty) for all subtypes that have (SubType, Node) dispatches
