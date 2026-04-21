@@ -445,6 +445,22 @@ def is_active(schema, path, control_status=None):
 
 
 @dataclass
+class Match:
+    """Result of matching a redex against a state subtree.
+
+    Attributes:
+        path: Location in the state where the match occurs.
+        bindings: ``{site_label: matched_subtree}`` — the content
+            captured by each Site in the redex.
+        key_map: ``{redex_key: state_key}`` — which state key each
+            non-Site redex key was assigned to.
+    """
+    path: tuple
+    bindings: dict
+    key_map: dict
+
+
+@dataclass
 class ReactionRule:
     """A parametric reaction rule.
 
@@ -485,6 +501,217 @@ class ReactionRule:
                     if rkey == dkey:
                         self.instantiation[rkey] = dkey
                         break
+
+
+# ── Matching ────────────────────────────────────────────────────────
+# Given a ground state and a redex pattern, find occurrences.
+#
+# Milner's matching semantics (informal, Ch. 1 + Def. 8.5):
+# - Non-Site redex entries must find structurally compatible state
+#   entries. The assignment of redex keys to state keys is discovered
+#   combinatorially (subgraph isomorphism).
+# - Site entries bind the REMAINING state content not consumed by
+#   non-Site entries. A single Site captures the entire leftover as
+#   a dict. Multiple Sites at the same level would require
+#   partitioning (deferred — rare in practice).
+# - Matching walks the state tree and tries the redex at every dict
+#   node, filtering by activity (is_active).
+
+
+def _match_node(state_node, redex_node, bindings):
+    """Check whether ``redex_node`` matches ``state_node``.
+
+    Matching modes (checked in order):
+
+    1. **Site** → matches anything (the whole point of a site).
+    2. **dict** → structural match via ``_match_dict``, with optional
+       ``_control`` constraint.
+    3. **Node vs Node** → ``isinstance`` (Float matches Float, Integer
+       matches Number, etc.).
+    4. **Node vs runtime value** → ``check(schema, value)`` from the
+       type system. Float() matches ``70.0``, Integer() matches ``5``,
+       String() matches ``'hello'``.
+    """
+    if isinstance(redex_node, Site):
+        return True
+
+    if isinstance(redex_node, dict):
+        if not isinstance(state_node, dict):
+            return False
+        if '_control' in redex_node:
+            if state_node.get('_control') != redex_node['_control']:
+                return False
+        return _match_dict(state_node, redex_node, bindings)
+
+    if isinstance(redex_node, Node):
+        # Schema-against-schema
+        if isinstance(state_node, Node):
+            return isinstance(state_node, type(redex_node))
+        # Schema-against-runtime-value (state is 70.0, redex is Float)
+        from bigraph_schema.methods import check
+        try:
+            return check(redex_node, state_node)
+        except Exception:
+            return False
+
+    return False
+
+
+def _match_dict(state_dict, redex_dict, bindings):
+    """Match ``redex_dict`` against ``state_dict``.
+
+    Separates redex entries into *fixed* (non-Site, must map to a
+    state key whose subtree matches) and *sites* (bind whatever
+    the fixed entries don't consume). Tries all valid assignments
+    of state keys to fixed entries; returns True on first success.
+    """
+    from itertools import permutations
+
+    redex_entries = [
+        (k, v) for k, v in redex_dict.items()
+        if isinstance(k, str) and not k.startswith('_')]
+    state_keys = [
+        k for k in state_dict
+        if isinstance(k, str) and not k.startswith('_')]
+
+    fixed = [(k, v) for k, v in redex_entries if not isinstance(v, Site)]
+    sites = [(k, v) for k, v in redex_entries if isinstance(v, Site)]
+
+    if len(fixed) > len(state_keys):
+        return False
+
+    candidates = permutations(state_keys, len(fixed))
+    # Optimisation: if no fixed keys, skip the permutation loop
+    if not fixed:
+        candidates = [()]
+
+    for perm in candidates:
+        assignment = dict(zip([k for k, _ in fixed], perm))
+        trial = {}
+        ok = True
+        for redex_key, state_key in assignment.items():
+            if not _match_node(
+                    state_dict[state_key], redex_dict[redex_key], trial):
+                ok = False
+                break
+        if not ok:
+            continue
+
+        # Remaining state keys → site bindings
+        used = set(assignment.values())
+        remaining = {k: state_dict[k] for k in state_keys if k not in used}
+
+        if len(sites) == 1:
+            trial[sites[0][0]] = remaining
+        elif len(sites) > 1:
+            # Multiple sites would need partitioning. For now, each
+            # gets the full remaining (only correct when remaining
+            # is empty or there's one site).
+            for sk, _ in sites:
+                trial[sk] = remaining
+
+        bindings.update(trial)
+        # Also record the key assignment so fire_rule knows the mapping
+        bindings['__key_map__'] = {**assignment,
+                                   **{sk: None for sk, _ in sites}}
+        return True
+
+    return False
+
+
+def find_matches(state, redex, control_status=None):
+    """Find all positions in ``state`` where ``redex`` matches.
+
+    Returns a list of ``Match`` objects. Each match records the path,
+    the Site bindings, and the redex→state key mapping.
+    """
+    results = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            bindings = {}
+            if _match_dict(node, redex, bindings):
+                key_map = bindings.pop('__key_map__', {})
+                if control_status is None or is_active(
+                        state, path, control_status):
+                    results.append(Match(
+                        path=path,
+                        bindings=bindings,
+                        key_map=key_map))
+            for key, child in node.items():
+                if isinstance(key, str) and not key.startswith('_'):
+                    walk(child, path + (key,))
+
+    walk(state, ())
+    return results
+
+
+# ── Instantiation ───────────────────────────────────────────────────
+
+
+def instantiate(reactum, bindings, instantiation):
+    """Build a concrete replacement subtree from a reactum pattern.
+
+    For each Site in the reactum, look up which redex site it maps to
+    via ``instantiation``, then fill it with the subtree captured in
+    ``bindings`` for that redex site.
+
+    Returns a new dict (deep-copied, safe to mutate).
+    """
+    result = {}
+    for key, value in reactum.items():
+        if isinstance(key, str) and key.startswith('_'):
+            continue
+        if isinstance(value, Site):
+            # This site maps to a redex site via instantiation
+            source_key = instantiation.get(key, key)
+            filler = bindings.get(source_key)
+            if isinstance(filler, dict):
+                result[key] = copy.deepcopy(filler)
+            else:
+                result[key] = copy.deepcopy(filler) if filler is not None else None
+        elif isinstance(value, dict):
+            result[key] = instantiate(value, bindings, instantiation)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+# ── Firing ──────────────────────────────────────────────────────────
+
+
+def fire_rule(state, rule, control_status=None, match_index=0):
+    """Apply a reaction rule to a state.
+
+    Finds matches of ``rule.redex`` in ``state``, picks one (by
+    ``match_index``), builds the reactum via instantiation, and
+    substitutes it into the state.
+
+    Returns ``(new_state, match)`` or ``(state, None)`` if no match.
+    """
+    matches = find_matches(state, rule.redex, control_status)
+    if not matches or match_index >= len(matches):
+        return state, None
+
+    match = matches[match_index]
+
+    # Build the replacement from the reactum
+    replacement = instantiate(
+        rule.reactum, match.bindings, rule.instantiation)
+
+    # Substitute into state at the match path
+    new_state = copy.deepcopy(state)
+    parent = _get_at_path(new_state, match.path) if match.path else new_state
+
+    if isinstance(parent, dict):
+        # Remove keys that the redex consumed
+        for redex_key, state_key in match.key_map.items():
+            if state_key is not None and state_key in parent:
+                del parent[state_key]
+        # Add the reactum's keys
+        parent.update(replacement)
+
+    return new_state, match
 
 
 # ── Helpers ─────────────────────────────────────────────────────────

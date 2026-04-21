@@ -1653,6 +1653,101 @@ def test_reaction_rule_built_environment(core):
     assert len(qi._places) == 2
 
 
+def test_find_matches_typed(core):
+    """Matching uses schema types as controls: Float() in the redex
+    matches Float() schema nodes and runtime float values."""
+    from bigraph_schema.assembly import find_matches
+    from bigraph_schema.schema import Float, Integer
+
+    # Schema-against-schema
+    schema = {'x': Float(), 'y': Integer(), 'sub': {'z': Float()}}
+    matches = find_matches(schema, {'f': Float()})
+    paths = [m.path for m in matches]
+    assert () in paths       # x is Float at top level
+    assert ('sub',) in paths  # z is Float inside sub
+
+    # Schema-against-runtime-value
+    state = {'temp': 22.5, 'count': 3, 'name': 'alice'}
+    matches2 = find_matches(state, {'val': Float()})
+    assert len(matches2) == 1
+    assert matches2[0].key_map['val'] == 'temp'
+
+
+def test_find_matches_controls(core):
+    """_control annotations discriminate matching so that only nodes
+    with the right control are matched."""
+    from bigraph_schema.assembly import find_matches
+
+    state = {
+        'bldg': {
+            '_control': 'building',
+            'ag': {'_control': 'agent', 'mass': 70.0},
+            'rm': {'_control': 'room', 'temp': 22.0}}}
+
+    # Only match agent+room pairs (not building+agent, etc.)
+    redex = {
+        'a': {'_control': 'agent', 'data': Site()},
+        'r': {'_control': 'room', 'stuff': Site()}}
+    matches = find_matches(state, redex)
+    assert len(matches) == 1
+    assert matches[0].path == ('bldg',)
+    assert matches[0].key_map['a'] == 'ag'
+    assert matches[0].key_map['r'] == 'rm'
+
+
+def test_fire_rule_b3(core):
+    """End-to-end B3: agent enters room. The agent moves from being
+    a sibling of the room to being inside it."""
+    from bigraph_schema.assembly import ReactionRule, fire_rule
+
+    state = {
+        'bldg': {
+            '_control': 'building',
+            'alice': {'_control': 'agent', 'mass': 70.0},
+            'lab': {
+                '_control': 'room',
+                'bob': {'_control': 'agent', 'mass': 80.0},
+                'pc': {'_control': 'computer', 'cpu': 3.0}}}}
+
+    redex = {
+        'a': {'_control': 'agent', 'props': Site()},
+        'r': {'_control': 'room', 'contents': Site()}}
+    reactum = {
+        'r': {'_control': 'room',
+              'contents': Site(),
+              'a': {'_control': 'agent', 'props': Site()}}}
+    b3 = ReactionRule(
+        redex=redex, reactum=reactum,
+        instantiation={'props': 'props', 'contents': 'contents'},
+        label='B3')
+
+    new_state, match = fire_rule(state, b3)
+    assert match is not None
+    # Alice should have moved inside the room
+    bldg = new_state['bldg']
+    assert 'alice' not in bldg
+    room = bldg['r']
+    assert 'a' in room
+    assert room['a']['props']['mass'] == 70.0
+    # Existing room contents preserved
+    assert 'bob' in room['contents']
+    assert 'pc' in room['contents']
+
+
+def test_fire_rule_no_match(core):
+    """fire_rule returns (state, None) when the redex doesn't match."""
+    from bigraph_schema.assembly import ReactionRule, fire_rule
+
+    state = {'x': 1.0}
+    rule = ReactionRule(
+        redex={'a': {'_control': 'agent', 'd': Site()}},
+        reactum={'a': {'_control': 'agent', 'd': Site()}},
+        label='noop')
+    new_state, match = fire_rule(state, rule)
+    assert match is None
+    assert new_state is state
+
+
 def test_interfaces_container_traversal(core):
     """The interfaces() walker descends into container value schemas
     (Map._value, List._element, Tree._leaf, Wrap._value) so that
@@ -1749,5 +1844,9 @@ if __name__ == '__main__':
     test_control_status_activity(core)
     test_reaction_rule_construction(core)
     test_reaction_rule_built_environment(core)
+    test_find_matches_typed(core)
+    test_find_matches_controls(core)
+    test_fire_rule_b3(core)
+    test_fire_rule_no_match(core)
 
     test_resolve_conflict(core)
