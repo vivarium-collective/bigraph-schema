@@ -770,10 +770,17 @@ def _match_node(state_node, redex_node, bindings):
 def _match_dict(state_dict, redex_dict, bindings):
     """Match ``redex_dict`` against ``state_dict``.
 
-    Separates redex entries into *fixed* (non-Site, must map to a
-    state key whose subtree matches) and *sites* (bind whatever
-    the fixed entries don't consume). Tries all valid assignments
-    of state keys to fixed entries; returns True on first success.
+    ALL redex entries (both fixed and Site) participate in the key
+    assignment. Fixed entries must structurally match their assigned
+    state node; Site entries match anything and bind the value.
+
+    When there are more state keys than redex entries (surplus), the
+    surplus is collected into a dict and added to the LAST Site's
+    binding. This gives the "rest" capture semantics — one Site can
+    bind an entire subtree of remaining children.
+
+    When ``len(redex) == len(state)``, each Site captures exactly one
+    state entry (1-to-1 assignment).
     """
     from itertools import permutations
 
@@ -784,46 +791,50 @@ def _match_dict(state_dict, redex_dict, bindings):
         k for k in state_dict
         if isinstance(k, str) and not k.startswith('_')]
 
-    fixed = [(k, v) for k, v in redex_entries if not isinstance(v, Site)]
-    sites = [(k, v) for k, v in redex_entries if isinstance(v, Site)]
-
-    if len(fixed) > len(state_keys):
+    if len(redex_entries) > len(state_keys):
         return False
 
-    candidates = permutations(state_keys, len(fixed))
-    # Optimisation: if no fixed keys, skip the permutation loop
-    if not fixed:
-        candidates = [()]
+    site_keys = [k for k, v in redex_entries if isinstance(v, Site)]
+    has_surplus = len(redex_entries) < len(state_keys)
 
-    for perm in candidates:
-        assignment = dict(zip([k for k, _ in fixed], perm))
+    for perm in permutations(state_keys, len(redex_entries)):
+        assignment = dict(zip([k for k, _ in redex_entries], perm))
         trial = {}
         ok = True
         for redex_key, state_key in assignment.items():
-            if not _match_node(
-                    state_dict[state_key], redex_dict[redex_key], trial):
+            redex_value = redex_dict[redex_key]
+            state_value = state_dict[state_key]
+            if isinstance(redex_value, Site):
+                if has_surplus:
+                    # With surplus, Sites capture as key→value dicts
+                    # (the last Site absorbs the surplus below).
+                    trial[redex_key] = {state_key: state_value}
+                else:
+                    # Exact match — Sites capture the bare value.
+                    trial[redex_key] = state_value
+            elif not _match_node(state_value, redex_value, trial):
                 ok = False
                 break
         if not ok:
             continue
 
-        # Remaining state keys → site bindings
+        # Surplus state keys → merge into the last Site's binding
         used = set(assignment.values())
-        remaining = {k: state_dict[k] for k in state_keys if k not in used}
+        surplus = {k: state_dict[k] for k in state_keys if k not in used}
 
-        if len(sites) == 1:
-            trial[sites[0][0]] = remaining
-        elif len(sites) > 1:
-            # Multiple sites would need partitioning. For now, each
-            # gets the full remaining (only correct when remaining
-            # is empty or there's one site).
-            for sk, _ in sites:
-                trial[sk] = remaining
+        if surplus and site_keys:
+            last_site = site_keys[-1]
+            existing = trial.get(last_site, {})
+            if isinstance(existing, dict):
+                existing.update(surplus)
+                trial[last_site] = existing
+            else:
+                trial[last_site] = surplus
 
         bindings.update(trial)
-        # Also record the key assignment so fire_rule knows the mapping
-        bindings['__key_map__'] = {**assignment,
-                                   **{sk: None for sk, _ in sites}}
+        bindings['__key_map__'] = {
+            **assignment,
+            **{sk: assignment.get(sk) for sk in site_keys}}
         return True
 
     return False

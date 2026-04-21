@@ -280,6 +280,128 @@ def ambient_brs(names=('x', 'y')):
 # post-conditions unmarked → flip to marked.
 
 
+# ── π-calculus ──────────────────────────────────────────────────────
+# Milner §11.3 (p. 122), Jensen & Milner [47].
+#
+# Like CCS but with name-passing: x̄⟨y⟩.P sends name y over channel
+# x, and x(z).Q receives on x and binds the received name to z in Q.
+#
+# Key reaction: x̄⟨y⟩.P | x(z).Q → P | Q{y/z}
+# where Q{y/z} substitutes y for all free occurrences of z in Q.
+#
+# Controls:
+#   - alt: passive, houses summands (same as CCS)
+#   - send_x: passive, arity 2 (channel port + transmitted name port)
+#   - get_x: passive, arity 2 (channel port + binding variable port)
+#   - nil: null process
+#
+# Restriction (νx)P is encoded as closure(/x) ∘ P — the link x
+# becomes a bound edge within P's scope. This uses our existing
+# closure() elementary bigraph.
+#
+# Name substitution Q{y/z}: in the bigraphical encoding, the
+# instantiation step rewires link z to link y within the bound
+# subtree. Our current instantiate() handles this when the
+# transmitted name appears as a key in the matched subtree that
+# can be carried through the instantiation map.
+
+
+def pi_sorting(channels=('x',)):
+    """Build the π-calculus sorting. Same stratified structure as CCS
+    but send/get have arity 2 (channel + name ports)."""
+    controls = {
+        'alt': {'sort': 'a', 'status': PASSIVE, 'arity': 0},
+        'nil': {'sort': 'a', 'status': PASSIVE, 'arity': 0}}
+    for ch in channels:
+        controls[f'send_{ch}'] = {
+            'sort': 'p', 'status': PASSIVE, 'arity': 2,
+            'port_sorts': ('s', 's')}
+        controls[f'get_{ch}'] = {
+            'sort': 'p', 'status': PASSIVE, 'arity': 2,
+            'port_sorts': ('t', 't')}
+
+    return stratified_sorting(
+        sorts={'p', 'a'},
+        phi={'p': 'a', 'a': 'p'},
+        controls=controls,
+        hard_sorts={'p'})
+
+
+def pi_reaction(channel):
+    """The π-calculus reaction rule for channel ``channel``.
+
+    ``x̄⟨y⟩.P | x(z).Q → P | Q{y/z}``
+
+    The redex matches two sibling alternations: one with a send
+    prefix carrying a name (``sent_name``), the other with a get
+    prefix expecting to bind a name. The reactum exposes both
+    continuations; the sent name is passed through as part of the
+    receiver's bound subtree via the instantiation map.
+
+    Full link-renaming (``Q{y/z}``) requires rewiring within the
+    bound subtree — a deeper feature noted for future work. This
+    encoding demonstrates the structural synchronisation; the name
+    appears in the receiver's continuation as a carried value.
+    """
+    return ReactionRule(
+        redex={
+            'sender': {
+                '_control': 'alt',
+                'prefix': {
+                    '_control': f'send_{channel}',
+                    'sent_name': Site(),
+                    'send_cont': Site()},
+                'send_rest': Site()},
+            'receiver': {
+                '_control': 'alt',
+                'prefix': {
+                    '_control': f'get_{channel}',
+                    'bound_var': Site(),
+                    'recv_cont': Site()},
+                'recv_rest': Site()}},
+        reactum={
+            'send_cont': Site(),
+            'recv_cont': Site(),
+            'received_name': Site()},
+        instantiation={
+            'send_cont': 'send_cont',
+            'recv_cont': 'recv_cont',
+            'received_name': 'sent_name'},
+        label=f'π sync on {channel}')
+
+
+def pi_brs(channels=('x',)):
+    """Build a π-calculus BRS.
+
+    Returns ``(sorting, rules, example_state)``.
+
+    Example: ``x̄⟨y⟩.0 | x(z).0`` — send name y on x, receive on x.
+    After reaction: both continuations are nil, and the sent name y
+    appears as ``received_name`` in the result.
+    """
+    sorting = pi_sorting(channels)
+    rules = [pi_reaction(ch) for ch in channels]
+
+    ch = channels[0]
+    example = {
+        'sender': {
+            '_control': 'alt',
+            'prefix': {
+                '_control': f'send_{ch}',
+                'sent_name': {'the_name': 'y', 'data': 42},
+                'send_cont': {'_control': 'nil'}},
+            'send_rest': {'_control': 'nil'}},
+        'receiver': {
+            '_control': 'alt',
+            'prefix': {
+                '_control': f'get_{ch}',
+                'bound_var': {'placeholder': 'z'},
+                'recv_cont': {'_control': 'nil'}},
+            'recv_rest': {'_control': 'nil'}}}
+
+    return sorting, rules, example
+
+
 def petri_sorting(events=None):
     """Build a Petri net many-one sorting.
 

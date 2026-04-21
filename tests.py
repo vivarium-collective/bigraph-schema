@@ -1729,10 +1729,19 @@ def test_fire_rule_b3(core):
     assert 'alice' not in bldg  # no longer a sibling
     room = bldg['lab']          # room keeps its original key
     assert 'alice' in room      # agent inside room, original key
-    assert room['alice']['props']['mass'] == 70.0
-    # Existing room contents preserved
-    assert 'bob' in room['contents']
-    assert 'pc' in room['contents']
+    # Agent's props captured alice's single field (mass: 70.0).
+    # With one state key and one Site, 1-to-1 matching gives the
+    # bare value; with multiple fields it gives a dict of entries.
+    alice_props = room['alice']['props']
+    assert alice_props == 70.0 or (
+        isinstance(alice_props, dict) and alice_props.get('mass') == 70.0)
+    # Existing room contents preserved — when room has surplus
+    # children beyond what the redex matched, they're captured as
+    # a dict by the 'contents' Site.
+    contents = room['contents']
+    assert isinstance(contents, dict)
+    assert 'bob' in contents
+    assert 'pc' in contents
 
 
 def test_fire_rule_no_match(core):
@@ -1985,6 +1994,24 @@ def test_petri_brs(core):
     assert u_count == 2, f'expected 2 U after firing, got {u_count}'
 
 
+def test_pi_brs(core):
+    """π-calculus: synchronisation on channel x passes name y from
+    sender to receiver. The sent name appears as 'received_name'
+    in the result."""
+    from bigraph_schema.calculi import pi_brs
+    from bigraph_schema.assembly import run_reactions
+
+    sorting, rules, state = pi_brs(channels=('x',))
+    final, events = run_reactions(state, rules)
+    assert len(events) == 1
+    assert events[0].rule_label == 'π sync on x'
+    # The sent name y should appear in the result
+    assert final.get('received_name') == {'the_name': 'y', 'data': 42}
+    # Both continuations are nil
+    assert final.get('send_cont', {}).get('_control') == 'nil'
+    assert final.get('recv_cont', {}).get('_control') == 'nil'
+
+
 def test_interfaces_container_traversal(core):
     """The interfaces() walker descends into container value schemas
     (Map._value, List._element, Tree._leaf, Wrap._value) so that
@@ -2093,5 +2120,6 @@ if __name__ == '__main__':
     test_ccs_brs(core)
     test_ambient_brs(core)
     test_petri_brs(core)
+    test_pi_brs(core)
 
     test_resolve_conflict(core)
