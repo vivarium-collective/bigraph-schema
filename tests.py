@@ -1723,12 +1723,13 @@ def test_fire_rule_b3(core):
 
     new_state, match = fire_rule(state, b3)
     assert match is not None
-    # Alice should have moved inside the room
+    # Alice should have moved inside the room. Reactum keys are
+    # remapped to original state keys: 'r' → 'lab', 'a' → 'alice'.
     bldg = new_state['bldg']
-    assert 'alice' not in bldg
-    room = bldg['r']
-    assert 'a' in room
-    assert room['a']['props']['mass'] == 70.0
+    assert 'alice' not in bldg  # no longer a sibling
+    room = bldg['lab']          # room keeps its original key
+    assert 'alice' in room      # agent inside room, original key
+    assert room['alice']['props']['mass'] == 70.0
     # Existing room contents preserved
     assert 'bob' in room['contents']
     assert 'pc' in room['contents']
@@ -1746,6 +1747,132 @@ def test_fire_rule_no_match(core):
     new_state, match = fire_rule(state, rule)
     assert match is None
     assert new_state is state
+
+
+def test_run_reactions_deterministic(core):
+    """run_reactions in deterministic mode fires rules in order until
+    no more matches are found."""
+    from bigraph_schema.assembly import ReactionRule, run_reactions
+    import random
+
+    state = {
+        'bldg': {
+            '_control': 'building',
+            'a1': {'_control': 'agent', 'mass': 70.0},
+            'a2': {'_control': 'agent', 'mass': 80.0},
+            'r1': {'_control': 'room', 'temp': 20.0}}}
+
+    b3 = ReactionRule(
+        redex={
+            'a': {'_control': 'agent', 'props': Site()},
+            'r': {'_control': 'room', 'contents': Site()}},
+        reactum={
+            'r': {'_control': 'room',
+                  'contents': Site(),
+                  'a': {'_control': 'agent', 'props': Site()}}},
+        instantiation={'props': 'props', 'contents': 'contents'},
+        label='B3')
+
+    final, events = run_reactions(state, [b3], mode='deterministic')
+    # Both agents should have entered the room
+    assert len(events) == 2
+    bldg = final['bldg']
+    assert 'a1' not in bldg
+    assert 'a2' not in bldg
+    room = bldg['r1']
+    # At least one agent is directly inside the room
+    agents_inside = [k for k in room if isinstance(room[k], dict)
+                     and room[k].get('_control') == 'agent']
+    assert len(agents_inside) >= 1
+
+
+def test_run_reactions_stochastic(core):
+    """run_reactions in stochastic mode picks among candidates
+    weighted by rate. Seeded RNG for reproducibility."""
+    from bigraph_schema.assembly import ReactionRule, run_reactions
+    import random
+
+    state = {
+        'bldg': {
+            '_control': 'building',
+            'agent': {'_control': 'agent', 'mass': 70.0},
+            'room': {'_control': 'room', 'temp': 20.0}}}
+
+    b3 = ReactionRule(
+        redex={
+            'a': {'_control': 'agent', 'props': Site()},
+            'r': {'_control': 'room', 'contents': Site()}},
+        reactum={
+            'r': {'_control': 'room',
+                  'contents': Site(),
+                  'a': {'_control': 'agent', 'props': Site()}}},
+        instantiation={'props': 'props', 'contents': 'contents'},
+        rate=2.5,
+        label='B3')
+
+    rng = random.Random(42)
+    final, events = run_reactions(
+        state, [b3], mode='stochastic', rng=rng, max_steps=10)
+    assert len(events) == 1
+    assert events[0].rule_label == 'B3'
+    # Agent is now inside the room
+    assert 'agent' not in final['bldg']
+
+
+def test_built_environment_scenario(core):
+    """Full built-environment scenario from Milner Ch. 1 (pp. 7-9).
+
+    Two buildings, multiple rooms, agents and computers. B3 fires
+    repeatedly until all agents are inside rooms. Invariant: there
+    are always exactly the same number of agents (conservation).
+    """
+    from bigraph_schema.assembly import ReactionRule, run_reactions
+
+    state = {
+        'bldg_a': {
+            '_control': 'building',
+            'alice': {'_control': 'agent', 'mass': 70.0},
+            'bob':   {'_control': 'agent', 'mass': 80.0},
+            'lab': {
+                '_control': 'room',
+                'pc1': {'_control': 'computer', 'cpu': 3.0}},
+            'office': {
+                '_control': 'room',
+                'pc2': {'_control': 'computer', 'cpu': 2.5}}},
+        'bldg_b': {
+            '_control': 'building',
+            'carol': {'_control': 'agent', 'mass': 55.0},
+            'lounge': {
+                '_control': 'room',
+                'tv': {'_control': 'computer', 'cpu': 1.0}}}}
+
+    b3 = ReactionRule(
+        redex={
+            'a': {'_control': 'agent', 'props': Site()},
+            'r': {'_control': 'room', 'contents': Site()}},
+        reactum={
+            'r': {'_control': 'room',
+                  'contents': Site(),
+                  'a': {'_control': 'agent', 'props': Site()}}},
+        instantiation={'props': 'props', 'contents': 'contents'},
+        label='B3')
+
+    final, events = run_reactions(state, [b3], max_steps=20)
+    assert len(events) == 3, f'expected 3 agents to enter rooms, got {len(events)}'
+
+    # Invariant: count all agents in the final state
+    def count_control(d, control):
+        n = 0
+        if isinstance(d, dict):
+            if d.get('_control') == control:
+                n += 1
+            for v in d.values():
+                n += count_control(v, control)
+        return n
+
+    assert count_control(final, 'agent') == 3, 'agent conservation violated'
+    assert count_control(final, 'room') == 3, 'room conservation violated'
+    assert count_control(final, 'computer') == 3, 'computer conservation violated'
 
 
 def test_interfaces_container_traversal(core):
@@ -1848,5 +1975,8 @@ if __name__ == '__main__':
     test_find_matches_controls(core)
     test_fire_rule_b3(core)
     test_fire_rule_no_match(core)
+    test_run_reactions_deterministic(core)
+    test_run_reactions_stochastic(core)
+    test_built_environment_scenario(core)
 
     test_resolve_conflict(core)

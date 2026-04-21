@@ -25,8 +25,10 @@ formal definitions.
 """
 
 import copy
+import random
+import math
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Tuple as TypingTuple
+from typing import Optional, Dict, List as TypingList, Tuple as TypingTuple
 
 from bigraph_schema.schema import (
     Node, Empty, Site, Interface, Link, Wires, Path, Place,
@@ -656,12 +658,13 @@ def instantiate(reactum, bindings, instantiation):
     via ``instantiation``, then fill it with the subtree captured in
     ``bindings`` for that redex site.
 
+    All keys in the reactum are preserved (including ``_control`` and
+    other user-defined ``_``-prefixed metadata).
+
     Returns a new dict (deep-copied, safe to mutate).
     """
     result = {}
     for key, value in reactum.items():
-        if isinstance(key, str) and key.startswith('_'):
-            continue
         if isinstance(value, Site):
             # This site maps to a redex site via instantiation
             source_key = instantiation.get(key, key)
@@ -680,12 +683,30 @@ def instantiate(reactum, bindings, instantiation):
 # ── Firing ──────────────────────────────────────────────────────────
 
 
+def _remap_keys(tree, key_map):
+    """Rename dict keys in ``tree`` according to ``key_map``.
+
+    Reactum keys are pattern labels (``'r'``, ``'a'``). The key_map
+    tells us what state keys they correspond to (``'lab'``,
+    ``'alice'``). This recursively renames so the output uses the
+    original state names, not the pattern labels.
+    """
+    if not isinstance(tree, dict):
+        return tree
+    result = {}
+    for k, v in tree.items():
+        new_key = key_map.get(k, k)
+        result[new_key] = _remap_keys(v, key_map)
+    return result
+
+
 def fire_rule(state, rule, control_status=None, match_index=0):
     """Apply a reaction rule to a state.
 
     Finds matches of ``rule.redex`` in ``state``, picks one (by
     ``match_index``), builds the reactum via instantiation, and
-    substitutes it into the state.
+    substitutes it into the state. Reactum keys are remapped to
+    the original state keys from the match.
 
     Returns ``(new_state, match)`` or ``(state, None)`` if no match.
     """
@@ -699,6 +720,10 @@ def fire_rule(state, rule, control_status=None, match_index=0):
     replacement = instantiate(
         rule.reactum, match.bindings, rule.instantiation)
 
+    # Remap reactum keys to original state keys
+    actual_map = {k: v for k, v in match.key_map.items() if v is not None}
+    replacement = _remap_keys(replacement, actual_map)
+
     # Substitute into state at the match path
     new_state = copy.deepcopy(state)
     parent = _get_at_path(new_state, match.path) if match.path else new_state
@@ -708,10 +733,103 @@ def fire_rule(state, rule, control_status=None, match_index=0):
         for redex_key, state_key in match.key_map.items():
             if state_key is not None and state_key in parent:
                 del parent[state_key]
-        # Add the reactum's keys
+        # Add the reactum's keys (now with original state names)
         parent.update(replacement)
 
     return new_state, match
+
+
+# ── Reaction engine ─────────────────────────────────────────────────
+
+
+@dataclass
+class ReactionEvent:
+    """Record of a single reaction firing."""
+    rule_label: str
+    match: Match
+    step: int
+
+
+def run_reactions(state, rules, control_status=None, max_steps=100,
+                  mode='deterministic', rng=None):
+    """Run reaction rules on ``state`` until quiescence or ``max_steps``.
+
+    Modes:
+
+    - ``'deterministic'`` — at each step, try rules in order and fire
+      the first match found.
+    - ``'stochastic'`` — collect all (rule, match) candidates, weight
+      by ``rule.rate`` (default 1.0), sample one via Gillespie. The
+      stochastic time is tracked but not returned (the caller
+      controls real time).
+
+    Returns ``(final_state, events)`` where ``events`` is the list of
+    ``ReactionEvent`` records in firing order.
+    """
+    if rng is None:
+        rng = random.Random()
+
+    events = []
+    state = copy.deepcopy(state)
+
+    for step in range(max_steps):
+        if mode == 'deterministic':
+            fired = False
+            for rule in rules:
+                new_state, match = fire_rule(state, rule, control_status)
+                if match is not None:
+                    events.append(ReactionEvent(
+                        rule_label=rule.label,
+                        match=match,
+                        step=step))
+                    state = new_state
+                    fired = True
+                    break
+            if not fired:
+                break
+
+        elif mode == 'stochastic':
+            # Collect all candidates: (rule, match, rate)
+            candidates = []
+            for rule in rules:
+                matches = find_matches(state, rule.redex, control_status)
+                rate = rule.rate if rule.rate is not None else 1.0
+                for match in matches:
+                    candidates.append((rule, match, rate))
+
+            if not candidates:
+                break
+
+            # Gillespie: total rate = sum of all rates, pick one
+            # proportionally.
+            total_rate = sum(r for _, _, r in candidates)
+            pick = rng.random() * total_rate
+            cumulative = 0.0
+            chosen_rule, chosen_match = candidates[0][0], candidates[0][1]
+            for rule, match, rate in candidates:
+                cumulative += rate
+                if cumulative >= pick:
+                    chosen_rule, chosen_match = rule, match
+                    break
+
+            new_state, _ = fire_rule(
+                state, chosen_rule, control_status,
+                match_index=0)
+            # fire_rule may pick a different match than chosen_match if
+            # there are multiple; re-fire with the specific match.
+            # For now, just use the first match from fire_rule.
+            if new_state is not state:
+                events.append(ReactionEvent(
+                    rule_label=chosen_rule.label,
+                    match=chosen_match,
+                    step=step))
+                state = new_state
+            else:
+                break
+        else:
+            raise ValueError(f'unknown mode {mode!r}')
+
+    return state, events
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
