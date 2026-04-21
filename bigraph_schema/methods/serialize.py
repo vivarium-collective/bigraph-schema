@@ -104,13 +104,13 @@ def render(schema: OuterName, defaults=False):
 
 @dispatch
 def render(schema: Interface, defaults=False):
-    result = {'_type': 'interface'}
+    result = {'_type': 'face'}
     if schema._places:
         result['_places'] = [render(p, defaults=defaults) for p in schema._places]
     if schema._names:
         result['_names'] = dict(schema._names)
     if len(result) == 1:  # only _type
-        result = 'interface'
+        result = 'face'
     return wrap_default(schema, result) if defaults else result
 
 @dispatch

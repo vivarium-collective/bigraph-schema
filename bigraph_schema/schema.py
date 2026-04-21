@@ -692,6 +692,6 @@ BASE_TYPES = {
     'site': Site,
     'inner_name': InnerName,
     'outer_name': OuterName,
-    'interface': Interface}
+    'face': Interface}
 
 

@@ -1223,13 +1223,13 @@ def test_bigraph_structural_types_in_registry(core):
     assert isinstance(core.access('site'), Site)
     assert isinstance(core.access('inner_name'), InnerName)
     assert isinstance(core.access('outer_name'), OuterName)
-    assert isinstance(core.access('interface'), Interface)
+    assert isinstance(core.access('face'), Interface)
 
 
 def test_bigraph_structural_types_are_empty(core):
     """Inheriting from Empty means these types have no realizable
     state — default is None and only None checks through."""
-    for type_name in ('site', 'inner_name', 'outer_name', 'interface'):
+    for type_name in ('site', 'inner_name', 'outer_name', 'face'):
         schema = core.access(type_name)
         assert isinstance(schema, Empty), (
             f'{type_name} should inherit from Empty (got {type(schema)})')
@@ -1243,7 +1243,7 @@ def test_bigraph_structural_types_are_empty(core):
 def test_bigraph_structural_bare_round_trip(core):
     """A bare (unsorted, empty) structural schema renders as just its
     type name and round-trips cleanly."""
-    for type_name in ('site', 'inner_name', 'outer_name', 'interface'):
+    for type_name in ('site', 'inner_name', 'outer_name', 'face'):
         schema = core.access(type_name)
         rendered = core.render(schema)
         assert rendered == type_name, (
@@ -1279,7 +1279,7 @@ def test_interface_direct_construction(core):
         _names={'x': '', 'y': 'cell'})
     rendered = core.render(iface)
     assert rendered == {
-        '_type': 'interface',
+        '_type': 'face',
         '_places': ['site', {'_type': 'site', '_sort': 'cell'}],
         '_names': {'x': '', 'y': 'cell'}}
     # Empty state still the right answer — this Interface is a
@@ -1293,16 +1293,16 @@ def test_bigraph_structural_types_present_in_base_types(core):
     assert BASE_TYPES['site'] is Site
     assert BASE_TYPES['inner_name'] is InnerName
     assert BASE_TYPES['outer_name'] is OuterName
-    assert BASE_TYPES['interface'] is Interface
+    assert BASE_TYPES['face'] is Interface
 
 
 def test_interface_dict_form_access(core):
     """Populated Interface schemas built via the dict-access path:
-    ``{'_type': 'interface', '_places': [...], '_names': {...}}``.
+    ``{'_type': 'face', '_places': [...], '_names': {...}}``.
     Requires the resolve(tuple, list) dispatcher to merge the incoming
     list of sub-schemas with the default empty ``_places`` tuple."""
     iface = core.access({
-        '_type': 'interface',
+        '_type': 'face',
         '_places': [core.access('site'), core.access('site')],
         '_names': {'x': '', 'y': 'cell'}})
     assert isinstance(iface, Interface)
