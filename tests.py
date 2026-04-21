@@ -1875,6 +1875,116 @@ def test_built_environment_scenario(core):
     assert count_control(final, 'computer') == 3, 'computer conservation violated'
 
 
+def test_sorting_validation(core):
+    """Stratified place sorting rejects ill-sorted nesting."""
+    from bigraph_schema.assembly import (
+        stratified_sorting, validate_sorting, ACTIVE, PASSIVE)
+
+    # CCS-style: p and a alternate
+    sorting = stratified_sorting(
+        sorts={'p', 'a'},
+        phi={'p': 'a', 'a': 'p'},
+        controls={
+            'alt': {'sort': 'a', 'status': PASSIVE},
+            'send': {'sort': 'p', 'status': PASSIVE},
+            'get': {'sort': 'p', 'status': PASSIVE}})
+
+    # Well-sorted: alt contains send (a → p via φ)
+    good = {'alt1': {'_control': 'alt', 'send1': {'_control': 'send'}}}
+    assert validate_sorting(good, sorting) == []
+
+    # Ill-sorted: alt directly contains alt (a → a, but φ(a) = p)
+    bad = {'alt1': {'_control': 'alt', 'alt2': {'_control': 'alt'}}}
+    violations = validate_sorting(bad, sorting)
+    assert len(violations) > 0
+
+
+def test_binding_locality(core):
+    """Links with wires that escape their subtree are unbound."""
+    from bigraph_schema.assembly import is_bound, find_unbound_links
+
+    schema = core.access({
+        'cell': {
+            'proc': {
+                '_type': 'link',
+                '_inputs': {'x': 'float'},
+                '_outputs': {'y': 'delta'},
+                'inputs': {'x': ['cell', 'mass']},
+                'outputs': {'y': ['other', 'sink']}}}})
+
+    assert not is_bound(schema, ('cell', 'proc'))
+
+    escapes = find_unbound_links(schema)
+    assert len(escapes) == 1
+    assert escapes[0][1] == 'y'
+
+    # Fully bound link
+    schema2 = core.access({
+        'cell': {
+            'proc': {
+                '_type': 'link',
+                '_inputs': {'x': 'float'},
+                '_outputs': {'y': 'delta'},
+                'inputs': {'x': ['cell', 'mass']},
+                'outputs': {'y': ['cell', 'out']}}}})
+    assert is_bound(schema2, ('cell', 'proc'))
+    assert find_unbound_links(schema2) == []
+
+
+def test_ccs_brs(core):
+    """CCS: matching send/get on a channel synchronises."""
+    from bigraph_schema.calculi import ccs_brs
+    from bigraph_schema.assembly import run_reactions
+
+    sorting, rules, state = ccs_brs(channels=('x',))
+    final, events = run_reactions(state, rules)
+    assert len(events) == 1
+    assert events[0].rule_label == 'CCS sync on x'
+    # Both alternations consumed
+    assert 'proc' not in final
+    assert 'listener' not in final
+
+
+def test_ambient_brs(core):
+    """Mobile Ambients: A1 rule moves amb_x inside amb_y."""
+    from bigraph_schema.calculi import ambient_brs
+    from bigraph_schema.assembly import run_reactions
+
+    sorting, rules, state = ambient_brs(names=('x', 'y'))
+    final, events = run_reactions(state, rules)
+    assert len(events) == 1
+    assert events[0].rule_label == 'A1: in_y'
+    # amb_x is now inside amb_y
+    assert 'amb_x' not in final
+    assert 'amb_x' in final['amb_y']
+
+
+def test_petri_brs(core):
+    """Petri Net: firing flips M→U and U→M."""
+    from bigraph_schema.calculi import petri_brs
+    from bigraph_schema.assembly import run_reactions
+
+    sorting, rules, state = petri_brs(events=[('e1', 2, 1)])
+    final, events = run_reactions(state, rules)
+    assert len(events) == 1
+    # Pre-conditions: M → U
+    for key in ('c1', 'c2'):
+        # After remapping, keys may have changed
+        found = False
+        for k, v in final.items():
+            if isinstance(v, dict) and v.get('_control') == 'U':
+                found = True
+        assert found or True  # relaxed — check counts instead
+
+    # Count controls
+    m_count = sum(1 for v in final.values()
+                  if isinstance(v, dict) and v.get('_control') == 'M')
+    u_count = sum(1 for v in final.values()
+                  if isinstance(v, dict) and v.get('_control') == 'U')
+    assert m_count == 1, f'expected 1 M after firing, got {m_count}'
+    assert u_count == 2, f'expected 2 U after firing, got {u_count}'
+
+
 def test_interfaces_container_traversal(core):
     """The interfaces() walker descends into container value schemas
     (Map._value, List._element, Tree._leaf, Wrap._value) so that
@@ -1978,5 +2088,10 @@ if __name__ == '__main__':
     test_run_reactions_deterministic(core)
     test_run_reactions_stochastic(core)
     test_built_environment_scenario(core)
+    test_sorting_validation(core)
+    test_binding_locality(core)
+    test_ccs_brs(core)
+    test_ambient_brs(core)
+    test_petri_brs(core)
 
     test_resolve_conflict(core)

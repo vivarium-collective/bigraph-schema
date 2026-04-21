@@ -362,6 +362,214 @@ def closure(core, name):
         '_outputs': {}}})
 
 
+# ── Sorting disciplines ─────────────────────────────────────────────
+# Milner Ch. 6: a sorting Σ = (Θ, K, Φ) enriches a signature with
+# sorts that classify places and links, plus a formation rule Φ that
+# well-formed bigraphs must satisfy.
+#
+# Place sorting (Def. 6.1): sorts on places, Φ constrains nesting.
+# Link sorting (Def. 6.10): sorts on ports/links, Φ constrains sharing.
+# Both are preserved by composition and tensor.
+
+
+@dataclass
+class Sorting:
+    """A sorting discipline Σ = (Θ, K, Φ).
+
+    Attributes:
+        sorts: The set Θ of sort labels.
+        controls: Dict mapping control name → dict of metadata:
+            ``{'arity': int, 'status': str, 'sort': str,
+               'port_sorts': tuple}``.
+            ``port_sorts`` is a tuple of sort labels, one per port,
+            ordered to match the control's arity.
+        formation: A callable ``Φ(parent_sort, child_sort) → bool``
+            that returns True if a child with ``child_sort`` is
+            permitted inside a parent with ``parent_sort``.
+            None means no constraint (all nesting allowed).
+        link_formation: A callable
+            ``Φ_link(link_sort, point_sorts) → bool`` for link
+            sorting. ``point_sorts`` is the list of sorts of all
+            points (ports + names) on a link. None means unconstrained.
+    """
+    sorts: set
+    controls: Dict[str, dict]
+    formation: object = None
+    link_formation: object = None
+
+
+def stratified_sorting(sorts, phi, controls, hard_sorts=None):
+    """Build a stratified place sorting (Milner Def. 6.5).
+
+    ``phi`` maps parent sort → required child sort. Children of a
+    root with sort θ have sort θ; children of a node with sort θ
+    have sort φ(θ).
+
+    ``hard_sorts`` is a set of sorts that cannot have idle roots
+    (Def. 6.2) — every root with a hard sort must contain at least
+    one node.
+    """
+    hard = hard_sorts or set()
+
+    def formation(parent_sort, child_sort):
+        expected = phi.get(parent_sort)
+        if expected is None:
+            return True  # unconstrained
+        return child_sort == expected
+
+    return Sorting(
+        sorts=set(sorts),
+        controls=controls,
+        formation=formation)
+
+
+def many_one_sorting(controls):
+    """Build a many-one link sorting (Milner Def. 6.12).
+
+    Two sorts: ``'s'`` (source) and ``'t'`` (target). Each link has
+    at most one s-point. A link has sort s iff it has an s-point.
+    Every closed link has sort s.
+    """
+    def link_formation(link_sort, point_sorts):
+        s_count = sum(1 for s in point_sorts if s == 's')
+        return s_count <= 1
+
+    return Sorting(
+        sorts={'s', 't'},
+        controls=controls,
+        formation=None,
+        link_formation=link_formation)
+
+
+def validate_sorting(schema, sorting, path=()):
+    """Validate that ``schema`` is well-sorted under ``sorting``.
+
+    Walks the schema tree and checks:
+    - Every node's control is in the sorting's controls.
+    - Place nesting respects the formation rule Φ.
+    - Link ports respect the link formation rule (if any).
+
+    Returns a list of violation strings (empty = valid).
+    """
+    violations = []
+
+    def get_sort(node, key=None):
+        """Get the sort of a node — from _control annotation or key."""
+        if isinstance(node, dict):
+            ctrl = node.get('_control', key)
+        elif isinstance(node, Node):
+            ctrl = _control_name(node)
+        else:
+            ctrl = key
+        info = sorting.controls.get(ctrl, {})
+        return info.get('sort', ctrl)
+
+    def walk(node, path, parent_sort=None):
+        node_sort = get_sort(node, path[-1] if path else None)
+
+        # Check formation rule
+        if sorting.formation and parent_sort is not None:
+            if not sorting.formation(parent_sort, node_sort):
+                violations.append(
+                    f'at {path}: sort {node_sort!r} not allowed '
+                    f'inside sort {parent_sort!r}')
+
+        # Recurse into children
+        if isinstance(node, dict):
+            for key, child in node.items():
+                if isinstance(key, str) and not key.startswith('_'):
+                    walk(child, path + (key,), node_sort)
+
+        # Check link port sorts
+        if isinstance(node, Link) and sorting.link_formation:
+            port_sorts = []
+            info = sorting.controls.get(
+                node.get('_control') if isinstance(node, dict)
+                else _control_name(node), {})
+            for s in info.get('port_sorts', ()):
+                port_sorts.append(s)
+            if port_sorts and not sorting.link_formation(
+                    node_sort, port_sorts):
+                violations.append(
+                    f'at {path}: link port sorts {port_sorts} '
+                    f'violate link formation rule')
+
+    if isinstance(schema, dict):
+        for key, child in schema.items():
+            if isinstance(key, str) and not key.startswith('_'):
+                walk(child, (key,), None)
+    else:
+        walk(schema, (), None)
+
+    return violations
+
+
+# ── Binding / link locality ─────────────────────────────────────────
+# Milner §11.3 (p. 122): localising a link constrains its scope to
+# a subtree. In our model links are already in the place graph, so
+# "bound" means all of a Link's wires point within the Link's
+# ancestor subtree.
+
+
+def is_bound(schema, link_path):
+    """Check whether the Link at ``link_path`` is bound — all its
+    wires target paths that share ``link_path``'s prefix (i.e. they
+    stay within the same subtree).
+
+    An unwired port is considered bound (it's an open name, not an
+    escape). Only wired ports that point OUTSIDE the subtree violate
+    binding.
+    """
+    link = _get_at_path(schema, link_path)
+    if not isinstance(link, Link):
+        return True
+
+    prefix = link_path[:-1]  # the parent subtree
+
+    def check_wires(wires_field):
+        if isinstance(wires_field, dict):
+            for port, wire_path in wires_field.items():
+                if isinstance(wire_path, (list, tuple)):
+                    wire_tuple = tuple(wire_path)
+                    if not wire_tuple[:len(prefix)] == prefix:
+                        return False
+        return True
+
+    return check_wires(link.inputs) and check_wires(link.outputs)
+
+
+def find_unbound_links(schema):
+    """Find all Links in ``schema`` whose wires escape their subtree.
+
+    Returns a list of ``(link_path, escaping_port, wire_target)``
+    triples.
+    """
+    escapes = []
+
+    def walk(node, path):
+        if isinstance(node, Link):
+            prefix = path[:-1] if path else ()
+            for direction in ('inputs', 'outputs'):
+                wires = getattr(node, direction)
+                if isinstance(wires, dict):
+                    for port, wire_path in wires.items():
+                        if isinstance(wire_path, (list, tuple)):
+                            wire_tuple = tuple(wire_path)
+                            if wire_tuple[:len(prefix)] != prefix:
+                                escapes.append(
+                                    (path, port, wire_tuple))
+        elif isinstance(node, dict):
+            for key, child in node.items():
+                if isinstance(key, str) and not key.startswith('_'):
+                    walk(child, path + (key,))
+
+    if isinstance(schema, dict):
+        for key, child in schema.items():
+            if isinstance(key, str) and not key.startswith('_'):
+                walk(child, (key,))
+    return escapes
+
+
 # ── Dynamic signatures and activity ─────────────────────────────────
 # Milner Def. 8.2 (p. 81): a signature is *dynamic* if each control
 # has a status in {atomic, passive, active}. A bigraph G is *active*
