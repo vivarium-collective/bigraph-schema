@@ -120,37 +120,74 @@ def reconcile(schema: String, updates: list):
     return None
 
 
+def _add_sparse_dict_into(out, sparse, prefix=()):
+    """Additively apply a sparse-dict update ``{k: {k2: val}}`` into ndarray ``out``."""
+    for k, v in sparse.items():
+        idx = prefix + (k,)
+        if isinstance(v, dict):
+            _add_sparse_dict_into(out, v, idx)
+        else:
+            out[idx] = out[idx] + v
+
+
+def _add_sparse_list_into(out, sparse_list):
+    """Additively apply a sparse-list update ``[(idx, delta), ...]`` into ndarray ``out``."""
+    for idx, val in sparse_list:
+        out[idx] = out[idx] + val
+
+
+def _merge_array_deltas(a, b):
+    """Combine two Array deltas. Handles:
+      - dict + dict: sparse-coordinate union with recursive merge, summing numeric leaves.
+      - ndarray + ndarray: element-wise sum.
+      - ndarray + (dict | list): normalize sparse form to ndarray of additions, then sum.
+    """
+    if isinstance(a, dict) and isinstance(b, dict):
+        merged = dict(a)
+        for k, v in b.items():
+            if k in merged:
+                merged[k] = _merge_array_deltas(merged[k], v)
+            else:
+                merged[k] = v
+        return merged
+    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
+        return a + b
+    arr_operand, other = (a, b) if isinstance(a, np.ndarray) else (
+        (b, a) if isinstance(b, np.ndarray) else (None, None))
+    if arr_operand is not None:
+        sparse_arr = np.zeros(arr_operand.shape, dtype=arr_operand.dtype)
+        if isinstance(other, dict):
+            _add_sparse_dict_into(sparse_arr, other)
+            return arr_operand + sparse_arr
+        if isinstance(other, list):
+            _add_sparse_list_into(sparse_arr, other)
+            return arr_operand + sparse_arr
+    return a + b
+
+
 @dispatch
 def reconcile(schema: Array, updates: list):
-    """Element-wise sum of array deltas."""
+    """Element-wise sum of array deltas. Supports homogeneous and mixed
+    update forms (ndarray, sparse list ``[(idx, delta), ...]``, sparse dict
+    ``{j: {i: val}}``, and ``{'set': ...}`` overwrite)."""
     result = None
     for update in updates:
         if update is None:
             continue
-        if isinstance(update, list):
-            # Sparse updates: [(idx, delta), ...]
-            if result is None:
-                result = []
-            result.extend(update)
-        elif isinstance(update, np.ndarray):
-            if result is None:
-                result = np.zeros_like(update)
-            result = result + update
-        elif isinstance(update, dict):
-            # Field-level updates: {'field': values} or {'set': {...}}
-            if result is None:
-                result = {}
-            if 'set' in update:
-                # Set overwrites — last one wins
-                result = update
-            else:
-                for field, values in update.items():
-                    if field in result:
-                        result[field] = result[field] + values
-                    else:
-                        result[field] = values
-        else:
+        if isinstance(update, dict) and 'set' in update:
+            # Set overwrites — last one wins.
             result = update
+            continue
+        if result is None:
+            if isinstance(update, list):
+                result = list(update)
+            else:
+                result = update
+            continue
+        if isinstance(update, list) and isinstance(result, list):
+            result.extend(update)
+            continue
+        result = _merge_array_deltas(result, update)
     return result
 
 
