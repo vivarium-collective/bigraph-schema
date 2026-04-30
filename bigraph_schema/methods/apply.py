@@ -126,6 +126,20 @@ def apply(schema: Tuple, state, update, path):
 
 
 @dispatch
+def apply(schema: Path, state, update, path):
+    """Path is a list whose update semantics are replacement, not concat.
+
+    Wire paths (the leaves of a Wires tree) are atomic addresses, so an
+    update of `['a', 'b']` should *replace* the wire, not append to it.
+    """
+    if update is None:
+        return state, []
+    if isinstance(update, list):
+        return list(update), []
+    return update, []
+
+
+@dispatch
 def apply(schema: List, state, update, path):
     # Coerce state to list if it arrived as wrong type
     if not isinstance(state, list):
@@ -364,26 +378,47 @@ def apply(schema: Map, state, update, path):
 
 @dispatch
 def apply(schema: Tree, state, update, path):
+    if update is None:
+        return state, []
     if check(schema._leaf, state):
         return apply(schema._leaf, state, update, path)
+    if not isinstance(state, dict):
+        return update, []
+    if not isinstance(update, dict):
+        return update, []
 
-    result = state.copy()
+    result = dict(state)
+    merges = []
+
+    add_update = update.get('_add')
+    if add_update:
+        if isinstance(add_update, list):
+            for add_key, add_value in add_update:
+                result[add_key] = add_value
+        elif isinstance(add_update, dict):
+            for add_key, add_value in add_update.items():
+                result[add_key] = add_value
+
+    for key, update_value in update.items():
+        if key in ('_add', '_remove'):
+            continue
+        if key in result:
+            new_value, submerges = apply(
+                schema,
+                result[key],
+                update_value,
+                path + (key,))
+            if new_value is not result[key]:
+                result[key] = new_value
+            if submerges:
+                merges += submerges
+        else:
+            result[key] = update_value
+
     if '_remove' in update:
         for remove_key in update['_remove']:
-            del result[remove_key]
-
-    if '_add' in update:
-        for add_key, add_value in update['_add']:
-            result[add_key] = add_value
-
-    for key, value in result:
-        if key in update:
-            result[key], submerges = apply(
-                schema,
-                value,
-                update[key],
-                path+(key,))
-            merges += submerges
+            if remove_key in result:
+                del result[remove_key]
 
     return result, merges
 
