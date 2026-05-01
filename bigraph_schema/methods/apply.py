@@ -387,36 +387,46 @@ def apply(schema: Tree, state, update, path):
     if not isinstance(update, dict):
         return update, []
 
-    result = dict(state)
+    # Lazy copy: keep ``result`` aliased to ``state`` until we know we
+    # need to mutate, then allocate. Tree apply runs many times per
+    # tick and most calls produce no change; the eager ``dict(state)``
+    # was the dominant fixed cost.
     merges = []
+    result = state
+    state_dict = state  # alias used while result still points at the original
 
     add_update = update.get('_add')
     if add_update:
+        result = dict(state_dict)
         if isinstance(add_update, list):
             for add_key, add_value in add_update:
                 result[add_key] = add_value
         elif isinstance(add_update, dict):
-            for add_key, add_value in add_update.items():
-                result[add_key] = add_value
+            result.update(add_update)
 
     for key, update_value in update.items():
-        if key in ('_add', '_remove'):
+        if key == '_add' or key == '_remove':
             continue
-        if key in result:
+        if key in state_dict:
+            child = state_dict[key]
             new_value, submerges = apply(
-                schema,
-                result[key],
-                update_value,
-                path + (key,))
-            if new_value is not result[key]:
+                schema, child, update_value, path + (key,))
+            if new_value is not child:
+                if result is state_dict:
+                    result = dict(state_dict)
                 result[key] = new_value
             if submerges:
                 merges += submerges
         else:
+            if result is state_dict:
+                result = dict(state_dict)
             result[key] = update_value
 
-    if '_remove' in update:
-        for remove_key in update['_remove']:
+    remove_update = update.get('_remove')
+    if remove_update:
+        if result is state_dict:
+            result = dict(state_dict)
+        for remove_key in remove_update:
             if remove_key in result:
                 del result[remove_key]
 
@@ -600,7 +610,7 @@ def apply(schema: dict, state, update, path):
 @dispatch
 def apply(schema: Float, state, update, path):
     """Additive: float updates are deltas."""
-    if update is None:
+    if update is None or update == 0:
         return state, []
     if state is None:
         return update, []
@@ -609,8 +619,13 @@ def apply(schema: Float, state, update, path):
 
 @dispatch
 def apply(schema: Integer, state, update, path):
-    """Additive: integer updates are deltas."""
-    if update is None:
+    """Additive: integer updates are deltas. Zero-delta updates fast-path
+    to ``return state``; on the vEcoli hot path 80%+ of integer apply
+    calls are zero-deltas (per-process listener fields with no change),
+    so this avoids both the addition and the wasteful new-int allocation
+    that would force the parent dict-apply to write back an identical
+    value."""
+    if update is None or update == 0:
         return state, []
     if state is None:
         return update, []

@@ -120,27 +120,39 @@ def reconcile(schema: String, updates: list):
     return None
 
 
-def _add_sparse_dict_into(out, sparse, prefix=()):
-    """Additively apply a sparse-dict update ``{k: {k2: val}}`` into ndarray ``out``."""
+def _apply_sparse_dict_into(arr, sparse):
+    """Add a sparse-dict update ``{k: {k2: val}}`` into ndarray ``arr`` in place."""
     for k, v in sparse.items():
-        idx = prefix + (k,)
         if isinstance(v, dict):
-            _add_sparse_dict_into(out, v, idx)
+            _apply_sparse_dict_into(arr[k], v)
         else:
-            out[idx] = out[idx] + v
+            arr[k] = arr[k] + v
 
 
-def _add_sparse_list_into(out, sparse_list):
-    """Additively apply a sparse-list update ``[(idx, delta), ...]`` into ndarray ``out``."""
-    for idx, val in sparse_list:
-        out[idx] = out[idx] + val
+def _apply_sparse_list_into(arr, sparse_list):
+    """Add a sparse-list update ``[(idx, delta), ...]`` into ndarray ``arr`` in place.
+
+    Uses numpy's batched ``np.add.at`` to avoid per-element Python overhead
+    when the sparse list is non-trivial.
+    """
+    n = len(sparse_list)
+    if n == 0:
+        return
+    if n == 1:
+        idx, val = sparse_list[0]
+        arr[idx] = arr[idx] + val
+        return
+    indices = np.fromiter((s[0] for s in sparse_list), dtype=np.intp, count=n)
+    deltas = np.fromiter((s[1] for s in sparse_list), dtype=arr.dtype, count=n)
+    np.add.at(arr, indices, deltas)
 
 
 def _merge_array_deltas(a, b):
     """Combine two Array deltas. Handles:
       - dict + dict: sparse-coordinate union with recursive merge, summing numeric leaves.
       - ndarray + ndarray: element-wise sum.
-      - ndarray + (dict | list): normalize sparse form to ndarray of additions, then sum.
+      - ndarray + (dict | list): copy the ndarray and apply the sparse update in place
+        (one full-array allocation instead of two: a scratch zeros + the sum).
     """
     if isinstance(a, dict) and isinstance(b, dict):
         merged = dict(a)
@@ -155,13 +167,14 @@ def _merge_array_deltas(a, b):
     arr_operand, other = (a, b) if isinstance(a, np.ndarray) else (
         (b, a) if isinstance(b, np.ndarray) else (None, None))
     if arr_operand is not None:
-        sparse_arr = np.zeros(arr_operand.shape, dtype=arr_operand.dtype)
         if isinstance(other, dict):
-            _add_sparse_dict_into(sparse_arr, other)
-            return arr_operand + sparse_arr
+            result = arr_operand.copy()
+            _apply_sparse_dict_into(result, other)
+            return result
         if isinstance(other, list):
-            _add_sparse_list_into(sparse_arr, other)
-            return arr_operand + sparse_arr
+            result = arr_operand.copy()
+            _apply_sparse_list_into(result, other)
+            return result
     return a + b
 
 
