@@ -279,6 +279,12 @@ class Core:
         # every tick. The witness tuple verifies the ids still refer to
         # the same objects.
         self._resolve_cache = {}
+        # Compiled-apply cache: id(schema) → (witness, compiled_fn).
+        # Each schema is compiled once into straight-line Python source
+        # (see methods.compile_apply) and the resulting function is
+        # cached. Cleared on structural changes by callers (e.g.
+        # Composite.find_instance_paths).
+        self._compiled_apply_cache = {}
 
         self.parse_visitor = CoreVisitor(self)
 
@@ -1399,16 +1405,46 @@ class Core:
     def apply(self, schema, state, update, path=()):
         """Apply a schema-aware update/patch; provides minimal context.
 
+        Fast path: schemas with at least one ``compile_apply`` cycle's
+        worth of dispatch overhead get compiled into straight-line
+        Python source on first apply and cached. The returned function
+        is a single call with no recursion through plum dispatch.
+
         `is not None` rather than truthiness — numpy arrays don't have
         a scalar truth value, and even an "empty" container (e.g. {})
         should reach the dispatched apply (which is a no-op for empty
         updates anyway).
         """
-        if update is not None:
-            found = self.access(schema)
-            return apply(found, state, update, path)
-        else:
+        if update is None:
             return state, []
+        found = self.access(schema)
+
+        if not getattr(self, '_disable_compiled_apply', False):
+            cache = self._compiled_apply_cache
+            cache_key = id(found)
+            cached = cache.get(cache_key)
+            if cached is not None and cached[0] is found:
+                compiled_fn = cached[1]
+            else:
+                from bigraph_schema.methods.compile_apply import compile_apply
+                try:
+                    compiled_fn = compile_apply(found)
+                except Exception:
+                    # Defensive: if compile fails for any reason, fall back
+                    # to dispatch and don't try to cache. Caller correctness
+                    # is preserved.
+                    compiled_fn = None
+                cache[cache_key] = (found, compiled_fn)
+            if compiled_fn is not None:
+                return compiled_fn(state, update, path)
+
+        return apply(found, state, update, path)
+
+    def invalidate_compiled_apply(self):
+        """Drop all compiled apply functions. Callers must invoke this
+        after any change that mutates a schema in place (notably
+        ``apply(dict)``'s ``_divide`` branch which pops/inserts keys)."""
+        self._compiled_apply_cache = {}
 
     def reconcile(self, schema, updates):
         """Reconcile multiple updates into a single combined update.
