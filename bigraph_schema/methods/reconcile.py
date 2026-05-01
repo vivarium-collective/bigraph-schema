@@ -12,6 +12,12 @@ The relationship:
 
 ...for commutative types. For non-commutative types (like UniqueArray),
 reconcile provides correct batching that sequential apply cannot.
+
+Reconcile also populates an optional ``ReconcileSummary`` sink as it
+walks: leaf paths and a structural-sentinel flag. Callers that need
+that info (notably ``Composite.apply_updates``) install the sink before
+calling and read it after — eliminating a redundant ``_walk_update``
+pass over the same tree.
 """
 
 from plum import dispatch
@@ -45,6 +51,7 @@ from bigraph_schema.schema import (
     Frame,
     Link,
 )
+from bigraph_schema.methods.events import get_reconcile_sink
 
 
 @dispatch
@@ -251,6 +258,7 @@ def reconcile(schema: Map, updates: list):
     out because ``apply(Map, ...)`` handles them holistically — they
     are not per-key value updates.
     """
+    sink = get_reconcile_sink()
     adds = {}
     removes = []
     divide = None  # Last non-None _divide wins.
@@ -264,14 +272,20 @@ def reconcile(schema: Map, updates: list):
         if isinstance(update, dict):
             if '_add' in update:
                 add = update['_add']
+                if sink is not None:
+                    sink.has_structural = True
                 if isinstance(add, dict):
                     adds.update(add)
                 elif isinstance(add, list):
                     for k, v in add:
                         adds[k] = v
             if '_remove' in update:
+                if sink is not None:
+                    sink.has_structural = True
                 removes.extend(update['_remove'])
             if '_divide' in update and update['_divide'] is not None:
+                if sink is not None:
+                    sink.has_structural = True
                 divide = update['_divide']
             # Regular key updates: collect ALL updates per key, not just the last
             for key, value in update.items():
@@ -281,13 +295,33 @@ def reconcile(schema: Map, updates: list):
     # Recursively reconcile multiple updates targeting the same key
     value_schema = schema._value
     value_updates = {}
-    for key, sub_updates in grouped_value_updates.items():
-        if len(sub_updates) == 1:
-            value_updates[key] = sub_updates[0]
-        else:
-            reconciled = reconcile(value_schema, sub_updates)
-            if reconciled is not None:
-                value_updates[key] = reconciled
+    if sink is not None:
+        # When a sink is installed, always recurse so deeper paths get
+        # tracked. The recursion on a single update is cheap (returns
+        # the update unchanged for atomic types, walks for dict/Map).
+        parent_path = sink.path_stack
+        for key, sub_updates in grouped_value_updates.items():
+            sink.paths.append(parent_path + (key,))
+            sink.path_stack = parent_path + (key,)
+            try:
+                reconciled = reconcile(value_schema, sub_updates)
+                if reconciled is not None:
+                    value_updates[key] = reconciled
+                elif len(sub_updates) == 1:
+                    # Atomic-typed reconcile may return None to signal
+                    # "no-op delta" (e.g. zero Float). Single-update
+                    # path keeps the original update intact.
+                    value_updates[key] = sub_updates[0]
+            finally:
+                sink.path_stack = parent_path
+    else:
+        for key, sub_updates in grouped_value_updates.items():
+            if len(sub_updates) == 1:
+                value_updates[key] = sub_updates[0]
+            else:
+                reconciled = reconcile(value_schema, sub_updates)
+                if reconciled is not None:
+                    value_updates[key] = reconciled
 
     result = {}
     if adds:
@@ -326,6 +360,8 @@ def reconcile(schema: dict, updates: list):
     apply."""
     from bigraph_schema.schema import is_schema_field
 
+    sink = get_reconcile_sink()
+
     # Collect all keys across updates
     all_keys = set()
     for update in updates:
@@ -333,8 +369,11 @@ def reconcile(schema: dict, updates: list):
             all_keys.update(update.keys())
 
     result = {}
+    parent_path = sink.path_stack if sink is not None else ()
     for key in all_keys:
         if key in _STRUCTURAL_SENTINELS:
+            if sink is not None:
+                sink.has_structural = True
             # Last non-None wins for structural directives — they
             # don't need to be deep-merged because apply() handles
             # them holistically.
@@ -351,7 +390,15 @@ def reconcile(schema: dict, updates: list):
                 key_updates.append(update[key])
         if key_updates:
             subschema = schema.get(key, Node())
-            reconciled = reconcile(subschema, key_updates)
+            if sink is not None:
+                sink.paths.append(parent_path + (key,))
+                sink.path_stack = parent_path + (key,)
+                try:
+                    reconciled = reconcile(subschema, key_updates)
+                finally:
+                    sink.path_stack = parent_path
+            else:
+                reconciled = reconcile(subschema, key_updates)
             if reconciled is not None:
                 result[key] = reconciled
 

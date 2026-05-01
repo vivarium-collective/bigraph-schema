@@ -1425,7 +1425,8 @@ class Core:
 
         return outcome
 
-    def apply(self, schema, state, update, path=()):
+    def apply(self, schema, state, update, path=(), update_has_structural=None,
+              events=None):
         """Apply a schema-aware update/patch; provides minimal context.
 
         Fast path: schemas with at least one ``compile_apply`` cycle's
@@ -1437,6 +1438,17 @@ class Core:
         a scalar truth value, and even an "empty" container (e.g. {})
         should reach the dispatched apply (which is a no-op for empty
         updates anyway).
+
+        ``update_has_structural`` lets callers that already walked the
+        update (e.g. ``Composite.apply_updates``) skip the redundant
+        sentinel-detection walk here. ``None`` means "walk to find out".
+
+        ``events`` (optional list): when provided, structural events
+        emitted by sentinel handlers (``_add`` -> ``NodeAdded``,
+        ``_remove`` -> ``NodeRemoved``, ``_divide`` -> ``Divided``)
+        are appended. ``None`` discards events (preserves the original
+        2-tuple return). Compiled apply emits no events (value-only
+        ticks can't trigger sentinels).
         """
         if update is None:
             return state, []
@@ -1450,8 +1462,10 @@ class Core:
         # replicates via fallback at specific depths. Forcing dispatch
         # for any update containing a sentinel keeps these paths
         # bit-identical to the dispatch-only behavior.
+        if update_has_structural is None:
+            update_has_structural = _update_has_structural(update)
         use_compile = (not getattr(self, '_disable_compiled_apply', False)
-                       and not _update_has_structural(update))
+                       and not update_has_structural)
         if use_compile:
             cache = self._compiled_apply_cache
             cache_key = id(found)
@@ -1471,6 +1485,15 @@ class Core:
             if compiled_fn is not None:
                 return compiled_fn(state, update, path)
 
+        # Dispatched path: install events sink if caller asked for one.
+        # Only sentinel handlers in the dispatched apply emit events.
+        if events is not None:
+            from bigraph_schema.methods.events import install_sink, uninstall_sink
+            prev = install_sink(events)
+            try:
+                return apply(found, state, update, path)
+            finally:
+                uninstall_sink(prev)
         return apply(found, state, update, path)
 
     def invalidate_compiled_apply(self):
@@ -1487,12 +1510,10 @@ class Core:
         be passed to apply() for a single atomic state update.
 
         Fast path: when there is only ONE non-None update, return it
-        directly without dispatching. Reconcile's job is to merge
-        multiple updates per type's semantics; with a single update
-        there's nothing to merge, and the update is already in the
-        format apply() expects (sums of one delta == that delta,
-        unions of one set == that set, etc.). This skip is safe for
-        every type currently registered.
+        directly. If a ReconcileSummary sink is installed, walk the
+        single update once to populate paths/has_structural — much
+        cheaper than dispatching the full reconcile machinery just to
+        observe the tree.
 
         Args:
             schema: The schema at the update target path.
@@ -1503,7 +1524,6 @@ class Core:
         """
         if not updates:
             return None
-        # Pass-through fast path for the common single-update case.
         non_none_count = 0
         single = None
         for u in updates:
@@ -1515,8 +1535,15 @@ class Core:
         if non_none_count == 0:
             return None
         if non_none_count == 1:
+            from bigraph_schema.methods.events import (
+                get_reconcile_sink, emit_to_reconcile_sink)
+            sink = get_reconcile_sink()
+            if sink is not None:
+                emit_to_reconcile_sink(single, sink)
             return single
-        # Multiple updates — dispatch to per-type reconcile.
+        # Multiple updates — dispatch to per-type reconcile, which
+        # already walks the tree naturally and populates the sink via
+        # its dict/Map handlers.
         found = self.access(schema)
         return reconcile(found, updates)
 

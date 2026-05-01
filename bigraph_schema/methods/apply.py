@@ -5,6 +5,7 @@ from bigraph_schema.methods.check import check
 from bigraph_schema.methods.default import default
 
 from bigraph_schema.methods.divide import divide as _divide_state
+from bigraph_schema.methods.events import emit, NodeAdded, NodeRemoved, Divided
 
 from bigraph_schema.schema import (
     Node,
@@ -315,6 +316,15 @@ def _handle_divide_sentinel(value_schema, state, update, path):
     del state[mother]
     state[key_a] = daughter_a
     state[key_b] = daughter_b
+
+    # Emit Divided event so composite-layer consumers can update their
+    # process_paths/step_paths indexes incrementally (no full rescan).
+    emit(Divided(
+        path=path,
+        mother_key=mother,
+        daughter_keys=[key_a, key_b],
+        daughters_state={key_a: daughter_a, key_b: daughter_b},
+        daughters_schema=value_schema))
     return state
 
 
@@ -340,19 +350,23 @@ def apply(schema: Map, state, update, path):
             return state, merges
         update = rest
 
+    value_schema = schema._value
     if '_add' in update:
         add_update = update['_add']
         if isinstance(add_update, list):
             for add_key, add_value in update['_add']:
                 state[add_key] = add_value
+                emit(NodeAdded(path=path, key=add_key,
+                               state=add_value, schema=value_schema))
         elif isinstance(add_update, dict):
             for add_key, add_value in update['_add'].items():
                 state[add_key] = add_value
+                emit(NodeAdded(path=path, key=add_key,
+                               state=add_value, schema=value_schema))
 
     # Update-driven walk: iterate update keys (matching state) instead
     # of state keys, mutating in place. Skip _add/_remove sentinels
     # which were handled above.
-    value_schema = schema._value
     for key, update_value in update.items():
         if key in ('_add', '_remove'):
             continue
@@ -372,6 +386,7 @@ def apply(schema: Map, state, update, path):
         for remove_key in update['_remove']:
             if remove_key in state:
                 del state[remove_key]
+                emit(NodeRemoved(path=path, key=remove_key))
 
     return state, merges
 
@@ -401,8 +416,13 @@ def apply(schema: Tree, state, update, path):
         if isinstance(add_update, list):
             for add_key, add_value in add_update:
                 result[add_key] = add_value
+                emit(NodeAdded(path=path, key=add_key,
+                               state=add_value, schema=schema))
         elif isinstance(add_update, dict):
             result.update(add_update)
+            for add_key, add_value in add_update.items():
+                emit(NodeAdded(path=path, key=add_key,
+                               state=add_value, schema=schema))
 
     for key, update_value in update.items():
         if key == '_add' or key == '_remove':
@@ -429,6 +449,7 @@ def apply(schema: Tree, state, update, path):
         for remove_key in remove_update:
             if remove_key in result:
                 del result[remove_key]
+                emit(NodeRemoved(path=path, key=remove_key))
 
     return result, merges
 
