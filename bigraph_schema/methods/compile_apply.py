@@ -87,16 +87,29 @@ class CompileContext:
 @dispatch
 def compile_apply_emit(schema: Node, ctx: CompileContext,
                         state_expr: str, update_expr: str) -> str:
-    """Default fallback: emit a dispatched apply call.
+    """Default fallback: emit a direct call to the type's apply method.
 
-    Used for types we haven't taught the compiler about (Map, Array,
-    Tree, custom types like vEcoli's UniqueArray). Captures the schema
-    and dispatched apply by reference so the runtime call doesn't go
-    through plum lookup again — direct callable invocation.
+    Used for types we haven't taught the compiler to inline (Map,
+    Array, Tree, custom types like vEcoli's UniqueArray / BulkArray).
+    Pre-resolves the type-specific apply handler via plum's dispatcher
+    at *compile* time, then captures a direct reference — so the
+    runtime call skips plum's per-call type lookup. Only the function
+    body runs at the call site.
+
+    Falls back to the dispatched ``_dispatch_apply`` if pre-resolution
+    fails (defensive — preserves correctness over speed).
     """
     schema_ref = ctx.capture(schema, 'schema')
+    # Try to resolve the specific apply method for this schema type
+    # so we can call it directly at runtime.
+    try:
+        resolved, _ = apply._resolve_method_with_cache(
+            args=(schema, None, None, ()))
+        fn_ref = ctx.capture(resolved, 'applyfn')
+    except Exception:
+        fn_ref = '_dispatch_apply'
     new = ctx.fresh('disp')
-    ctx.emit(f'{new}, _sm = _dispatch_apply({schema_ref}, '
+    ctx.emit(f'{new}, _sm = {fn_ref}({schema_ref}, '
              f'{state_expr}, {update_expr}, ())')
     ctx.emit(f'if _sm: _merges.extend(_sm)')
     return new
@@ -263,12 +276,20 @@ def compile_apply_emit(schema: dict, ctx: CompileContext,
     ctx.indent += 1
     ctx.emit(f'{new} = {update_expr}')
     ctx.indent -= 1
-    # Structural sentinels: dispatch fallback (rare).
+    # Structural sentinels: dispatch fallback (rare). Pre-resolve to
+    # the dict apply method so we skip plum lookup on the hot edge
+    # case where division/spawn happens.
     ctx.emit(f'elif "_divide" in {update_expr} or "_add" in {update_expr} '
              f'or "_remove" in {update_expr} or "_type" in {update_expr}:')
     ctx.indent += 1
     schema_ref = ctx.capture(schema, 'dictschema')
-    ctx.emit(f'{new}, _sm = _dispatch_apply({schema_ref}, '
+    try:
+        resolved, _ = apply._resolve_method_with_cache(
+            args=(schema, None, None, ()))
+        fn_ref = ctx.capture(resolved, 'dictapplyfn')
+    except Exception:
+        fn_ref = '_dispatch_apply'
+    ctx.emit(f'{new}, _sm = {fn_ref}({schema_ref}, '
              f'{state_expr}, {update_expr}, ())')
     ctx.emit(f'if _sm: _merges.extend(_sm)')
     ctx.indent -= 1

@@ -241,6 +241,29 @@ class CoreVisitor(NodeVisitor):
         return {'node': node, 'visit': visit}
 
 
+_STRUCTURAL_UPDATE_KEYS = frozenset(('_add', '_remove', '_type', '_divide'))
+
+
+def _update_has_structural(update) -> bool:
+    """True if ``update`` contains a structural sentinel at any depth.
+
+    Used by ``Core.apply`` to bypass the compiled fast path when the
+    update needs the dispatched ``apply``'s sentinel handling. Keeps
+    the check cheap by short-circuiting on first sentinel and skipping
+    non-dict values.
+    """
+    if not isinstance(update, dict):
+        return False
+    for key, value in update.items():
+        if isinstance(key, str) and key.startswith('_'):
+            if key in _STRUCTURAL_UPDATE_KEYS:
+                return True
+            continue
+        if isinstance(value, dict) and _update_has_structural(value):
+            return True
+    return False
+
+
 class Core:
     """Bigraph-schema operation: registry, parsing, normalization, and ops.
 
@@ -1419,7 +1442,17 @@ class Core:
             return state, []
         found = self.access(schema)
 
-        if not getattr(self, '_disable_compiled_apply', False):
+        # Structural sentinels at any depth bypass the compiled fast
+        # path. The dispatched apply mutates schemas in place during
+        # ``_divide`` (popping mother key, inserting daughters) and
+        # uses ``_handle_divide_sentinel`` to walk the type tree —
+        # behaviors the inlined compiled function only partially
+        # replicates via fallback at specific depths. Forcing dispatch
+        # for any update containing a sentinel keeps these paths
+        # bit-identical to the dispatch-only behavior.
+        use_compile = (not getattr(self, '_disable_compiled_apply', False)
+                       and not _update_has_structural(update))
+        if use_compile:
             cache = self._compiled_apply_cache
             cache_key = id(found)
             cached = cache.get(cache_key)
