@@ -141,8 +141,22 @@ def divide(schema: dict, state, context=None, path=(), rng=None):
 def divide(schema: Wrap, state, context=None, path=(), rng=None):
     """Wrap subclasses delegate divide to their inner type. This lets
     nested wrappers like ``overwrite[divide_reset[boolean]]`` dispatch
-    to the innermost type-specific divide (e.g. DivideReset)."""
-    return divide(schema._value, state, context, path, rng)
+    to the innermost type-specific divide (e.g. DivideReset).
+
+    If this Wrap declares ``_default`` but the inner Wrap has none,
+    propagate ours down so the inner can produce a correctly-shaped
+    default. Without this, ``Overwrite[DivideReset[Array[Float]]]``
+    declared with ``_default=[0]*21`` (on Overwrite) would divide to
+    the bare ``Array`` default (length 1) instead of the configured
+    21-element zero array.
+    """
+    inner = schema._value
+    if (schema._default is not None
+            and isinstance(inner, Wrap)
+            and inner._default is None):
+        from dataclasses import replace
+        inner = replace(inner, _default=schema._default)
+    return divide(inner, state, context, path, rng)
 
 
 @dispatch
