@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "bigraph-schema"
 version = "1.2.1"
@@ -10,17 +14,20 @@ authors = [
 ]
 dependencies = [
     "fire",
-    "ipdb",
     "numpy",
     "orjson",
     "pandas",
     "parsimonious",
     "pint",
     "plum-dispatch",
-    "pytest",
     "requests>=2.31.0",
-    "setuptools",
-    "twine>=4.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "ipdb",
+    "pytest",
+    "pytest-cov",
 ]
 
 [tool.setuptools]
