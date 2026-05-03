@@ -31,7 +31,6 @@ import numpy as np
 from numpy import dtype
 import numpy.lib.format as nf
 
-import pytest
 import logging
 
 from plum import dispatch
