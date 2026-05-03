@@ -87,6 +87,7 @@ from bigraph_schema.methods import (
     infer,
     default,
     resolve,
+    promote,
     generalize,
     check,
     validate,
@@ -600,6 +601,30 @@ class Core:
         if cache_key is not None:
             self._resolve_cache[cache_key] = (current, update, result)
         return result
+
+    def promote(self, library_schema, sparse_schema):
+        """Sparse projection of `library_schema` over `sparse_schema`.
+
+        Walks only ``sparse_schema``'s keys and substitutes typed
+        nodes from ``library_schema`` where they exist along the path.
+        Unlike ``resolve(library, sparse)``, does NOT walk every key
+        of ``library`` — paths that ``sparse`` doesn't touch are
+        omitted from the result.
+
+        Use case: per-tick apply, where ``sparse_schema`` is the
+        combined update schema (only paths the update touches) and
+        ``library_schema`` is the full Composite state schema. The
+        promoted schema reaches dispatch with the right typed nodes
+        (Array, Map, ProcessLink, ...) without paying the full
+        resolve cost.
+        """
+        library_is_node = isinstance(library_schema, Node)
+        sparse_is_node = isinstance(sparse_schema, Node)
+        library = library_schema if library_is_node else self.access(library_schema)
+        sparse = sparse_schema if sparse_is_node else self.access(sparse_schema)
+        if library is sparse:
+            return library
+        return promote(library, sparse)
 
     def generalize(self, current_schema, update_schema):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""

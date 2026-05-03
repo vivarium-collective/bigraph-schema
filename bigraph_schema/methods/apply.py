@@ -525,6 +525,19 @@ def apply(schema: Array, state, update, path):
                     if field in state.dtype.names:
                         state[field] += values
             return state, []
+        # Sparse cell-projection update: {i: {j: delta, ...}, ...}.
+        # Wires that target a single cell of an Array (e.g. per-cell
+        # spatial processes wired to ``['fields','glucose',i,j]``)
+        # produce projection updates of this shape; each integer key
+        # is an axis index, leaves are additive scalars.
+        if isinstance(state, np.ndarray) and all(
+                isinstance(k, (int, np.integer)) for k in update.keys()):
+            for idx, sub in update.items():
+                if isinstance(sub, dict):
+                    apply(schema, state[idx], sub, path + (idx,))
+                elif sub is not None:
+                    state[idx] += sub
+            return state, []
 
     if hasattr(update, 'shape'):
         if state.size == 0:

@@ -945,3 +945,90 @@ def resolve(current, update, path=None):
         raise Exception(f'\ncannot resolve types, not schemas:\n{current}\n{update}\n')
 
 
+# ---------------------------------------------------------------------------
+# promote: sparse projection of `library` over `sparse`
+# ---------------------------------------------------------------------------
+#
+# resolve(library, sparse) walks every key of `library` (the library of
+# all known types — typically the full Composite schema), even branches
+# `sparse` never touched. For per-tick apply, this is wasted work: the
+# update only lands on a few paths and we just need the typed nodes
+# along those paths.
+#
+# promote walks only `sparse`'s keys. At each step:
+#   - if `library` has a typed Node at that path → return the Node
+#     (the sparse dict was just a wire-shape projection; the typed
+#     node is what apply() needs to dispatch correctly)
+#   - if `library` has a dict → recurse into both
+#   - if `library` is missing the path → keep the sparse subtree as-is
+#
+# The result is a schema that mirrors `sparse`'s structure with
+# `library`'s typed nodes substituted in where they exist. Used by
+# Composite.apply_updates to avoid re-walking the entire state schema
+# on every non-structural tick.
+
+
+@dispatch
+def promote(library: dict, sparse: dict, path=None):
+    """Walk only sparse's keys; recurse with library's value at each.
+
+    Skip schema-metadata keys (anything not satisfying
+    ``is_schema_field``). When library has no entry at a key, keep the
+    sparse subtree unchanged.
+    """
+    result = {}
+    for key in sparse.keys():
+        if not is_schema_field(library, key):
+            continue
+        sub_library = library.get(key)
+        if sub_library is None:
+            result[key] = sparse[key]
+        else:
+            result[key] = promote(sub_library, sparse[key])
+    return result
+
+
+@dispatch
+def promote(library: Node, sparse: dict, path=None):
+    """Library is a typed Node; sparse is a dict — keep the typed node.
+
+    The dict was a wire-shape projection (e.g. ``{0: {0: delta}}``
+    landing in an Array cell). At apply time the typed node's
+    dispatched apply walks the dict update against the live state.
+    """
+    return library
+
+
+@dispatch
+def promote(library: dict, sparse: Node, path=None):
+    """Sparse declared a typed leaf at a path library only knows as a
+    plain dict — use sparse's type."""
+    return sparse
+
+
+@dispatch
+def promote(library: Node, sparse: Node, path=None):
+    """Both typed — fall through to full resolve so e.g. Map/Map and
+    Wrap/Wrap rules apply."""
+    return resolve(library, sparse)
+
+
+@dispatch
+def promote(library: Empty, sparse, path=None):
+    """No library type at this path — keep sparse as-is."""
+    return sparse
+
+
+@dispatch
+def promote(library, sparse: Empty, path=None):
+    """Sparse has nothing to promote here — keep library."""
+    return library
+
+
+@dispatch
+def promote(library, sparse, path=None):
+    """Fallback for value/value pairs (None, primitives) — defer to
+    resolve so we keep its existing behavior for non-schema inputs."""
+    return resolve(library, sparse)
+
+

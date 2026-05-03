@@ -425,6 +425,56 @@ def test_resolve(core):
         failed = True
     assert failed
 
+
+def test_promote(core):
+    # Library schema: a Composite-like dict with several typed branches.
+    library = {
+        'global_time': 'float',
+        'fields': 'map[array[float]]',
+        'spatial_dFBA': {
+            'dFBA[0,0]': 'float',
+            'dFBA[1,0]': 'float',
+        },
+        'emitter': 'string',
+    }
+
+    # Sparse update schema: only touches `fields/glucose`. Inner shape
+    # is a wire-level projection ``{0: {0: count}}`` — what
+    # project_ports_fast emits for a per-cell process update.
+    from bigraph_schema.schema import Float
+    sparse = {
+        'fields': {
+            'glucose': {0: {0: 'float'}},
+        },
+    }
+
+    promoted = core.promote(library, sparse)
+
+    # Top result has only the keys sparse touched.
+    assert set(promoted.keys()) == {'fields'}, (
+        'promote should not pull in keys sparse never touched')
+
+    # The typed Map at fields wins — the dict-of-glucose subtree from
+    # sparse is replaced by the library's typed Map node so apply
+    # dispatches correctly.
+    fields_schema = promoted['fields']
+    from bigraph_schema.schema import Map
+    assert isinstance(fields_schema, Map), (
+        f'expected Map at fields, got {type(fields_schema).__name__}')
+
+    # Sanity: the spatial_dFBA branch is not in the result (sparse
+    # never touched it, so promote must not walk into it).
+    assert 'spatial_dFBA' not in promoted
+
+
+def test_promote_keeps_sparse_when_library_missing(core):
+    # If library has no entry at a key, promote keeps sparse's subtree
+    # so the projection schema isn't silently dropped.
+    library = {'a': 'float'}
+    sparse = {'b': 'float'}
+    promoted = core.promote(library, sparse)
+    assert 'b' in promoted
+
 def test_check(core):
     tree_a = {
         'a': {
