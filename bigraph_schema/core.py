@@ -23,6 +23,7 @@ import sys
 import copy
 import typing
 import inspect
+import collections
 
 from pprint import pformat as pf
 
@@ -294,21 +295,45 @@ class Core:
         self.registry = {}
         self.link_registry = {}
         self.method_registry = {}
-        self._access_cache = {}
+        # ``_access_cache`` is keyed by ``id(dict)`` and holds the dict
+        # witness alive (so id reuse after GC is detected). Fresh
+        # short-lived dicts produced per-tick (projection schemas,
+        # update_schemas) would otherwise leak — each one entering
+        # the cache is never evicted, pinning its dict in memory.
+        # ``OrderedDict`` + size cap implements LRU eviction so the
+        # cache stays bounded under high-churn workloads while still
+        # serving the vEcoli-style steady-state schemas (~5x reuse
+        # observed) effectively.
+        self._access_cache = collections.OrderedDict()
+        self._access_cache_max = 100_000
         self._access_string_cache = {}
         self._link_cache = {}
         # Resolve memoization: map (id(current), id(update)) → result Node.
         # Schemas in the hot path come from precompiled link caches (Node
         # objects built once at construction), so the same id pairs recur
         # every tick. The witness tuple verifies the ids still refer to
-        # the same objects.
-        self._resolve_cache = {}
+        # the same objects. LRU-bounded so per-tick projection schemas
+        # don't pin objects in memory forever (same leak pattern as
+        # _access_cache).
+        self._resolve_cache = collections.OrderedDict()
+        self._resolve_cache_max = 100_000
         # Compiled-apply cache: id(schema) → (witness, compiled_fn).
         # Each schema is compiled once into straight-line Python source
         # (see methods.compile_apply) and the resulting function is
         # cached. Cleared on structural changes by callers (e.g.
-        # Composite.find_instance_paths).
-        self._compiled_apply_cache = {}
+        # Composite.find_instance_paths). LRU-bounded so per-tick fresh
+        # schemas (e.g. promote results that aren't memoized) don't
+        # leak compiled functions.
+        self._compiled_apply_cache = collections.OrderedDict()
+        self._compiled_apply_cache_max = 10_000
+        # promote() memoization: id(library) × id(sparse) → result.
+        # Composite hands us the same combined_schema repeatedly when
+        # the same set of processes emits each tick (covered by
+        # _combined_schema_cache); memoizing promote on top makes the
+        # apply_schema stable across ticks, which lets compile_apply
+        # hit cache instead of recompiling every tick.
+        self._promote_cache = collections.OrderedDict()
+        self._promote_cache_max = 10_000
 
         self.parse_visitor = CoreVisitor(self)
 
@@ -472,6 +497,9 @@ class Core:
             kid = id(key)
             cached = self._access_cache.get(kid)
             if cached is not None and cached[0] is key:
+                # LRU touch: move-to-end so frequently used schemas
+                # survive eviction.
+                self._access_cache.move_to_end(kid)
                 return cached[1]
 
             if '_type' in key:
@@ -498,6 +526,13 @@ class Core:
                         result[subkey] = subitem
 
             self._access_cache[kid] = (key, result)
+            # LRU eviction: drop oldest entries once we exceed the
+            # cap. This keeps RAM bounded under high-churn workloads
+            # (e.g. hundreds of fresh projection schemas per tick)
+            # without losing the steady-state hits the cache exists
+            # to serve.
+            if len(self._access_cache) > self._access_cache_max:
+                self._access_cache.popitem(last=False)
             return result
 
         elif isinstance(key, list):
@@ -581,6 +616,7 @@ class Core:
             cache_key = (id(current), id(update))
             cached = self._resolve_cache.get(cache_key)
             if cached is not None and cached[0] is current and cached[1] is update:
+                self._resolve_cache.move_to_end(cache_key)
                 return cached[2]
 
         try:
@@ -600,6 +636,10 @@ class Core:
 
         if cache_key is not None:
             self._resolve_cache[cache_key] = (current, update, result)
+            # LRU eviction: bounded so per-tick fresh schemas don't
+            # leak. Same pattern as _access_cache above.
+            if len(self._resolve_cache) > self._resolve_cache_max:
+                self._resolve_cache.popitem(last=False)
         return result
 
     def promote(self, library_schema, sparse_schema):
@@ -617,14 +657,32 @@ class Core:
         promoted schema reaches dispatch with the right typed nodes
         (Array, Map, ProcessLink, ...) without paying the full
         resolve cost.
+
+        Memoized by ``(id(library), id(sparse))``: when both inputs
+        are reused (e.g. a Composite whose schema is stable and whose
+        combined_schema is cached across ticks), this returns the
+        same result object — letting compile_apply hit cache instead
+        of recompiling each tick.
         """
+        cache_key = (id(library_schema), id(sparse_schema))
+        cached = self._promote_cache.get(cache_key)
+        if cached is not None and cached[0] is library_schema and cached[1] is sparse_schema:
+            self._promote_cache.move_to_end(cache_key)
+            return cached[2]
+
         library_is_node = isinstance(library_schema, Node)
         sparse_is_node = isinstance(sparse_schema, Node)
         library = library_schema if library_is_node else self.access(library_schema)
         sparse = sparse_schema if sparse_is_node else self.access(sparse_schema)
         if library is sparse:
-            return library
-        return promote(library, sparse)
+            result = library
+        else:
+            result = promote(library, sparse)
+
+        self._promote_cache[cache_key] = (library_schema, sparse_schema, result)
+        if len(self._promote_cache) > self._promote_cache_max:
+            self._promote_cache.popitem(last=False)
+        return result
 
     def generalize(self, current_schema, update_schema):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution)."""
@@ -1496,6 +1554,7 @@ class Core:
             cache_key = id(found)
             cached = cache.get(cache_key)
             if cached is not None and cached[0] is found:
+                cache.move_to_end(cache_key)  # LRU touch
                 compiled_fn = cached[1]
             else:
                 from bigraph_schema.methods.compile_apply import compile_apply
@@ -1507,6 +1566,8 @@ class Core:
                     # is preserved.
                     compiled_fn = None
                 cache[cache_key] = (found, compiled_fn)
+                if len(cache) > self._compiled_apply_cache_max:
+                    cache.popitem(last=False)
             if compiled_fn is not None:
                 return compiled_fn(state, update, path)
 
@@ -1525,7 +1586,8 @@ class Core:
         """Drop all compiled apply functions. Callers must invoke this
         after any change that mutates a schema in place (notably
         ``apply(dict)``'s ``_divide`` branch which pops/inserts keys)."""
-        self._compiled_apply_cache = {}
+        self._compiled_apply_cache = collections.OrderedDict()
+        self._promote_cache = collections.OrderedDict()
 
     def reconcile(self, schema, updates):
         """Reconcile multiple updates into a single combined update.
