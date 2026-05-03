@@ -242,29 +242,6 @@ class CoreVisitor(NodeVisitor):
         return {'node': node, 'visit': visit}
 
 
-_STRUCTURAL_UPDATE_KEYS = frozenset(('_add', '_remove', '_type', '_divide'))
-
-
-def _update_has_structural(update) -> bool:
-    """True if ``update`` contains a structural sentinel at any depth.
-
-    Used by ``Core.apply`` to bypass the compiled fast path when the
-    update needs the dispatched ``apply``'s sentinel handling. Keeps
-    the check cheap by short-circuiting on first sentinel and skipping
-    non-dict values.
-    """
-    if not isinstance(update, dict):
-        return False
-    for key, value in update.items():
-        if isinstance(key, str) and key.startswith('_'):
-            if key in _STRUCTURAL_UPDATE_KEYS:
-                return True
-            continue
-        if isinstance(value, dict) and _update_has_structural(value):
-            return True
-    return False
-
-
 class Core:
     """Bigraph-schema operation: registry, parsing, normalization, and ops.
 
@@ -316,21 +293,12 @@ class Core:
         # _access_cache).
         self._resolve_cache = collections.OrderedDict()
         self._resolve_cache_max = 100_000
-        # Compiled-apply cache: id(schema) → (witness, compiled_fn).
-        # Each schema is compiled once into straight-line Python source
-        # (see methods.compile_apply) and the resulting function is
-        # cached. Cleared on structural changes by callers (e.g.
-        # Composite.find_instance_paths). LRU-bounded so per-tick fresh
-        # schemas (e.g. promote results that aren't memoized) don't
-        # leak compiled functions.
-        self._compiled_apply_cache = collections.OrderedDict()
-        self._compiled_apply_cache_max = 10_000
         # promote() memoization: id(library) × id(sparse) → result.
         # Composite hands us the same combined_schema repeatedly when
         # the same set of processes emits each tick (covered by
         # _combined_schema_cache); memoizing promote on top makes the
-        # apply_schema stable across ticks, which lets compile_apply
-        # hit cache instead of recompiling every tick.
+        # apply_schema stable across ticks. Cleared on structural
+        # changes by callers via ``invalidate_caches``.
         self._promote_cache = collections.OrderedDict()
         self._promote_cache_max = 10_000
 
@@ -660,8 +628,7 @@ class Core:
         Memoized by ``(id(library), id(sparse))``: when both inputs
         are reused (e.g. a Composite whose schema is stable and whose
         combined_schema is cached across ticks), this returns the
-        same result object — letting compile_apply hit cache instead
-        of recompiling each tick.
+        same result object — saving the per-tick recompute cost.
         """
         cache_key = (id(library_schema), id(sparse_schema))
         cached = self._promote_cache.get(cache_key)
@@ -1511,67 +1478,21 @@ class Core:
               events=None):
         """Apply a schema-aware update/patch; provides minimal context.
 
-        Fast path: schemas with at least one ``compile_apply`` cycle's
-        worth of dispatch overhead get compiled into straight-line
-        Python source on first apply and cached. The returned function
-        is a single call with no recursion through plum dispatch.
-
-        `is not None` rather than truthiness — numpy arrays don't have
-        a scalar truth value, and even an "empty" container (e.g. {})
-        should reach the dispatched apply (which is a no-op for empty
-        updates anyway).
-
-        ``update_has_structural`` lets callers that already walked the
-        update (e.g. ``Composite.apply_updates``) skip the redundant
-        sentinel-detection walk here. ``None`` means "walk to find out".
+        ``update_has_structural`` is accepted for API compatibility with
+        callers that already walked the update (e.g.
+        ``Composite.apply_updates``); it is no longer consulted by this
+        method since dispatch is uniform for all updates.
 
         ``events`` (optional list): when provided, structural events
         emitted by sentinel handlers (``_add`` -> ``NodeAdded``,
         ``_remove`` -> ``NodeRemoved``, ``_divide`` -> ``Divided``)
         are appended. ``None`` discards events (preserves the original
-        2-tuple return). Compiled apply emits no events (value-only
-        ticks can't trigger sentinels).
+        2-tuple return).
         """
         if update is None:
             return state, []
         found = self.access(schema)
 
-        # Structural sentinels at any depth bypass the compiled fast
-        # path. The dispatched apply mutates schemas in place during
-        # ``_divide`` (popping mother key, inserting daughters) and
-        # uses ``_handle_divide_sentinel`` to walk the type tree —
-        # behaviors the inlined compiled function only partially
-        # replicates via fallback at specific depths. Forcing dispatch
-        # for any update containing a sentinel keeps these paths
-        # bit-identical to the dispatch-only behavior.
-        if update_has_structural is None:
-            update_has_structural = _update_has_structural(update)
-        use_compile = (not getattr(self, '_disable_compiled_apply', False)
-                       and not update_has_structural)
-        if use_compile:
-            cache = self._compiled_apply_cache
-            cache_key = id(found)
-            cached = cache.get(cache_key)
-            if cached is not None and cached[0] is found:
-                cache.move_to_end(cache_key)  # LRU touch
-                compiled_fn = cached[1]
-            else:
-                from bigraph_schema.methods.compile_apply import compile_apply
-                try:
-                    compiled_fn = compile_apply(found)
-                except Exception:
-                    # Defensive: if compile fails for any reason, fall back
-                    # to dispatch and don't try to cache. Caller correctness
-                    # is preserved.
-                    compiled_fn = None
-                cache[cache_key] = (found, compiled_fn)
-                if len(cache) > self._compiled_apply_cache_max:
-                    cache.popitem(last=False)
-            if compiled_fn is not None:
-                return compiled_fn(state, update, path)
-
-        # Dispatched path: install events sink if caller asked for one.
-        # Only sentinel handlers in the dispatched apply emit events.
         if events is not None:
             from bigraph_schema.methods.events import install_sink, uninstall_sink
             prev = install_sink(events)
@@ -1581,11 +1502,10 @@ class Core:
                 uninstall_sink(prev)
         return apply(found, state, update, path)
 
-    def invalidate_compiled_apply(self):
-        """Drop all compiled apply functions. Callers must invoke this
-        after any change that mutates a schema in place (notably
-        ``apply(dict)``'s ``_divide`` branch which pops/inserts keys)."""
-        self._compiled_apply_cache = collections.OrderedDict()
+    def invalidate_caches(self):
+        """Drop schema-derived caches that go stale on in-place schema
+        mutation (notably ``apply(dict)``'s ``_divide`` branch, which
+        pops mother keys and inserts daughter keys)."""
         self._promote_cache = collections.OrderedDict()
 
     def reconcile(self, schema, updates):
