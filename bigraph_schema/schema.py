@@ -173,6 +173,44 @@ class DivideReset(Wrap):
     pass
 
 @dataclass(kw_only=True)
+class DivideShare(Wrap):
+    """Wrapper that shares the inner value across both daughters on division.
+
+    Mirrors v1's ``_divider: "set"`` behavior — both daughters receive
+    the mother's value (no copy, no halving, no reset). Use this for
+    intensive quantities the framework would otherwise halve by default
+    (notably ``array[float]``, which the framework treats as extensive
+    and divides by 2 — wrong for rate-typed arrays like
+    ``aa_exchange_rates``).
+
+    All other dispatched methods delegate to the inner type — only
+    ``divide`` differs.
+    """
+    pass
+
+@dataclass(kw_only=True)
+class LineageSeed(Wrap):
+    """Integer seed combined with the current lineage seed at realize time.
+
+    State holds the BASE seed (a constant per process). At realize, the
+    framework reads the active ``DerivationContext.lineage_seed`` and
+    returns ``(base + lineage) % 2**31`` so the realized config carries
+    the derived seed used to instantiate the process. Serialize subtracts
+    the same lineage so saved bundles always store base values.
+
+    This lifts vEcoli's per-generation seed derivation
+    (``seed = (default + cli_seed) % RAND_MAX``) into the type system:
+    bundle reload, in-process division, and fresh build all derive seeds
+    the same way from the surrounding context, instead of each callsite
+    needing a process-aware reseed helper.
+
+    Divide shares the base across both daughters; the per-daughter
+    derivation happens at the daughter's next realize() against whatever
+    lineage context is active then.
+    """
+    pass
+
+@dataclass(kw_only=True)
 class List(Node):
     _schema_keys =Node._schema_keys | frozenset({'_element'})
     _element: Node = field(default_factory=Node)
@@ -672,6 +710,8 @@ BASE_TYPES = {
     'overwrite': Overwrite,
     'const': Const,
     'divide_reset': DivideReset,
+    'divide_share': DivideShare,
+    'lineage_seed': LineageSeed,
     'list': List,
     'set': Set,
     'map': Map,

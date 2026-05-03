@@ -30,6 +30,8 @@ from bigraph_schema.schema import (
     Overwrite,
     Const,
     DivideReset,
+    DivideShare,
+    LineageSeed,  # for render dispatch only
     List,
     Set,
     Map,
@@ -143,6 +145,28 @@ def render(schema: DivideReset, defaults=False):
     else:
         result = {
             '_type': 'divide_reset',
+            '_value': value}
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: DivideShare, defaults=False):
+    value = render(schema._value, defaults=defaults)
+    if isinstance(value, str):
+        result = f'divide_share[{value}]'
+    else:
+        result = {
+            '_type': 'divide_share',
+            '_value': value}
+    return wrap_default(schema, result) if defaults else result
+
+@dispatch
+def render(schema: LineageSeed, defaults=False):
+    value = render(schema._value, defaults=defaults)
+    if isinstance(value, str):
+        result = f'lineage_seed[{value}]'
+    else:
+        result = {
+            '_type': 'lineage_seed',
             '_value': value}
     return wrap_default(schema, result) if defaults else result
 

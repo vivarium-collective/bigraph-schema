@@ -42,6 +42,8 @@ from bigraph_schema.schema import (
     Quantity,
     Wrap,
     DivideReset,
+    DivideShare,
+    LineageSeed,
 )
 from bigraph_schema.methods.default import default
 
@@ -168,6 +170,33 @@ def divide(schema: DivideReset, state, context=None, path=(), rng=None):
     """
     reset = default(schema)
     return reset, reset
+
+
+@dispatch
+def divide(schema: DivideShare, state, context=None, path=(), rng=None):
+    """Share the inner value across both daughters.
+
+    Mirrors v1's ``_divider: "set"``. Both daughters receive the same
+    reference to mother's value — no copy, no halving, no reset.
+    Use this to override a child type's default divide behavior, e.g.
+    when ``array[float]`` would otherwise halve a rate-typed array.
+    """
+    return state, state
+
+
+@dispatch
+def divide(schema: LineageSeed, state, context=None, path=(), rng=None):
+    """Share the base seed across both daughters.
+
+    Per-daughter seed derivation happens at each daughter's next
+    realize() — base values flow through divide unchanged so the
+    ``LineageSeed`` realize dispatcher can recombine them with whatever
+    ``DerivationContext`` is active when daughter processes are
+    instantiated. Without this dispatch, ``Wrap``'s default would
+    delegate to the inner Integer's binomial split, which would corrupt
+    the seed.
+    """
+    return state, state
 
 
 @dispatch
