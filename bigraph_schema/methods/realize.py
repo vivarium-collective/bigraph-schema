@@ -596,51 +596,6 @@ def default_wires(schema):
         for key in schema}
 
 
-def _is_lineage_seed(schema):
-    """Return True if ``schema`` is a LineageSeed (possibly nested
-    inside another Wrap, e.g. ``overwrite[lineage_seed[integer]]``)."""
-    if isinstance(schema, LineageSeed):
-        return True
-    if isinstance(schema, Wrap):
-        return _is_lineage_seed(schema._value)
-    return False
-
-
-def _derive_config(core, config_schema, config):
-    """Apply realize-time derivations to a process's realized config.
-
-    Walks the top level of ``config_schema``: any field whose schema is
-    (or wraps) a ``LineageSeed`` is combined with the active
-    ``DerivationContext.lineage_seed`` mod 2**31. The process's
-    constructor receives the derived value; the original ``config``
-    dict (with base values) is what's stored back into state, so the
-    round-trip through serialize/realize is invariant of context.
-
-    No-op when no DerivationContext is installed — preserves the
-    fully-derived seed semantics for callers that haven't opted in.
-    """
-    from bigraph_schema.methods.derive import get_derivation_context
-    context = get_derivation_context()
-    if context is None or not isinstance(config_schema, dict):
-        return config
-    if not isinstance(config, dict):
-        return config
-    derived = None
-    RAND_MAX = 2**31
-    for key, sub_schema in config_schema.items():
-        if isinstance(sub_schema, str):
-            sub_schema = core.access(sub_schema)
-        if not _is_lineage_seed(sub_schema):
-            continue
-        base = config.get(key)
-        if not isinstance(base, (int, np.integer)):
-            continue
-        if derived is None:
-            derived = dict(config)
-        derived[key] = (
-            int(base) + int(context.lineage_seed)
-        ) % RAND_MAX
-    return derived if derived is not None else config
 
 
 def realize_link(core, schema: Link, encode, path=()):
@@ -696,20 +651,13 @@ def realize_link(core, schema: Link, encode, path=()):
         else:
             config = encode_config
 
-        # Realize-time derivation: walk config_schema for fields that
-        # need contextual transformation (e.g. LineageSeed combines
-        # base+lineage). State stores base; the constructor sees the
-        # derived value. Bundle round-trips remain invariant of
-        # DerivationContext.
-        constructor_config = _derive_config(core, config_schema, config)
-
         # Try (config, core) first (standard bigraph signature), then
         # fall back to (config) only (vivarium-style processes whose
         # __init__ doesn't accept core).
         try:
-            edge_instance = edge_class(constructor_config, core)
+            edge_instance = edge_class(config, core)
         except TypeError:
-            edge_instance = edge_class(constructor_config)
+            edge_instance = edge_class(config)
         # Ensure all instances have core for config_schema resolution
         # (needed by serialize). Vivarium-style processes don't accept
         # core in __init__ so we set it after construction.

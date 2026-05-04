@@ -32,8 +32,9 @@ class DerivationContext:
 
     Fields:
       lineage_seed: Per-generation seed (CLI ``--seed`` in vEcoli).
-        Combined into ``LineageSeed`` field values as
-        ``(base + lineage_seed) % RAND_MAX``.
+        Available to derivers (currently unused by the framework
+        itself — projects compute their per-generation seeds in
+        their own bundle-load pipeline).
     """
     lineage_seed: int = 0
 

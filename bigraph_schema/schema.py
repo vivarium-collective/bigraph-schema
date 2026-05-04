@@ -190,23 +190,19 @@ class DivideShare(Wrap):
 
 @dataclass(kw_only=True)
 class LineageSeed(Wrap):
-    """Integer seed combined with the current lineage seed at realize time.
+    """Marker wrapper for integer seeds that are scoped to a lineage.
 
-    State holds the BASE seed (a constant per process). At realize, the
-    framework reads the active ``DerivationContext.lineage_seed`` and
-    returns ``(base + lineage) % 2**31`` so the realized config carries
-    the derived seed used to instantiate the process. Serialize subtracts
-    the same lineage so saved bundles always store base values.
+    State holds the seed as an integer. Divide shares the seed across
+    both daughters (matches v1's ``_divider:"set"`` for seeds — both
+    daughters inherit the mother's value, then the project's load
+    pipeline can recompute per-generation seeds from the cli_seed).
 
-    This lifts vEcoli's per-generation seed derivation
-    (``seed = (default + cli_seed) % RAND_MAX``) into the type system:
-    bundle reload, in-process division, and fresh build all derive seeds
-    the same way from the surrounding context, instead of each callsite
-    needing a process-aware reseed helper.
-
-    Divide shares the base across both daughters; the per-daughter
-    derivation happens at the daughter's next realize() against whatever
-    lineage context is active then.
+    The class carries no derivation logic itself: project integrations
+    that need per-generation seed reseeding should compute fresh
+    seeds in their bundle-load pipeline rather than at realize time.
+    Keeping derivation out of the framework avoids coupling
+    bigraph-schema to project-specific derivation formulas
+    (e.g. v1's ``crc32(process_name, cli_seed)``).
     """
     pass
 
