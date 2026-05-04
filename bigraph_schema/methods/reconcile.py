@@ -361,45 +361,81 @@ def reconcile(schema: dict, updates: list):
     from bigraph_schema.schema import is_schema_field
 
     sink = get_reconcile_sink()
-
-    # Collect all keys across updates
-    all_keys = set()
-    for update in updates:
-        if isinstance(update, dict):
-            all_keys.update(update.keys())
-
-    result = {}
     parent_path = sink.path_stack if sink is not None else ()
-    for key in all_keys:
-        if key in _STRUCTURAL_SENTINELS:
-            if sink is not None:
-                sink.has_structural = True
-            # Last non-None wins for structural directives — they
-            # don't need to be deep-merged because apply() handles
-            # them holistically.
-            for update in reversed(updates):
-                if isinstance(update, dict) and key in update and update[key] is not None:
-                    result[key] = update[key]
-                    break
-            continue
-        if not is_schema_field(schema, key):
-            continue
-        key_updates = []
-        for update in updates:
-            if isinstance(update, dict) and key in update:
-                key_updates.append(update[key])
-        if key_updates:
-            subschema = schema.get(key, Node())
+
+    # Single-update fast path: most apply_updates calls in a layered
+    # composite end up reconciling exactly one update at the dict
+    # level. Skip the per-key gather and just walk the one update's
+    # keys directly.
+    if len(updates) == 1:
+        update = updates[0]
+        if not isinstance(update, dict):
+            return None
+        result = {}
+        for key, value in update.items():
+            if isinstance(key, str) and key.startswith('_'):
+                if key in _STRUCTURAL_SENTINELS:
+                    if sink is not None:
+                        sink.has_structural = True
+                    if value is not None:
+                        result[key] = value
+                    continue
+                if isinstance(schema, dict) and not is_schema_field(schema, key):
+                    continue
+            if isinstance(schema, dict) and key not in schema:
+                if not (isinstance(key, str) and key.startswith('_')):
+                    continue
+            subschema = schema.get(key, Node()) if isinstance(schema, dict) else Node()
             if sink is not None:
                 sink.paths.append(parent_path + (key,))
                 sink.path_stack = parent_path + (key,)
                 try:
-                    reconciled = reconcile(subschema, key_updates)
+                    reconciled = reconcile(subschema, [value])
                 finally:
                     sink.path_stack = parent_path
             else:
-                reconciled = reconcile(subschema, key_updates)
+                reconciled = reconcile(subschema, [value])
             if reconciled is not None:
                 result[key] = reconciled
+        return result if result else None
+
+    # General path: walk updates ONCE, collecting per-key value lists
+    # in the same pass that builds the key set. Saves a second loop
+    # over updates per key.
+    keys_with_updates: dict = {}
+    for update in updates:
+        if not isinstance(update, dict):
+            continue
+        for k, v in update.items():
+            keys_with_updates.setdefault(k, []).append(v)
+
+    result = {}
+    for key, key_updates in keys_with_updates.items():
+        if isinstance(key, str) and key.startswith('_'):
+            if key in _STRUCTURAL_SENTINELS:
+                if sink is not None:
+                    sink.has_structural = True
+                # Last non-None wins for structural directives.
+                for v in reversed(key_updates):
+                    if v is not None:
+                        result[key] = v
+                        break
+                continue
+            # Underscore key that isn't a structural sentinel — only
+            # keep it if the schema declares it.
+            if not is_schema_field(schema, key):
+                continue
+        subschema = schema.get(key, Node())
+        if sink is not None:
+            sink.paths.append(parent_path + (key,))
+            sink.path_stack = parent_path + (key,)
+            try:
+                reconciled = reconcile(subschema, key_updates)
+            finally:
+                sink.path_stack = parent_path
+        else:
+            reconciled = reconcile(subschema, key_updates)
+        if reconciled is not None:
+            result[key] = reconciled
 
     return result if result else None
