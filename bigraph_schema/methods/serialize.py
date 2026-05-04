@@ -550,7 +550,11 @@ def serialize(schema: Empty, state):
 def serialize(schema: Boolean, state):
     if state is None:
         return None
-    return 'true' if state else 'false'
+    # Return the bool itself so JSON encodes as ``true``/``false``
+    # rather than the string ``"true"``/``"false"``. ``realize(Boolean)``
+    # already accepts both bool and string-encoded forms, so old
+    # bundles with stringified booleans still round-trip.
+    return True if state else False
 
 
 @dispatch
