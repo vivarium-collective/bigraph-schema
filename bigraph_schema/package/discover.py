@@ -83,11 +83,19 @@ def recursive_dynamic_import(
         try:
             module = importlib.import_module(adjusted)
 
-        except ModuleNotFoundError as e:
-            # e.name is the missing module name
-            # If the missing name IS the module we tried to import, then it's truly not found.
-            # Otherwise, it's a dependency import failure inside that module.
-            print(f"module `{adjusted}` not found during dynamic import")
+        except ImportError as e:
+            # Catch both ModuleNotFoundError (the target itself is missing)
+            # and ImportError (the target exists but a dep inside it failed
+            # to import — typical for optional-extras modules like
+            # process_bigraph.protocols.ray when ray isn't installed).
+            # Skip and continue scanning the rest of the package; absorbing
+            # one missing optional dep should never break the discovery.
+            missing = getattr(e, "name", None)
+            if missing and missing != adjusted:
+                print(f"skipping `{adjusted}` (missing optional dep `{missing}`)")
+            else:
+                print(f"module `{adjusted}` not found during dynamic import")
+            return core, edges, types, visited
 
     # Allow module to register types into core
     if hasattr(module, "register_types"):
