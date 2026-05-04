@@ -1066,7 +1066,15 @@ def _realize_dict(core, schema, encode, path=(), fill_missing=True):
 
     if isinstance(encode, dict):
         if '_type' in encode:
+            # Encoded type promotes the schema to a typed Node — but
+            # ``_realize_dict`` only knows how to walk a plain dict.
+            # Re-dispatch so the typed Node hits its own realize handler
+            # (e.g. realize(Map, ...)) instead of the dict iteration
+            # below crashing on the Node's missing ``.items()``.
             schema = core.access_type(encode)
+            if fill_missing:
+                return realize(core, schema, encode, path=path)
+            return _discover_dispatch(core, schema, encode, path=path)
 
         for key, subschema in schema.items():
             if is_schema_field(schema, key):

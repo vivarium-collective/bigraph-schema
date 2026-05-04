@@ -351,6 +351,18 @@ def resolve(current: Map, update: Empty, path=None):
 
 @dispatch
 def resolve(current: Map, update: Wrap, path=None):
+    # Path-aware dispatch:
+    # - With ``path``, the Wrap targets a subkey of the Map (typical
+    #   case: a writer's port ``overwrite[float]`` projected through a
+    #   wire to ``map[<key>]``). Walk into Map._value and resolve there
+    #   so the Wrap applies per-element instead of replacing the whole
+    #   map.
+    # - Without ``path``, the Wrap targets the Map itself (e.g.
+    #   ``overwrite[map[float]]`` declared as a unit — caller wants
+    #   atomic-replace semantics for the entire map).
+    if path:
+        new_value = resolve(current._value, update, path)
+        return replace(current, _value=new_value)
     value = resolve(current, update._value, path=path)
     result = type(update)(_value=value)
     if result._default is None and current._default is not None:
