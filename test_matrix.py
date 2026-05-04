@@ -118,10 +118,10 @@ class TestBoolean:
         assert 'boolean' in str(r)
 
     def test_serialize_true(self):
-        assert serialize(Boolean(), True) == 'true'
+        assert serialize(Boolean(), True) is True
 
     def test_serialize_false(self):
-        assert serialize(Boolean(), False) == 'false'
+        assert serialize(Boolean(), False) is False
 
     def test_realize_true_string(self, core):
         _, state, _ = realize(core, Boolean(), 'true')
@@ -218,10 +218,10 @@ class TestOr:
         assert render(Or()) == 'boolean'
 
     def test_serialize_true(self):
-        assert serialize(Or(), True) == 'true'
+        assert serialize(Or(), True) is True
 
     def test_serialize_false(self):
-        assert serialize(Or(), False) == 'false'
+        assert serialize(Or(), False) is False
 
     def test_realize(self, core):
         _, state, _ = realize(core, Or(), 'true')
@@ -264,10 +264,10 @@ class TestAnd:
         assert result is False
 
     def test_serialize_true(self):
-        assert serialize(And(), True) == 'true'
+        assert serialize(And(), True) is True
 
     def test_serialize_false(self):
-        assert serialize(And(), False) == 'false'
+        assert serialize(And(), False) is False
 
     def test_realize(self, core):
         _, state, _ = realize(core, And(), 'false')
@@ -307,7 +307,7 @@ class TestXor:
         assert result is False
 
     def test_serialize(self):
-        assert serialize(Xor(), True) == 'true'
+        assert serialize(Xor(), True) is True
 
     def test_realize(self, core):
         _, state, _ = realize(core, Xor(), 'true')
@@ -2102,7 +2102,7 @@ class TestLink:
         state = {
             'inputs': {'x': ['x']},
             'outputs': {'y': ['y']}}
-        gen_schema, gen_state = core.realize(schema, state)
+        gen_schema, gen_state, _ = core.realize(schema, state)
         assert 'instance' in gen_state
         assert 'address' in gen_state
         assert 'config' in gen_state
@@ -2115,7 +2115,7 @@ class TestLink:
         state = {
             'inputs': {'n': ['A']},
             'outputs': {'z': ['B']}}
-        gen_schema, gen_state = core.realize(schema, state)
+        gen_schema, gen_state, _ = core.realize(schema, state)
         assert 'instance' in gen_state
 
     def test_realize_already_instantiated(self, core):
@@ -2126,9 +2126,9 @@ class TestLink:
         state = {
             'inputs': {'x': ['x']},
             'outputs': {'y': ['y']}}
-        gen_schema, gen_state = core.realize(schema, state)
+        gen_schema, gen_state, _ = core.realize(schema, state)
         # Re-realize should short-circuit on existing instance
-        gen_schema2, gen_state2 = core.realize(gen_schema, gen_state)
+        gen_schema2, gen_state2, _ = core.realize(gen_schema, gen_state)
         assert 'instance' in gen_state2
 
     def test_serialize(self, core):
@@ -2139,7 +2139,7 @@ class TestLink:
         state = {
             'inputs': {'x': ['x']},
             'outputs': {'y': ['y']}}
-        gen_schema, gen_state = core.realize(schema, state)
+        gen_schema, gen_state, _ = core.realize(schema, state)
         result = core.serialize(gen_schema, gen_state)
         assert '_inputs' in result
         assert '_outputs' in result
@@ -2153,9 +2153,9 @@ class TestLink:
         state = {
             'inputs': {'x': ['x']},
             'outputs': {'y': ['y']}}
-        gen_schema, gen_state = core.realize(schema, state)
+        gen_schema, gen_state, _ = core.realize(schema, state)
         serialized = core.serialize(gen_schema, gen_state)
-        re_schema, re_state = core.realize(gen_schema, serialized)
+        re_schema, re_state, _ = core.realize(gen_schema, serialized)
         assert 'instance' in re_state
 
     def test_merge(self, core):
@@ -2211,7 +2211,7 @@ class TestLink:
         state = {
             'inputs': {'x': ['x']},
             'outputs': {'y': ['y']}}
-        gen_schema, gen_state = core.realize(schema, state)
+        gen_schema, gen_state, _ = core.realize(schema, state)
         result = validate(core, gen_schema, gen_state)
         assert result is None or result == {}
 
@@ -2367,7 +2367,7 @@ class TestTraverse:
                 '_outputs': {'force': 'string'},
                 'inputs': {'mass': ['mass_value']},
                 'outputs': {'force': ['result']}}}
-        gen_schema, gen_state = core.realize({}, graph)
+        gen_schema, gen_state, _ = core.realize({}, graph)
         # Traverse to the input wire target
         mass_schema, mass_state = core.traverse(
             gen_schema, gen_state, ['link', 'inputs', 'mass'])
@@ -2404,21 +2404,21 @@ class TestCoreRoundTrip:
         s, v = core.default('boolean')
         assert v is False
         encoded = core.serialize(s, v)
-        _, decoded = core.realize(s, encoded)
+        _, decoded, _ = core.realize(s, encoded)
         assert decoded is v
 
     def test_or(self, core):
         s, v = core.default('or')
         assert v is False
         encoded = core.serialize(s, v)
-        _, decoded = core.realize(s, encoded)
+        _, decoded, _ = core.realize(s, encoded)
         assert decoded is False
 
     def test_and(self, core):
         s, v = core.default('and')
         assert v is True
         encoded = core.serialize(s, v)
-        _, decoded = core.realize(s, encoded)
+        _, decoded, _ = core.realize(s, encoded)
         assert decoded is True
 
     def test_xor(self, core):
@@ -2429,21 +2429,21 @@ class TestCoreRoundTrip:
         s, v = core.default('integer')
         assert v == 0
         encoded = core.serialize(s, v)
-        _, decoded = core.realize(s, encoded)
+        _, decoded, _ = core.realize(s, encoded)
         assert decoded == v
 
     def test_float(self, core):
         s, v = core.default('float')
         assert v == 0.0
         encoded = core.serialize(s, v)
-        _, decoded = core.realize(s, encoded)
+        _, decoded, _ = core.realize(s, encoded)
         assert decoded == v
 
     def test_delta(self, core):
         s, v = core.default('delta')
         assert v == 0.0
         encoded = core.serialize(s, v)
-        _, decoded = core.realize(s, encoded)
+        _, decoded, _ = core.realize(s, encoded)
         assert decoded == v
 
     def test_nonnegative(self, core):
@@ -2454,7 +2454,7 @@ class TestCoreRoundTrip:
         s, v = core.default('string')
         assert v == ''
         encoded = core.serialize(s, v)
-        _, decoded = core.realize(s, encoded)
+        _, decoded, _ = core.realize(s, encoded)
         assert decoded == v
 
     def test_enum(self, core):
@@ -2799,14 +2799,14 @@ class TestCoreSerializeRealize:
     def test_boolean_true(self, core):
         s = core.access('boolean')
         encoded = serialize(s, True)
-        assert encoded == 'true'
+        assert encoded is True
         _, decoded, _ = realize(core, s, encoded)
         assert decoded is True
 
     def test_boolean_false(self, core):
         s = core.access('boolean')
         encoded = serialize(s, False)
-        assert encoded == 'false'
+        assert encoded is False
         _, decoded, _ = realize(core, s, encoded)
         assert decoded is False
 

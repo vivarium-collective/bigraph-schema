@@ -132,7 +132,7 @@ def test_array(core):
             for y in range(6)]).reshape((5,6)),
         'link': basic_link}
 
-    basic_schema, basic_state = core.realize(
+    basic_schema, basic_state, _ = core.realize(
         {'array': basic},
         basic_initial)
 
@@ -534,9 +534,9 @@ def test_check(core):
     assert not core.check(link_schema, link_d)
     assert not core.check(link_schema, 44.44444)
 
-    _, a_instance = core.realize(link_schema, link_a)
-    _, b_instance = core.realize(link_schema, link_b)
-    _, c_instance = core.realize(link_schema, link_c)
+    _, a_instance, _ = core.realize(link_schema, link_a)
+    _, b_instance, _ = core.realize(link_schema, link_b)
+    _, c_instance, _ = core.realize(link_schema, link_c)
 
     assert core.check(link_schema, a_instance)
     assert core.check(link_schema, b_instance)
@@ -565,7 +565,7 @@ def test_realize(core):
             "mass":["cell","mass"],\
             "concentrations":["cell","internal"]}'}
 
-    decoded_schema, decoded_state = core.realize(link_schema, encoded_link)
+    decoded_schema, decoded_state, _ = core.realize(link_schema, encoded_link)
 
     assert isinstance(decoded_state['instance'], Edge)
 
@@ -576,7 +576,7 @@ def test_realize(core):
         'a': '5555',
         'b': ('1111.1', "okay", '{"x": 5, "y": "11"}')}
 
-    decoded_schema, decoded_state = core.realize(schema, code)
+    decoded_schema, decoded_state, _ = core.realize(schema, code)
     assert decoded_state['a'] == 5555
     assert decoded_state['b'][2]['y'] == 11
 
@@ -734,7 +734,7 @@ def test_generate(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    generated_schema, generated_state = core.realize(schema, state)
+    generated_schema, generated_state, _ = core.realize(schema, state)
 
     assert generated_state['A'] == 5.5
     assert generated_state['B'] == 'one'
@@ -769,7 +769,7 @@ def test_resolve_conflict(core):
 
     conflict = False
     try:
-        schema, realized = core.realize({}, state)
+        schema, realized, _ = core.realize({}, state)
     except Exception as e:
         conflict = True
 
@@ -830,7 +830,7 @@ def test_realize_port_default_overrides_schema_default(core):
             'inputs': {'n': ['A']},
         },
     }
-    _, realized = core.realize(schema, state)
+    _, realized, _ = core.realize(schema, state)
     # Port-level default 5.5 must win over the bare Float default 0.0
     assert realized['A'] == 5.5
 
@@ -849,7 +849,7 @@ def test_realize_coerces_list_to_ndarray_via_port(core):
             'outputs': {'a': ['arr']},
         },
     }
-    _, realized = core.realize(schema, state)
+    _, realized, _ = core.realize(schema, state)
     assert isinstance(realized['arr'], np.ndarray), (
         f'expected ndarray, got {type(realized["arr"]).__name__}')
     assert realized['arr'].dtype == np.dtype('float64')
@@ -905,24 +905,24 @@ def test_resolve_union_with_union(core):
 def test_union_realize_bool_matches_boolean(core):
     """In ``union[boolean,string,float]``, a bool value realizes to the
     Boolean option (not String, not Float)."""
-    _, state = core.realize('union[boolean,string,float]', True)
+    _, state, _ = core.realize('union[boolean,string,float]', True)
     assert state is True
 
 
 def test_union_realize_str_matches_string(core):
-    _, state = core.realize('union[boolean,string,float]', 'hello')
+    _, state, _ = core.realize('union[boolean,string,float]', 'hello')
     assert state == 'hello'
 
 
 def test_union_realize_float_matches_float(core):
-    _, state = core.realize('union[boolean,string,float]', 1.5)
+    _, state, _ = core.realize('union[boolean,string,float]', 1.5)
     assert state == 1.5
 
 
 def test_union_realize_int_matches_float_not_boolean(core):
     """A plain int in ``union[boolean,float]`` should realize as Float
     (not Boolean — Boolean now rejects non-bool values)."""
-    _, state = core.realize('union[boolean,float]', 7)
+    _, state, _ = core.realize('union[boolean,float]', 7)
     assert state == 7.0
     assert isinstance(state, float)
 
@@ -931,14 +931,14 @@ def test_union_realize_ordering_first_match_wins(core):
     """If two options both accept a value, the first option in the
     declared order wins. Here ``union[float,integer]`` with value 5
     realizes as Float (first match)."""
-    _, state = core.realize('union[float,integer]', 5)
+    _, state, _ = core.realize('union[float,integer]', 5)
     assert isinstance(state, float)
     assert state == 5.0
 
 
 def test_union_realize_ordering_reverse(core):
     """Swap the order — now Integer wins for int values."""
-    _, state = core.realize('union[integer,float]', 5)
+    _, state, _ = core.realize('union[integer,float]', 5)
     assert isinstance(state, int)
     assert state == 5
 
@@ -982,9 +982,9 @@ def test_union_realize_in_nested_dict(core):
     """Union embedded in a dict schema realizes the right option for
     each state value."""
     schema = {'val': 'union[boolean,string,float]'}
-    _, a = core.realize(schema, {'val': True})
-    _, b = core.realize(schema, {'val': 'mass_distribution'})
-    _, c = core.realize(schema, {'val': 123.456})
+    _, a, _ = core.realize(schema, {'val': True})
+    _, b, _ = core.realize(schema, {'val': 'mass_distribution'})
+    _, c, _ = core.realize(schema, {'val': 123.456})
     assert a['val'] is True
     assert b['val'] == 'mass_distribution'
     assert c['val'] == 123.456
@@ -1076,7 +1076,7 @@ def test_unify(core):
             'meters': 11.1111,
             'seconds': 22.833333}}
 
-    generated_schema, generated_state = core.realize(
+    generated_schema, generated_state, _ = core.realize(
         schema,
         state)
 
@@ -1127,9 +1127,9 @@ def test_generate_coverage(core):
             '_type': 'tuple[number,number]',
             '_default': (0,0)}}
 
-    generated_schema, generated_state = core.realize(schema, state)
+    generated_schema, generated_state, _ = core.realize(schema, state)
 
-    deschema, destate = core.realize(
+    deschema, destate, _ = core.realize(
         generated_schema,
         core.serialize(generated_schema, generated_state))
 
@@ -1148,7 +1148,7 @@ def test_generate_tuple_default(core):
             '_type': 'tuple[number,number]',
             '_default': (0,0)}}
 
-    generated_schema, generated_state = core.realize(schema, state)
+    generated_schema, generated_state, _ = core.realize(schema, state)
     assert generated_state['C'] == (0,0)
     assert generated_state['B'] == True
 
@@ -1167,10 +1167,10 @@ def test_generate_promote_to_struct(core):
             '_type': 'boolean',
             '_default': True}}
 
-    generated_schema, generated_state = core.realize(schema, state)
+    generated_schema, generated_state, _ = core.realize(schema, state)
     serialized = core.serialize(generated_schema, generated_state)
 
-    deschema, destate = core.realize(
+    deschema, destate, _ = core.realize(
         generated_schema,
         serialized)
     assert deschema == generated_schema
@@ -1224,9 +1224,9 @@ def test_frame(core):
     assert schema == from_string
 
     default = core.default(schema)
-    frame_schema, frame_state = core.realize(schema, _dict)
+    frame_schema, frame_state, _ = core.realize(schema, _dict)
     encoded = core.serialize(frame_schema, frame_state)
-    realized_schema, realized_state = core.realize(frame_schema, encoded)
+    realized_schema, realized_state, _ = core.realize(frame_schema, encoded)
 
     assert realized_state.equals(df)
 

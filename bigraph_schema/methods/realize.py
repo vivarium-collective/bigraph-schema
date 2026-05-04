@@ -692,7 +692,7 @@ def realize_link(core, schema: Link, encode, path=()):
         encode_config = encode.get('config', {})
 
         if config_schema:
-            _, config = core.realize(config_schema, encode_config)
+            _, config, _ = core.realize(config_schema, encode_config)
         else:
             config = encode_config
 

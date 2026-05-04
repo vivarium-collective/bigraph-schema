@@ -551,7 +551,8 @@ class Core:
     def default(self, schema, path=()):
         found = self.access(schema)
         value = default(found)
-        return self.realize(found, value, path=path)
+        decode_schema, decode_state, _ = self.realize(found, value, path=path)
+        return decode_schema, decode_state
 
     def resolve(self, current_schema, update_schema, path=None):
         """Unify two schemas under node semantics (e.g., Map/Tree/Link field-wise resolution).
@@ -706,7 +707,7 @@ class Core:
         found = self.access(schema)
         return _discover(self, found, state, path=path)
 
-    def realize(self, schema, state, path=()):
+    def realize(self, schema, state, path=(), realize_root=None):
         """Two-phase realization: ``discover`` + fill/coerce.
 
         Port-level defaults (declared on a wire's input/output schema,
@@ -714,20 +715,82 @@ class Core:
         from Link realization. If the bare schema's defaults were
         pre-filled eagerly, port_merges would have nothing to override
         — hence the split.
+
+        ``realize_root`` is the absolute path that defines the scope of
+        this realize. Merges produced by ``port_merges`` carry absolute
+        paths; those falling under ``realize_root`` are stripped of the
+        prefix and applied to the local ``decode_schema``. Merges whose
+        paths escape ``realize_root`` (e.g. from ``..`` wires that point
+        outside the subtree being realized) are returned as
+        ``escape_merges`` so the caller can apply them at a higher
+        scope. Defaults to ``path`` — i.e. a top-level realize call
+        owns its full subtree.
         """
+        if realize_root is None:
+            realize_root = path
+        realize_root = tuple(realize_root)
+
         # Phase 1 — walk state, coerce existing values, collect merges.
         decode_schema, decode_state, merges = self.discover(
             schema, state, path=path)
 
-        if merges:
-            merge_schema = self.resolve_merges({}, merges)
+        local_merges, escape_merges = self._partition_merges(
+            merges, realize_root)
+
+        if local_merges:
+            merge_schema = self.resolve_merges({}, local_merges)
             decode_schema = self.resolve(decode_schema, merge_schema)
 
         # Phase 2 — fill missing defaults (now port-enhanced) + coerce.
-        decode_schema, decode_state, _ = realize(
+        decode_schema, decode_state, phase2_merges = realize(
             self, decode_schema, decode_state, path=path)
 
-        return decode_schema, decode_state
+        p2_local, p2_escape = self._partition_merges(
+            phase2_merges, realize_root)
+        if p2_local:
+            merge_schema = self.resolve_merges({}, p2_local)
+            decode_schema = self.resolve(decode_schema, merge_schema)
+        escape_merges.extend(p2_escape)
+
+        return decode_schema, decode_state, escape_merges
+
+    @staticmethod
+    def _partition_merges(merges, realize_root):
+        """Partition merges into ``(local, escape)`` by whether each
+        merge's absolute path falls under ``realize_root``.
+
+        Each merge subpath is canonicalized via ``resolve_path`` first
+        (so any ``..`` segments produced by ``port_merges`` are reduced
+        to their absolute form). Subpaths whose canonical form starts
+        with ``realize_root`` get the prefix stripped and become local
+        merges. Subpaths outside ``realize_root`` (typically from
+        ``..`` wires that escape the subtree) are returned with their
+        canonical absolute path so the caller can apply them at a
+        higher scope.
+
+        Each merge tuple from ``port_merges`` has shape
+        ``(subpath, port_schema, link_path)``.
+        """
+        local = []
+        escape = []
+        n = len(realize_root)
+        for entry in merges:
+            try:
+                canonical = resolve_path(entry[0])
+            except Exception:
+                # Unresolvable path (e.g. ``..`` escapes past the top
+                # of the absolute tree). Skip — there's nothing
+                # sensible to do with this merge.
+                continue
+            rest = tuple(entry[1:])
+            if not realize_root:
+                # Empty root: everything is local; keep canonical path.
+                local.append((canonical,) + rest)
+            elif len(canonical) >= n and canonical[:n] == realize_root:
+                local.append((canonical[n:],) + rest)
+            else:
+                escape.append((canonical,) + rest)
+        return local, escape
 
     def generalize_merges(self, schema, merges):
         if len(merges) > 0:
@@ -1432,7 +1495,7 @@ class Core:
     def combine(self, schema, state, update_schema, update_state):
         resolved = self.resolve(schema, update_schema)
         merged = self.merge(resolved, state, update_state)
-        decode_schema, decode_state = self.realize(resolved, merged)
+        decode_schema, decode_state, _ = self.realize(resolved, merged)
 
         return decode_schema, decode_state
 
