@@ -71,6 +71,18 @@ def resolve_subclass(subclass, superclass):
                     raise Exception(f'\ncannot resolve subtypes for attribute \'{key}\':\n{subattr}\n{superattr}\n\n  due to\n{e}')
 
                 result[key] = outcome
+            elif isinstance(superattr, (list, tuple)) and isinstance(subattr, (list, tuple)) \
+                    and any(isinstance(v, Node) for v in superattr):
+                # Sequence of schemas (e.g. Tuple._values): resolve element-wise
+                # so the more-specific subtype on either side wins per position.
+                container = type(subattr)
+                pairs = list(zip(subattr, superattr))
+                resolved_items = [resolve(a, b) for a, b in pairs]
+                if len(subattr) > len(superattr):
+                    resolved_items += list(subattr[len(pairs):])
+                elif len(superattr) > len(subattr):
+                    resolved_items += list(superattr[len(pairs):])
+                result[key] = container(resolved_items)
             else:
                 result[key] = subattr
         else:
