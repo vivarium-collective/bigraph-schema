@@ -382,9 +382,14 @@ def reconcile(schema: dict, updates: list):
                     continue
                 if isinstance(schema, dict) and not is_schema_field(schema, key):
                     continue
-            if isinstance(schema, dict) and key not in schema:
-                if not (isinstance(key, str) and key.startswith('_')):
-                    continue
+            # Match the general path's filter (is_schema_field, not strict
+            # dict-membership). is_schema_field is map-aware: dynamic keys
+            # of map schemas (e.g. agent IDs in a `pool: map[...]`) are
+            # valid even though they don't appear in the static schema dict.
+            # Strict membership rejected them, breaking dynamic-structure
+            # tests that grow a pool of agents at runtime.
+            if isinstance(schema, dict) and not is_schema_field(schema, key):
+                continue
             subschema = schema.get(key, Node()) if isinstance(schema, dict) else Node()
             if sink is not None:
                 sink.paths.append(parent_path + (key,))
