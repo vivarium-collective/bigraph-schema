@@ -41,7 +41,6 @@ from bigraph_schema.schema import (
     Link,
     Quantity,
     Wrap,
-    Overwrite,
     DivideReset,
     DivideShare,
     LineageSeed,
@@ -160,33 +159,6 @@ def divide(schema: Wrap, state, context=None, path=(), rng=None):
         from dataclasses import replace
         inner = replace(inner, _default=schema._default)
     return divide(inner, state, context, path, rng)
-
-
-@dispatch
-def divide(schema: Overwrite, state, context=None, path=(), rng=None):
-    """``Overwrite`` semantically means "the writer replaces this value."
-    On division, the daughter therefore inherits mother's last-written
-    value as-is — no halving, no reset — UNLESS the inner type
-    explicitly declares a divide-customizing semantic via
-    ``_customizes_divide = True`` (DivideReset, DivideShare, LineageSeed,
-    or any future wrapper that opts in), in which case delegate.
-
-    This corrects the previous default where ``overwrite[array[float]]``
-    would binomially-split mother's value (because Array defaults to
-    halving). Listener arrays, environment exchange flags, and other
-    overwrite-typed fields now preserve mother's value automatically,
-    matching v1 vivarium's behavior for ``_updater: 'set'`` ports
-    declared without an explicit ``_divider``.
-    """
-    inner = schema._value
-    # If the inner wrapper declares it customizes divide, delegate so
-    # its explicit semantic fires (e.g. ``overwrite[divide_reset[X]]``).
-    # The class attribute is the source of truth — adding a new wrapper
-    # type just sets ``_customizes_divide = True`` on the class.
-    if getattr(inner, '_customizes_divide', False):
-        return divide(inner, state, context, path, rng)
-    # Default for overwrite[X]: share mother's value across both daughters.
-    return state, state
 
 
 @dispatch

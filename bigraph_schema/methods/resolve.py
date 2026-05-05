@@ -1014,13 +1014,43 @@ def promote(library: dict, sparse: dict, path=None):
 
 @dispatch
 def promote(library: Node, sparse: dict, path=None):
-    """Library is a typed Node; sparse is a dict — keep the typed node.
+    """Library is a typed Node; sparse is a dict.
 
-    The dict was a wire-shape projection (e.g. ``{0: {0: delta}}``
-    landing in an Array cell). At apply time the typed node's
-    dispatched apply walks the dict update against the live state.
+    Two distinct cases land here:
+
+    1. **Wire-shape projection.** Sparse encodes the wire shape of an
+       update landing inside library (e.g. ``{0: {0: delta}}`` into
+       an Array cell). None of sparse's keys name a dataclass field
+       of library — at apply time, library's dispatched apply walks
+       the dict update against live state. Keep library unchanged.
+
+    2. **Typed projection at named fields.** Sparse carries typed
+       schema Nodes (e.g. an output port's ``overwrite[float]``) at
+       keys that *do* name dataclass fields of library (e.g.
+       ``'interval'`` on ProcessLink). Promote per-field so the
+       port-declared types reach apply: the recursive call falls
+       through to ``promote(Node, Node) -> resolve(library, sparse)``
+       at the leaf, and ``resolve(Float, Overwrite[Float])`` composes
+       Wrap-over-Node correctly. Without this walk, the source's
+       Wrap is dropped and apply dispatches on library's plain
+       field schema (additive ``Float``), silently breaking
+       ``overwrite[float]`` semantics on wired ports.
     """
-    return library
+    if not sparse:
+        return library
+
+    field_names = library.__dataclass_fields__
+    structured_keys = [
+        key for key in sparse.keys()
+        if key in field_names and is_schema_field(library, key)
+    ]
+    if not structured_keys:
+        return library
+
+    overrides = {}
+    for key in structured_keys:
+        overrides[key] = promote(getattr(library, key), sparse[key])
+    return replace(library, **overrides)
 
 
 @dispatch
