@@ -145,6 +145,13 @@ class Wrap(Node):
     _schema_keys =Node._schema_keys | frozenset({'_value'})
     _value: Node = field(default_factory=Node)
 
+    # Subclasses that override the inner type's divide semantic should set
+    # this to True. Used by container-wrapper dispatches (e.g. Overwrite)
+    # to decide whether to delegate to the inner or apply their own
+    # default divide. Avoids hard-coded ``isinstance(..., (DivideReset,
+    # DivideShare, ...))`` lists that go stale when new wrappers land.
+    _customizes_divide: typing.ClassVar[bool] = False
+
 @dataclass(kw_only=True)
 class Maybe(Wrap):
     pass
@@ -170,7 +177,7 @@ class DivideReset(Wrap):
     All other dispatched methods (apply, merge, serialize, realize)
     delegate to the inner type — only ``divide`` differs.
     """
-    pass
+    _customizes_divide: typing.ClassVar[bool] = True
 
 @dataclass(kw_only=True)
 class DivideShare(Wrap):
@@ -186,7 +193,7 @@ class DivideShare(Wrap):
     All other dispatched methods delegate to the inner type — only
     ``divide`` differs.
     """
-    pass
+    _customizes_divide: typing.ClassVar[bool] = True
 
 @dataclass(kw_only=True)
 class LineageSeed(Wrap):
@@ -204,7 +211,7 @@ class LineageSeed(Wrap):
     bigraph-schema to project-specific derivation formulas
     (e.g. v1's ``crc32(process_name, cli_seed)``).
     """
-    pass
+    _customizes_divide: typing.ClassVar[bool] = True
 
 @dataclass(kw_only=True)
 class List(Node):
