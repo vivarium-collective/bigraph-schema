@@ -169,12 +169,20 @@ def default(schema: Tree):
 
 @dispatch
 def default(schema: Array):
-    if schema._default is not None:
+    # An explicit ``_default`` wins, but only if it carries actual data.
+    # v1 ``ports_schema()`` helpers commonly use ``[]`` as a placeholder
+    # for "fill in later," and ``_enrich_defaults`` propagates that empty
+    # list onto the v2 Array schema. If the schema declares a non-trivial
+    # shape, we'd rather hand back a properly-shaped zero array than an
+    # empty list that won't survive serialization.
+    has_value = schema._default is not None
+    is_empty_placeholder = isinstance(schema._default, (list, tuple)) and len(schema._default) == 0
+    has_shape = schema._shape and any(s for s in schema._shape)
+    if has_value and not (is_empty_placeholder and has_shape):
         return schema._default
-    else:
-        return np.zeros(
-            schema._shape,
-            dtype=schema._data)
+    return np.zeros(
+        schema._shape,
+        dtype=schema._data)
 
 @dispatch
 def default(schema: Frame):

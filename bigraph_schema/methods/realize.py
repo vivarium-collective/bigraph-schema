@@ -63,14 +63,21 @@ def _enrich_defaults(port_schema, v1_ports):
     that the inferred schema lacks. This enriches the schema with those defaults
     so that realize/fill creates state with the right shapes.
     """
+    def _is_empty_placeholder(v):
+        # v1 ``ports_schema()`` helpers commonly use ``[]`` to mean
+        # "fill in later." Treat these as missing so the schema's own
+        # ``default()`` can produce a properly-shaped value (e.g. an
+        # ``Array`` with declared shape will return ``np.zeros(shape)``).
+        return isinstance(v, (list, tuple)) and len(v) == 0
+
     if isinstance(port_schema, dict):
         for key, subschema in port_schema.items():
             if key in v1_ports and isinstance(v1_ports[key], dict):
                 v1_port = v1_ports[key]
                 if '_default' in v1_port and hasattr(subschema, '_default'):
-                    if subschema._default is None or (
-                        isinstance(subschema._default, (list, tuple)) and len(subschema._default) == 0
-                    ):
+                    if _is_empty_placeholder(v1_port['_default']):
+                        continue
+                    if subschema._default is None or _is_empty_placeholder(subschema._default):
                         subschema._default = v1_port['_default']
                 elif isinstance(v1_port, dict) and not '_default' in v1_port:
                     _enrich_defaults(subschema, v1_port)
@@ -82,9 +89,9 @@ def _enrich_defaults(port_schema, v1_ports):
             if key in v1_ports and isinstance(v1_ports[key], dict):
                 v1_port = v1_ports[key]
                 if '_default' in v1_port and hasattr(attr, '_default'):
-                    if attr._default is None or (
-                        isinstance(attr._default, (list, tuple)) and len(attr._default) == 0
-                    ):
+                    if _is_empty_placeholder(v1_port['_default']):
+                        continue
+                    if attr._default is None or _is_empty_placeholder(attr._default):
                         attr._default = v1_port['_default']
                 elif isinstance(v1_port, dict) and not '_default' in v1_port:
                     _enrich_defaults(attr, v1_port)
