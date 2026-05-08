@@ -188,15 +188,29 @@ def _merge_array_deltas(a, b):
 @dispatch
 def reconcile(schema: Array, updates: list):
     """Element-wise sum of array deltas. Supports homogeneous and mixed
-    update forms (ndarray, sparse list ``[(idx, delta), ...]``, sparse dict
-    ``{j: {i: val}}``, and ``{'set': ...}`` overwrite)."""
+    update forms (ndarray, sparse list ``[(idx, delta), ...]``, sparse
+    dict ``{j: {i: val}}``).
+
+    ``{'set': {field: values}}`` updates overwrite specified fields on
+    structured arrays. Apply treats ``set`` as absorbing — its branch
+    is ``if 'set' in update: ... else: <additive>``, so a single update
+    is either a set or additive, never both. Reconcile mirrors that:
+    when any update in the batch is a ``set`` form, the last set wins
+    and concurrent deltas in the same batch are dropped (they would
+    target state being overwritten anyway).
+    """
+    last_set = None
     result = None
+
     for update in updates:
         if update is None:
             continue
         if isinstance(update, dict) and 'set' in update:
-            # Set overwrites — last one wins.
-            result = update
+            last_set = update
+            continue
+        if last_set is not None:
+            # Set is absorbing — drop deltas after / before that
+            # appear once we've seen a set in the batch.
             continue
         if result is None:
             if isinstance(update, list):
@@ -208,40 +222,124 @@ def reconcile(schema: Array, updates: list):
             result.extend(update)
             continue
         result = _merge_array_deltas(result, update)
+
+    if last_set is not None:
+        return last_set
     return result
 
 
 @dispatch
 def reconcile(schema: List, updates: list):
-    """Merge list operations: concatenate adds, union removes."""
+    """Merge list operations into a single update.
+
+    Rule: apply removes first, then all adds — irrespective of the
+    order in which updates were received. ``{'_remove': 'all'}``
+    therefore clears only pre-existing state; items contributed by
+    sibling updates in the same batch survive.
+
+    Plain-list updates (``[x, y]``) are equivalent to ``{'_add': [x, y]}``
+    and are folded into the combined ``_add`` whenever any structural
+    sentinel appears in the batch. When no sentinels appear, the
+    plain-list fast-path returns a concatenation rather than a dict.
+    """
     adds = []
-    removes = set()
-    plain = []
+    remove_indexes = []
+    seen_indexes = set()
+    remove_all = False
+    has_structural = False
 
     for update in updates:
         if update is None:
             continue
         if isinstance(update, dict):
             if '_add' in update:
+                has_structural = True
                 adds.extend(update['_add'])
             if '_remove' in update:
+                has_structural = True
                 rm = update['_remove']
                 if rm == 'all':
-                    removes = 'all'
-                elif removes != 'all':
-                    removes.update(rm if isinstance(rm, (set, frozenset)) else rm)
+                    remove_all = True
+                elif not remove_all:
+                    for idx in rm:
+                        if idx not in seen_indexes:
+                            seen_indexes.add(idx)
+                            remove_indexes.append(idx)
         elif isinstance(update, list):
-            plain.extend(update)
+            adds.extend(update)
 
-    if plain and not adds and removes != 'all':
-        # Plain list concatenation
-        return plain
+    if not has_structural:
+        return adds if adds else None
 
     result = {}
     if adds:
         result['_add'] = adds
-    if removes:
-        result['_remove'] = list(removes) if isinstance(removes, set) else removes
+    if remove_all:
+        result['_remove'] = 'all'
+    elif remove_indexes:
+        result['_remove'] = remove_indexes
+    return result if result else None
+
+
+@dispatch
+def reconcile(schema: Set, updates: list):
+    """Merge set operations into a single update.
+
+    Symmetric with List: apply removes first, then all adds —
+    irrespective of receipt order. ``{'_remove': 'all'}`` clears
+    pre-existing state only; sibling additions in the same batch
+    survive.
+
+    Plain set updates (a bare ``set``) are equivalent to
+    ``{'_add': set}`` and fold into the combined ``_add`` whenever any
+    structural sentinel appears in the batch. When no sentinels appear,
+    plain set updates are returned as a unioned set rather than a dict.
+    """
+    adds = []
+    seen_adds = set()
+    removes = []
+    seen_removes = set()
+    remove_all = False
+    has_structural = False
+
+    def _add_one(item):
+        if item not in seen_adds:
+            seen_adds.add(item)
+            adds.append(item)
+
+    for update in updates:
+        if update is None:
+            continue
+        if isinstance(update, dict):
+            if '_add' in update:
+                has_structural = True
+                for item in update['_add']:
+                    _add_one(item)
+            if '_remove' in update:
+                has_structural = True
+                rm = update['_remove']
+                if rm == 'all':
+                    remove_all = True
+                elif not remove_all:
+                    rm_iter = rm if isinstance(rm, (set, frozenset, list, tuple)) else [rm]
+                    for item in rm_iter:
+                        if item not in seen_removes:
+                            seen_removes.add(item)
+                            removes.append(item)
+        elif isinstance(update, (set, frozenset)):
+            for item in update:
+                _add_one(item)
+
+    if not has_structural:
+        return set(adds) if adds else None
+
+    result = {}
+    if adds:
+        result['_add'] = set(adds)
+    if remove_all:
+        result['_remove'] = 'all'
+    elif removes:
+        result['_remove'] = set(removes)
     return result if result else None
 
 
@@ -261,6 +359,8 @@ def reconcile(schema: Map, updates: list):
     sink = get_reconcile_sink()
     adds = {}
     removes = []
+    seen_removes = set()
+    remove_all = False
     divide = None  # Last non-None _divide wins.
     # Group regular key updates by key so multiple updates to the same
     # key can be recursively reconciled.
@@ -282,7 +382,14 @@ def reconcile(schema: Map, updates: list):
             if '_remove' in update:
                 if sink is not None:
                     sink.has_structural = True
-                removes.extend(update['_remove'])
+                rm = update['_remove']
+                if rm == 'all':
+                    remove_all = True
+                elif not remove_all:
+                    for k in rm:
+                        if k not in seen_removes:
+                            seen_removes.add(k)
+                            removes.append(k)
             if '_divide' in update and update['_divide'] is not None:
                 if sink is not None:
                     sink.has_structural = True
@@ -326,7 +433,9 @@ def reconcile(schema: Map, updates: list):
     result = {}
     if adds:
         result['_add'] = adds
-    if removes:
+    if remove_all:
+        result['_remove'] = 'all'
+    elif removes:
         result['_remove'] = removes
     if divide is not None:
         result['_divide'] = divide
@@ -335,9 +444,138 @@ def reconcile(schema: Map, updates: list):
 
 
 @dispatch
+def reconcile(schema: Tuple, updates: list):
+    """Reconcile per-position Tuple updates.
+
+    Tuple updates are positional sequences (lists or tuples). For each
+    position ``i`` over ``schema._values``, collect contributions from
+    every update where ``i < len(update)`` and ``update[i] is not
+    None``, then recurse with the component schema at position ``i``.
+
+    Missing positions and explicit Nones are treated as "no update at
+    that position" — symmetric with the apply path, where
+    ``apply(component, state[i], None, ...)`` returns ``state[i]``
+    unchanged.
+    """
+    non_none = [u for u in updates if u is not None]
+    if not non_none:
+        return None
+    if len(non_none) == 1:
+        return non_none[0]
+
+    n = len(schema._values)
+    result = [None] * n
+    has_any = False
+
+    for i in range(n):
+        contributions = [
+            u[i] for u in non_none
+            if i < len(u) and u[i] is not None]
+        if not contributions:
+            continue
+        if len(contributions) == 1:
+            result[i] = contributions[0]
+        else:
+            result[i] = reconcile(schema._values[i], contributions)
+        has_any = True
+
+    return result if has_any else None
+
+
+@dispatch
 def reconcile(schema: Tree, updates: list):
-    """Recursive reconcile on matching keys."""
-    return reconcile(schema._leaf, updates)
+    """Reconcile Tree updates.
+
+    Tree is recursively ``dict-of-Tree-or-leaf``. ``apply(Tree, ...)``
+    decides per-call whether to treat state as a leaf (dispatch to
+    ``apply(schema._leaf, ...)``) or as a tree-node (handle structural
+    sentinels + recurse per-key with ``apply(schema, ...)``).
+
+    Reconcile has no state to inspect, so mode is inferred from the
+    update shapes:
+
+    - All non-None updates are non-dict → leaf mode: delegate to
+      ``reconcile(schema._leaf, updates)``.
+    - Any update is a dict → tree-node mode: handle ``_add`` /
+      ``_remove`` structurally at this node and recurse per-key with
+      ``reconcile(schema, ...)``.
+    - Mixed batch (both dict and non-dict updates): the non-dict
+      updates correspond to whole-node overwrites in ``apply``; resolve
+      to last-non-None-wins among the overwrites and drop earlier
+      dict-form contributions, matching the apply-level outcome.
+
+    Limitation: when ``schema._leaf`` itself accepts dict-shaped updates
+    (rare — e.g. ``Tree[Map[Float]]``), the disambiguation can't be
+    decided without state. Tree is intended for atomic leaf types.
+    """
+    non_none = [u for u in updates if u is not None]
+    if not non_none:
+        return None
+
+    any_dict = any(isinstance(u, dict) for u in non_none)
+    any_non_dict = any(not isinstance(u, dict) for u in non_none)
+
+    if not any_dict:
+        return reconcile(schema._leaf, updates)
+
+    if any_non_dict:
+        # Whole-node overwrite wins; sequential apply would land on
+        # whichever non-dict update came last.
+        for u in reversed(updates):
+            if u is not None and not isinstance(u, dict):
+                return u
+        # All "non-dict" turned out to be None — fall through.
+
+    sink = get_reconcile_sink()
+    adds = {}
+    removes = []
+    grouped_value_updates = {}
+
+    for update in updates:
+        if not isinstance(update, dict):
+            continue
+        if '_add' in update:
+            if sink is not None:
+                sink.has_structural = True
+            add = update['_add']
+            if isinstance(add, dict):
+                adds.update(add)
+            elif isinstance(add, list):
+                for k, v in add:
+                    adds[k] = v
+        if '_remove' in update:
+            if sink is not None:
+                sink.has_structural = True
+            removes.extend(update['_remove'])
+        for key, value in update.items():
+            if key not in ('_add', '_remove'):
+                grouped_value_updates.setdefault(key, []).append(value)
+
+    parent_path = sink.path_stack if sink is not None else ()
+    value_updates = {}
+    for key, sub_updates in grouped_value_updates.items():
+        if sink is not None:
+            sink.paths.append(parent_path + (key,))
+            sink.path_stack = parent_path + (key,)
+            try:
+                reconciled = reconcile(schema, sub_updates)
+            finally:
+                sink.path_stack = parent_path
+        else:
+            if len(sub_updates) == 1:
+                reconciled = sub_updates[0]
+            else:
+                reconciled = reconcile(schema, sub_updates)
+        if reconciled is not None:
+            value_updates[key] = reconciled
+
+    result = {}
+    if adds:
+        result['_add'] = adds
+    if removes:
+        result['_remove'] = removes
+    result.update(value_updates)
+    return result if result else None
 
 
 @dispatch
@@ -420,11 +658,45 @@ def reconcile(schema: dict, updates: list):
             if key in _STRUCTURAL_SENTINELS:
                 if sink is not None:
                     sink.has_structural = True
-                # Last non-None wins for structural directives.
-                for v in reversed(key_updates):
-                    if v is not None:
-                        result[key] = v
-                        break
+                if key == '_add':
+                    # Union all _add contributions, mirroring Map's
+                    # semantics so concurrent processes can each
+                    # contribute new keys without overwriting.
+                    merged = {}
+                    for v in key_updates:
+                        if v is None:
+                            continue
+                        if isinstance(v, dict):
+                            merged.update(v)
+                        elif isinstance(v, (list, tuple)):
+                            for entry in v:
+                                if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                                    merged[entry[0]] = entry[1]
+                    if merged:
+                        result[key] = merged
+                elif key == '_remove':
+                    # Union all _remove contributions.
+                    merged_remove = []
+                    seen = set()
+                    for v in key_updates:
+                        if v is None:
+                            continue
+                        for item in v:
+                            if item not in seen:
+                                seen.add(item)
+                                merged_remove.append(item)
+                    if merged_remove:
+                        result[key] = merged_remove
+                else:
+                    # _divide / _type — last non-None wins. These are
+                    # singleton directives; a second contribution within
+                    # one tick is at best redundant, at worst a
+                    # contradiction (worth flagging in a future hardening
+                    # pass).
+                    for v in reversed(key_updates):
+                        if v is not None:
+                            result[key] = v
+                            break
                 continue
             # Underscore key that isn't a structural sentinel — only
             # keep it if the schema declares it.

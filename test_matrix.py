@@ -25,7 +25,7 @@ from bigraph_schema.schema import (
 from bigraph_schema.methods import (
     default, check, validate, render, serialize, realize, merge, apply,
     infer, walk, diff, coerce, select, transform, patch,
-    generalize,
+    generalize, reconcile,
 )
 
 
@@ -1287,6 +1287,71 @@ class TestTuple:
         assert result is not None
 
 
+class TestTupleReconcile:
+    """Tuple reconcile groups updates by position and recurses into the
+    component schema at each position. None / missing-position entries
+    are no-ops, matching the apply path."""
+
+    schema = Tuple(_values=[Float(), Float(), Float()])
+
+    # ── empty / single ─────────────────────────────────────────
+
+    def test_empty(self):
+        assert reconcile(self.schema, []) is None
+
+    def test_all_none(self):
+        assert reconcile(self.schema, [None, None]) is None
+
+    def test_single_update(self):
+        # A single update is returned as-is; its positional shape is
+        # preserved (Tuple apply iterates positions and treats missing
+        # entries as no-ops).
+        assert reconcile(self.schema, [(1.0, 2.0, 3.0)]) == (1.0, 2.0, 3.0)
+
+    # ── per-position recursion ─────────────────────────────────
+
+    def test_two_full_updates_sum_per_position(self):
+        # The audit bug: previously fell through to Node default and
+        # returned only (3.0, 4.0, 5.0). Now each position's Float
+        # reconcile sums the contributions.
+        result = reconcile(
+            self.schema,
+            [(1.0, 1.0, 1.0), (2.0, 3.0, 4.0)])
+        assert result == [3.0, 4.0, 5.0]
+
+    def test_disjoint_positions_via_none(self):
+        # Each update contributes to exactly one position via None
+        # placeholders. Only the non-None entries land in the result.
+        result = reconcile(
+            self.schema,
+            [(1.0, None, None), (None, 2.0, None), (None, None, 3.0)])
+        assert result == [1.0, 2.0, 3.0]
+
+    def test_shorter_updates_drop_missing_positions(self):
+        # Apply treats `index >= len(update)` as no-update. Reconcile
+        # mirrors that.
+        result = reconcile(
+            self.schema,
+            [(1.0,), (2.0, 3.0)])
+        assert result == [3.0, 3.0, None]
+
+    def test_mixed_lengths(self):
+        result = reconcile(
+            self.schema,
+            [(1.0, 2.0), None, (None, 3.0, 4.0)])
+        assert result == [1.0, 5.0, 4.0]
+
+    # ── end-to-end: reconcile → apply ──────────────────────────
+
+    def test_e2e_per_position_sum(self):
+        state = (10.0, 20.0, 30.0)
+        update = reconcile(
+            self.schema,
+            [(1.0, 0.0, 0.0), (0.0, 2.0, 0.0), (0.0, 0.0, 3.0)])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == (11.0, 22.0, 33.0)
+
+
 # ── List ───────────────────────────────────────────────────
 
 class TestList:
@@ -1424,6 +1489,192 @@ class TestList:
     def test_validate_fail_wrong_element(self, core):
         result = validate(core, List(_element=Float()), [1, 2])
         assert result is not None
+
+
+class TestListReconcile:
+    """Reconciliation rule for List: when multiple updates target the
+    same list within one timestep, apply removes first and then *all*
+    adds, irrespective of receipt order. ``_remove: 'all'`` therefore
+    clears only pre-existing state — items contributed by sibling
+    updates in the same batch survive.
+
+    Plain-list updates (``[x, y]``) are equivalent to ``{'_add': [x, y]}``
+    and are folded into the combined ``_add`` whenever any structural
+    sentinel appears in the batch.
+    """
+
+    schema = List(_element=Float())
+
+    # ── single-update reconcile ────────────────────────────────
+
+    def test_single_plain(self):
+        assert reconcile(self.schema, [[1.0, 2.0]]) == [1.0, 2.0]
+
+    def test_single_add(self):
+        assert reconcile(self.schema, [{'_add': [1.0]}]) == {'_add': [1.0]}
+
+    def test_single_remove_indexes(self):
+        assert reconcile(self.schema, [{'_remove': [0]}]) == {'_remove': [0]}
+
+    def test_single_remove_all(self):
+        assert reconcile(self.schema, [{'_remove': 'all'}]) == {'_remove': 'all'}
+
+    def test_single_combined_remove_all_and_add(self):
+        result = reconcile(self.schema, [{'_remove': 'all', '_add': [1.0]}])
+        assert result == {'_remove': 'all', '_add': [1.0]}
+
+    # ── empty / None handling ──────────────────────────────────
+
+    def test_empty_batch(self):
+        assert reconcile(self.schema, []) is None
+
+    def test_all_none(self):
+        assert reconcile(self.schema, [None, None]) is None
+
+    def test_skips_none_between_updates(self):
+        assert reconcile(self.schema, [None, [1.0], None]) == [1.0]
+
+    def test_empty_plain_collapses_to_none(self):
+        assert reconcile(self.schema, [[]]) is None
+
+    def test_noop_add_collapses_to_none(self):
+        assert reconcile(self.schema, [{'_add': []}]) is None
+
+    # ── plain-only batches (fast path) ─────────────────────────
+
+    def test_plain_concat(self):
+        assert reconcile(self.schema, [[1.0], [2.0, 3.0]]) == [1.0, 2.0, 3.0]
+
+    def test_plain_concat_returns_list_not_dict(self):
+        result = reconcile(self.schema, [[1.0], [2.0]])
+        assert isinstance(result, list)
+
+    # ── multi-update structural batches (the bug) ──────────────
+
+    def test_add_then_remove_all_keeps_add(self):
+        result = reconcile(self.schema, [{'_add': [1.0]}, {'_remove': 'all'}])
+        assert result == {'_add': [1.0], '_remove': 'all'}
+
+    def test_remove_all_then_add_keeps_add(self):
+        result = reconcile(self.schema, [{'_remove': 'all'}, {'_add': [1.0]}])
+        assert result == {'_add': [1.0], '_remove': 'all'}
+
+    def test_plain_then_remove_all_keeps_plain(self):
+        # BUG FIX: previously the plain-list fast-path returned [1.0]
+        # when {'_remove': 'all'} was also present, dropping the
+        # remove. Now plain promotes to _add and survives.
+        result = reconcile(self.schema, [[1.0], {'_remove': 'all'}])
+        assert result == {'_add': [1.0], '_remove': 'all'}
+
+    def test_remove_all_then_plain_keeps_plain(self):
+        result = reconcile(self.schema, [{'_remove': 'all'}, [1.0]])
+        assert result == {'_add': [1.0], '_remove': 'all'}
+
+    def test_plain_plus_add_combines(self):
+        # BUG FIX: previously plain was silently dropped whenever any
+        # _add appeared. Now both contribute to _add.
+        result = reconcile(self.schema, [[1.0], {'_add': [2.0]}])
+        assert result == {'_add': [1.0, 2.0]}
+
+    def test_three_way_mix(self):
+        result = reconcile(
+            self.schema,
+            [[1.0], {'_add': [2.0]}, {'_remove': 'all'}])
+        assert result == {'_add': [1.0, 2.0], '_remove': 'all'}
+
+    # ── index-remove behavior ──────────────────────────────────
+
+    def test_union_remove_indexes(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': [0]}, {'_remove': [1]}])
+        assert result == {'_remove': [0, 1]}
+
+    def test_dedupe_remove_indexes(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': [0, 1]}, {'_remove': [1, 2]}])
+        assert result == {'_remove': [0, 1, 2]}
+
+    def test_remove_all_absorbs_indexes(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': [0]}, {'_remove': 'all'}])
+        assert result == {'_remove': 'all'}
+
+    def test_remove_all_absorbs_indexes_reverse(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': 'all'}, {'_remove': [0]}])
+        assert result == {'_remove': 'all'}
+
+    def test_index_remove_plus_add(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': [0]}, {'_add': [9.0]}])
+        assert result == {'_remove': [0], '_add': [9.0]}
+
+    # ── encounter order preservation in combined _add ──────────
+
+    def test_preserves_encounter_order(self):
+        result = reconcile(
+            self.schema,
+            [[1.0], {'_add': [2.0]}, [3.0], {'_add': [4.0]}])
+        assert result == {'_add': [1.0, 2.0, 3.0, 4.0]}
+
+    # ── end-to-end: reconcile → apply ──────────────────────────
+
+    def test_e2e_remove_all_plus_concurrent_add(self):
+        state = [10.0, 20.0]
+        update = reconcile(
+            self.schema,
+            [{'_add': [99.0]}, {'_remove': 'all'}])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == [99.0]
+
+    def test_e2e_remove_all_plus_concurrent_plain(self):
+        state = [10.0, 20.0]
+        update = reconcile(
+            self.schema,
+            [[99.0], {'_remove': 'all'}])
+        result, _ = apply(self.schema, state, update, ())
+        # Plain item survives the concurrent remove-all (the bug).
+        assert result == [99.0]
+
+    def test_e2e_receipt_order_invariant_for_remove_all(self):
+        state = [10.0, 20.0]
+        forward = reconcile(
+            self.schema,
+            [[99.0], {'_remove': 'all'}])
+        reverse = reconcile(
+            self.schema,
+            [{'_remove': 'all'}, [99.0]])
+        result_forward, _ = apply(self.schema, list(state), forward, ())
+        result_reverse, _ = apply(self.schema, list(state), reverse, ())
+        assert result_forward == result_reverse == [99.0]
+
+    def test_e2e_three_processes_with_remove_all(self):
+        state = [1.0, 2.0, 3.0]
+        update = reconcile(
+            self.schema,
+            [[10.0], {'_add': [20.0]}, {'_remove': 'all'}])
+        result, _ = apply(self.schema, state, update, ())
+        # Pre-existing cleared, both new contributions retained.
+        assert result == [10.0, 20.0]
+
+    def test_e2e_index_remove_plus_add(self):
+        state = [1.0, 2.0, 3.0]
+        update = reconcile(
+            self.schema,
+            [{'_remove': [0]}, {'_add': [99.0]}])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == [2.0, 3.0, 99.0]
+
+    def test_e2e_pure_plain_concat(self):
+        state = [1.0]
+        update = reconcile(self.schema, [[2.0], [3.0]])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == [1.0, 2.0, 3.0]
 
 
 # ── Map ────────────────────────────────────────────────────
@@ -1595,6 +1846,64 @@ class TestMap:
         assert result is not None
 
 
+class TestMapReconcileRemoveAll:
+    """Map _remove:'all' is symmetric with List: it clears pre-existing
+    state, but adds and value updates from sibling updates in the same
+    batch survive (apply does remove-all first, then adds, then
+    targeted removes)."""
+
+    schema = Map(_value=Float())
+
+    def test_apply_remove_all_clears(self):
+        result, _ = apply(self.schema, {'a': 1.0, 'b': 2.0}, {'_remove': 'all'}, ())
+        assert result == {}
+
+    def test_apply_remove_all_then_add_in_same_update(self):
+        result, _ = apply(
+            self.schema,
+            {'a': 1.0, 'b': 2.0},
+            {'_remove': 'all', '_add': {'c': 3.0}},
+            ())
+        assert result == {'c': 3.0}
+
+    def test_reconcile_remove_all_alone(self):
+        assert reconcile(self.schema, [{'_remove': 'all'}]) == {'_remove': 'all'}
+
+    def test_reconcile_add_plus_remove_all(self):
+        result = reconcile(
+            self.schema,
+            [{'_add': {'c': 3.0}}, {'_remove': 'all'}])
+        assert result == {'_add': {'c': 3.0}, '_remove': 'all'}
+
+    def test_reconcile_remove_all_absorbs_targeted_removes(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': ['a']}, {'_remove': 'all'}])
+        assert result == {'_remove': 'all'}
+
+    def test_reconcile_remove_all_absorbs_targeted_removes_reverse(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': 'all'}, {'_remove': ['a']}])
+        assert result == {'_remove': 'all'}
+
+    def test_e2e_remove_all_plus_concurrent_add(self):
+        state = {'a': 1.0, 'b': 2.0}
+        update = reconcile(
+            self.schema,
+            [{'_add': {'c': 99.0}}, {'_remove': 'all'}])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == {'c': 99.0}
+
+    def test_e2e_receipt_order_invariant(self):
+        state = {'a': 1.0}
+        forward = reconcile(self.schema, [{'_add': {'c': 99.0}}, {'_remove': 'all'}])
+        reverse = reconcile(self.schema, [{'_remove': 'all'}, {'_add': {'c': 99.0}}])
+        rf, _ = apply(self.schema, dict(state), forward, ())
+        rr, _ = apply(self.schema, dict(state), reverse, ())
+        assert rf == rr == {'c': 99.0}
+
+
 # ── Tree ───────────────────────────────────────────────────
 
 class TestTree:
@@ -1707,6 +2016,109 @@ class TestTree:
     def test_validate_fail_nested(self, core):
         result = validate(core, Tree(_leaf=Float()), {'a': 'not float'})
         assert result is not None
+
+
+class TestTreeReconcile:
+    """Tree reconcile mirrors Map's structural-sentinel handling at the
+    tree-node level, while delegating leaf-shaped batches to
+    reconcile(schema._leaf, ...). Crash-free across mixed batches."""
+
+    schema = Tree(_leaf=Float())
+
+    # ── leaf-mode batches (delegate to leaf reconcile) ─────────
+
+    def test_single_leaf_value(self):
+        assert reconcile(self.schema, [3.0]) == 3.0
+
+    def test_summed_leaf_deltas(self):
+        # Tree[Float] leaf reconcile sums deltas via the Float dispatch.
+        assert reconcile(self.schema, [1.0, 2.5, -0.5]) == 3.0
+
+    def test_all_none_returns_none(self):
+        assert reconcile(self.schema, [None, None]) is None
+
+    # ── tree-node mode: structural sentinels ───────────────────
+
+    def test_single_add(self):
+        result = reconcile(self.schema, [{'_add': {'x': 1.0}}])
+        assert result == {'_add': {'x': 1.0}}
+
+    def test_two_adds_union(self):
+        # Previously crashed (delegated to Float reconcile which tried
+        # 0.0 + {'_add': {...}}). Now both adds survive.
+        result = reconcile(
+            self.schema,
+            [{'_add': {'x': 1.0}}, {'_add': {'y': 2.0}}])
+        assert result == {'_add': {'x': 1.0, 'y': 2.0}}
+
+    def test_add_plus_remove_no_crash(self):
+        # The original audit reproducer.
+        result = reconcile(
+            self.schema,
+            [{'_add': {'x': 1.0}}, {'_remove': ['y']}])
+        assert result == {'_add': {'x': 1.0}, '_remove': ['y']}
+
+    def test_remove_indexes_union(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': ['a']}, {'_remove': ['b']}])
+        assert result == {'_remove': ['a', 'b']}
+
+    # ── tree-node mode: per-key recursion ──────────────────────
+
+    def test_per_key_leaf_sum(self):
+        # Two updates write to the same key 'x'; reconcile recurses
+        # with the Tree schema (which then delegates to Float for
+        # leaf-shaped sub_updates).
+        result = reconcile(
+            self.schema,
+            [{'x': 1.0}, {'x': 2.0}])
+        assert result == {'x': 3.0}
+
+    def test_per_key_nested(self):
+        result = reconcile(
+            self.schema,
+            [{'a': {'b': 1.0}}, {'a': {'b': 2.0}}])
+        assert result == {'a': {'b': 3.0}}
+
+    def test_per_key_disjoint(self):
+        result = reconcile(
+            self.schema,
+            [{'x': 1.0}, {'y': 2.0}])
+        assert result == {'x': 1.0, 'y': 2.0}
+
+    def test_structural_plus_per_key(self):
+        result = reconcile(
+            self.schema,
+            [{'_add': {'new': 9.0}}, {'existing': 1.0}, {'existing': 2.0}])
+        assert result == {'_add': {'new': 9.0}, 'existing': 3.0}
+
+    # ── mixed batch (whole-node overwrites) ────────────────────
+
+    def test_mixed_dict_then_overwrite(self):
+        # Last non-dict overwrite wins; earlier dict update is dropped
+        # (matches apply's behavior when state is dict but update is
+        # not — apply returns the update directly).
+        result = reconcile(self.schema, [{'a': 1.0}, 5.0])
+        assert result == 5.0
+
+    # ── end-to-end: reconcile → apply ──────────────────────────
+
+    def test_e2e_two_adds(self):
+        state = {'pre': 0.0}
+        update = reconcile(
+            self.schema,
+            [{'_add': {'x': 1.0}}, {'_add': {'y': 2.0}}])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == {'pre': 0.0, 'x': 1.0, 'y': 2.0}
+
+    def test_e2e_per_key_recursion(self):
+        state = {'a': 0.0, 'b': 0.0}
+        update = reconcile(
+            self.schema,
+            [{'a': 1.0}, {'b': 2.0}, {'a': 4.0}])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == {'a': 5.0, 'b': 2.0}
 
 
 # ── Array ──────────────────────────────────────────────────
@@ -1864,6 +2276,72 @@ class TestArray:
     def test_validate_fail_wrong_shape(self, core):
         schema = Array(_shape=(3,), _data=np.dtype('float64'))
         assert validate(core, schema, np.zeros(4)) is not None
+
+
+class TestArrayReconcile:
+    """Array reconcile sums deltas and treats ``set`` as absorbing
+    (last-set wins; deltas in the same batch are dropped, since apply
+    is ``if 'set' in update: ... else: <additive>`` and never both)."""
+
+    schema_dense = Array(_shape=(3,), _data=np.dtype('float64'))
+    schema_struct = Array(
+        _shape=(3,),
+        _data=np.dtype([('id', '<U50'), ('count', '<i8')]))
+
+    # ── delta-only batches ─────────────────────────────────────
+
+    def test_two_dense_deltas_sum(self):
+        result = reconcile(
+            self.schema_dense,
+            [np.array([1., 0., 0.]), np.array([0., 2., 0.])])
+        assert list(result) == [1., 2., 0.]
+
+    def test_single_delta(self):
+        result = reconcile(self.schema_dense, [np.array([1., 2., 3.])])
+        assert list(result) == [1., 2., 3.]
+
+    def test_all_none(self):
+        assert reconcile(self.schema_dense, [None, None]) is None
+
+    # ── set-only batches ───────────────────────────────────────
+
+    def test_single_set(self):
+        update = {'set': {'count': np.array([1, 2, 3])}}
+        result = reconcile(self.schema_struct, [update])
+        assert result is update or result == update
+
+    def test_two_sets_last_wins(self):
+        first = {'set': {'count': np.array([1, 2, 3])}}
+        second = {'set': {'count': np.array([10, 20, 30])}}
+        result = reconcile(self.schema_struct, [first, second])
+        assert list(result['set']['count']) == [10, 20, 30]
+
+    # ── mixed set + delta batches (the audit CRASH case) ───────
+
+    def test_set_then_delta_set_wins(self):
+        # Previously crashed with IndexError on the set-dict being fed
+        # to sparse-coordinate code. Now set absorbs the delta cleanly.
+        result = reconcile(
+            self.schema_dense,
+            [{'set': {'count': np.array([1, 2, 3])}}, np.array([1., 1., 1.])])
+        assert isinstance(result, dict) and 'set' in result
+
+    def test_delta_then_set_set_wins(self):
+        result = reconcile(
+            self.schema_dense,
+            [np.array([1., 1., 1.]), {'set': {'count': np.array([10, 20, 30])}}])
+        assert isinstance(result, dict) and 'set' in result
+
+    def test_delta_set_delta_set_wins(self):
+        result = reconcile(
+            self.schema_dense,
+            [
+                np.array([1., 0., 0.]),
+                {'set': {'count': np.array([100, 200, 300])}},
+                np.array([0., 1., 0.]),
+            ])
+        assert isinstance(result, dict) and 'set' in result
+        assert list(result['set']['count']) == [100, 200, 300]
 
 
 # ── Frame ──────────────────────────────────────────────────
@@ -3541,6 +4019,121 @@ class TestSet:
     def test_core_roundtrip(self, core):
         s, v = core.default('set[float]')
         assert v == set()
+
+
+class TestSetReconcile:
+    """Set reconcile mirrors List: union of adds, union of removes,
+    _remove:'all' absorbs index-based removes. Apply does remove first,
+    then add (this also fixes a subtle pre-existing bug where the old
+    Set apply did add-then-remove for single combined updates)."""
+
+    schema = Set(_element=Float())
+
+    # ── single-update reconcile ────────────────────────────────
+
+    def test_single_plain_set(self):
+        assert reconcile(self.schema, [{1.0, 2.0}]) == {1.0, 2.0}
+
+    def test_single_add(self):
+        assert reconcile(self.schema, [{'_add': {1.0}}]) == {'_add': {1.0}}
+
+    def test_single_remove(self):
+        assert reconcile(self.schema, [{'_remove': {1.0}}]) == {'_remove': {1.0}}
+
+    def test_single_remove_all(self):
+        assert reconcile(self.schema, [{'_remove': 'all'}]) == {'_remove': 'all'}
+
+    # ── empty / None handling ──────────────────────────────────
+
+    def test_empty_batch(self):
+        assert reconcile(self.schema, []) is None
+
+    def test_all_none(self):
+        assert reconcile(self.schema, [None, None]) is None
+
+    def test_skips_none(self):
+        assert reconcile(self.schema, [None, {1.0}, None]) == {1.0}
+
+    # ── plain-set fast path ────────────────────────────────────
+
+    def test_plain_union(self):
+        assert reconcile(self.schema, [{1.0}, {2.0}]) == {1.0, 2.0}
+
+    def test_plain_dedup(self):
+        assert reconcile(self.schema, [{1.0, 2.0}, {2.0, 3.0}]) == {1.0, 2.0, 3.0}
+
+    # ── multi-update structural batches (the audit bug) ────────
+
+    def test_two_adds_union(self):
+        # The original audit reproducer: with no Set reconcile dispatch,
+        # this used to fall through to dict/Node and return only the
+        # second _add. Now both contribute.
+        result = reconcile(
+            self.schema,
+            [{'_add': {1.0}}, {'_add': {2.0}}])
+        assert result == {'_add': {1.0, 2.0}}
+
+    def test_add_plus_remove_all_keeps_add(self):
+        result = reconcile(
+            self.schema,
+            [{'_add': {1.0}}, {'_remove': 'all'}])
+        assert result == {'_add': {1.0}, '_remove': 'all'}
+
+    def test_remove_all_plus_add_keeps_add(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': 'all'}, {'_add': {1.0}}])
+        assert result == {'_add': {1.0}, '_remove': 'all'}
+
+    def test_plain_plus_remove_all_keeps_plain(self):
+        result = reconcile(
+            self.schema,
+            [{1.0}, {'_remove': 'all'}])
+        assert result == {'_add': {1.0}, '_remove': 'all'}
+
+    def test_plain_plus_add_combines(self):
+        result = reconcile(
+            self.schema,
+            [{1.0}, {'_add': {2.0}}])
+        assert result == {'_add': {1.0, 2.0}}
+
+    def test_remove_all_absorbs_indexes(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': {1.0}}, {'_remove': 'all'}])
+        assert result == {'_remove': 'all'}
+
+    def test_union_remove_indexes(self):
+        result = reconcile(
+            self.schema,
+            [{'_remove': {1.0}}, {'_remove': {2.0}}])
+        assert result == {'_remove': {1.0, 2.0}}
+
+    # ── end-to-end: reconcile → apply ──────────────────────────
+
+    def test_e2e_remove_all_plus_concurrent_add(self):
+        state = {1.0, 2.0}
+        update = reconcile(
+            self.schema,
+            [{'_add': {99.0}}, {'_remove': 'all'}])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == {99.0}
+
+    def test_e2e_remove_all_plus_concurrent_plain(self):
+        state = {1.0, 2.0}
+        update = reconcile(
+            self.schema,
+            [{99.0}, {'_remove': 'all'}])
+        result, _ = apply(self.schema, state, update, ())
+        assert result == {99.0}
+
+    def test_e2e_receipt_order_invariant(self):
+        state = {1.0, 2.0}
+        forward = reconcile(self.schema, [{99.0}, {'_remove': 'all'}])
+        reverse = reconcile(self.schema, [{'_remove': 'all'}, {99.0}])
+        rf, _ = apply(self.schema, set(state), forward, ())
+        rr, _ = apply(self.schema, set(state), reverse, ())
+        assert rf == rr == {99.0}
 
 
 # ── New Methods ────────────────────────────────────────────

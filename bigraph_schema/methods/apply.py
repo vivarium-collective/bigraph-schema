@@ -182,10 +182,14 @@ def apply(schema: List, state, update, path):
 def apply(schema: Set, state, update, path):
     result = set(state) if state else set()
     if isinstance(update, dict):
+        if '_remove' in update:
+            rm = update['_remove']
+            if rm == 'all':
+                result = set()
+            else:
+                result -= set(rm)
         if '_add' in update:
             result |= set(update['_add'])
-        if '_remove' in update:
-            result -= set(update['_remove'])
     elif isinstance(update, set):
         result |= update
     return result, []
@@ -351,6 +355,18 @@ def apply(schema: Map, state, update, path):
         update = rest
 
     value_schema = schema._value
+
+    # _remove: 'all' clears pre-existing state first, so adds and
+    # value updates from sibling updates in the same batch survive.
+    # Targeted _remove: [keys] still runs at the end of the apply
+    # pass (after adds and value updates), preserving the existing
+    # "remove wins over add for the same key" semantics.
+    remove_directive = update.get('_remove')
+    if remove_directive == 'all':
+        for remove_key in list(state.keys()):
+            del state[remove_key]
+            emit(NodeRemoved(path=path, key=remove_key))
+
     if '_add' in update:
         add_update = update['_add']
         if isinstance(add_update, list):
@@ -382,8 +398,8 @@ def apply(schema: Map, state, update, path):
         if submerges:
             merges += submerges
 
-    if '_remove' in update:
-        for remove_key in update['_remove']:
+    if remove_directive is not None and remove_directive != 'all':
+        for remove_key in remove_directive:
             if remove_key in state:
                 del state[remove_key]
                 emit(NodeRemoved(path=path, key=remove_key))

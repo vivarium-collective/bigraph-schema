@@ -347,6 +347,42 @@ def test_reconcile_preserves_divide_sentinel_map(core):
     assert result['_add'] == {'2': 5.0}
 
 
+def test_reconcile_dict_schema_unions_add(core):
+    """Dict-schema reconcile must union _add contributions across
+    updates instead of last-non-None-wins (matching List/Map). Two
+    processes each contributing a new entry should both survive."""
+    schema = {'0': {'mass': Float()}}
+    result = reconcile(schema, [
+        {'_add': {'a': {'mass': 1.0}}},
+        {'_add': {'b': {'mass': 2.0}}},
+    ])
+    assert result is not None
+    assert result['_add'] == {'a': {'mass': 1.0}, 'b': {'mass': 2.0}}
+
+
+def test_reconcile_dict_schema_unions_remove(core):
+    """Dict-schema reconcile must union _remove contributions, deduped."""
+    schema = {'0': {'mass': Float()}}
+    result = reconcile(schema, [
+        {'_remove': ['a']},
+        {'_remove': ['b', 'a']},
+    ])
+    assert result is not None
+    assert result['_remove'] == ['a', 'b']
+
+
+def test_reconcile_dict_schema_divide_last_wins(core):
+    """_divide remains last-non-None-wins; concurrent _divide updates
+    on the same node within a tick are collapsed deterministically."""
+    schema = {'0': {'mass': Float()}}
+    result = reconcile(schema, [
+        {'_divide': {'mother': '0', 'daughters': [{'key': '00'}, {'key': '01'}]}},
+        {'_divide': {'mother': '0', 'daughters': [{'key': 'aa'}, {'key': 'bb'}]}},
+    ])
+    assert result is not None
+    assert [d['key'] for d in result['_divide']['daughters']] == ['aa', 'bb']
+
+
 def test_infer(core):
     default_schema, default_state = core.default(node_schema)
     node_inferred = core.infer(default_state)
