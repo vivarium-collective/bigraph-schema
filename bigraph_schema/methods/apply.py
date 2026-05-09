@@ -301,33 +301,42 @@ def _handle_divide_sentinel(value_schema, state, update, path):
             f'_divide at {path}: daughters must be dict or list, '
             f'got {type(daughters).__name__}')
 
-    if len(daughter_items) != 2:
+    if len(daughter_items) not in (1, 2):
         raise ValueError(
-            f'_divide at {path}: expected exactly 2 daughters, got '
+            f'_divide at {path}: expected 1 or 2 daughters, got '
             f'{len(daughter_items)}')
 
-    # Phase 1: type-driven divide walk produces two baseline daughters.
+    # Phase 1: type-driven divide walk produces two baseline daughters
+    # (binomial bulk split, unique-molecule domain split, divide_share
+    # / divide_reset semantics applied). For single-daughter mode
+    # (len==1) we still compute both — same RNG draws, same baseline —
+    # and install only the first; the discarded daughter never sees
+    # realize() so there's no instantiation cost. This preserves bit
+    # parity with the per-gen Nextflow path which generates both
+    # daughters and only loads daughter_state_0.json forward.
     mother_state = state[mother]
-    a, b = _divide_state(value_schema, mother_state,
-                         context=mother_state, path=())
+    baselines = _divide_state(value_schema, mother_state,
+                              context=mother_state, path=())
 
-    # Phase 2: deep-merge each daughter's overrides onto the baseline.
-    (key_a, override_a), (key_b, override_b) = daughter_items
-    daughter_a = _deep_merge_into(a, override_a) if override_a else a
-    daughter_b = _deep_merge_into(b, override_b) if override_b else b
-
-    # Remove the mother and install daughters.
+    # Remove the mother and install the requested daughters.
     del state[mother]
-    state[key_a] = daughter_a
-    state[key_b] = daughter_b
+    daughter_keys = []
+    daughters_state = {}
+    for i, (key, override) in enumerate(daughter_items):
+        baseline = baselines[i]
+        daughter = (_deep_merge_into(baseline, override)
+                    if override else baseline)
+        state[key] = daughter
+        daughter_keys.append(key)
+        daughters_state[key] = daughter
 
     # Emit Divided event so composite-layer consumers can update their
     # process_paths/step_paths indexes incrementally (no full rescan).
     emit(Divided(
         path=path,
         mother_key=mother,
-        daughter_keys=[key_a, key_b],
-        daughters_state={key_a: daughter_a, key_b: daughter_b},
+        daughter_keys=daughter_keys,
+        daughters_state=daughters_state,
         daughters_schema=value_schema))
     return state
 
