@@ -895,11 +895,22 @@ def _match_dict(state_dict, redex_dict, bindings):
         k for k in state_dict
         if isinstance(k, str) and not k.startswith('_')]
 
-    if len(redex_entries) > len(state_keys):
+    site_keys = [k for k, v in redex_entries if isinstance(v, Site)]
+    non_site_count = len(redex_entries) - len(site_keys)
+
+    # Sites are allowed to bind to *zero* state keys (an empty
+    # capture), so the floor on state size is set by the non-Site
+    # redex entries only. We pad ``state_keys`` with ``None``
+    # sentinels so the original 1-to-1 permutation logic can still
+    # run when the redex has more entries than the state — any
+    # padding that lands on a Site means "this Site captures
+    # nothing"; padding that lands on a non-Site is a mismatch.
+    if non_site_count > len(state_keys):
         return False
 
-    site_keys = [k for k, v in redex_entries if isinstance(v, Site)]
     has_surplus = len(redex_entries) < len(state_keys)
+    n_padding = max(0, len(redex_entries) - len(state_keys))
+    padded_keys = list(state_keys) + [None] * n_padding
 
     # Edge bindings (from ``LinkVar``s) are shared by reference
     # across every recursive ``_match_dict`` call within a single
@@ -909,13 +920,20 @@ def _match_dict(state_dict, redex_dict, bindings):
     # a failed permutation can roll the bindings back.
     edges = bindings.setdefault('__edges__', {})
 
-    for perm in permutations(state_keys, len(redex_entries)):
+    for perm in permutations(padded_keys, len(redex_entries)):
         assignment = dict(zip([k for k, _ in redex_entries], perm))
         saved_edges = dict(edges)
         trial = {'__edges__': edges}
         ok = True
         for redex_key, state_key in assignment.items():
             redex_value = redex_dict[redex_key]
+            if state_key is None:
+                # Padding: only meaningful for a Site (binds empty).
+                if not isinstance(redex_value, Site):
+                    ok = False
+                    break
+                trial[redex_key] = {}
+                continue
             state_value = state_dict[state_key]
             if isinstance(redex_value, Site):
                 if has_surplus:
@@ -929,13 +947,12 @@ def _match_dict(state_dict, redex_dict, bindings):
                 ok = False
                 break
         if not ok:
-            # Roll back any edge bindings written by this iteration.
             edges.clear()
             edges.update(saved_edges)
             continue
 
         # Surplus state keys → merge into the last Site's binding
-        used = set(assignment.values())
+        used = set(v for v in assignment.values() if v is not None)
         surplus = {k: state_dict[k] for k in state_keys if k not in used}
 
         if surplus and site_keys:
