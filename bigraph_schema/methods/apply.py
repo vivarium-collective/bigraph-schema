@@ -1,5 +1,6 @@
 from plum import dispatch
 import numpy as np
+import os
 
 from bigraph_schema.methods.check import check
 from bigraph_schema.methods.default import default
@@ -315,8 +316,35 @@ def _handle_divide_sentinel(value_schema, state, update, path):
     # parity with the per-gen Nextflow path which generates both
     # daughters and only loads daughter_state_0.json forward.
     mother_state = state[mother]
+    # DEBUG: dump schema seen by divide
+    if os.environ.get('VECOLI_DEBUG_DIVIDE'):
+        import sys as _sys
+        print(f'[divide-debug] path={path} mother={mother!r}', file=_sys.stderr, flush=True)
+        print(f'[divide-debug] value_schema type={type(value_schema).__name__}', file=_sys.stderr, flush=True)
+        print(f'[divide-debug] value_schema repr={value_schema!r}', file=_sys.stderr, flush=True)
+        print(f'[divide-debug] mother_state keys={list(mother_state.keys()) if isinstance(mother_state, dict) else type(mother_state).__name__}', file=_sys.stderr, flush=True)
+        if isinstance(mother_state, dict) and 'bulk' in mother_state:
+            bulk_state = mother_state['bulk']
+            print(f'[divide-debug] mother_state[bulk] type={type(bulk_state).__name__}', file=_sys.stderr, flush=True)
+            sub_schema = getattr(value_schema, 'bulk', None)
+            print(f'[divide-debug] value_schema.bulk attr={type(sub_schema).__name__ if sub_schema is not None else "NONE"}', file=_sys.stderr, flush=True)
+            if sub_schema is None and isinstance(value_schema, dict):
+                sub_schema = value_schema.get('bulk')
+                print(f'[divide-debug] value_schema[bulk] dict-lookup={type(sub_schema).__name__ if sub_schema is not None else "NONE"}', file=_sys.stderr, flush=True)
     baselines = _divide_state(value_schema, mother_state,
                               context=mother_state, path=())
+    if os.environ.get('VECOLI_DEBUG_DIVIDE'):
+        import sys as _sys
+        if isinstance(baselines[0], dict) and 'bulk' in baselines[0]:
+            import numpy as np
+            ba = baselines[0]['bulk']
+            ma = mother_state['bulk']
+            try:
+                if hasattr(ba, 'dtype') and ba.dtype.names and 'count' in ba.dtype.names:
+                    print(f'[divide-debug] mother bulk count_sum={int(ma["count"].sum())}', file=_sys.stderr, flush=True)
+                    print(f'[divide-debug] daughter_a bulk count_sum={int(ba["count"].sum())} (expect ~half)', file=_sys.stderr, flush=True)
+            except Exception as e:
+                print(f'[divide-debug] err inspecting baseline: {e}', file=_sys.stderr, flush=True)
 
     # Remove the mother and install the requested daughters.
     del state[mother]

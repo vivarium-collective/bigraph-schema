@@ -654,6 +654,66 @@ def is_active(schema, path, control_status=None):
 #   - rate is an optional stochastic weight (Milner §11.4)
 
 
+@dataclass(frozen=True)
+class Absent:
+    """A redex marker requiring the matched state node to NOT have
+    the named key (or to have it as an empty container).
+
+    Where ``Site`` says "something must be present here" and
+    ``LinkVar('e')`` says "this port must be wired to the edge bound
+    by ``e``", ``Absent()`` is the matcher's negative-application
+    condition: "this key must be absent."
+
+    Used for *unbound* / *free* preimage patterns. For example, a
+    biochemical binding rule
+
+        Substrate{free} + Enzyme{free} -->  Substrate-Enzyme{bound}
+
+    in our model becomes a redex with ``'outputs': Absent()`` on
+    both Substrate and Enzyme — the rule fires only when neither is
+    currently in any complex. Without this marker the rule would
+    happily double-bind a kinase that's already bound to a different
+    substrate, violating the active-site stoichiometry.
+
+    A state value matches ``Absent()`` if it is missing entirely or
+    present as an empty dict — either form represents "no wire."
+    The reactum may include ``Absent()`` for symmetry, but it has
+    no effect there: keys mapped to ``Absent`` are simply omitted
+    from the result.
+    """
+
+
+@dataclass(frozen=True)
+class LinkVar:
+    """A wire-binding variable in a redex/reactum.
+
+    Where ``Site`` is a hole in the *place* graph, ``LinkVar`` is a
+    variable in the *link* graph (Milner Def. 2.2, p. 16) — it binds
+    to a wire path in the state.
+
+    Two ``LinkVar``s with the same ``name`` in a redex must bind to
+    the *same* wire path: that's how "panel.auth and person.badge
+    share an edge" is expressed.
+
+    In a reactum:
+
+    - A ``LinkVar`` whose ``name`` was bound during matching is
+      substituted with the bound path — the new node inherits the
+      same edge.
+    - A ``LinkVar`` whose ``name`` was *not* bound (introduced
+      fresh by the reactum, e.g. ``enter_secure`` creating a new
+      link between a previously-unconnected Person and a panel)
+      mints a fresh anchor path during ``instantiate``.
+
+    The runtime wire format is the existing process-bigraph wire
+    convention: a list of path components into the state tree (the
+    same shape ``Link.outputs`` carries). So if ``LinkVar('e')``
+    binds to ``['..', '..', '_edges', 'edge_office_panel']``, that
+    list propagates verbatim into the reactum slot.
+    """
+    name: str
+
+
 @dataclass
 class Match:
     """Result of matching a redex against a state subtree.
@@ -661,7 +721,8 @@ class Match:
     Attributes:
         path: Location in the state where the match occurs.
         bindings: ``{site_label: matched_subtree}`` — the content
-            captured by each Site in the redex.
+            captured by each Site in the redex. Also carries
+            ``__edges__`` — wire paths bound by ``LinkVar``s.
         key_map: ``{redex_key: state_key}`` — which state key each
             non-Site redex key was assigned to.
     """
@@ -734,16 +795,32 @@ def _match_node(state_node, redex_node, bindings):
     Matching modes (checked in order):
 
     1. **Site** → matches anything (the whole point of a site).
-    2. **dict** → structural match via ``_match_dict``, with optional
+    2. **LinkVar** → matches a wire path; binds the variable on
+       first occurrence and requires equality on later occurrences.
+    3. **dict** → structural match via ``_match_dict``, with optional
        ``_control`` constraint.
-    3. **Node vs Node** → ``isinstance`` (Float matches Float, Integer
+    4. **Node vs Node** → ``isinstance`` (Float matches Float, Integer
        matches Number, etc.).
-    4. **Node vs runtime value** → ``check(schema, value)`` from the
+    5. **Node vs runtime value** → ``check(schema, value)`` from the
        type system. Float() matches ``70.0``, Integer() matches ``5``,
        String() matches ``'hello'``.
     """
     if isinstance(redex_node, Site):
         return True
+
+    if isinstance(redex_node, LinkVar):
+        # Wire-equality matching. The state value at this position
+        # is a wire (a path list, by the existing process-bigraph
+        # convention used on Link.outputs/inputs). LinkVars with the
+        # same name must bind to the same path; anywhere they appear
+        # repeated is the redex's way of saying "these two ports
+        # share an edge".
+        edges = bindings.setdefault('__edges__', {})
+        bound = edges.get(redex_node.name)
+        if bound is None:
+            edges[redex_node.name] = state_node
+            return True
+        return bound == state_node
 
     if isinstance(redex_node, dict):
         if not isinstance(state_node, dict):
@@ -784,9 +861,26 @@ def _match_dict(state_dict, redex_dict, bindings):
     """
     from itertools import permutations
 
+    # Negative application conditions: any redex key paired with an
+    # ``Absent()`` marker requires the matching key to be missing in
+    # the state (or present but empty). Empty dicts count as absent
+    # because in our wire convention an empty ``outputs: {}`` carries
+    # no port at all.
+    for k, v in redex_dict.items():
+        if not (isinstance(k, str) and not k.startswith('_')):
+            continue
+        if isinstance(v, Absent):
+            sval = state_dict.get(k)
+            if sval is None:
+                continue
+            if isinstance(sval, dict) and not sval:
+                continue
+            return False
+
     redex_entries = [
         (k, v) for k, v in redex_dict.items()
-        if isinstance(k, str) and not k.startswith('_')]
+        if isinstance(k, str) and not k.startswith('_')
+        and not isinstance(v, Absent)]
     state_keys = [
         k for k in state_dict
         if isinstance(k, str) and not k.startswith('_')]
@@ -797,9 +891,18 @@ def _match_dict(state_dict, redex_dict, bindings):
     site_keys = [k for k, v in redex_entries if isinstance(v, Site)]
     has_surplus = len(redex_entries) < len(state_keys)
 
+    # Edge bindings (from ``LinkVar``s) are shared by reference
+    # across every recursive ``_match_dict`` call within a single
+    # match attempt — that's what makes ``LinkVar('e')`` at one
+    # node's wire visible to ``LinkVar('e')`` at a sibling or
+    # descendant node's wire. We snapshot before each iteration so
+    # a failed permutation can roll the bindings back.
+    edges = bindings.setdefault('__edges__', {})
+
     for perm in permutations(state_keys, len(redex_entries)):
         assignment = dict(zip([k for k, _ in redex_entries], perm))
-        trial = {}
+        saved_edges = dict(edges)
+        trial = {'__edges__': edges}
         ok = True
         for redex_key, state_key in assignment.items():
             redex_value = redex_dict[redex_key]
@@ -816,6 +919,9 @@ def _match_dict(state_dict, redex_dict, bindings):
                 ok = False
                 break
         if not ok:
+            # Roll back any edge bindings written by this iteration.
+            edges.clear()
+            edges.update(saved_edges)
             continue
 
         # Surplus state keys → merge into the last Site's binding
@@ -832,9 +938,22 @@ def _match_dict(state_dict, redex_dict, bindings):
                 trial[last_site] = surplus
 
         bindings.update(trial)
-        bindings['__key_map__'] = {
+
+        # Merge this level's key map with any inner-level maps that
+        # were already written by recursive ``_match_node`` calls.
+        # Inner mappings (written first) take precedence on shared
+        # keys — but in well-formed rules, redex keys are unique
+        # across the whole tree (Milner: each site has a unique
+        # number), so collisions don't arise in practice.
+        # Without this merge, only the outermost level's key map
+        # would survive, and inner state-key identities (e.g. an
+        # alice/bob person captured under a redex slot ``p``) would
+        # be lost during reactum remapping.
+        this_keymap = {
             **assignment,
             **{sk: assignment.get(sk) for sk in site_keys}}
+        existing_keymap = bindings.get('__key_map__', {})
+        bindings['__key_map__'] = {**this_keymap, **existing_keymap}
         return True
 
     return False
@@ -870,6 +989,20 @@ def find_matches(state, redex, control_status=None):
 # ── Instantiation ───────────────────────────────────────────────────
 
 
+_FRESH_EDGE_COUNTER = 0
+
+
+def _gensym_edge():
+    """Mint a unique fresh edge id, suitable as the last component
+    of an anchor path under the floor's ``_edges`` map. Module-level
+    counter keeps ids unique across firings so edges introduced by
+    different rule applications never collide on string equality.
+    """
+    global _FRESH_EDGE_COUNTER
+    _FRESH_EDGE_COUNTER += 1
+    return f"~e_{_FRESH_EDGE_COUNTER}"
+
+
 def instantiate(reactum, bindings, instantiation):
     """Build a concrete replacement subtree from a reactum pattern.
 
@@ -877,23 +1010,69 @@ def instantiate(reactum, bindings, instantiation):
     via ``instantiation``, then fill it with the subtree captured in
     ``bindings`` for that redex site.
 
+    For each ``LinkVar`` in the reactum, substitute the wire path
+    bound during matching (in ``bindings['__edges__']``). An unbound
+    ``LinkVar`` is interpreted as a *new* hyperedge introduced by
+    the reactum: a fresh anchor path is minted and recorded in the
+    edge bindings, so subsequent occurrences of the same variable
+    resolve to the same fresh path.
+
     All keys in the reactum are preserved (including ``_control`` and
     other user-defined ``_``-prefixed metadata).
 
     Returns a new dict (deep-copied, safe to mutate).
     """
+    edges = bindings.get('__edges__', {})
+    return _instantiate_walk(reactum, bindings, instantiation, edges)
+
+
+def _instantiate_walk(reactum, bindings, instantiation, edges):
     result = {}
     for key, value in reactum.items():
+        if isinstance(value, Absent):
+            # Symmetry with the redex side: an Absent marker on the
+            # reactum is just "this key is not in the result." We
+            # could equivalently leave the key out of the reactum;
+            # accepting ``Absent()`` here lets a rule author write
+            # symmetric redex/reactum pairs.
+            continue
         if isinstance(value, Site):
             # This site maps to a redex site via instantiation
             source_key = instantiation.get(key, key)
             filler = bindings.get(source_key)
-            if isinstance(filler, dict):
-                result[key] = copy.deepcopy(filler)
+            if isinstance(filler, dict) and '_control' not in filler:
+                # Forest of trees captured (Milner: a site is a hole
+                # in the place graph that gets filled with a region;
+                # the region's roots become children at the slot
+                # position rather than nesting under the site name).
+                # We detect a forest by the absence of ``_control``
+                # at the top — every bigraph node has one, so a
+                # ``_control``-less dict is a multi-rooted region.
+                for fk, fv in filler.items():
+                    result[fk] = copy.deepcopy(fv)
+            elif filler is None:
+                # Site captured nothing; drop the slot.
+                pass
             else:
-                result[key] = copy.deepcopy(filler) if filler is not None else None
+                # Single tree (filler has ``_control``) or scalar.
+                # Bind at the site's name; ``_remap_keys`` will then
+                # rename that slot to the original state key via the
+                # merged key map.
+                result[key] = copy.deepcopy(filler)
+        elif isinstance(value, LinkVar):
+            bound = edges.get(value.name)
+            if bound is None:
+                # Reactum-introduced edge — mint a fresh anchor
+                # under ``_edges`` (relative to the match path).
+                # A reactum that uses the same fresh variable in
+                # multiple places will see the same fresh path on
+                # every later occurrence.
+                bound = ['_edges', _gensym_edge()]
+                edges[value.name] = bound
+            result[key] = list(bound)
         elif isinstance(value, dict):
-            result[key] = instantiate(value, bindings, instantiation)
+            result[key] = _instantiate_walk(
+                value, bindings, instantiation, edges)
         else:
             result[key] = copy.deepcopy(value)
     return result

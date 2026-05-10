@@ -1815,19 +1815,20 @@ def test_fire_rule_b3(core):
     assert 'alice' not in bldg  # no longer a sibling
     room = bldg['lab']          # room keeps its original key
     assert 'alice' in room      # agent inside room, original key
-    # Agent's props captured alice's single field (mass: 70.0).
-    # With one state key and one Site, 1-to-1 matching gives the
-    # bare value; with multiple fields it gives a dict of entries.
-    alice_props = room['alice']['props']
-    assert alice_props == 70.0 or (
-        isinstance(alice_props, dict) and alice_props.get('mass') == 70.0)
-    # Existing room contents preserved — when room has surplus
-    # children beyond what the redex matched, they're captured as
-    # a dict by the 'contents' Site.
-    contents = room['contents']
-    assert isinstance(contents, dict)
-    assert 'bob' in contents
-    assert 'pc' in contents
+    # Per Milner's bigraph semantics, a Site is a hole in the place
+    # graph that gets filled with a region; the region's children
+    # become siblings at the slot, with their original identifiers
+    # preserved by the merged key map. So:
+    #   - alice's `mass` field stays as `mass` on alice (not nested
+    #     under the redex Site name `props`).
+    assert room['alice']['mass'] == 70.0
+    assert 'props' not in room['alice']
+    #   - The room's other contents (bob, pc) become direct siblings
+    #     of alice, again with their original keys (not nested under
+    #     the redex Site name `contents`).
+    assert 'bob' in room and room['bob']['_control'] == 'agent'
+    assert 'pc' in room and room['pc']['_control'] == 'computer'
+    assert 'contents' not in room
 
 
 def test_fire_rule_no_match(core):
@@ -1842,6 +1843,324 @@ def test_fire_rule_no_match(core):
     new_state, match = fire_rule(state, rule)
     assert match is None
     assert new_state is state
+
+
+def test_linkvar_match_equality(core):
+    """Two LinkVars with the same name in a redex must bind to the
+    same wire path. Encodes the link-graph constraint
+    "panel.auth and person.badge share an edge".
+    """
+    from bigraph_schema.assembly import (
+        ReactionRule, LinkVar, find_matches)
+
+    # bob's badge and the panel's auth wire to the same anchor —
+    # this is what "linked" looks like at the runtime level.
+    state = {
+        'office': {
+            '_control': 'Room',
+            'panel': {
+                '_control': 'CtrlPanel',
+                'outputs': {'auth': ['..', '_edges', 'e1']}},
+            'bob': {
+                '_control': 'PersonSecured',
+                'name': 'bob',
+                'outputs': {'badge': ['..', '_edges', 'e1']}}}}
+
+    redex = {
+        'panel': {
+            '_control': 'CtrlPanel',
+            'outputs': {'auth': LinkVar('e')}},
+        'p': {
+            '_control': 'PersonSecured',
+            'name': Site(),
+            'outputs': {'badge': LinkVar('e')}}}
+
+    matches = find_matches(state, redex)
+    assert len(matches) == 1
+    edges = matches[0].bindings.get('__edges__', {})
+    assert edges['e'] == ['..', '_edges', 'e1']
+
+    # Now break the link: bob points to a different anchor.
+    state2 = {
+        'office': {
+            '_control': 'Room',
+            'panel': {
+                '_control': 'CtrlPanel',
+                'outputs': {'auth': ['..', '_edges', 'e1']}},
+            'bob': {
+                '_control': 'PersonSecured',
+                'name': 'bob',
+                'outputs': {'badge': ['..', '_edges', 'OTHER']}}}}
+    matches2 = find_matches(state2, redex)
+    assert matches2 == [], 'mismatched wires must not match'
+
+
+def test_linkvar_match_unconstrained_when_absent(core):
+    """A redex that doesn't mention `outputs` doesn't constrain the
+    wires on the state node — links are only checked where the redex
+    asks for them.
+    """
+    from bigraph_schema.assembly import ReactionRule, find_matches
+
+    state = {
+        'office': {
+            '_control': 'Room',
+            'bob': {
+                '_control': 'Person',
+                'name': 'bob',
+                # Bob has wires, but redex doesn't ask about them
+                'outputs': {'badge': ['..', '_edges', 'e1']}}}}
+    redex = {
+        'p': {'_control': 'Person', 'name': Site()}}
+    matches = find_matches(state, redex)
+    assert len(matches) == 1
+
+
+def test_linkvar_substitutes_in_reactum(core):
+    """When the reactum uses a bound LinkVar, the captured wire
+    path flows through to the new node — modelling "the moved
+    Person keeps its CtrlPanel link" or "both panel and Person
+    end up wired to the same edge".
+    """
+    from bigraph_schema.assembly import (
+        ReactionRule, LinkVar, fire_rule)
+
+    state = {
+        'office': {
+            '_control': 'Room',
+            'panel': {
+                '_control': 'CtrlPanel',
+                'outputs': {'auth': ['..', '_edges', 'e1']}},
+            'bob': {
+                '_control': 'PersonSecured',
+                'name': 'bob',
+                'outputs': {'badge': ['..', '_edges', 'e1']}}}}
+
+    # Redex captures the link between panel.auth and bob.badge.
+    # Reactum keeps both endpoints on that same edge — i.e. an
+    # identity-like rewrite that asserts the link survives.
+    rule = ReactionRule(
+        redex={
+            'panel': {
+                '_control': 'CtrlPanel',
+                'outputs': {'auth': LinkVar('e')}},
+            'p': {
+                '_control': 'PersonSecured',
+                'name': Site(),
+                'outputs': {'badge': LinkVar('e')}}},
+        reactum={
+            'panel': {
+                '_control': 'CtrlPanel',
+                'outputs': {'auth': LinkVar('e')}},
+            'p': {
+                '_control': 'PersonSecured',
+                'name': Site(),
+                'outputs': {'badge': LinkVar('e')}}},
+        instantiation={'name': 'name'},
+        label='link_identity')
+
+    new_state, match = fire_rule(state, rule)
+    assert match is not None
+    office = new_state['office']
+    assert office['bob']['outputs']['badge'] == ['..', '_edges', 'e1']
+    assert office['panel']['outputs']['auth'] == ['..', '_edges', 'e1']
+
+
+def test_linkvar_fresh_edge_when_unbound(core):
+    """A LinkVar that appears only in the reactum (not the redex)
+    is interpreted as a *new* edge introduced by the rule. The
+    instantiator mints a fresh anchor path — and reuses it across
+    every occurrence of the same fresh variable, so both new
+    endpoints end up on the same edge.
+    """
+    from bigraph_schema.assembly import (
+        ReactionRule, LinkVar, fire_rule)
+
+    state = {
+        'office': {
+            '_control': 'Room',
+            'door': {'_control': 'Door'},
+            'panel': {
+                '_control': 'CtrlPanel',
+                'outputs': {'auth': ['..', '_edges', 'e1']}},
+            'alice': {'_control': 'Person', 'name': 'alice'}}}
+
+    # enter_secure-style rule: a free Person in a Room with a
+    # CtrlPanel becomes PersonSecured AND gets a new wire to a
+    # fresh edge that the panel ALSO joins.
+    rule = ReactionRule(
+        redex={
+            'r': {
+                '_control': 'Room',
+                'panel': {
+                    '_control': 'CtrlPanel',
+                    'outputs': Site()},
+                'p': {'_control': 'Person', 'name': Site()},
+                'rest': Site()}},
+        reactum={
+            'r': {
+                '_control': 'Room',
+                'panel': {
+                    '_control': 'CtrlPanel',
+                    'outputs': {'auth': LinkVar('fresh')}},
+                'p': {
+                    '_control': 'PersonSecured',
+                    'name': Site(),
+                    'outputs': {'badge': LinkVar('fresh')}},
+                'rest': Site()}},
+        instantiation={'rest': 'rest', 'name': 'name'},
+        label='enter_secure')
+
+    new_state, match = fire_rule(state, rule)
+    assert match is not None
+    office = new_state['office']
+    panel_wire = office['panel']['outputs']['auth']
+    alice_wire = office['alice']['outputs']['badge']
+    # Both endpoints landed on the *same* fresh edge:
+    assert panel_wire == alice_wire
+    # And the fresh path is anchored under ``_edges`` with a
+    # gensym-style id (starts with ``~e_``):
+    assert panel_wire[0] == '_edges'
+    assert panel_wire[1].startswith('~e_')
+
+
+def test_absent_redex_rejects_present_key(core):
+    """An ``Absent()`` marker on a redex key is a negative
+    application condition: the rule must NOT match a state node
+    that has that key bound to anything non-empty.
+    """
+    from bigraph_schema.assembly import (
+        ReactionRule, Absent, find_matches)
+
+    rule = ReactionRule(
+        redex={
+            'panel': {
+                '_control': 'CtrlPanel',
+                'outputs': Absent()}},
+        reactum={
+            'panel': {'_control': 'CtrlPanel'}},
+        label='only_unbound')
+
+    free_panel = {
+        'panel': {'_control': 'CtrlPanel'}}
+    bound_panel = {
+        'panel': {
+            '_control': 'CtrlPanel',
+            'outputs': {'auth': ['_edges', 'e1']}}}
+
+    # Free panel: matches.
+    assert len(find_matches(free_panel, rule.redex)) == 1
+    # Bound panel: ``Absent`` rules it out.
+    assert find_matches(bound_panel, rule.redex) == []
+
+
+def test_absent_treats_empty_dict_as_absent(core):
+    """For wire-shaped fields like ``outputs``, an empty dict is
+    semantically equivalent to "no port wired" — so ``Absent()``
+    should accept it as well as a missing key.
+    """
+    from bigraph_schema.assembly import (
+        ReactionRule, Absent, find_matches)
+
+    rule = ReactionRule(
+        redex={'panel': {
+            '_control': 'CtrlPanel',
+            'outputs': Absent()}},
+        reactum={'panel': {'_control': 'CtrlPanel'}},
+        label='only_unbound')
+
+    empty_outputs = {
+        'panel': {'_control': 'CtrlPanel', 'outputs': {}}}
+    assert len(find_matches(empty_outputs, rule.redex)) == 1
+
+
+def test_bond_create_destroy_cycle(core):
+    """Full kinase-substrate-style cycle:
+
+    1. Both panel and person start unbound.
+    2. ``enter_secure`` (with ``Absent`` preimage on both ports
+       and a fresh ``LinkVar('e')`` reactum) binds them to a new
+       edge.
+    3. ``leave_secure`` (with shared ``LinkVar('e')`` redex and
+       no ``outputs`` in the reactum) consumes the bond and
+       returns both nodes to the unbound state.
+
+    The structural property under test: after firing both rules
+    in sequence, the state is back to having no port wired to the
+    minted edge — the bond is fully destroyed.
+    """
+    from bigraph_schema.assembly import (
+        ReactionRule, LinkVar, Absent, fire_rule)
+
+    state = {
+        'office': {
+            '_control': 'Room',
+            'door': {'_control': 'Door'},
+            'panel': {'_control': 'CtrlPanel'},
+            'alice': {'_control': 'Person', 'name': 'alice'}}}
+
+    enter = ReactionRule(
+        redex={
+            'r': {
+                '_control': 'Room',
+                'panel': {
+                    '_control': 'CtrlPanel',
+                    'outputs': Absent()},
+                'p': {
+                    '_control': 'Person',
+                    'name': Site(),
+                    'outputs': Absent()},
+                'rest': Site()}},
+        reactum={
+            'r': {
+                '_control': 'Room',
+                'panel': {
+                    '_control': 'CtrlPanel',
+                    'outputs': {'auth': LinkVar('e')}},
+                'p': {
+                    '_control': 'PersonSecured',
+                    'name': Site(),
+                    'outputs': {'badge': LinkVar('e')}},
+                'rest': Site()}},
+        instantiation={'rest': 'rest', 'name': 'name'},
+        label='enter_secure')
+
+    leave = ReactionRule(
+        redex={
+            'r': {
+                '_control': 'Room',
+                'panel': {
+                    '_control': 'CtrlPanel',
+                    'outputs': {'auth': LinkVar('e')}},
+                'p': {
+                    '_control': 'PersonSecured',
+                    'name': Site(),
+                    'outputs': {'badge': LinkVar('e')}},
+                'rest': Site()}},
+        reactum={
+            'r': {
+                '_control': 'Room',
+                'panel': {'_control': 'CtrlPanel'},
+                'p': {'_control': 'Person', 'name': Site()},
+                'rest': Site()}},
+        instantiation={'rest': 'rest', 'name': 'name'},
+        label='leave_secure')
+
+    bound, match = fire_rule(state, enter)
+    assert match is not None
+    panel_wire = bound['office']['panel']['outputs']['auth']
+    alice_wire = bound['office']['alice']['outputs']['badge']
+    assert panel_wire == alice_wire  # bond formed
+
+    free, match = fire_rule(bound, leave)
+    assert match is not None
+    panel_after = free['office']['panel']
+    alice_after = free['office']['alice']
+    # Both ports gone: the bond was consumed.
+    assert 'outputs' not in panel_after
+    assert 'outputs' not in alice_after
+    # And the person reverted to the unbound control.
+    assert alice_after['_control'] == 'Person'
 
 
 def test_run_reactions_deterministic(core):
@@ -2091,8 +2410,14 @@ def test_pi_brs(core):
     final, events = run_reactions(state, rules)
     assert len(events) == 1
     assert events[0].rule_label == 'π sync on x'
-    # The sent name y should appear in the result
-    assert final.get('received_name') == {'the_name': 'y', 'data': 42}
+    # The sent name y should appear in the result. The redex captures
+    # the receiver's continuation under a Site that is then filled at
+    # the top level — its children (the_name, data) splice into the
+    # surrounding region as siblings rather than nesting under the
+    # site name (Milner: a site is a hole; its filler region's roots
+    # become children at the slot position).
+    assert final.get('the_name') == 'y'
+    assert final.get('data') == 42
     # Both continuations are nil
     assert final.get('send_cont', {}).get('_control') == 'nil'
     assert final.get('recv_cont', {}).get('_control') == 'nil'

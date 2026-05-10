@@ -44,7 +44,14 @@ from bigraph_schema.schema import (
     DivideReset,
     DivideShare,
     LineageSeed,
+    NPRandom,
 )
+
+
+# Key used by ``divide(NPRandom)`` to publish the divide rng on
+# context for sibling dispatchers (``divide(Array)`` for binomial
+# bulk splits, etc.) to consume.
+DIVIDE_RNG_CONTEXT_KEY = '__divide_rng__'
 from bigraph_schema.methods.default import default
 
 
@@ -83,16 +90,39 @@ def _binomial_split(rng, total):
     return total / 2.0, total / 2.0
 
 
+def _split_keys_by_rng_first(schema, state):
+    """Partition state keys into (NPRandom-typed first, then rest).
+
+    The framework dispatches by schema type, but dict iteration order
+    is insertion order — there's no guarantee that an NPRandom field
+    is visited before its sibling Array fields. This helper enforces
+    "rng-publishers run first" so ``divide(NPRandom)`` populates
+    ``context[DIVIDE_RNG_CONTEXT_KEY]`` before ``divide(Array)`` calls
+    that need it consume it.
+    """
+    is_dict = isinstance(schema, dict)
+    def _sub(name):
+        return schema.get(name) if is_dict else getattr(schema, name, None)
+    rng_keys, other_keys = [], []
+    for k in state:
+        if k.startswith('_'):
+            other_keys.append(k)
+            continue
+        if isinstance(_sub(k), NPRandom):
+            rng_keys.append(k)
+        else:
+            other_keys.append(k)
+    return rng_keys + other_keys
+
+
 @dispatch
 def divide(schema: Node, state, context=None, path=(), rng=None):
     """Walk an arbitrary Node's typed fields when state is a dict.
 
-    Many cell schemas are auto-resolved to a plain Node with per-field
-    attributes set via setattr (e.g. cell.bulk = BulkArray, cell.unique
-    = Tree, cell.listeners = Map). Recurse into each known field so
-    field-specific divide() dispatchers fire. Unknown fields (not on
-    the schema) are shared by reference — they're typically static
-    metadata or instance handles.
+    Visits NPRandom-typed fields first so their dispatcher can
+    publish the rng on inner_context, making it available to sibling
+    fields' dispatchers (e.g. integer-array binomial splits). All
+    other fields are visited in their original order.
     """
     if state is None:
         return None, None
@@ -100,14 +130,13 @@ def divide(schema: Node, state, context=None, path=(), rng=None):
         return state, state
     inner_context = context if context is not None else state
     a, b = {}, {}
-    for k, v in state.items():
+    for k in _split_keys_by_rng_first(schema, state):
+        v = state[k]
         if k.startswith('_'):
-            # Schema metadata leaking into state — share
             a[k] = b[k] = v
             continue
         sub_schema = getattr(schema, k, None)
         if sub_schema is None:
-            # No typed schema for this field — share by reference
             a[k] = b[k] = v
         else:
             a[k], b[k] = divide(sub_schema, v, inner_context, path + (k,), rng)
@@ -120,6 +149,8 @@ def divide(schema: dict, state, context=None, path=(), rng=None):
     field name → Node. Walk the dict the same way `apply(dict, ...)` does:
     for each schema field, recurse into the corresponding state value;
     unknown state keys are shared by reference (they have no schema info).
+
+    Same NPRandom-first ordering as the Node dispatcher above.
     """
     if state is None:
         return None, None
@@ -127,7 +158,8 @@ def divide(schema: dict, state, context=None, path=(), rng=None):
         return state, state
     inner_context = context if context is not None else state
     a, b = {}, {}
-    for k, v in state.items():
+    for k in _split_keys_by_rng_first(schema, state):
+        v = state[k]
         if k.startswith('_'):
             a[k] = b[k] = v
             continue
@@ -137,6 +169,25 @@ def divide(schema: dict, state, context=None, path=(), rng=None):
         else:
             a[k], b[k] = divide(sub_schema, v, inner_context, path + (k,), rng)
     return a, b
+
+
+@dispatch
+def divide(schema: NPRandom, state, context=None, path=(), rng=None):
+    """RNG state shares by reference between daughters AND publishes
+    itself on ``context[DIVIDE_RNG_CONTEXT_KEY]`` so sibling Array
+    dispatchers can use it for deterministic binomial splits.
+
+    Without this, ``divide(Array)`` on integer counts falls back to
+    a fresh ``np.random.default_rng()`` (system-entropy seed) every
+    division — splits become non-deterministic across runs even with
+    the same seeds and same state.
+    """
+    if isinstance(state, (np.random.RandomState, np.random.Generator)):
+        if isinstance(context, dict):
+            # Don't clobber an explicit publisher upstream (e.g. nested
+            # cells with their own rng).
+            context.setdefault(DIVIDE_RNG_CONTEXT_KEY, state)
+    return state, state
 
 
 @dispatch
@@ -264,6 +315,13 @@ def divide(schema: Array, state, context=None, path=(), rng=None):
     (interpretable as counts), halve for floats, share by reference
     for anything else.
 
+    The binomial rng comes from (in order): explicit ``rng=`` arg →
+    ``context[DIVIDE_RNG_CONTEXT_KEY]`` (published by an
+    ``NPRandom`` dispatcher visited earlier in the same divide walk)
+    → ``np.random.default_rng()`` fallback. The fallback is
+    non-deterministic; it should only fire when no rng exists in the
+    schema being divided, which is rarely what callers want.
+
     A generic Array could carry counts, indices, deltas, timestamps,
     listeners, or sparse update buffers, and the framework has no way
     to know which. Splitting only makes sense for non-negative
@@ -280,7 +338,10 @@ def divide(schema: Array, state, context=None, path=(), rng=None):
             if (state < 0).any():
                 # Mixed signs — share by reference (safest)
                 return state, state
-            rng = rng or np.random.default_rng()
+            if rng is None and isinstance(context, dict):
+                rng = context.get(DIVIDE_RNG_CONTEXT_KEY)
+            if rng is None:
+                rng = np.random.default_rng()
             return _binomial_split(rng, state)
         if np.issubdtype(state.dtype, np.floating):
             return state / 2.0, state / 2.0
