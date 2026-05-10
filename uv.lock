@@ -28,7 +28,7 @@ wheels = [
 
 [[package]]
 name = "bigraph-schema"
-version = "1.3.0"
+version = "1.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "fire" },
