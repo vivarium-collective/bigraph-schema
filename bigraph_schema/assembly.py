@@ -454,9 +454,10 @@ def validate_sorting(schema, sorting, path=()):
     violations = []
 
     def get_sort(node, key=None):
-        """Get the sort of a node — from _control annotation or key."""
+        """Get the sort of a node — from ``_type`` (canonical),
+        ``_control`` (legacy), or the parent key."""
         if isinstance(node, dict):
-            ctrl = node.get('_control', key)
+            ctrl = node.get('_type', node.get('_control', key))
         elif isinstance(node, Node):
             ctrl = _control_name(node)
         else:
@@ -484,7 +485,8 @@ def validate_sorting(schema, sorting, path=()):
         if isinstance(node, Link) and sorting.link_formation:
             port_sorts = []
             info = sorting.controls.get(
-                node.get('_control') if isinstance(node, dict)
+                node.get('_type', node.get('_control'))
+                if isinstance(node, dict)
                 else _control_name(node), {})
             for s in info.get('port_sorts', ()):
                 port_sorts.append(s)
@@ -825,8 +827,16 @@ def _match_node(state_node, redex_node, bindings):
     if isinstance(redex_node, dict):
         if not isinstance(state_node, dict):
             return False
-        if '_control' in redex_node:
-            if state_node.get('_control') != redex_node['_control']:
+        # Bigraph signature labels can be carried in ``_type`` (the
+        # canonical form, sharing one namespace with the typesystem)
+        # or in the legacy ``_control`` field. We accept either, so
+        # rules and states authored against either spelling continue
+        # to match. Mixed usage on a single node would be a bug, but
+        # we don't enforce that here.
+        redex_sort = redex_node.get('_type', redex_node.get('_control'))
+        if redex_sort is not None:
+            state_sort = state_node.get('_type', state_node.get('_control'))
+            if state_sort != redex_sort:
                 return False
         return _match_dict(state_node, redex_node, bindings)
 
@@ -937,6 +947,14 @@ def _match_dict(state_dict, redex_dict, bindings):
             else:
                 trial[last_site] = surplus
 
+        # Pull the trial's __key_map__ out before updating bindings:
+        # otherwise a recursive _match_dict that found no non-_
+        # children (e.g. matching a literal sort tag like
+        # ``{'_type': 'Cytoplasm'}``) writes an *empty* __key_map__
+        # into trial, and a blind ``bindings.update(trial)`` would
+        # wipe out any __key_map__ already accumulated by an earlier
+        # sibling match at this same level. We merge instead.
+        trial_keymap = trial.pop('__key_map__', None)
         bindings.update(trial)
 
         # Merge this level's key map with any inner-level maps that
@@ -953,7 +971,10 @@ def _match_dict(state_dict, redex_dict, bindings):
             **assignment,
             **{sk: assignment.get(sk) for sk in site_keys}}
         existing_keymap = bindings.get('__key_map__', {})
-        bindings['__key_map__'] = {**this_keymap, **existing_keymap}
+        merged = {**this_keymap, **existing_keymap}
+        if trial_keymap:
+            merged = {**merged, **trial_keymap}
+        bindings['__key_map__'] = merged
         return True
 
     return False
@@ -1040,14 +1061,17 @@ def _instantiate_walk(reactum, bindings, instantiation, edges):
             # This site maps to a redex site via instantiation
             source_key = instantiation.get(key, key)
             filler = bindings.get(source_key)
-            if isinstance(filler, dict) and '_control' not in filler:
+            if isinstance(filler, dict) \
+                    and '_control' not in filler \
+                    and '_type' not in filler:
                 # Forest of trees captured (Milner: a site is a hole
                 # in the place graph that gets filled with a region;
                 # the region's roots become children at the slot
                 # position rather than nesting under the site name).
-                # We detect a forest by the absence of ``_control``
-                # at the top — every bigraph node has one, so a
-                # ``_control``-less dict is a multi-rooted region.
+                # We detect a forest by the absence of any sort
+                # label at the top — every bigraph node has either
+                # ``_type`` (canonical) or ``_control`` (legacy), so
+                # a label-less dict is a multi-rooted region.
                 for fk, fv in filler.items():
                     result[fk] = copy.deepcopy(fv)
             elif filler is None:
