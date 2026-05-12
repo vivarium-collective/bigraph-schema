@@ -2,6 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/bigraph-schema.svg)](https://pypi.org/project/bigraph-schema/)
 [![Tutorial](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/bigraph-schema/notebooks/demo.html)
+[![Units Demo](https://img.shields.io/badge/GitHub%20Pages-Units%20demo-blue)](https://vivarium-collective.github.io/bigraph-schema/notebooks/units.html)
 
 `bigraph-schema` provides a serializable type schema for compositional and multiscale modeling.  
 It defines a compact, extensible language for describing hierarchical data structures — the foundation of the Vivarium 2.0 simulation framework.
@@ -27,6 +28,8 @@ The following resources provide guided introductions and examples:
 - [Type System Overview](https://vivarium-collective.github.io/bigraph-schema/notebooks/core.html) – Demonstrates how to use the `Core` API for schema inference, normalization, and serialization.
 
 - [Bigraph Schema Basics Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html) – Explains how to compose and visualize schema graphs using the `bigraph-schema` syntax.
+
+- [Units Demo](https://vivarium-collective.github.io/bigraph-schema/notebooks/units.html) – Demonstrates `Quantity`, `Number._units`, and wire-level unit conversion.
 
 
 ---
