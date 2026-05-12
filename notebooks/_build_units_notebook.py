@@ -110,7 +110,44 @@ _, q_back, _ = core.realize(quantity_schema, encoded)
 q_back == q
 """)
 
-# ---------- Section 2 placeholder — filled in Task 2 ----------
+# ---------- Section 2: Number._units ----------
+md("""\
+## 2. `Number._units` — units as metadata
+
+Use `_units` on a numeric type when you want to record the unit but keep the runtime value as a plain `float` (or numpy array). The unit string lives **only on the schema** — at runtime the value has no awareness of its units.
+""")
+
+md("### Defining a unit-annotated float schema")
+code("""\
+float_schema = core.access({'_type': 'float', '_units': 'mol/L'})
+float_schema
+""")
+
+code("""\
+core.render(float_schema)
+""")
+
+md("### The runtime value is a plain `float`")
+code("""\
+_, x, _ = core.realize(float_schema, 2.5)
+x, type(x).__name__
+""")
+
+md("### Serialize is just the number")
+code("""\
+core.serialize(float_schema, x)
+""")
+
+md("""\
+### When to use which
+
+| Approach        | Runtime value     | Unit info lives in | Use when                                            |
+|-----------------|-------------------|--------------------|-----------------------------------------------------|
+| `Number._units` | plain `float`     | schema annotation  | hot numerical paths; downstream code expects floats |
+| `Quantity`      | `pint.Quantity`   | the value itself   | unit-safe arithmetic / introspection at runtime     |
+
+`_units` is the right default for high-throughput numerics — no per-value pint overhead, and unit-aware wiring (Section 3) still works. Reach for `Quantity` when you need `.to()` or unit-checked arithmetic on individual values.
+""")
 # ---------- Section 3 placeholder — filled in Task 3 ----------
 
 def cell_dict(cell_type: str, source: str) -> dict:
