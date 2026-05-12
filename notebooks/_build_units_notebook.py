@@ -148,7 +148,71 @@ md("""\
 
 `_units` is the right default for high-throughput numerics — no per-value pint overhead, and unit-aware wiring (Section 3) still works. Reach for `Quantity` when you need `.to()` or unit-checked arithmetic on individual values.
 """)
-# ---------- Section 3 placeholder — filled in Task 3 ----------
+# ---------- Section 3: wire-level conversion ----------
+md("""\
+## 3. Unit conversion across wires
+
+When a state's schema declares `_units` and a port's schema declares a *different* `_units`, `bigraph-schema` doesn't silently mismatch — it computes a scalar conversion factor at compile time (using `pint`) and applies it during view/projection. The relevant logic is `Core._compute_unit_scale` in `bigraph_schema/core.py`.
+
+You can call it directly to see what happens for a given pair of units.
+""")
+
+md("### Compatible units: a real scale factor")
+code("""\
+core._compute_unit_scale('fg', 'g')
+""")
+
+code("""\
+core._compute_unit_scale('mmol/L', 'mol/L')
+""")
+
+md("""\
+### No-op cases
+
+`_compute_unit_scale` returns `1.0` (a true pass-through) in three cases:
+
+- one side has no unit declared (`''`)
+- the units match exactly
+- one side is `'dimensionless'`
+""")
+
+code("""\
+core._compute_unit_scale('', 'g'), core._compute_unit_scale('g', 'g'), core._compute_unit_scale('dimensionless', 'g')
+""")
+
+md("""\
+### Incompatible units raise
+
+Asking pint to convert `fg` to `mol` is meaningless; the call raises. (In wire resolution this is caught and falls back to `1.0`, but it's intended to surface as a wire validation error — see the docstring in `core.py`.)
+""")
+
+code("""\
+try:
+    core._compute_unit_scale('fg', 'mol')
+except Exception as exc:
+    print(type(exc).__name__, exc)
+""")
+
+md("""\
+### How this plays out in a schema
+
+Picture a composite where a state at path `x` is stored in `fg` and a process reads it through a port declared in `g`:
+
+```python
+schema = {
+    'x': {'_type': 'float', '_units': 'fg'},
+    'proc': {
+        '_type': 'process',
+        'inputs': {'mass': {'_type': 'float', '_units': 'g'}},
+        ...
+    },
+}
+```
+
+When the wire from `proc.inputs.mass` resolves down to `x`, `bigraph-schema` computes `1e-15` once and caches it. Each view of the port multiplies the underlying `float` by `1e-15` so the process always sees grams, while storage stays in femtograms.
+
+The full machinery — `_collect_view_scales`, `view`, `project`, `apply` — is internal to `Core` and is exercised end-to-end in [`process-bigraph`](https://github.com/vivarium-collective/process-bigraph). For this notebook we stop at showing the scale computation itself.
+""")
 
 def cell_dict(cell_type: str, source: str) -> dict:
     src_lines = source.splitlines(keepends=True)
