@@ -2,6 +2,8 @@ name: Convert Jupyter Notebook to HTML
 
 on:
   push:
+    branches:
+      - main
     paths:
       - 'notebooks/demo.ipynb'
       - 'notebooks/core.ipynb'
