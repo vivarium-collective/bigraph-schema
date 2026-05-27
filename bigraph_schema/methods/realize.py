@@ -658,12 +658,28 @@ def realize_link(core, schema: Link, encode, path=()):
         else:
             config = encode_config
 
-        # Try (config, core) first (standard bigraph signature), then
-        # fall back to (config) only (vivarium-style processes whose
-        # __init__ doesn't accept core).
+        # Pick constructor shape by inspecting the signature, instead
+        # of catching TypeError from edge_class(config, core) (which
+        # would also swallow real TypeErrors from inside __init__ and
+        # mask the underlying bug). Standard bigraph processes accept
+        # ``(config, core)``; vivarium-style processes take ``(config)``.
+        import inspect
         try:
+            sig = inspect.signature(edge_class)
+            accepts_core = (
+                'core' in sig.parameters
+                or any(p.kind == inspect.Parameter.VAR_KEYWORD
+                       for p in sig.parameters.values())
+                or len([p for p in sig.parameters.values()
+                        if p.kind in (inspect.Parameter.POSITIONAL_ONLY,
+                                      inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                                      inspect.Parameter.VAR_POSITIONAL)]) >= 2
+            )
+        except (ValueError, TypeError):
+            accepts_core = True  # default to standard bigraph signature
+        if accepts_core:
             edge_instance = edge_class(config, core)
-        except TypeError:
+        else:
             edge_instance = edge_class(config)
         # Ensure all instances have core for config_schema resolution
         # (needed by serialize). Vivarium-style processes don't accept
