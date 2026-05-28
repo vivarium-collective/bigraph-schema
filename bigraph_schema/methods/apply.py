@@ -216,6 +216,41 @@ def _deep_merge_into(base, overlay):
     return base
 
 
+def _path_copy_merge(base, overlay):
+    """Persistent-data-structure-style merge.
+
+    Returns a NEW dict whose top-level is a shallow copy of ``base``,
+    with keys present in ``overlay`` recursively replaced. Subtrees of
+    ``base`` not touched by ``overlay`` are shared by reference, not
+    copied. Mutation-free w.r.t. ``base`` for the parts ``overlay``
+    doesn't reach.
+
+    Used by ``_handle_divide_sentinel`` so per-daughter overrides
+    (e.g. ``{division: {config: {agent_id: '00'}}}``) don't poison the
+    shared base produced by the type-driven divide walk (where
+    ``divide(Link)`` deliberately shares ``config`` by reference
+    between daughters so unmodified parameters/sim_data refs aren't
+    deep-copied).
+
+    Allocation cost is proportional to the *depth and width of
+    ``overlay``*, not the size of ``base``. For an override of depth
+    D touching K keys per level, this allocates O(D × K) dicts;
+    everything else (numpy arrays, sim_data references, the other
+    sibling configs) stays shared.
+    """
+    if not isinstance(overlay, dict):
+        return overlay
+    if not isinstance(base, dict):
+        return overlay
+    result = dict(base)
+    for key, overlay_value in overlay.items():
+        if key in base and isinstance(base[key], dict) and isinstance(overlay_value, dict):
+            result[key] = _path_copy_merge(base[key], overlay_value)
+        else:
+            result[key] = overlay_value
+    return result
+
+
 def _handle_divide_sentinel(value_schema, state, update, path):
     """Process a `_divide` sentinel from a Map / dict update.
 
@@ -352,7 +387,12 @@ def _handle_divide_sentinel(value_schema, state, update, path):
     daughters_state = {}
     for i, (key, override) in enumerate(daughter_items):
         baseline = baselines[i]
-        daughter = (_deep_merge_into(baseline, override)
+        # ``_path_copy_merge`` (not the in-place ``_deep_merge_into``)
+        # because divide(Link) shares config dicts by reference between
+        # both baseline daughters — mutating one daughter's override
+        # would silently corrupt the other. Path-copy only allocates
+        # along the override spine; everything else stays shared.
+        daughter = (_path_copy_merge(baseline, override)
                     if override else baseline)
         state[key] = daughter
         daughter_keys.append(key)
