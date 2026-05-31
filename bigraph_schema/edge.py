@@ -6,6 +6,9 @@ Edge
 Base class for all edges in the bigraph schema.
 """
 
+import inspect
+
+
 def default_wires(schema):
     """
     Create default wiring for a schema by connecting each port to a store of the same name.
@@ -27,6 +30,12 @@ class Edge:
     """
 
     config_schema = {}
+
+    # Canonical formal description of this edge — a string (markdown / LaTeX) that
+    # states what the process/step computes (governing equations, assumptions).
+    # Override on subclasses. Tooling reads it via `describe()`, which falls back
+    # to the class docstring when this is left empty.
+    description = ''
 
     def __init__(self, config=None, core=None):
         """
@@ -134,5 +143,17 @@ class Edge:
             'inputs': self.inputs(),
             'outputs': self.outputs()
         }
+
+    def describe(self):
+        """
+        Return this edge's formal description.
+
+        Returns the ``description`` class attribute — the canonical formal
+        (mathematical) description of what this process/step computes. Falls
+        back to the class docstring when ``description`` is unset, so existing
+        edges still surface something. Subclasses should set ``description`` to
+        a string (markdown / LaTeX) for a precise, standardized description.
+        """
+        return self.description or inspect.getdoc(type(self)) or ''
 
 
