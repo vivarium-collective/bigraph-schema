@@ -189,7 +189,15 @@ def resolve(current: Wrap, update: Wrap, path=None):
         return schema
     else:
         # TODO: resolve wrappings somehow?
-        raise Exception(f'cannot resolve two different wrappings {current} {update}')
+        import traceback as _tb
+        _frames = ''.join(_tb.format_stack(limit=12)[:-1])
+        raise Exception(
+            f'cannot resolve two different wrappings at path={path}:\n'
+            f'  current ({type(current).__name__}, _default={getattr(current, "_default", "?")}, '
+            f'_value type={type(getattr(current, "_value", None)).__name__})\n'
+            f'  update ({type(update).__name__}, _default={getattr(update, "_default", "?")}, '
+            f'_value type={type(getattr(update, "_value", None)).__name__})\n'
+            f'  call stack:\n{_frames}')
 
 
 @dispatch
