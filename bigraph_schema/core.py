@@ -1619,24 +1619,58 @@ class Core:
 
 _cached_base_core = None
 
+
+def _isolated_copy(base):
+    """Return a Core that shares nothing mutable with ``base``.
+
+    ``copy.copy`` alone is a *shallow* copy: the new object would share
+    the very same ``registry``, ``link_registry``, ``method_registry`` and
+    cache dicts as ``base``, so registering a type on one leaks into all
+    others. Here we shallow-copy the object (preserving cheaply-derived
+    state like ``packages_distributions``) and then give the copy its own
+    registry containers plus fresh, empty per-instance caches.
+
+    The copy depth is deliberately container-level, not deep: registry
+    *entries* are immutable schema nodes/dicts, so duplicating the dicts
+    that hold them is enough to prevent key-level leakage between cores
+    without the cost of deep-copying every schema.
+    """
+    import copy
+    clone = copy.copy(base)
+    clone.registry = dict(base.registry)
+    clone.link_registry = dict(base.link_registry)
+    clone.method_registry = dict(base.method_registry)
+    # Fresh, empty per-instance caches so warm entries (and the id-keyed
+    # witnesses they hold) never bleed between independently-allocated cores.
+    clone._access_cache = collections.OrderedDict()
+    clone._access_string_cache = {}
+    clone._link_cache = {}
+    clone._resolve_cache = collections.OrderedDict()
+    clone._promote_cache = collections.OrderedDict()
+    # The parse visitor closes over its owning core; rebind it to the clone.
+    clone.parse_visitor = CoreVisitor(clone)
+    return clone
+
+
 def allocate_core(top=None):
     """Allocate a new Core with all discovered packages.
 
-    The base core (without ``top``) is cached after the first call
-    to avoid repeated expensive package discovery. Each call returns
-    a fresh copy so callers can register additional types independently.
+    The base core (without ``top``) is built once and cached to avoid
+    repeated expensive package discovery. Each call returns an *isolated*
+    copy: it shares no mutable state with any other allocated core, so
+    types/links/methods registered on one core never leak into another,
+    while the base types from discovery are present on every copy. See
+    :func:`_isolated_copy` for the (container-level) copy semantics.
     """
     global _cached_base_core
     if top is None and _cached_base_core is not None:
-        import copy
-        return copy.copy(_cached_base_core)
+        return _isolated_copy(_cached_base_core)
 
     core = Core(BASE_TYPES)
     core = discover_packages(core, top)
 
     if top is None:
         _cached_base_core = core
-        import copy
-        return copy.copy(core)
+        return _isolated_copy(core)
 
     return core
