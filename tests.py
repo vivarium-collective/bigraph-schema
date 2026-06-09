@@ -15,6 +15,42 @@ def core():
     return allocate_core()
 
 
+def test_allocate_core_isolation():
+    """Two allocate_core() instances must not share registry mutations.
+
+    Registering a type/link/method on one core must not be visible on a
+    separately-allocated core, while both must still carry the base types
+    discovered when the cached base was built.
+    """
+    a = allocate_core()
+    b = allocate_core()
+
+    # Mutable containers and caches are distinct objects per instance.
+    assert a.registry is not b.registry
+    assert a.link_registry is not b.link_registry
+    assert a.method_registry is not b.method_registry
+    assert a._access_cache is not b._access_cache
+    assert a._resolve_cache is not b._resolve_cache
+    assert a._promote_cache is not b._promote_cache
+
+    # Both copies carry the shared base types.
+    assert 'float' in a.registry
+    assert 'float' in b.registry
+
+    # Mutating one must not leak into the other.
+    a.register_type('zzz_isolation_probe', 'float')
+    assert 'zzz_isolation_probe' in a.registry
+    assert 'zzz_isolation_probe' not in b.registry
+
+    a.register_link('zzz_isolation_link', Edge)
+    assert 'zzz_isolation_link' in a.link_registry
+    assert 'zzz_isolation_link' not in b.link_registry
+
+    a.register_method('zzz_isolation_method', lambda core, *args, **kw: None)
+    assert 'zzz_isolation_method' in a.method_registry
+    assert 'zzz_isolation_method' not in b.method_registry
+
+
 
 # test data ----------------------------
 
