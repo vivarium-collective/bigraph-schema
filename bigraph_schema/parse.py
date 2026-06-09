@@ -170,7 +170,7 @@ def render_expression(expression):
     return str(expression)  # fallback for unknown structures
 
 # --- Debugging/Testing ---------------------------------------------------------
-def test_parse_parameters():
+def _demo_parse_parameters():
     """Test parsing and rendering for all example expressions."""
     for label, expr in parameter_examples.items():
         parsed = parse_expression(expr)
@@ -180,4 +180,4 @@ def test_parse_parameters():
             print(f'  Rendered: {render_expression(parsed)}')
 
 if __name__ == '__main__':
-    test_parse_parameters()
+    _demo_parse_parameters()

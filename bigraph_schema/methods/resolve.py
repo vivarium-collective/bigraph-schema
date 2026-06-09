@@ -669,7 +669,6 @@ def resolve(current: Array, update: Node, path=None):
 # @dispatch
 # def resolve(current: Node, update: Array, path=None):
 #     if path:
-#         import ipdb; ipdb.set_trace()
 
 #         return resolve_array_path(update, current, path=path)
 
@@ -848,7 +847,6 @@ def resolve(current: String, update: Node, path=None):
 
 # @dispatch
 # def resolve(current: Node, update: String):
-#     # import ipdb; ipdb.set_trace()
 #     if update._default:
 #         current = replace(current, **{'_default': update._default})
 #     return current
