@@ -19,23 +19,13 @@ validation, and data transformation.
 expressions into structured schema nodes (`Union`, `Tuple`, `Array`, `Link`, etc.).
 """
 
-import sys
 import copy
-import typing
-import inspect
 import collections
 
 from pprint import pformat as pf
 
-import numpy as np
-from numpy import dtype
-import numpy.lib.format as nf
-
-import logging
-
-from plum import dispatch
 from parsimonious.nodes import NodeVisitor
-from dataclasses import dataclass, is_dataclass, replace
+from dataclasses import dataclass, replace
 import importlib.metadata
 
 from bigraph_schema.schema import (

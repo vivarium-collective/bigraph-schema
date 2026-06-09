@@ -358,17 +358,6 @@ def _value_is_empty(value):
         return not value
 
 
-def tuplify_dict(d):
-    if isinstance(d, dict):
-        tulip = []
-        for key, value in d.items():
-            tulip.append((
-                key,
-                tuplify_dict(value)))
-    else:
-        return d
-
-
 @dispatch
 def merge(schema: dict, current, update, path=()):
     if path:
