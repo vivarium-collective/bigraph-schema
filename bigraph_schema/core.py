@@ -24,7 +24,6 @@ import collections
 
 from pprint import pformat as pf
 
-from parsimonious.nodes import NodeVisitor
 from dataclasses import dataclass, replace
 import importlib.metadata
 
@@ -69,11 +68,10 @@ from bigraph_schema.schema import (
     LocalProtocol
 )
 
-from bigraph_schema.parse import visit_expression
+from bigraph_schema.parse import visit_expression, CoreVisitor
 from bigraph_schema.edge import Edge
 from bigraph_schema.methods import (
     reify_schema,
-    handle_parameters,
     infer,
     default,
     resolve,
@@ -114,122 +112,6 @@ def append_link_path(schema, link_path):
         schema['_link_path'].append(link_path)
 
     return schema
-
-
-class CoreVisitor(NodeVisitor):
-    """Visitor that converts parsed bigraph expressions into schema node structures.
-
-    Operates within a `Core` context, mapping grammar constructs
-    (unions, merges, type parameters, and defaults) into dataclass-based nodes.
-    Handles normalization of nested expressions (e.g. `tuple[int,float]`,
-    `link[a:int|b:string]`, `(x:y|z:w)`) into instances of `Union`, `Tuple`,
-    or structured dicts.
-    """
-
-    def __init__(self, operation):
-        """Initialize with the active `Core`."""
-        self.operation = operation
-
-    def visit_expression(self, node, visit):
-        """Top-level entry; returns first child."""
-        return visit[0]
-
-    def visit_union(self, node, visit):
-        """Parse `a~b~c` into a `Union(_options=[a,b,c])`."""
-        head = [visit[0]]
-        tail = [tree['visit'][1] for tree in visit[1]['visit']]
-        return Union(_options=head + tail)
-
-    def visit_merge(self, node, visit):
-        """Parse `a|b|c`; dicts merge to one mapping, others form a `Tuple`."""
-        head = [visit[0]]
-        tail = [tree['visit'][1] for tree in visit[1]['visit']]
-        nodes = head + tail
-        if all(isinstance(tree, dict) for tree in nodes):
-            merged = {}
-            for tree in nodes:
-                merged.update(tree)
-            return merged
-        else:
-            try:
-                values = tuple([int(x) for x in nodes])
-
-                return values
-            except Exception as e:
-                return Tuple(_values=nodes)
-
-    def visit_tree(self, node, visit):
-        """Delegate directly to nested element."""
-        return visit[0]
-
-    def visit_bigraph(self, node, visit):
-        """Alias for tree; allows recursion within nested bigraphs."""
-        return visit[0]
-
-    def visit_group(self, node, visit):
-        """Handle grouped subexpression `( ... )`; return tuple or dict."""
-        group_value = visit[1]
-        return group_value if isinstance(group_value, (list, tuple, dict, Tuple)) else (group_value,)
-
-    def visit_nest(self, node, visit):
-        """Handle `key:subtype` pairs (used in trees/maps).
-
-        The left side of the colon is a dict key — always a plain string,
-        not a resolved type.  We use the raw text from the parse node
-        rather than the visited (type-resolved) value, since key names
-        like ``process`` may collide with registered type names.
-        """
-        key = node.children[0].text
-        return {key: visit[2]}
-
-    def visit_type_name(self, node, visit):
-        """Resolve base type, parameters, and defaults into schema nodes."""
-        schema = visit[0]
-
-        # Parse parameter list
-        type_parameters = [
-            parameter
-            for parameter in visit[1]['visit']]
-
-        if type_parameters:
-            schema = handle_parameters(self.operation, schema, type_parameters[0])
-
-        # Parse default value `{...}`
-        default_visit = visit[2]['visit']
-        if default_visit:
-            default = default_visit[0]
-            if isinstance(schema, Node):
-                schema._default = default
-            elif isinstance(schema, dict):
-                schema['_default'] = default
-
-        return schema
-
-    def visit_parameter_list(self, node, visit):
-        """Return ordered list of parameters `[A,B,C]`."""
-        first = [visit[1]]
-        rest = [inner['visit'][1] for inner in visit[2]['visit']]
-        return first + rest
-
-    def visit_default_block(self, node, visit):
-        """Extract contents of `{...}` blocks."""
-        return visit[1]
-
-    def visit_default(self, node, visit):
-        """Return text inside default braces as string."""
-        return node.text
-
-    def visit_symbol(self, node, visit):
-        """Resolve bare symbol names via the operation registry or parse visitor."""
-        return self.operation.access(node.text)
-
-    def visit_nothing(self, node, visit):
-        """Handle empty productions (e.g., trailing commas)."""
-        return None
-
-    def generic_visit(self, node, visit):
-        """Fallback: return raw parse node and visited children."""
-        return {'node': node, 'visit': visit}
 
 
 class Core:
