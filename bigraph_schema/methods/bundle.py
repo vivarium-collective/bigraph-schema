@@ -74,6 +74,100 @@ REF_KEY = '$bundle_ref'
 MIN_ARRAY_BYTES = 10_000  # ~10 KB threshold for externalizing
 
 
+# ---------------------------------------------------------------------------
+# Parquet array I/O
+# ---------------------------------------------------------------------------
+# The bundle WRITE side lives here because bigraph-schema owns the bundle
+# format (``BundleContext`` + the dispatched ``bundle`` method). The matching
+# READ side, ``_load_array_parquet`` / ``resolve_refs`` / ``load_bundle``, lives
+# in ``process_bigraph.bundle`` (the layer that orchestrates loading). The two
+# are a format pair — keep their column/metadata layout in sync. pyarrow is
+# imported lazily so bigraph-schema does not gain a hard pyarrow dependency
+# (bundling is opt-in).
+
+def _save_array_parquet(arr: "np.ndarray", filepath: str) -> None:
+    """Save a numpy array to a Parquet file.
+
+    Strategy:
+    - 1D/2D numeric arrays: store as columnar Parquet (one column per
+      array column, or a single column for 1D).
+    - Higher-dimensional or structured arrays: store as a binary blob
+      with shape/dtype metadata.
+
+    Counterpart reader: ``process_bigraph.bundle._load_array_parquet``.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if arr.dtype.names:
+        # Structured array — each field becomes one or more Parquet columns.
+        # Sub-array fields (e.g. shape (N, 2)) are flattened into separate
+        # columns: field.0, field.1, etc.
+        columns = {}
+        subarray_meta = {}  # field_name -> {'shape': [...], 'dtype': '...'}
+
+        for name in arr.dtype.names:
+            field_data = arr[name]
+            if field_data.dtype.kind == 'U':
+                columns[name] = pa.array(field_data.tolist(), type=pa.string())
+            elif field_data.ndim > 1:
+                # Sub-array field: flatten into N columns
+                sub_shape = field_data.shape[1:]
+                sub_count = int(np.prod(sub_shape))
+                flat = field_data.reshape(len(field_data), sub_count)
+                for i in range(sub_count):
+                    columns[f'{name}.{i}'] = pa.array(flat[:, i])
+                subarray_meta[name] = {
+                    'shape': list(sub_shape),
+                    'dtype': str(field_data.dtype.base),
+                    'count': sub_count,
+                }
+            else:
+                columns[name] = pa.array(field_data)
+
+        table = pa.table(columns)
+
+        # Store the original dtype string and sub-array info in file metadata
+        file_meta = {
+            'dtype': str(arr.dtype),
+            'subarray_fields': subarray_meta,
+        }
+        schema_meta = table.schema.metadata or {}
+        schema_meta[b'bundle_structured'] = json.dumps(file_meta).encode()
+        table = table.replace_schema_metadata(schema_meta)
+
+        pq.write_table(table, filepath, compression='zstd')
+
+    elif arr.ndim == 1 or (arr.ndim == 2 and arr.shape[1] <= 500):
+        # Dense 1D or moderate 2D array — columnar storage.
+        if arr.ndim == 1:
+            table = pa.table({'c0': pa.array(arr)})
+        else:
+            columns = {
+                f'c{i}': pa.array(arr[:, i])
+                for i in range(arr.shape[1])
+            }
+            table = pa.table(columns)
+
+        # Store original dtype in metadata
+        meta = {b'dtype': str(arr.dtype).encode(),
+                b'shape': json.dumps(list(arr.shape)).encode()}
+        table = table.replace_schema_metadata(meta)
+        pq.write_table(table, filepath, compression='zstd')
+
+    else:
+        # Wide 2D (>500 cols) or 3D+ — binary blob with compression.
+        # Storing as raw bytes in a single Parquet row with zstd
+        # compression. This is still very efficient: a 50MB int8 array
+        # compresses to ~15MB.
+        table = pa.table({
+            'data': [arr.tobytes()],
+            'shape': [json.dumps(list(arr.shape))],
+            'dtype': [str(arr.dtype)],
+        })
+        pq.write_table(table, filepath, compression='zstd')
+
+
 @dataclass
 class BundleContext:
     """Accumulates array files during a bundle operation.
@@ -93,8 +187,6 @@ class BundleContext:
         If an array with identical content has already been saved, the
         existing file is reused (content-addressed deduplication).
         """
-        from process_bigraph.bundle import _save_array_parquet
-
         os.makedirs(self.arrays_dir, exist_ok=True)
 
         content_id = hashlib.sha256(
