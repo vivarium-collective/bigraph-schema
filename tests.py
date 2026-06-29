@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 import numpy as np
@@ -8,6 +10,8 @@ from bigraph_schema.schema import (
     Float, String, Map, Tree, Link, Array, Overwrite, Node, Empty,
     Site, InnerName, OuterName, Interface)
 from bigraph_schema.methods import check, render, serialize, apply, reconcile
+from bigraph_schema.package.discover import (
+    recursive_dynamic_import, _should_skip_submodule)
 
 
 @pytest.fixture
@@ -2493,6 +2497,92 @@ def test_interfaces_container_traversal(core):
     inner4, _ = interfaces(schema4)
     assert len(inner4._places) == 1
     assert inner4._places[0][0] == ('hier', '*')
+
+
+def _build_fake_discovery_package(root):
+    """Materialize a fake installable package tree on disk for the
+    package-discovery walk to traverse.
+
+    Layout (under ``root``)::
+
+        fake_disco_pkg/__init__.py        # registers a sentinel marker
+        fake_disco_pkg/boom.py            # raises RuntimeError at import
+        fake_disco_pkg/good.py            # imports cleanly
+        fake_disco_pkg/test_scaffold.py   # must NOT be imported (test_*)
+        fake_disco_pkg/testing/__init__.py# must NOT be imported (testing)
+
+    The ``boom`` module mimics the observed failure mode (starlette
+    raising ``RuntimeError`` rather than ``ImportError`` when an optional
+    test dependency is missing). The ``test_scaffold``/``testing`` modules
+    raise on import too, so if the walk *did* import them the test would
+    fail loudly rather than silently.
+    """
+    pkg = root / "fake_disco_pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "boom.py").write_text(
+        "raise RuntimeError('simulated optional-dep failure at import')\n")
+    (pkg / "good.py").write_text("VALUE = 1\n")
+    # If the discovery walk ever imports these, they explode — proving a
+    # regression in the test-scaffolding skip rule.
+    (pkg / "test_scaffold.py").write_text(
+        "raise AssertionError('test_* module must not be imported by walk')\n")
+    testing = pkg / "testing"
+    testing.mkdir()
+    (testing / "__init__.py").write_text(
+        "raise AssertionError('testing pkg must not be imported by walk')\n")
+
+
+def test_recursive_import_skips_runtime_error_module(tmp_path, capsys):
+    """A submodule raising a non-ImportError (RuntimeError) at import time
+    must be caught and skipped so the package walk completes — this is the
+    httpx2/starlette crash class that aborted ``build_core()`` downstream."""
+    _build_fake_discovery_package(tmp_path)
+    sys.path.insert(0, str(tmp_path))
+    try:
+        core = allocate_core()
+        # Must NOT raise even though `boom` raises RuntimeError at import.
+        core, edges, types, visited = recursive_dynamic_import(
+            core, "fake_disco_pkg")
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in list(sys.modules):
+            if name == "fake_disco_pkg" or name.startswith("fake_disco_pkg."):
+                del sys.modules[name]
+
+    out = capsys.readouterr().out
+    # (b) a clear warning was emitted naming the module and exception type.
+    assert "fake_disco_pkg.boom" in out
+    assert "RuntimeError" in out
+
+
+def test_recursive_import_skips_test_modules(tmp_path):
+    """The walk must never import test scaffolding (test_*, tests, testing).
+    Those fake modules raise on import, so reaching them would surface as an
+    error here; instead they should be silently skipped."""
+    _build_fake_discovery_package(tmp_path)
+    sys.path.insert(0, str(tmp_path))
+    try:
+        core = allocate_core()
+        recursive_dynamic_import(core, "fake_disco_pkg")
+        # The good (non-test) submodule got imported; the test ones did not.
+        assert "fake_disco_pkg.good" in sys.modules
+        assert "fake_disco_pkg.testing" not in sys.modules
+        assert "fake_disco_pkg.test_scaffold" not in sys.modules
+    finally:
+        sys.path.remove(str(tmp_path))
+        for name in list(sys.modules):
+            if name == "fake_disco_pkg" or name.startswith("fake_disco_pkg."):
+                del sys.modules[name]
+
+
+def test_should_skip_submodule_rules():
+    """Unit-level guard for the test-scaffolding skip predicate."""
+    assert _should_skip_submodule("tests")
+    assert _should_skip_submodule("testing")
+    assert _should_skip_submodule("test_e2e")
+    assert not _should_skip_submodule("processes")
+    assert not _should_skip_submodule("contest")  # not a prefix match
 
 
 if __name__ == '__main__':

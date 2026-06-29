@@ -8,6 +8,19 @@ from bigraph_schema import Edge
 from bigraph_schema.schema import Node
 
 
+# Submodule / subpackage names that core discovery must never import.
+# Test scaffolding routinely pulls in heavy, test-only optional
+# dependencies (e.g. fastapi/starlette ``TestClient`` needs httpx) and
+# registers no Processes/Steps/Types worth discovering. Importing it can
+# raise arbitrary exceptions and abort the whole walk, so skip it up front.
+SKIP_SUBMODULES = frozenset({"tests", "testing"})
+
+
+def _should_skip_submodule(subname: str) -> bool:
+    """True for test scaffolding that must be excluded from the walk."""
+    return subname in SKIP_SUBMODULES or subname.startswith("test_")
+
+
 def find_edges(mapping, module_name=None):
     discovered = []
     for _, cls in mapping:
@@ -83,6 +96,12 @@ def recursive_dynamic_import(
         try:
             module = importlib.import_module(adjusted)
 
+        except (KeyboardInterrupt, SystemExit):
+            # Never swallow interpreter-control signals: a Ctrl-C or an
+            # intentional sys.exit() raised at import time must propagate
+            # so discovery can't trap a deliberate interpreter exit.
+            raise
+
         except ImportError as e:
             # Catch both ModuleNotFoundError (the target itself is missing)
             # and ImportError (the target exists but a dep inside it failed
@@ -97,6 +116,20 @@ def recursive_dynamic_import(
                 print(f"module `{adjusted}` not found during dynamic import")
             return core, edges, types, visited
 
+        except Exception as e:
+            # A submodule can fail at import time with an exception that is
+            # NOT an ImportError — e.g. starlette raising RuntimeError when
+            # an optional test dependency (httpx) is absent, or an OSError
+            # from a module that touches the filesystem at import. One broken
+            # or optional submodule must never abort the entire package walk,
+            # so log a clear warning and skip it. KeyboardInterrupt/SystemExit
+            # are BaseException subclasses and are intentionally not caught
+            # here (handled above), so Ctrl-C still works.
+            print(
+                f"skipping `{adjusted}` "
+                f"({type(e).__name__} raised at import: {e})")
+            return core, edges, types, visited
+
     # Allow module to register types into core
     if hasattr(module, "register_types"):
         core = module.register_types(core)
@@ -108,6 +141,9 @@ def recursive_dynamic_import(
     # Recurse into submodules if this is a package
     if hasattr(module, "__path__"):
         for _, subname, _ in pkgutil.iter_modules(module.__path__):
+            # Never descend into test scaffolding (test_*, tests, testing).
+            if _should_skip_submodule(subname):
+                continue
             submod = f"{adjusted}.{subname}"
             core, sub_edges, sub_types, visited = recursive_dynamic_import(
                 core, submod, visited=visited)
