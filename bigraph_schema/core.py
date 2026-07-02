@@ -104,8 +104,8 @@ def schema_keys(schema):
 def append_link_path(schema, link_path):
     if isinstance(schema, Node):
         if not hasattr(schema, '_link_path'):
-            schema.link_path = []
-        schema.link_path.append(link_path)
+            schema._link_path = []
+        schema._link_path.append(link_path)
     else:
         if not '_link_path' in schema:
             schema['_link_path'] = []
@@ -200,7 +200,7 @@ class Core:
             self.registry[key] = self.resolve(self.registry[key], data)
 
     def register_link(self, key, link):
-        if key in self.registry:
+        if key in self.link_registry:
             self.update_link(key, link)
         else:
             self.link_registry[key] = link
