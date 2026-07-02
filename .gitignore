@@ -9,6 +9,7 @@ __pycache__
 .python-version
 .pytest_cache
 lib/
+build/
 *.ipynb_checkpoints/
 dist/
 bigraph_schema.egg-info/
