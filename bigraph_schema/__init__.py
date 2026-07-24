@@ -1,4 +1,5 @@
 from bigraph_schema.edge import Edge
+from bigraph_schema.contract import ProcessContract, resolve_contract
 from bigraph_schema.protocols import local_lookup_module
 
 from bigraph_schema.schema import BASE_TYPES, resolve_path, deep_merge, make_default

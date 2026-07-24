@@ -726,6 +726,17 @@ def serialize(schema: Link, state):
     if state.get('_triggers'):
         encode['_triggers'] = state.get('_triggers')
 
+    # Additive: surface the resolved ProcessContract when the live instance
+    # supports one. Guarded so a process without contract support (or any odd
+    # state) never breaks Link serialization.
+    try:
+        from bigraph_schema.contract import resolve_contract
+        contract = resolve_contract(instance) if instance is not None else None
+        if contract is not None:
+            encode['_contract'] = contract.to_dict()
+    except Exception:
+        pass
+
     return encode
 
 

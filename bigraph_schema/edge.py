@@ -8,6 +8,8 @@ Base class for all edges in the bigraph schema.
 
 import inspect
 
+from bigraph_schema.contract import resolve_contract
+
 
 def default_wires(schema):
     """
@@ -36,6 +38,14 @@ class Edge:
     # Override on subclasses. Tooling reads it via `describe()`, which falls back
     # to the class docstring when this is left empty.
     description = ''
+
+    # Structured superset of `description` (a `ProcessContract`, or a dict of
+    # its fields). Left `None` on the base class — resolves through normal MRO,
+    # so leaving it unset never changes runtime behavior. Subclasses may set it
+    # to advertise per-port / per-config / per-symbol semantics; when unset the
+    # contract is derived from `description` (or the docstring). Read it via the
+    # resolver method below or the module fn `contract.resolve_contract`.
+    contract = None
 
     def __init__(self, config=None, core=None):
         """
@@ -155,5 +165,20 @@ class Edge:
         a string (markdown / LaTeX) for a precise, standardized description.
         """
         return self.description or inspect.getdoc(type(self)) or ''
+
+    def describe_contract(self):
+        """
+        Return this edge's resolved :class:`~bigraph_schema.contract.ProcessContract`.
+
+        A declared ``contract`` (class attribute) wins, merged with
+        ``description``; otherwise the contract is derived from ``description``
+        or the class docstring. Returns ``None`` when there is nothing to
+        surface. Never raises.
+
+        (Named ``describe_contract`` rather than ``contract`` because ``contract``
+        is the data slot subclasses populate — a same-named method would shadow
+        it and break declaration.)
+        """
+        return resolve_contract(self)
 
 
