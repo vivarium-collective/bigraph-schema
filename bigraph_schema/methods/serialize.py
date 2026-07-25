@@ -486,17 +486,42 @@ def render(schema: Node, defaults=False):
     return wrap_default(schema, subrender) if defaults else subrender
 
 
-# Reverse lookup: Node subclass -> registered type name
+# Reverse lookup: Node subclass -> registered type name. Seeded from BASE_TYPES,
+# and extended by the core as it registers further types (e.g. workspace types
+# like `inplace_dict`) via `register_type_name` — so render() can emit a name for
+# any registered type, not only the base set.
 _TYPE_NAME_CACHE = {}
+_BASE_SEEDED = False
+
+
+def _seed_base_types():
+    global _BASE_SEEDED
+    if _BASE_SEEDED:
+        return
+    from bigraph_schema.schema import BASE_TYPES
+    for name, type_cls in BASE_TYPES.items():
+        if isinstance(type_cls, type):
+            _TYPE_NAME_CACHE.setdefault(type_cls, name)
+    _BASE_SEEDED = True
+
+
+def register_type_name(cls, name):
+    """Record a ``Node`` subclass → its registered type name so ``render`` can
+    emit the name for types registered beyond BASE_TYPES. Prefer an explicit
+    registered name (e.g. ``inplace_dict``) over the class's own CamelCase name
+    (types are commonly auto-registered under ``__name__`` too, so first-wins
+    would otherwise keep ``InPlaceDict``)."""
+    if not isinstance(cls, type):
+        return
+    _seed_base_types()
+    existing = _TYPE_NAME_CACHE.get(cls)
+    if existing is None or (existing == cls.__name__ and name != cls.__name__):
+        _TYPE_NAME_CACHE[cls] = name
+
 
 def _node_type_name(cls):
     """Get the registered type name for a Node subclass, if any."""
-    if not _TYPE_NAME_CACHE:
-        # Build cache from BASE_TYPES
-        from bigraph_schema.schema import BASE_TYPES
-        for name, type_cls in BASE_TYPES.items():
-            if isinstance(type_cls, type):
-                _TYPE_NAME_CACHE[type_cls] = name
+    _seed_base_types()
     return _TYPE_NAME_CACHE.get(cls)
 
 @dispatch
