@@ -73,6 +73,7 @@ def recursive_dynamic_import(
     core,
     module,
     visited: Set[str] | None = None,
+    is_package: bool = False,
 ) -> tuple[object, List[tuple[str, Type[Edge]]], List[tuple[str, type]]]:
     if visited is None:
         visited = set()
@@ -92,18 +93,26 @@ def recursive_dynamic_import(
         # plus a back-compat shim shipped in the same distribution). Walk EVERY
         # package for the dist — otherwise an empty shim shadows the real
         # package and its edges/types/visualizations are never discovered.
-        dist_packages = core.distributions_packages.get(module)
-        if dist_packages is not None:
-            for package in dist_packages:
-                if package in visited:
-                    continue
-                core, pkg_edges, pkg_types, visited = recursive_dynamic_import(
-                    core, package, visited=visited)
-                edges.extend(pkg_edges)
-                types.extend(pkg_types)
-            return core, edges, types, visited
+        #
+        # `is_package` guards against the DIST-NAME == IMPORT-PACKAGE-NAME case
+        # (e.g. a dist `v2ecoli` whose import package is also `v2ecoli`): without
+        # it, recursing on that package name re-enters this dist branch and loops
+        # forever (RecursionError). Recursions from the dist loop below (and from
+        # the submodule walk) force `is_package=True` so the name is imported as a
+        # package, never re-interpreted as a dist.
+        if not is_package:
+            dist_packages = core.distributions_packages.get(module)
+            if dist_packages is not None:
+                for package in dist_packages:
+                    if package in visited:
+                        continue
+                    core, pkg_edges, pkg_types, visited = recursive_dynamic_import(
+                        core, package, visited=visited, is_package=True)
+                    edges.extend(pkg_edges)
+                    types.extend(pkg_types)
+                return core, edges, types, visited
 
-        # Not a known dist name -> treat as an import-package/module name.
+        # An import-package/module name -> import + walk it.
         adjusted = module
         if adjusted in visited:
             return core, edges, types, visited
@@ -162,7 +171,7 @@ def recursive_dynamic_import(
                 continue
             submod = f"{adjusted}.{subname}"
             core, sub_edges, sub_types, visited = recursive_dynamic_import(
-                core, submod, visited=visited)
+                core, submod, visited=visited, is_package=True)
             edges.extend(sub_edges)
             types.extend(sub_types)
 

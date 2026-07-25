@@ -37,3 +37,27 @@ def test_distributions_packages_values_are_lists():
     assert all(isinstance(v, list) for v in core.distributions_packages.values())
     # bigraph-schema is always present and maps to the bigraph_schema package.
     assert "bigraph_schema" in core.distributions_packages.get("bigraph-schema", [])
+
+
+def test_dist_name_equal_package_name_does_not_recurse(monkeypatch):
+    """A dist whose NAME equals its import PACKAGE name (e.g. a dist ``v2ecoli``
+    whose import package is also ``v2ecoli``) must not recurse forever.
+
+    Regression: the multi-package walk recursed on each of a dist's packages;
+    when a package name equalled the dist name it re-entered the dist branch and
+    looped until ``RecursionError`` (~3000 frames). The ``is_package`` guard
+    imports such a name as a package instead of re-interpreting it as a dist.
+    """
+    import importlib.metadata
+    from bigraph_schema import Core
+    from bigraph_schema.package.discover import recursive_dynamic_import
+
+    fake = {"selfpkg": ["selfpkg"], "bigraph_schema": ["bigraph-schema"]}
+    monkeypatch.setattr(
+        importlib.metadata, "packages_distributions", lambda: fake)
+    core = Core({})
+
+    # Must terminate (the package import simply fails and is skipped),
+    # NOT raise RecursionError.
+    _core, _edges, _types, visited = recursive_dynamic_import(core, "selfpkg")
+    assert "selfpkg" in visited
