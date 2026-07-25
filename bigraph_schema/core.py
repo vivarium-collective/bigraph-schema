@@ -188,6 +188,17 @@ class Core:
             self.registry[key] = found
         # Invalidate access cache since type registry changed
         self._access_cache.pop(key, None)
+        # Record the reverse class -> name mapping so serialize.render() can emit
+        # this type's NAME (not a Python class repr) when a port declares it as a
+        # type OBJECT (e.g. a process whose inputs() returns InPlaceDict()).
+        try:
+            from bigraph_schema.methods.serialize import register_type_name
+            from bigraph_schema.schema import Node
+            cls = found if isinstance(found, type) else type(found)
+            if isinstance(cls, type) and issubclass(cls, Node):
+                register_type_name(cls, key)
+        except Exception:
+            pass
 
     def register_types(self, types):
         """Bulk register multiple type keys into the operation registry."""
