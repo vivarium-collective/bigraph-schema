@@ -135,10 +135,16 @@ class Core:
             for key, values in importlib.metadata.packages_distributions().items()
             for value in values}
 
-        self.distributions_packages = {
-            value: key
-            for key, values in self.packages_distributions.items()
-            for value in values}
+        # dist -> LIST of its import packages. A single distribution can ship
+        # more than one import package (e.g. a real package plus a back-compat
+        # shim), so this must AGGREGATE, not last-wins-collapse to a single
+        # package — otherwise an empty shim can shadow the real package and its
+        # edges/types/visualizations are never discovered (bigraph-schema
+        # discover walks every package listed here).
+        self.distributions_packages = {}
+        for package, dists in self.packages_distributions.items():
+            for dist in dists:
+                self.distributions_packages.setdefault(dist, []).append(package)
 
         self.registry = {}
         self.link_registry = {}
