@@ -88,7 +88,23 @@ def recursive_dynamic_import(
         visited.add(adjusted)
 
     if isinstance(module, str):
-        adjusted = core.distributions_packages.get(module, module)
+        # A dist name can map to MORE THAN ONE import package (a real package
+        # plus a back-compat shim shipped in the same distribution). Walk EVERY
+        # package for the dist — otherwise an empty shim shadows the real
+        # package and its edges/types/visualizations are never discovered.
+        dist_packages = core.distributions_packages.get(module)
+        if dist_packages is not None:
+            for package in dist_packages:
+                if package in visited:
+                    continue
+                core, pkg_edges, pkg_types, visited = recursive_dynamic_import(
+                    core, package, visited=visited)
+                edges.extend(pkg_edges)
+                types.extend(pkg_types)
+            return core, edges, types, visited
+
+        # Not a known dist name -> treat as an import-package/module name.
+        adjusted = module
         if adjusted in visited:
             return core, edges, types, visited
         visited.add(adjusted)
