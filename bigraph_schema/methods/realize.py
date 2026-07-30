@@ -716,13 +716,19 @@ def realize_link(core, schema: Link, encode, path=()):
         else:
             subschema = getattr(schema, port)
 
-            subschema._default = encode[port]
-            wires_schema, wires_state, submerges = realize(core, subschema, encode[port], path+(port,))
-            if wires_state is None:
-                decode[port] = default_wires(port_schema)
+            if isinstance(subschema, dict):
+                # ``access`` materializes declared wires as a plain
+                # ``{port: path}`` dict, which carries no ``_default`` to
+                # stamp and is already the value realize would produce.
+                decode[port] = encode[port]
             else:
-                decode[port] = wires_state
-            merges += submerges
+                subschema._default = encode[port]
+                wires_schema, wires_state, submerges = realize(core, subschema, encode[port], path+(port,))
+                if wires_state is None:
+                    decode[port] = default_wires(port_schema)
+                else:
+                    decode[port] = wires_state
+                merges += submerges
 
         submerges = port_merges(
             core,
@@ -741,7 +747,12 @@ def realize_link(core, schema: Link, encode, path=()):
             if has_instance and key in ('config', 'instance'):
                 decode[key] = value
             elif hasattr(schema, key):
-                getattr(schema, key)._default = value
+                field_schema = getattr(schema, key)
+                if hasattr(field_schema, '_default'):
+                    field_schema._default = value
+                # Otherwise the field is materialized — ``access`` left a
+                # plain dict/string that already *is* the value, so there is
+                # no schema node to stamp a default onto.
             else:
                 attr, decode[key], submerges = realize(
                     core, {}, value, path+(key,))

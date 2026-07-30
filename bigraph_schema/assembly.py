@@ -102,6 +102,12 @@ def interfaces(schema):
                     if port not in wired_out:
                         outer_names[port] = path
 
+            # An edge may leave its *implementation* open: a site in
+            # ``address`` (or ``config``) is an abstract process — the face is
+            # fixed and only what satisfies it is missing.
+            walk(node.address, path + ('address',))
+            walk(node.config, path + ('config',))
+
         elif isinstance(node, (Wires, Path)):
             # Link-graph wiring structure — not place-graph children.
             pass
@@ -584,6 +590,19 @@ def validate_sorting(schema, sorting, path=()):
 #       job.
 
 
+def is_address(value):
+    """True when ``value`` spells an edge address rather than a subtree.
+
+    An address is a string (``'local:copasi'``, ``'copasi'``) or the canonical
+    ``{'protocol', 'data'}`` dict — the two forms ``normalize_address``
+    accepts.
+    """
+    if isinstance(value, str):
+        return bool(value)
+    return (isinstance(value, dict)
+            and 'protocol' in value and 'data' in value)
+
+
 def _face_from_address(core, address, config):
     """Resolve an edge's ports from the class its address names.
 
@@ -639,6 +658,14 @@ def collect_face(core, node):
     if callable(interface):
         face = interface() or {}
         return dict(face.get('inputs') or {}), dict(face.get('outputs') or {})
+
+    # A bare address is a filler in its own right — the abstract-process case,
+    # where only the implementation is being injected. Its face is the face of
+    # the process it names.
+    if is_address(node):
+        resolved = _face_from_address(core, node, None)
+        if resolved is not None:
+            return resolved
 
     def declared(get, address, config):
         found_in = get('_inputs')
@@ -788,10 +815,18 @@ def _as_schema(core, site, filler):
     state. An unsorted site has no sort to carry the value, so the raw
     filler stands (the pure-Milner case).
     """
+    sort = getattr(site, '_sort', '')
+
+    # Injecting an implementation: a face-sorted site filled with an *address*
+    # compiles to a Protocol, the same shape ``access`` gives a declared
+    # address — so the filled edge realizes exactly like a written one.
+    if core is not None and isinstance(sort, Link) and is_address(filler):
+        from bigraph_schema.methods.handle_parameters import access_address
+        return access_address(core, filler)
+
     if isinstance(filler, (Node, dict)):
         return filler
 
-    sort = getattr(site, '_sort', '')
     if not sort or core is None:
         return filler
 

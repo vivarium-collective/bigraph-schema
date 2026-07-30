@@ -2333,6 +2333,149 @@ def test_fill_does_not_splice_a_multi_root_filler(core):
     assert filled['study']['level'] is not filled['study']['model']['level']
 
 
+# ── address injection: an abstract process ──────────────────────────
+
+
+SOLVER_FACE = {
+    '_type': 'link',
+    '_inputs': {'model': 'string'},
+    '_outputs': {'trajectory': 'map[float]'}}
+
+
+class CopasiSolver(Edge):
+    """A conforming implementation of the solver face."""
+
+    def inputs(self):
+        return {'model': 'string'}
+
+    def outputs(self):
+        return {'trajectory': 'map[float]'}
+
+
+class TelluriumSolver(Edge):
+    """A second conforming implementation — the point of the pattern."""
+
+    def inputs(self):
+        return {'model': 'string', 'seed': 'integer'}   # may over-provide
+
+    def outputs(self):
+        return {'trajectory': 'map[float]'}
+
+
+class NotASolver(Edge):
+    """Right shape of thing, wrong face."""
+
+    def inputs(self):
+        return {'model': 'string'}
+
+    def outputs(self):
+        return {'steady_state': 'float'}
+
+
+def _abstract_solver(core):
+    """A template edge whose face, config and wiring are fixed and whose
+    **address** — its implementation — is the only hole."""
+    core.register_link('CopasiSolver', CopasiSolver)
+    core.register_link('TelluriumSolver', TelluriumSolver)
+    core.register_link('NotASolver', NotASolver)
+    return core.access({
+        'sim': {
+            '_type': 'link',
+            'address': {'_type': 'site', '_sort': SOLVER_FACE},
+            '_inputs': {'model': 'string'},
+            '_outputs': {'trajectory': 'map[float]'},
+            'inputs': {'model': ['model']},
+            'outputs': {'trajectory': ['traj']}},
+        'model': 'string'})
+
+
+def test_an_address_site_is_an_open_hole(core):
+    """An edge that fixes its face but leaves ``address`` open is a process
+    definition without an implementation — and it is genuinely not ground."""
+    from bigraph_schema.assembly import is_ground, collect_sites
+
+    template = _abstract_solver(core)
+
+    assert not is_ground(template)
+    assert 'sim/address' in collect_sites(template)
+
+
+@pytest.mark.parametrize('implementation', ['CopasiSolver', 'TelluriumSolver'])
+def test_injecting_a_conforming_address_builds(core, implementation):
+    """Inject a conforming implementation → a runnable edge. This is the
+    solver-swap pattern: one face, many implementations, no code."""
+    template = _abstract_solver(core)
+
+    schema, state = core.build(
+        template, {'sim/address': f'local:{implementation}'})
+
+    assert state['sim']['address'] == {
+        'protocol': 'local', 'data': implementation}
+    assert isinstance(state['sim']['instance'], Edge)
+    # The parts the template fixed are untouched by the injection.
+    assert state['sim']['inputs'] == {'model': ['model']}
+    assert state['sim']['outputs'] == {'trajectory': ['traj']}
+
+
+def test_injecting_a_non_conforming_address_names_the_mismatch(core):
+    template = _abstract_solver(core)
+
+    with pytest.raises(ValueError, match="site 'sim/address'") as raised:
+        core.build(template, {'sim/address': 'local:NotASolver'})
+
+    message = str(raised.value)
+    assert 'trajectory' in message          # the port the face required
+    assert 'steady_state' in message        # what the filler offered instead
+
+
+def test_both_injection_flavors_go_through_one_fill(core):
+    """Address-hole and whole-edge site are the same operation: one
+    ``fill``, one ``admits``, differing only in what the filler spells."""
+    from bigraph_schema.assembly import interfaces
+    core.register_link('CopasiSolver', CopasiSolver)
+
+    # (a) address-hole — only the implementation varies.
+    address_hole = _abstract_solver(core)
+    by_address = core.fill_sites(
+        address_hole, {'sim/address': 'local:CopasiSolver'})
+
+    # (b) whole-edge site — inject the entire edge.
+    edge_hole = core.access({
+        'sim': {'_type': 'site', '_sort': SOLVER_FACE},
+        'model': 'string'})
+    by_edge = core.fill_sites(edge_hole, {'sim': core.access({
+        '_type': 'link',
+        'address': 'local:CopasiSolver',
+        'inputs': {'model': ['model']},
+        'outputs': {'trajectory': ['traj']}})})
+
+    for filled in (by_address, by_edge):
+        assert interfaces(filled)[0]._places == ()
+        assert filled['sim'].address._default == {
+            'protocol': 'local', 'data': 'CopasiSolver'}
+
+
+def test_wired_link_defaults_and_realizes(core):
+    """A link that declared its wiring must still default and realize.
+
+    ``access`` materializes declared wires as a plain ``{port: path}`` dict;
+    ``default``/``realize`` used to walk that as a schema and reach a raw
+    path list, so any edge that named its own wiring could not be built.
+    """
+    wired = core.access({'p': {
+        '_type': 'link',
+        '_inputs': {'x': 'float'},
+        '_outputs': {'y': 'float'},
+        'inputs': {'x': ['x']},
+        'outputs': {'y': ['y']}}})
+
+    state = core.fill(wired, {})
+
+    assert state['p']['inputs'] == {'x': ['x']}
+    assert state['p']['outputs'] == {'y': ['y']}
+    assert isinstance(state['p']['instance'], Edge)
+
+
 def test_compose_requires_one_root_per_site(core):
     """The arity law that makes splicing wrong: sites and roots match 1:1."""
     from bigraph_schema.assembly import compose, merge, barren, tensor
