@@ -267,3 +267,42 @@ hole is a **sorting**. All four decisions land as *deletions*:
 4. **`fill` is the one primitive; `compose` is a two-line adapter over it; register
    `core.fill_sites`** (never shadow `Core.bind`). `assembly.instantiate` already
    implements the substitution.
+
+---
+
+## 11. Implementation status (2026-07-30 · PR #175)
+
+Built by Fable; **1086 tests pass, 0 failures** (baseline 1067). Shipped:
+`assembly.fill_sites` (the primitive), `admits`/`admits_why`/`face_conforms`/
+`collect_face`/`collect_sites`, `compose` re-expressed over one shared substitution,
+`core.fill_sites`/`register_sort`/`admits`. All deletions held (no `compose_at`,
+`Slot`/`Template`, `_slots`; `BASE_TYPES` unchanged).
+
+**Task 0 found the foundation was broken (3 bugs, now fixed + tested).** The
+untested `compose` link-branch (a) never rebased the wire → realization crashed,
+(b) pointed inside a `Link` node, (c) wired only one end. Fixed: a join wires **both**
+ports to one shared store, rebased through the site; `compose` raises naming the port
+when a join isn't expressible. Also fixed: `render` dropped a site's `_sort` (leaked a
+Python object into the JSON document) — face-sorted templates now round-trip.
+
+### Open decision (resolve at Layer 2a's first task)
+
+5. **`fill_sites` place semantics: aim at forest-splice (Milner-correct).**
+   `instantiate` forest-splices a multi-root filler **at the parent** (roots are
+   *regions*); `compose`'s `_set_at_path` keeps the site's key as a **wrapper node**.
+   `fill_sites` currently follows `compose` (conservative — no behavior change). The
+   **decision:** move toward the Milner forest-splice, validated with **evidence** —
+   Layer 2a's first task fills a *real composite* into a site and picks the semantics
+   against what `Composite` actually consumes (updating `compose`'s tests if changed).
+   Until then `fill_sites` follows `compose`.
+
+### Deferred (next Fable pass)
+
+- **Cardinality** as a single `ReactionRule` (§4.5) — redex = marked region, reactum =
+  N keyed copies, fired via `fire_rule` before `fill_sites`.
+- **`build(core, template, overrides)`** convenience (§4.3) → `(schema, state)`.
+
+### Flagged, orthogonal (separate fix)
+
+- `is_bound`/`find_unbound_links` (`assembly.py:570`) read wires absolute-from-root,
+  contradicting `port_merges`' relative-to-parent — untested; left alone.
