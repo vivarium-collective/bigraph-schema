@@ -2243,6 +2243,104 @@ def test_link_round_trips_through_render(core, declaration):
         assert 'address' not in (rendered if isinstance(rendered, dict) else {})
 
 
+class LevelProcess(Edge):
+    """A registered edge that declares its ports on the class, the way every
+    real process does — the declaration names an address, not an interface."""
+
+    def inputs(self):
+        return {'level': 'float'}
+
+    def outputs(self):
+        return {'level': 'float'}
+
+
+def test_admits_resolves_a_filler_face_from_its_address(core):
+    """A real process declaration carries an address and a config, not its
+    ports. ``admits`` must resolve the face from the registered class, or a
+    site could only ever be filled by a declaration restating its own
+    interface — which no registered process does."""
+    core.register_link('LevelProcess', LevelProcess)
+
+    template = core.access({'study': {'model': {
+        '_type': 'site',
+        '_sort': {'_type': 'link',
+                  '_inputs': {'level': 'float'},
+                  '_outputs': {'level': 'float'}}}}})
+
+    # No _inputs/_outputs declared anywhere — only the address.
+    filler = core.access({'_type': 'link', 'address': 'local:LevelProcess'})
+    assert filler._inputs == {}
+
+    filled = core.fill_sites(template, {'model': filler})
+    assert filled['study']['model'] is not None
+
+    # An address naming a class with the wrong face is still rejected.
+    core.register_link('EmptyProcess', Edge)
+    wrong = core.access({'_type': 'link', 'address': 'local:EmptyProcess'})
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.fill_sites(template, {'model': wrong})
+
+
+# ── place semantics: a site takes one root, at the site's position ──
+
+
+def test_fill_places_a_filler_at_the_site_position(core):
+    """One site, one filler, at the site's own path.
+
+    Evidence (recorded here because it settles the open question): handed a
+    template whose ``model`` site is filled by a real registered process,
+    ``process_bigraph.Composite`` reports
+    ``process_paths == [('study', 'model')]`` — it expects the process node
+    to sit exactly where the site was.
+    """
+    core.register_link('LevelProcess', LevelProcess)
+    template = core.access({'study': {
+        'model': {'_type': 'site'},
+        'level': 'float'}})
+    filler = core.access({'_type': 'link', 'address': 'local:LevelProcess'})
+
+    filled = core.fill_sites(template, {'model': filler})
+
+    assert isinstance(filled['study']['model'], Link)
+    assert sorted(filled['study']) == ['level', 'model']
+
+
+def test_fill_does_not_splice_a_multi_root_filler(core):
+    """A multi-root filler nests **under** the site; it is not spliced into
+    the site's parent.
+
+    Splicing would (a) drop the site's key, so the filled region loses the
+    name the template gave it, and (b) merge the filler's roots into the
+    parent's namespace — here the filler's own ``level`` store would collide
+    with the template's ``study/level`` and one of the two would be silently
+    lost. Milner is the same answer from the other side: composition plugs
+    **one root into one site**, so a filler with n roots fills n sites, not
+    one — ``compose`` already enforces that arity.
+    """
+    template = core.access({'study': {
+        'model': {'_type': 'site'},
+        'level': 'float'}})
+    multi = core.access({
+        'A': {'_type': 'link', 'address': 'local:edge'},
+        'B': {'_type': 'link', 'address': 'local:edge'},
+        'level': 'float'})
+
+    filled = core.fill_sites(template, {'model': multi})
+
+    assert sorted(filled['study']) == ['level', 'model']
+    assert sorted(filled['study']['model']) == ['A', 'B', 'level']
+    # The filler's store and the template's store stay distinct.
+    assert filled['study']['level'] is not filled['study']['model']['level']
+
+
+def test_compose_requires_one_root_per_site(core):
+    """The arity law that makes splicing wrong: sites and roots match 1:1."""
+    from bigraph_schema.assembly import compose, merge, barren, tensor
+
+    with pytest.raises(ValueError, match='faces must match'):
+        compose(merge(1), tensor(barren('a'), barren('b')))
+
+
 def test_rendered_link_realizes(core):
     """A rendered link must survive realization — the round trip is only
     useful if the far end still loads. An address-less link previously

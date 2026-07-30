@@ -32,7 +32,7 @@ from typing import Optional, Dict, List as TypingList, Tuple as TypingTuple
 
 from bigraph_schema.schema import (
     Node, Empty, Site, Interface, Link, Wires, Path, Place,
-    Map, List, Set, Tree, Tuple, Wrap, Union,
+    Map, List, Set, Tree, Tuple, Wrap, Union, Protocol, normalize_address,
     is_schema_field)
 
 
@@ -584,14 +584,53 @@ def validate_sorting(schema, sorting, path=()):
 #       job.
 
 
-def collect_face(node):
-    """Collect a filler's **outer face** — the ports it declares.
+def _face_from_address(core, address, config):
+    """Resolve an edge's ports from the class its address names.
+
+    A real process declaration carries an **address** and a config, not its
+    ports — the ports live on the registered class and are only known once
+    it is built. Without this, a site could only ever be filled by a
+    declaration that restated its own interface, which no registered
+    process does.
+
+    Returns ``None`` when the address names nothing this core knows, so the
+    caller can fall back to whatever was declared.
+    """
+    if core is None:
+        return None
+
+    if isinstance(address, Protocol):
+        address = address._default
+    canonical = normalize_address(address)
+    if not isinstance(canonical, dict):
+        return None
+
+    edge_class = getattr(core, 'link_registry', {}).get(canonical.get('data'))
+    if edge_class is None:
+        return None
+
+    if isinstance(config, Node):
+        config = config._default
+    if not isinstance(config, dict):
+        config = {}
+
+    try:
+        face = edge_class(config, core).interface() or {}
+    except Exception:
+        return None
+
+    return dict(face.get('inputs') or {}), dict(face.get('outputs') or {})
+
+
+def collect_face(core, node):
+    """Collect a filler's **outer face** — the ports it exposes.
 
     Returns an ``(inputs, outputs)`` pair of port-type maps. An ``Edge``
     instance reports its own via ``interface()`` (``edge.py``); a ``Link``
-    reports ``_inputs``/``_outputs``; a subtree reports the union of the
-    Links it contains. Declared ports are used regardless of wiring — a
-    filler exposes its interface whether or not it is internally wired.
+    reports ``_inputs``/``_outputs``, or — when it declares none — the ports
+    of the class its address names; a subtree reports the union of the Links
+    it contains. Declared ports are used regardless of wiring: a filler
+    exposes its interface whether or not it is internally wired.
     """
     inputs = {}
     outputs = {}
@@ -601,18 +640,33 @@ def collect_face(node):
         face = interface() or {}
         return dict(face.get('inputs') or {}), dict(face.get('outputs') or {})
 
+    def declared(get, address, config):
+        found_in = get('_inputs')
+        found_out = get('_outputs')
+        found_in = found_in if isinstance(found_in, dict) else {}
+        found_out = found_out if isinstance(found_out, dict) else {}
+        if not found_in and not found_out:
+            resolved = _face_from_address(core, address, config)
+            if resolved is not None:
+                return resolved
+        return found_in, found_out
+
     def walk(subnode):
         if isinstance(subnode, Link):
-            if isinstance(subnode._inputs, dict):
-                inputs.update(subnode._inputs)
-            if isinstance(subnode._outputs, dict):
-                outputs.update(subnode._outputs)
+            found_in, found_out = declared(
+                lambda key: getattr(subnode, key, None),
+                getattr(subnode, 'address', None),
+                getattr(subnode, 'config', None))
+            inputs.update(found_in)
+            outputs.update(found_out)
         elif isinstance(subnode, dict):
-            if subnode.get('_type') == 'link':
-                if isinstance(subnode.get('_inputs'), dict):
-                    inputs.update(subnode['_inputs'])
-                if isinstance(subnode.get('_outputs'), dict):
-                    outputs.update(subnode['_outputs'])
+            if subnode.get('_type') in ('link', 'process', 'step'):
+                found_in, found_out = declared(
+                    subnode.get,
+                    subnode.get('address'),
+                    subnode.get('config'))
+                inputs.update(found_in)
+                outputs.update(found_out)
                 return
             for key, child in subnode.items():
                 if isinstance(key, str) and not key.startswith('_'):
@@ -632,7 +686,7 @@ def face_conforms(core, face, filler):
 
     Returns ``(ok, reason)``.
     """
-    provided = dict(zip(('inputs', 'outputs'), collect_face(filler)))
+    provided = dict(zip(("inputs", "outputs"), collect_face(core, filler)))
 
     for direction, port_key in (('inputs', '_inputs'), ('outputs', '_outputs')):
         required = getattr(face, port_key, None)
@@ -754,6 +808,23 @@ def _fill_at_paths(core, body, filling):
     filler is checked with :func:`admits` *before* substitution — while the
     site still exists — and a rejection is a fill error naming the site.
     Paths not in ``filling`` are left open.
+
+    **Place semantics (settled).** A filler is substituted **at the site's
+    own position**; it is not forest-spliced into the site's parent, which
+    is what ``instantiate`` does when a *redex* site captures several
+    sibling keys during matching. Reaction-matching and composition are
+    different operations and this is where they differ:
+
+    - Milner composition plugs **one root into one site**, so a filler with
+      n roots fills n sites — ``compose`` already enforces that arity.
+      Splicing a multi-root filler into a single site would silently turn
+      one hole into n nodes.
+    - Splicing drops the site's key, so the filled region loses the name the
+      template gave it, and merges the filler's roots into the parent's
+      namespace where they can collide with the template's own stores.
+    - Empirically, ``process_bigraph.Composite`` reports a filled model site
+      at ``('study', 'model')`` — it expects the process node exactly where
+      the site was, with a nested composite's internals kept under it.
     """
     result = copy.deepcopy(body)
 
