@@ -149,6 +149,10 @@ class Core:
         self.registry = {}
         self.link_registry = {}
         self.method_registry = {}
+        # sort name -> admits(core, site, filler): the FILLING discipline
+        # (what may close a hole), as opposed to Sorting.formation, which
+        # is the NESTING discipline (what may live inside what).
+        self.sort_registry = {}
         # ``_access_cache`` is keyed by ``id(dict)`` and holds the dict
         # witness alive (so id reuse after GC is detected). Fresh
         # short-lived dicts produced per-tick (projection schemas,
@@ -233,6 +237,33 @@ class Core:
 
     def register_method(self, key, data):
         self.method_registry[key] = data
+
+    def register_sort(self, key, admits):
+        """Register the **filling** discipline for a sort.
+
+        ``admits(core, site, filler) -> bool`` decides whether a filler may
+        close a site of this sort. Distinct from ``Sorting.formation``,
+        which is the *nesting* discipline (see ``assembly``); a sort with no
+        registered ``admits`` falls back to face-conformance when it names a
+        link and to ``check`` otherwise.
+        """
+        self.sort_registry[key] = admits
+
+    def admits(self, site, filler):
+        """Is ``filler`` an admissible filling for this sorted site?"""
+        from bigraph_schema.assembly import admits
+        return admits(self, site, filler)
+
+    def fill_sites(self, body, bindings):
+        """Substitute fillers into ``body``'s named open sites.
+
+        The one substitution primitive: ``admits``-checked, order-independent
+        across independent sites, and leaving unbound sites open so a
+        partially filled document is still a document. Note this is **not**
+        ``Core.bind``, which binds a logical key (a jump) to a target.
+        """
+        from bigraph_schema.assembly import fill_sites
+        return fill_sites(self, body, bindings)
 
     def call_method(self, key, *args, **kwargs):
         method = self.method_registry.get(key)

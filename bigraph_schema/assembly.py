@@ -182,7 +182,7 @@ def identity(interface):
 # ── Composition ─────────────────────────────────────────────────────
 
 
-def compose(outer, inner):
+def compose(outer, inner, core=None):
     """Compose ``outer ∘ inner``: substitute ``inner``'s roots into
     ``outer``'s Sites, and wire matching port names.
 
@@ -200,6 +200,13 @@ def compose(outer, inner):
       matches an inner name of ``outer`` (by port name), **join** the
       two ports — wire *both* ends to one shared store, so the ports
       meet the way ``realize`` resolves them. See ``_join_names``.
+
+    Place composition is exactly :func:`fill_sites` with positionally
+    matched bindings — Milner's sites are anonymous, so they are paired
+    with ``inner``'s roots by index rather than by name; both routes share
+    one substitution (``_fill_at_paths``). ``core`` is only needed when a
+    site is *sorted* (so ``admits`` can check the filler); plain Milner
+    composition over unsorted sites needs none.
 
     Currently handles: ground schemas (no Sites, all ports wired) and
     the identity cases. Raises ``NotImplementedError`` for cases not
@@ -228,19 +235,21 @@ def compose(outer, inner):
             f'compose: outer has {len(site_list)} sites but inner has '
             f'{len(root_keys)} roots — faces must match')
 
-    result = copy.deepcopy(outer)
-
     # Replace each site with the corresponding root from inner, recording
     # where each root landed so inner paths can be rebased into the
     # composed tree's coordinates.
+    filling = {}
     rebase = {}
-    for (site_path, _site), root_key in zip(site_list, root_keys):
+    for index, ((site_path, site), root_key) in enumerate(
+            zip(site_list, root_keys)):
         if root_key not in inner:
             raise ValueError(
                 f'compose: inner schema missing root {root_key!r}')
-        filler = copy.deepcopy(inner[root_key])
-        _set_at_path(result, site_path, filler)
+        filling[tuple(site_path)] = (
+            site_path[-1] if site_path else index, site, inner[root_key])
         rebase[root_key] = tuple(site_path)
+
+    result = _fill_at_paths(core, outer, filling)
 
     # --- Link composition: join matching names ---
     # inner's outer names → ports on inner's Links whose outputs are
@@ -558,6 +567,206 @@ def validate_sorting(schema, sorting, path=()):
         walk(schema, (), None)
 
     return violations
+
+
+# ── The filling discipline: admits ──────────────────────────────────
+# Milner's sorting constrains a bigraph in two ways that this module
+# keeps as two named relations, because they are different relations
+# that merely share an arity:
+#
+#   formation(parent_sort, child_sort)  — NESTING. May this child live
+#       inside this parent? Policed by ``validate_sorting`` over
+#       parent/child pairs, AFTER substitution.
+#   admits(core, site, filler)          — FILLING. May this filler close
+#       this hole? Checked BEFORE substitution, while the site — and so
+#       its ``_sort`` — still exists. Once a site is filled there is no
+#       site anymore, which is exactly why ``formation`` cannot do this
+#       job.
+
+
+def collect_face(node):
+    """Collect a filler's **outer face** — the ports it declares.
+
+    Returns an ``(inputs, outputs)`` pair of port-type maps. An ``Edge``
+    instance reports its own via ``interface()`` (``edge.py``); a ``Link``
+    reports ``_inputs``/``_outputs``; a subtree reports the union of the
+    Links it contains. Declared ports are used regardless of wiring — a
+    filler exposes its interface whether or not it is internally wired.
+    """
+    inputs = {}
+    outputs = {}
+
+    interface = getattr(node, 'interface', None)
+    if callable(interface):
+        face = interface() or {}
+        return dict(face.get('inputs') or {}), dict(face.get('outputs') or {})
+
+    def walk(subnode):
+        if isinstance(subnode, Link):
+            if isinstance(subnode._inputs, dict):
+                inputs.update(subnode._inputs)
+            if isinstance(subnode._outputs, dict):
+                outputs.update(subnode._outputs)
+        elif isinstance(subnode, dict):
+            if subnode.get('_type') == 'link':
+                if isinstance(subnode.get('_inputs'), dict):
+                    inputs.update(subnode['_inputs'])
+                if isinstance(subnode.get('_outputs'), dict):
+                    outputs.update(subnode['_outputs'])
+                return
+            for key, child in subnode.items():
+                if isinstance(key, str) and not key.startswith('_'):
+                    walk(child)
+
+    walk(node)
+    return inputs, outputs
+
+
+def face_conforms(core, face, filler):
+    """Structural subtyping of faces (the composition law, made typed).
+
+    The filler must provide **every** port the face requires, at a type
+    that ``core.resolve`` accepts. Over-providing is fine; under-providing
+    is not — that is what makes a site reusable across processes of the
+    same shape.
+
+    Returns ``(ok, reason)``.
+    """
+    provided = dict(zip(('inputs', 'outputs'), collect_face(filler)))
+
+    for direction, port_key in (('inputs', '_inputs'), ('outputs', '_outputs')):
+        required = getattr(face, port_key, None)
+        if not isinstance(required, dict):
+            continue
+        for port, port_schema in required.items():
+            if port not in provided[direction]:
+                return False, (
+                    f'filler does not provide {direction[:-1]} port '
+                    f'{port!r} (has {sorted(provided[direction])})')
+            try:
+                core.resolve(port_schema, provided[direction][port])
+            except Exception as error:
+                return False, (
+                    f'{direction[:-1]} port {port!r} does not resolve: '
+                    f'{error}')
+
+    return True, None
+
+
+def admits_why(core, site, filler):
+    """As :func:`admits`, but returns ``(ok, reason)`` so callers can say
+    *why* a filler was rejected."""
+    sort = getattr(site, '_sort', '') or ''
+    if not sort:
+        return True, None          # an unsorted hole — pure Milner
+
+    if core is None:
+        return False, (
+            f'site is sorted {sort!r} but no core was supplied to check it')
+
+    if isinstance(sort, str):
+        admits_fn = getattr(core, 'sort_registry', {}).get(sort)
+        if admits_fn is not None:
+            ok = admits_fn(core, site, filler)
+            return bool(ok), None if ok else (
+                f'sort {sort!r} rejected the filler')
+
+    face = core.access(sort)
+    if isinstance(face, Link):
+        return face_conforms(core, face, filler)
+
+    if core.check(sort, filler):
+        return True, None
+    return False, f'value does not satisfy sort {sort!r}'
+
+
+def admits(core, site, filler):
+    """Is ``filler`` an admissible filling for this sorted site?
+
+    Checked BEFORE substitution (see the section note above). An unsorted
+    site admits anything. A sort registered via ``core.register_sort``
+    decides for itself. A sort that names a **face** (``link[in, out]``,
+    or a link literal) is decided by structural conformance
+    (:func:`face_conforms`); any other sort is a value type, decided by
+    ``core.check``.
+    """
+    ok, _reason = admits_why(core, site, filler)
+    return ok
+
+
+# ── fill — the one substitution primitive ───────────────────────────
+
+
+def collect_sites(body):
+    """Map each open site's **name** to its path.
+
+    A site's name is its key in the place graph — the same convention
+    ``instantiate`` and ``Match.bindings`` already use. Raises when one
+    name is ambiguous across two paths, since bindings address sites by
+    name.
+    """
+    sites = {}
+    for path, site in interfaces(body)[0]._places:
+        name = path[-1] if path else ''
+        if name in sites:
+            raise ValueError(
+                f'fill: site name {name!r} is ambiguous — it appears at '
+                f'{sites[name][0]} and at {path}')
+        sites[name] = (path, site)
+    return sites
+
+
+def _fill_at_paths(core, body, filling):
+    """The substitution itself, shared by every way of naming a site.
+
+    ``filling`` maps a site's **path** to ``(label, site, filler)``. Each
+    filler is checked with :func:`admits` *before* substitution — while the
+    site still exists — and a rejection is a fill error naming the site.
+    Paths not in ``filling`` are left open.
+    """
+    result = copy.deepcopy(body)
+
+    for path, (label, site, filler) in filling.items():
+        ok, reason = admits_why(core, site, filler)
+        if not ok:
+            raise ValueError(
+                f'fill: filler rejected for site {label!r} at {path}: '
+                f'{reason}')
+        _set_at_path(result, path, copy.deepcopy(filler))
+
+    return result
+
+
+def fill_sites(core, body, bindings):
+    """Substitute fillers into named open sites — **the** primitive.
+
+    ``bindings`` maps a site's name to its filler. Sites with no binding
+    fall back to the site's ``_default`` if it has one and are otherwise
+    **left open** — a partially filled document is still a document, which
+    is what lets filling be incremental.
+
+    Filling independent sites commutes: each binding is applied at its own
+    path, so the result does not depend on the order of ``bindings``.
+    """
+    sites = collect_sites(body)
+
+    unknown = set(bindings) - set(sites)
+    if unknown:
+        raise ValueError(
+            f'fill: no such site(s): {sorted(unknown)} '
+            f'(open sites: {sorted(sites)})')
+
+    filling = {}
+    for name, (path, site) in sites.items():
+        if name in bindings:
+            filler = bindings[name]
+        elif getattr(site, '_default', None) is not None:
+            filler = site._default
+        else:
+            continue                    # left open, still a site
+        filling[path] = (name, site, filler)
+
+    return _fill_at_paths(core, body, filling)
 
 
 # ── Binding / link locality ─────────────────────────────────────────

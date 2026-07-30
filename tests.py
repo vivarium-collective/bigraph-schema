@@ -1733,6 +1733,234 @@ def test_compose_raises_when_the_join_is_inexpressible(core):
         compose(outer, inner)
 
 
+# ── fill + admits: one primitive, one filling discipline ────────────
+
+MODEL_FACE = {
+    '_type': 'link',
+    '_inputs': {'glucose': 'float'},
+    '_outputs': {'growth_rate': 'float'}}
+
+
+def _sorted_body(core, sort, **extra):
+    """A one-site document whose site carries ``sort``."""
+    return core.access({'study': {
+        'model': dict({'_type': 'site', '_sort': sort}, **extra),
+        'note': 'string'}})
+
+
+def _process(core, inputs, outputs):
+    return core.access({
+        '_type': 'link',
+        '_inputs': inputs,
+        '_outputs': outputs})
+
+
+def test_fill_admits_a_conforming_filler(core):
+    """A face-sorted site accepts a filler whose outer face conforms."""
+    body = _sorted_body(core, MODEL_FACE)
+    filler = _process(core, {'glucose': 'float'}, {'growth_rate': 'float'})
+
+    filled = core.fill_sites(body, {'model': filler})
+
+    from bigraph_schema.assembly import interfaces
+    assert isinstance(filled['study']['model'], Link)
+    assert not isinstance(filled['study']['model'], Site)
+    assert interfaces(filled)[0]._places == ()   # the hole is closed
+
+
+def test_fill_admits_an_over_providing_filler(core):
+    """Conformance is structural subtyping: over-providing ports is fine."""
+    body = _sorted_body(core, MODEL_FACE)
+    generous = _process(
+        core,
+        {'glucose': 'float', 'oxygen': 'float'},
+        {'growth_rate': 'float', 'waste': 'float'})
+
+    filled = core.fill_sites(body, {'model': generous})
+    assert 'oxygen' in filled['study']['model']._inputs
+
+
+def test_fill_rejects_an_under_providing_filler(core):
+    """Under-providing is a fill error that names the site and the port."""
+    body = _sorted_body(core, MODEL_FACE)
+    stingy = _process(core, {'glucose': 'float'}, {'biomass': 'float'})
+
+    with pytest.raises(ValueError, match="site 'model'") as raised:
+        core.fill_sites(body, {'model': stingy})
+    assert 'growth_rate' in str(raised.value)
+
+
+def test_fill_rejects_a_shape_mismatched_port(core):
+    """A shared port whose type will not ``resolve`` is not admissible."""
+    body = _sorted_body(core, MODEL_FACE)
+    mistyped = _process(
+        core, {'glucose': 'map[float]'}, {'growth_rate': 'float'})
+
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.fill_sites(body, {'model': mistyped})
+
+
+def test_fill_value_site_checks_and_rejects(core):
+    """A value-sorted site is decided by ``check``."""
+    body = _sorted_body(core, 'float')
+
+    filled = core.fill_sites(body, {'model': 3.5})
+    assert filled['study']['model'] == 3.5
+
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.fill_sites(body, {'model': 'not a float'})
+
+
+def test_fill_optional_site_falls_back_to_its_default(core):
+    """``optional``/``default`` live on the site, not in a header."""
+    body = _sorted_body(core, 'float', _default=1.25)
+
+    filled = core.fill_sites(body, {})
+    assert filled['study']['model'] == 1.25
+
+    # An explicit binding still wins over the default.
+    assert core.fill_sites(body, {'model': 9.0})['study']['model'] == 9.0
+
+
+def test_fill_unsorted_site_admits_anything(core):
+    """An unsorted site is a pure Milner hole — no filling constraint."""
+    body = core.access({'world': {'hole': {'_type': 'site'}}})
+    assert core.fill_sites(body, {'hole': 42})['world']['hole'] == 42
+
+
+def test_fill_rejects_an_unknown_site_name(core):
+    body = _sorted_body(core, 'float')
+    with pytest.raises(ValueError, match='no such site'):
+        core.fill_sites(body, {'nonexistent': 1.0})
+
+
+def test_fill_rejects_an_ambiguous_site_name(core):
+    """Bindings address sites by name, so a duplicated name is an error."""
+    body = core.access({
+        'left': {'hole': {'_type': 'site'}},
+        'right': {'hole': {'_type': 'site'}}})
+    with pytest.raises(ValueError, match='ambiguous'):
+        core.fill_sites(body, {'hole': 1.0})
+
+
+def test_register_sort_overrides_the_default_discipline(core):
+    """A sort may decide admissibility for itself."""
+    core.register_sort(
+        'even', lambda core, site, filler: filler % 2 == 0)
+    body = _sorted_body(core, 'even')
+
+    assert core.fill_sites(body, {'model': 4})['study']['model'] == 4
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.fill_sites(body, {'model': 3})
+
+
+def test_admits_is_not_formation(core):
+    """``admits`` (filling) and ``formation`` (nesting) are two relations.
+
+    ``admits`` is consulted at the site, *before* substitution, while the
+    site's ``_sort`` still exists; ``validate_sorting`` walks parent/child
+    pairs *after*. The distinction is load-bearing: once a site is filled
+    there is no site — and no ``_sort`` — left for ``formation`` to see.
+    """
+    from bigraph_schema.assembly import admits, interfaces, validate_sorting, Sorting
+
+    body = _sorted_body(core, MODEL_FACE)
+    (_path, site), = interfaces(body)[0]._places
+    conforming = _process(core, {'glucose': 'float'}, {'growth_rate': 'float'})
+
+    assert admits(core, site, conforming)
+    assert not admits(core, site, _process(core, {}, {}))
+
+    filled = core.fill_sites(body, {'model': conforming})
+    assert interfaces(filled)[0]._places == ()   # the sort is gone with the site
+
+    # Nesting is still policed separately, and says nothing about filling.
+    unconstrained = Sorting(sorts=set(), controls={}, formation=None)
+    assert validate_sorting(filled, unconstrained) == []
+
+
+# ── the composition law ─────────────────────────────────────────────
+
+
+def test_fill_independent_sites_commutes(core):
+    """Filling independent sites is order-independent (a monoid action)."""
+    body = core.access({'study': {
+        'model': {'_type': 'site'},
+        'reference': {'_type': 'site'}}})
+    a = _process(core, {'glucose': 'float'}, {'growth_rate': 'float'})
+    b = _process(core, {'oxygen': 'float'}, {'biomass': 'float'})
+
+    both = core.fill_sites(body, {'model': a, 'reference': b})
+    one_then_other = core.fill_sites(
+        core.fill_sites(body, {'model': a}), {'reference': b})
+    other_then_one = core.fill_sites(
+        core.fill_sites(body, {'reference': b}), {'model': a})
+
+    assert both == one_then_other == other_then_one
+
+
+def test_partially_filled_document_is_still_fillable(core):
+    """A document with sites left open is still a document (still a template)."""
+    from bigraph_schema.assembly import is_ground
+
+    body = core.access({'study': {
+        'model': {'_type': 'site'},
+        'reference': {'_type': 'site'}}})
+
+    partial = core.fill_sites(body, {'model': 1.0})
+    assert not is_ground(partial)          # still open at 'reference'
+    assert isinstance(partial['study']['reference'], Site)
+
+    ground = core.fill_sites(partial, {'reference': 2.0})
+    assert is_ground(ground)
+
+
+def test_compose_is_fill_with_positional_bindings(core):
+    """``compose`` degrades to the same substitution ``fill_sites`` performs.
+
+    Milner's sites are anonymous, so composition pairs them with roots by
+    index while ``fill_sites`` pairs them by name; on a single-site document
+    the two must agree.
+    """
+    from bigraph_schema.assembly import compose, merge, barren
+
+    outer = merge(1)
+    inner = barren('a')
+
+    assert compose(outer, inner) == core.fill_sites(outer, {'site0': inner['a']})
+
+
+def test_fill_sites_does_not_shadow_core_bind(core):
+    """``Core.bind`` binds a logical key to a target and predates this work;
+    the fill primitive must not take its name."""
+    import inspect
+
+    assert core.bind is not core.fill_sites
+    assert list(inspect.signature(core.bind).parameters) == [
+        'schema', 'state', 'raw_key', 'target']
+    assert list(inspect.signature(core.fill_sites).parameters) == [
+        'body', 'bindings']
+
+
+def test_non_ground_document_survives_round_trip(core):
+    """A template — a document that is not ground — must render and re-access."""
+    from bigraph_schema.assembly import is_ground
+
+    body = _sorted_body(core, 'float')
+    assert not is_ground(body)
+
+    # ``_sort`` is a schema field, so access resolves it to a schema node;
+    # the round-trip claim is that render → access preserves the open site
+    # *and* its sort.
+    rendered = core.render(body)
+    assert rendered['study']['model'] == {'_type': 'site', '_sort': 'float'}
+
+    round_tripped = core.access(rendered)
+    assert not is_ground(round_tripped)
+    assert isinstance(round_tripped['study']['model'], Site)
+    assert core.render(round_tripped) == rendered
+
+
 def test_compose_atom(core):
     """ion ∘ barren produces a K-atom (ion with site filled)."""
     from bigraph_schema.assembly import ion, barren, compose, interfaces, is_ground

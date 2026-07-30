@@ -86,8 +86,15 @@ def render(schema: Empty, defaults=False):
 # metadata carried on the schema.
 
 def _render_bigraph_structural(schema, type_name, defaults=False):
-    if getattr(schema, '_sort', ''):
-        result = {'_type': type_name, '_sort': schema._sort}
+    sort = getattr(schema, '_sort', '')
+    if sort:
+        # ``_sort`` is a schema key, so ``access`` resolves a sort given as a
+        # type — a value type, or a link literal naming a face — into a schema
+        # node. Render it back so a sorted site (and so a template) survives
+        # the round trip to an on-disk document.
+        if isinstance(sort, Node):
+            sort = render(sort, defaults=defaults)
+        result = {'_type': type_name, '_sort': sort}
     else:
         result = type_name
     return wrap_default(schema, result) if defaults else result
