@@ -182,6 +182,29 @@ while removing the seven ad-hoc rules the earlier draft invented.)*
 
 ---
 
+### 4.6 Address injection — an abstract process (interface without implementation)
+
+An edge has an `address` (its implementation/protocol), a `config`, a **face**
+(`_inputs`/`_outputs` — port types), and **wires**. A template may leave the
+**`address` as a site** while fixing the face (and config schema + wiring). That is
+**a process definition without an implementation** — an *abstract process*: the
+face is the contract, the address is the hole.
+
+- **Fill = inject the address.** The filler is an `address` naming a registered
+  process; `admits` requires that process's `interface()` to **conform to the
+  site's face** (§4.4). Same `fill`, same `admits` — no new machinery; the site's
+  filler is an address string rather than a subtree.
+- Two flavors, both one operation: **(a) address-hole, else-fixed** — only the
+  *implementation* varies (pure implementation-swap); **(b) whole-edge site** —
+  inject a full process/composite.
+- **Payoff:** flavor (a) is the solver/model-swap pattern — one solver face, inject
+  `copasi` / `tellurium` / `simbio` — i.e. a cross-simulator comparison expressed as
+  *one template with an address site*. In component-model terms it is a required
+  interface satisfied by plugging in a conforming implementation.
+- Depends on address resolution (§11 Task A): an injected address must resolve to a
+  `Protocol` for `realize`. Address *injection* is address *resolution* applied to a
+  filled address — the same fix enables both.
+
 ## 5. Contracts
 
 1. **`fill` is a monoid action on documents.** Filling **independent** sites
@@ -213,6 +236,11 @@ while removing the seven ad-hoc rules the earlier draft invented.)*
   an over-providing one) → passes; a non-conforming one → fill error naming the
   site. Fill a value site; reject a mistyped value; `_default` fallback for an
   optional site.
+- **Address injection (abstract process, §4.6).** A template edge with a fixed face
+  and an **`address` site**: inject a conforming registered process's address →
+  `admits` passes and the filled edge `realize`s to a runnable process; inject a
+  non-conforming address → fill error naming the face mismatch. Assert the two
+  flavors (address-hole vs. whole-edge site) both go through the same `fill`.
 - **Composition law.** Filling two independent sites commutes; a partially filled
   document is still fillable; `compose` degrades to `assembly.compose` on empties.
 - **Cardinality.** A marked region + `n=3` yields three keyed instances
