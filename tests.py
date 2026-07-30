@@ -1588,6 +1588,151 @@ def test_compose_fills_sites(core):
     assert 'site1' in region
 
 
+def _resolve_wire(link_path, wire):
+    """Resolve a wire the way ``realize.port_merges`` does.
+
+    A wire is relative to the link's **parent** store, so the store it
+    designates is ``link_path[:-1] + wire``.
+    """
+    return tuple(link_path[:-1]) + tuple(wire)
+
+
+def _assert_wire_lands_on_a_store(schema, store_path):
+    """Every proper ancestor of ``store_path`` must exist in ``schema`` and
+    none of them may be a ``Link`` — ports read from stores, not from links."""
+    node = schema
+    for step in store_path[:-1]:
+        assert isinstance(node, dict) and step in node, (
+            f'wire target {store_path} escapes the composed tree at {step!r}')
+        node = node[step]
+        assert not isinstance(node, Link), (
+            f'wire target {store_path} passes through the Link at {step!r}')
+
+
+def test_compose_wires_link_into_wired_document(core):
+    """Task 0: compose a Link-bearing subtree into a site inside a wired
+    document and assert the resulting wires resolve.
+
+    The other compose tests only ever substitute *empty* regions into empty
+    holes, so the link-composition branch was unexercised. Joining an outer
+    name to an inner name has to satisfy three things at once: the wire must
+    be expressed in the **composed** tree's coordinates (not the filler's),
+    it must land on a **store** rather than inside a ``Link`` node, and the
+    filler's matching port must be wired to the **same** store — a join has
+    two ends.
+    """
+    from bigraph_schema.assembly import compose
+
+    outer = core.access({'world': {
+        'hole': {'_type': 'site'},
+        'consumer': {
+            '_type': 'link',
+            '_inputs': {'growth_rate': 'float'},
+            '_outputs': {'biomass': 'float'},
+            'outputs': {'biomass': ['biomass']}}}})
+
+    inner = core.access({'producer': {
+        'proc': {
+            '_type': 'link',
+            '_inputs': {'nutrient': 'float'},
+            '_outputs': {'growth_rate': 'float'},
+            'inputs': {'nutrient': ['nutrient']}}}})
+
+    result = compose(outer, inner)
+
+    consumer = result['world']['consumer']
+    producer = result['world']['hole']['proc']
+
+    # Both ends of the join are wired.
+    assert 'growth_rate' in consumer.inputs, 'outer input port left dangling'
+    assert 'growth_rate' in producer.outputs, 'filler output port left dangling'
+
+    # Both ends designate the same store.
+    consumer_store = _resolve_wire(
+        ('world', 'consumer'), consumer.inputs['growth_rate'])
+    producer_store = _resolve_wire(
+        ('world', 'hole', 'proc'), producer.outputs['growth_rate'])
+    assert consumer_store == producer_store, (
+        f'join ends disagree: {consumer_store} vs {producer_store}')
+
+    # And that store is reachable in the composed tree, through stores only.
+    _assert_wire_lands_on_a_store(result, consumer_store)
+
+    # The filler's already-wired port is untouched.
+    assert producer.inputs['nutrient'] == ['nutrient']
+
+
+def test_compose_wires_survive_realization(core):
+    """The wires ``compose`` writes must materialize a real shared store.
+
+    This is the end-to-end form of Task 0: realization is what turns wires
+    into stores (``realize.port_merges``), so a wire that resolves on paper
+    but not through ``realize`` is still dangling.
+    """
+    from bigraph_schema.assembly import compose
+
+    outer = core.access({'world': {
+        'hole': {'_type': 'site'},
+        'consumer': {
+            '_type': 'link',
+            'address': 'local:edge',
+            '_inputs': {'growth_rate': 'float'},
+            '_outputs': {'biomass': 'float'},
+            'outputs': {'biomass': ['biomass']}}}})
+
+    inner = core.access({'producer': {
+        'proc': {
+            '_type': 'link',
+            'address': 'local:edge',
+            '_inputs': {'nutrient': 'float'},
+            '_outputs': {'growth_rate': 'float'}}}})
+
+    result = compose(outer, inner)
+    schema, _state, _merges = core.realize({}, core.render(result))
+
+    consumer_store = _resolve_wire(
+        ('world', 'consumer'),
+        result['world']['consumer'].inputs['growth_rate'])
+
+    node = schema
+    for step in consumer_store:
+        assert isinstance(node, dict) and step in node, (
+            f'realization did not materialize {consumer_store} '
+            f'(missing {step!r})')
+        node = node[step]
+
+    # The join materialized as an actual typed store, reached from both ends.
+    assert isinstance(node, Float)
+
+
+def test_compose_raises_when_the_join_is_inexpressible(core):
+    """Wires are relative to a link's parent and cannot ascend, so a join is
+    only expressible when the outer link's parent contains the filled site.
+    When it does not, ``compose`` must say so rather than emit a wire that
+    silently resolves to nothing."""
+    from bigraph_schema.assembly import compose
+
+    # The consumer sits in a sibling subtree of the site, so no relative
+    # wire from ``left/`` can reach a store under ``right/hole/``.
+    outer = core.access({
+        'left': {
+            'consumer': {
+                '_type': 'link',
+                '_inputs': {'growth_rate': 'float'},
+                '_outputs': {}}},
+        'right': {
+            'hole': {'_type': 'site'}}})
+
+    inner = core.access({'producer': {
+        'proc': {
+            '_type': 'link',
+            '_inputs': {},
+            '_outputs': {'growth_rate': 'float'}}}})
+
+    with pytest.raises(ValueError, match='growth_rate'):
+        compose(outer, inner)
+
+
 def test_compose_atom(core):
     """ion ∘ barren produces a K-atom (ion with site filled)."""
     from bigraph_schema.assembly import ion, barren, compose, interfaces, is_ground

@@ -197,9 +197,9 @@ def compose(outer, inner):
       the corresponding root (top-level key) from ``inner``. Sites
       are matched to roots by index (0th site ↔ 0th root, etc.).
     - **Link composition**: for each outer name of ``inner`` that
-      matches an inner name of ``outer`` (by port name), create a
-      wire connecting the inner Link's output port to the path that
-      the outer Link's input port would read from.
+      matches an inner name of ``outer`` (by port name), **join** the
+      two ports — wire *both* ends to one shared store, so the ports
+      meet the way ``realize`` resolves them. See ``_join_names``.
 
     Currently handles: ground schemas (no Sites, all ports wired) and
     the identity cases. Raises ``NotImplementedError`` for cases not
@@ -230,31 +230,85 @@ def compose(outer, inner):
 
     result = copy.deepcopy(outer)
 
-    # Replace each site with the corresponding root from inner
+    # Replace each site with the corresponding root from inner, recording
+    # where each root landed so inner paths can be rebased into the
+    # composed tree's coordinates.
+    rebase = {}
     for (site_path, _site), root_key in zip(site_list, root_keys):
         if root_key not in inner:
             raise ValueError(
                 f'compose: inner schema missing root {root_key!r}')
         filler = copy.deepcopy(inner[root_key])
         _set_at_path(result, site_path, filler)
+        rebase[root_key] = tuple(site_path)
 
-    # --- Link composition: wire matching names ---
+    # --- Link composition: join matching names ---
     # inner's outer names → ports on inner's Links whose outputs are
     # unwired. outer's inner names → ports on outer's Links whose
-    # inputs are unwired. If port names match, create the connection.
+    # inputs are unwired. Matching names name the same link.
     for port_name, inner_link_path in inner_outer._names.items():
         if port_name in outer_inner._names:
-            outer_link_path = outer_inner._names[port_name]
-            # Wire inner's output → the path that outer's input reads
-            # from. For now: wire inner's output to the default path
-            # (the port name itself, relative to the inner link).
-            outer_link = _get_at_path(result, outer_link_path)
-            if isinstance(outer_link, Link):
-                if isinstance(outer_link.inputs, Wires):
-                    outer_link.inputs = {}
-                outer_link.inputs[port_name] = list(inner_link_path) + [port_name]
+            _join_names(
+                result,
+                port_name,
+                outer_link_path=outer_inner._names[port_name],
+                inner_link_path=inner_link_path,
+                rebase=rebase)
 
     return result
+
+
+def _join_names(result, port_name, outer_link_path, inner_link_path, rebase):
+    """Join an outer name of the filler to the inner name of the context.
+
+    Milner joins the two faces at a single link; in this model a link is
+    realized as a **store path**, so joining means wiring *both* ports to
+    one shared store.
+
+    Wires are relative to a link's parent store (``realize.port_merges``
+    resolves a wire as ``link_path[:-1] + wire``) and cannot ascend, so:
+
+    - the shared store is the filler link's own default output store —
+      ``<filler link's parent>/<port_name>`` — which the filler reaches
+      with the plain relative wire ``[port_name]``;
+    - the context link reaches it by descending from its own parent, which
+      is possible exactly when that parent contains the filled site.
+
+    ``rebase`` maps each of ``inner``'s root keys to the site path its
+    contents were substituted into, so the filler link's path can be
+    expressed in the composed tree.
+    """
+    outer_link = _get_at_path(result, outer_link_path)
+    if not isinstance(outer_link, Link):
+        return
+
+    # Rebase the filler link's path: composition splices a root's
+    # *contents* at the site, so the root key itself disappears.
+    root_key = inner_link_path[0]
+    if root_key not in rebase:
+        return
+    composed_link_path = rebase[root_key] + tuple(inner_link_path[1:])
+
+    store_path = composed_link_path[:-1] + (port_name,)
+
+    outer_parent = tuple(outer_link_path[:-1])
+    if store_path[:len(outer_parent)] != outer_parent:
+        raise ValueError(
+            f'compose: cannot join name {port_name!r} — wires are relative '
+            f'to a link\'s parent and cannot ascend, but the link at '
+            f'{outer_link_path} would have to reach {store_path}. Place the '
+            f'site inside the consuming link\'s parent, or wire the port '
+            f'explicitly before composing.')
+
+    inner_link = _get_at_path(result, composed_link_path)
+    if isinstance(inner_link, Link):
+        if isinstance(inner_link.outputs, Wires):
+            inner_link.outputs = {}
+        inner_link.outputs[port_name] = [port_name]
+
+    if isinstance(outer_link.inputs, Wires):
+        outer_link.inputs = {}
+    outer_link.inputs[port_name] = list(store_path[len(outer_parent):])
 
 
 # ── Tensor product ──────────────────────────────────────────────────
