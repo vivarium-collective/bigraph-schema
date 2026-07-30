@@ -2476,6 +2476,224 @@ def test_wired_link_defaults_and_realizes(core):
     assert isinstance(state['p']['instance'], Edge)
 
 
+# ── the contract: face as typed core, plus semantics and amendments ─
+
+
+def _solver_contract():
+    from bigraph_schema.contract import ProcessContract
+    return ProcessContract(
+        summary='Integrates a model.',
+        face={'inputs': {'model': 'string'},
+              'outputs': {'trajectory': 'map[float]'}})
+
+
+class SeededSolver(Edge):
+    """A solver that also consumes a seed."""
+
+    def inputs(self):
+        return {'model': 'string', 'seed': 'integer'}
+
+    def outputs(self):
+        return {'trajectory': 'map[float]'}
+
+
+def _solver_fillers(core):
+    core.register_link('CopasiSolver', CopasiSolver)
+    core.register_link('SeededSolver', SeededSolver)
+    core.register_link('NotASolver', NotASolver)
+    return {
+        name: core.access({'_type': 'link', 'address': f'local:{name}'})
+        for name in ('CopasiSolver', 'SeededSolver', 'NotASolver')}
+
+
+def test_describe_contract_answers_for_a_site(core):
+    """A site's sort *is* a contract — the interface it requires."""
+    site = core.access({'_type': 'site', '_sort': SOLVER_FACE})
+
+    contract = core.describe_contract(site)
+
+    assert sorted(contract.face_ports('inputs')) == ['model']
+    assert sorted(contract.face_ports('outputs')) == ['trajectory']
+
+
+def test_describe_contract_answers_for_an_edge(core):
+    """The same call answers for the thing that fills the hole, and the
+    face is the typed projection of the one contract."""
+    instance = CopasiSolver({}, core)
+
+    contract = core.describe_contract(instance)
+
+    assert contract.face == {
+        'inputs': {'model': 'string'},
+        'outputs': {'trajectory': 'map[float]'}}
+    # The documentary half still comes from the docstring convention.
+    assert 'conforming implementation' in contract.summary
+    # ``Edge.describe_contract()`` is the per-instance spelling of the same.
+    assert instance.describe_contract().face == contract.face
+
+
+def test_amend_is_pure_and_append_only(core):
+    from bigraph_schema.contract import Amendment, amend
+
+    base = _solver_contract()
+    first = amend(base, Amendment(
+        op='narrow', detail={'inputs': {'seed': 'integer'}},
+        by='fable', when='2026-07-30', why='reproducibility'))
+    second = amend(first, Amendment(op='annotate', detail={'summary': 'v2'}))
+
+    # The input is never mutated.
+    assert base.amendments == []
+    assert 'seed' not in base.face_ports('inputs')
+
+    # Every amendment is kept, in order, with its provenance.
+    assert [a.op for a in second.amendments] == ['narrow', 'annotate']
+    assert second.amendments[0].by == 'fable'
+    assert second.amendments[0].why == 'reproducibility'
+
+
+def test_narrow_makes_admits_strictly_stricter(core):
+    """Narrowing adds a required port, so strictly fewer fillers conform."""
+    from bigraph_schema.contract import Amendment, amend
+
+    fillers = _solver_fillers(core)
+    base = _solver_contract()
+    narrowed = amend(base, Amendment(
+        op='narrow', detail={'inputs': {'seed': 'integer'}}))
+
+    core.register_contract('solver', base)
+    core.register_contract('solver_seeded', narrowed)
+    loose = core.access({'_type': 'site', '_sort': 'solver'})
+    strict = core.access({'_type': 'site', '_sort': 'solver_seeded'})
+
+    assert core.admits(loose, fillers['CopasiSolver'])
+    assert core.admits(loose, fillers['SeededSolver'])
+
+    # The one that never took a seed no longer conforms.
+    assert not core.admits(strict, fillers['CopasiSolver'])
+    assert core.admits(strict, fillers['SeededSolver'])
+
+
+def test_narrow_is_monotone(core):
+    """The law that keeps ``admits`` sound: anything admissible under an
+    amended (narrower) contract was admissible under the original."""
+    from bigraph_schema.contract import Amendment, amend
+
+    fillers = _solver_fillers(core)
+    base = _solver_contract()
+
+    amended = base
+    for amendment in (
+            Amendment(op='narrow', detail={'inputs': {'seed': 'integer'}}),
+            Amendment(op='annotate', detail={'summary': 'seeded solver'}),
+            Amendment(op='narrow', detail={
+                'predicate': lambda core, filler: True}),
+    ):
+        amended = amend(amended, amendment)
+
+        core.register_contract('base', base)
+        core.register_contract('amended', amended)
+        before = core.access({'_type': 'site', '_sort': 'base'})
+        after = core.access({'_type': 'site', '_sort': 'amended'})
+
+        for name, filler in fillers.items():
+            if core.admits(after, filler):
+                assert core.admits(before, filler), (
+                    f'{name} admissible under the amended contract but not '
+                    f'the original — narrowing must never widen')
+
+
+def test_annotate_changes_docs_not_admissibility(core):
+    from bigraph_schema.contract import Amendment, amend
+
+    fillers = _solver_fillers(core)
+    base = _solver_contract()
+    annotated = amend(base, Amendment(
+        op='annotate',
+        detail={'summary': 'Integrates a model with an adaptive step.',
+                'inputs': {'model': 'an SBML document'},
+                'assumptions': ['well-mixed']}))
+
+    assert annotated.face == base.face
+    assert annotated.inputs == {'model': 'an SBML document'}
+    assert annotated.assumptions == ['well-mixed']
+
+    core.register_contract('base', base)
+    core.register_contract('annotated', annotated)
+    before = core.access({'_type': 'site', '_sort': 'base'})
+    after = core.access({'_type': 'site', '_sort': 'annotated'})
+
+    for filler in fillers.values():
+        assert core.admits(before, filler) == core.admits(after, filler)
+
+
+def test_narrow_predicate_further_restricts(core):
+    """A narrowing amendment may add a predicate on top of the face."""
+    from bigraph_schema.contract import Amendment, amend
+    from bigraph_schema.assembly import collect_face
+
+    fillers = _solver_fillers(core)
+    base = _solver_contract()
+    seeded_only = amend(base, Amendment(
+        op='narrow',
+        detail={'predicate': lambda core, filler: 'seed' in collect_face(
+            core, filler)[0]},
+        why='only stochastic solvers are comparable here'))
+
+    core.register_contract('seeded_only', seeded_only)
+    site = core.access({'_type': 'site', '_sort': 'seeded_only'})
+
+    assert core.admits(site, fillers['SeededSolver'])
+    assert not core.admits(site, fillers['CopasiSolver'])
+
+
+def test_extend_is_refused(core):
+    """A contract may get stricter and better documented, never looser."""
+    from bigraph_schema.contract import Amendment, amend, AmendmentError
+
+    with pytest.raises(AmendmentError, match='never looser'):
+        amend(_solver_contract(), Amendment(
+            op='extend', detail={'inputs': {'anything': 'float'}}))
+
+
+def test_narrow_may_not_redefine_a_port(core):
+    """Replacing a port's type could widen what conforms, so it is refused —
+    that is what makes narrowing monotone by construction."""
+    from bigraph_schema.contract import Amendment, amend, AmendmentError
+
+    with pytest.raises(AmendmentError, match='may not redefine'):
+        amend(_solver_contract(), Amendment(
+            op='narrow', detail={'inputs': {'model': 'map[float]'}}))
+
+    # Restating a port identically is harmless.
+    amend(_solver_contract(), Amendment(
+        op='narrow', detail={'inputs': {'model': 'string'}}))
+
+
+def test_annotate_may_not_touch_the_typed_core(core):
+    from bigraph_schema.contract import Amendment, amend, AmendmentError
+
+    with pytest.raises(AmendmentError, match='only touch documentation'):
+        amend(_solver_contract(), Amendment(
+            op='annotate', detail={'face': {'inputs': {}}}))
+
+
+def test_contract_to_dict_is_json_safe(core):
+    """Amendments carry provenance and must survive serialization even when
+    a predicate is not itself serializable."""
+    import json
+    from bigraph_schema.contract import Amendment, amend
+
+    contract = amend(_solver_contract(), Amendment(
+        op='narrow', detail={'predicate': lambda core, filler: True},
+        by='fable', when='2026-07-30', why='stochastic only'))
+
+    payload = contract.to_dict()
+    json.dumps(payload)
+
+    assert payload['amendments'][0]['why'] == 'stochastic only'
+    assert isinstance(payload['amendments'][0]['detail']['predicate'], str)
+
+
 def test_compose_requires_one_root_per_site(core):
     """The arity law that makes splicing wrong: sites and roots match 1:1."""
     from bigraph_schema.assembly import compose, merge, barren, tensor

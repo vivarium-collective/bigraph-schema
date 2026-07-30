@@ -153,6 +153,9 @@ class Core:
         # (what may close a hole), as opposed to Sorting.formation, which
         # is the NESTING discipline (what may live inside what).
         self.sort_registry = {}
+        # sort name -> ProcessContract: the interface a site of that sort
+        # *requires*, amendments included.
+        self.contract_registry = {}
         # ``_access_cache`` is keyed by ``id(dict)`` and holds the dict
         # witness alive (so id reuse after GC is detected). Fresh
         # short-lived dicts produced per-tick (projection schemas,
@@ -248,6 +251,26 @@ class Core:
         link and to ``check`` otherwise.
         """
         self.sort_registry[key] = admits
+
+    def register_contract(self, key, contract):
+        """Register the contract a sort names.
+
+        A site sorted with this name then requires that contract — including
+        any amendments it carries — so a narrowed or better-documented
+        interface can be shared by name rather than restated at each site.
+        """
+        self.contract_registry[key] = contract
+
+    def describe_contract(self, node):
+        """The contract of an edge **or a site** — the face as typed core,
+        plus its documented meaning and amendment history.
+
+        For a site this is the contract it *requires*; for an edge, the one
+        it provides. ``Edge.describe_contract()`` remains the per-instance
+        spelling of the same thing.
+        """
+        from bigraph_schema.assembly import contract_of
+        return contract_of(self, node)
 
     def admits(self, site, filler):
         """Is ``filler`` an admissible filling for this sorted site?"""

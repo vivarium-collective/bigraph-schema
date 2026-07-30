@@ -703,6 +703,90 @@ def collect_face(core, node):
     return inputs, outputs
 
 
+def contract_of(core, node):
+    """The contract of an **edge or a site** — universal ``describe_contract``.
+
+    A site's sort *is* a contract: a template site says "something satisfying
+    *this* contract", not merely "shaped like X". So the same call answers for
+    the thing that fills a hole and for the hole itself, and at exactly the
+    granularity you fill.
+
+    - a **site** → the contract it *requires*: a sort naming a registered
+      contract resolves to that contract (amendments included); a face
+      literal yields a contract whose typed core is that face.
+    - an **edge instance** → its own ``describe_contract``.
+    - a **link schema** → its declared face, or the face of the class its
+      address names, merged with that class's documented contract.
+
+    Returns ``None`` when the node carries no interface at all.
+    """
+    from bigraph_schema.contract import ProcessContract, resolve_contract
+
+    if node is None:
+        return None
+
+    if isinstance(node, Site):
+        sort = getattr(node, '_sort', '')
+        if isinstance(sort, str) and sort:
+            registered = getattr(core, 'contract_registry', {}).get(sort)
+            if registered is not None:
+                return registered
+            sort = core.access(sort) if core is not None else sort
+        if isinstance(sort, Link):
+            return contract_of(core, sort)
+        return None
+
+    if callable(getattr(node, 'interface', None)):
+        return resolve_contract(node)
+
+    inputs, outputs = collect_face(core, node)
+    if not inputs and not outputs:
+        return None
+
+    documented = None
+    if isinstance(node, Link) and core is not None:
+        address = node.address
+        if isinstance(address, Protocol):
+            address = address._default
+        canonical = normalize_address(address)
+        if isinstance(canonical, dict):
+            edge_class = getattr(core, 'link_registry', {}).get(
+                canonical.get('data'))
+            if edge_class is not None:
+                try:
+                    documented = resolve_contract(
+                        edge_class(node.config if isinstance(
+                            node.config, dict) else {}, core))
+                except Exception:
+                    documented = None
+
+    contract = copy.deepcopy(documented) if documented else ProcessContract()
+    contract.face = {'inputs': dict(inputs), 'outputs': dict(outputs)}
+    return contract
+
+
+def contract_admits(core, contract, filler):
+    """Does ``filler`` satisfy ``contract``? Returns ``(ok, reason)``.
+
+    The typed core decides conformance; ``narrow`` amendments may add
+    predicates that must also hold. Because narrowing only ever adds
+    requirements, this stays monotone — see :func:`~bigraph_schema.contract.amend`.
+    """
+    ok, reason = face_conforms(core, contract.face, filler)
+    if not ok:
+        return ok, reason
+
+    for index, predicate in enumerate(contract.predicates()):
+        try:
+            satisfied = predicate(core, filler)
+        except Exception as error:
+            return False, f'contract predicate {index} raised: {error}'
+        if not satisfied:
+            return False, f'filler fails contract predicate {index}'
+
+    return True, None
+
+
 def face_conforms(core, face, filler):
     """Structural subtyping of faces (the composition law, made typed).
 
@@ -711,12 +795,19 @@ def face_conforms(core, face, filler):
     is not — that is what makes a site reusable across processes of the
     same shape.
 
+    ``face`` may be a ``Link`` schema (``_inputs``/``_outputs``) or a
+    contract's typed core (``{'inputs': …, 'outputs': …}``) — the same two
+    spellings of one thing.
+
     Returns ``(ok, reason)``.
     """
     provided = dict(zip(("inputs", "outputs"), collect_face(core, filler)))
 
     for direction, port_key in (('inputs', '_inputs'), ('outputs', '_outputs')):
-        required = getattr(face, port_key, None)
+        if isinstance(face, dict):
+            required = face.get(direction)
+        else:
+            required = getattr(face, port_key, None)
         if not isinstance(required, dict):
             continue
         for port, port_schema in required.items():
@@ -752,9 +843,11 @@ def admits_why(core, site, filler):
             return bool(ok), None if ok else (
                 f'sort {sort!r} rejected the filler')
 
-    face = core.access(sort)
-    if isinstance(face, Link):
-        return face_conforms(core, face, filler)
+    # A sort that names an interface is a *contract*: the typed face decides
+    # conformance, and any narrowing amendment adds to it.
+    contract = contract_of(core, site)
+    if contract is not None:
+        return contract_admits(core, contract, filler)
 
     if core.check(sort, filler):
         return True, None
