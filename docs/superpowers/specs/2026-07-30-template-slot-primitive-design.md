@@ -83,9 +83,37 @@ layer over `compose` + `reify`/`fill`.
 
 ## 3. The core design decision
 
+**Binding is composition.** A template is a bigraph with an **inner face** made of
+named, typed holes; filling a slot is **composing** the template with a filler
+process-bigraph, following bigraph-schema's existing Milner algebra
+(`assembly.compose`/`tensor`/`interfaces`/`is_ground`) — *not* a bespoke
+`bind_template` side-mechanism. Where the current `compose` is too coarse we
+**extend it in a standard-preserving way**, we do not fork it. Concretely:
+
+- Milner `compose(a: I→J, b: J→K) = ab: I→K` (`assembly.compose`, `assembly.py:185`)
+  already substitutes `Site`s and requires the shared face `J` to match. **The
+  "shape of the process that fits a slot" is precisely that face** — a slot's
+  declared interface *is* its local inner face; a filler composes iff its **outer
+  face matches** (§4.4). Interface conformance is therefore a *law of composition*,
+  not an extra check bolted on.
+- The extensions this spec adds — all consistent with the algebra:
+  1. **Named / partial composition.** Today's `compose` fills *all* sites
+     positionally. Templates need to fill **one named slot at a time** (and leave
+     others open), with a per-slot face. `compose_at(template, slot_name, filler)`
+     is compose localized to a single named site; repeated application fills the
+     rest and reduces to ordinary `compose` when there is one anonymous site.
+  2. **Typed faces.** A slot's face carries a required interface
+     (`link[inputs, outputs]`); the face-match becomes a `core.check`/`resolve`
+     (structural subtyping) instead of name-only matching.
+  3. **Parallel replication.** Cardinality reuses `tensor` (the standard parallel
+     product, `assembly.py:263`) to place N copies — replication is composition,
+     not a new operator.
+
+With that principle fixed, the per-kind dispatch is:
+
 Two candidate mechanisms exist; the umbrella conflated them. This spec picks a
 **hybrid keyed on slot kind** — three kinds, matching the three goals in §1 — each
-reusing existing machinery:
+expressed through the composition algebra above:
 
 | Slot kind | Filler | Type constraint | Mechanism |
 |---|---|---|---|
@@ -165,47 +193,60 @@ class Template(Node):
   discovery hook — so `study`, `investigation`, and concrete templates all become
   bigraph-schema types (the umbrella's "bigraph-schema as the registry").
 
-### 4.3 `bind` — fill the slots → ground composite document
+### 4.3 `compose_at` (the primitive) and `bind` (the sugar)
 
-The one genuinely new operation, a thin driver over existing machinery:
+The one genuinely new **primitive** is *named, typed, partial* composition — an
+extension of `assembly.compose`. `bind` is convenience sugar that folds a whole
+`{slot: filler}` map through it.
 
 ```python
-def bind_template(core, template, bindings: dict) -> (schema, state):
-    """bindings: {slot_name: filler}. Returns a ground (Site-free) composite doc.
-    Order: cardinality slots FIRST (they expand structure, possibly creating new
-    process/value slots), then process slots, then value slots.
-      cardinality → expand the _target region to N instances (§4.5)
-      process     → check interface conformance (§4.4), then assembly.compose
-                    the filler subtree into the Slot's path + wire ports
-      value       → core.access filler → core.resolve into the Slot's path
-      missing     → _default if _optional else raise
-    Post: assembly.is_ground(result) (modulo optional process slots).
+def compose_at(core, template, slot_name, filler):
+    """Compose one named slot. Extension of assembly.compose localized to a site.
+    Precondition: outer_face(filler) matches inner_face(template @ slot_name)  (§4.4)
+      process slot     → substitute filler subtree at the slot's path (compose)
+                         + wire the faces (existing port-name wiring, assembly.py:185)
+      value  slot      → core.access filler → core.resolve into the slot position
+      cardinality slot → tensor N copies of the _target region (§4.5)
+    Returns a template with that slot closed (others still open).
     """
+
+def bind(core, template, bindings: dict) -> (schema, state):
+    """Fold compose_at over bindings → a ground (site-free) composite document.
+    Order: cardinality FIRST (replication grows the slot set), then process, then
+    value; re-collect slots after each cardinality step. Missing binding → _default
+    if _optional else raise. Then core.fill(result, {}); assert is_ground (modulo
+    optional slots). Registered as core methods → core.compose_at / core.bind."""
 ```
 
-- **Process path:** `assert conforms(core, slot._slot, filler)` (§4.4), then
-  `assembly.compose` (via `_set_at_path`, `assembly.py:185`) places the filler root
-  at the slot's position and wires matching port names.
-- **Value path:** `core.access` the filler → `core.resolve` into the slot position
-  (the field-binding `reify_schema` uses, `handle_parameters.py:276`).
-- **Cardinality path:** §4.5, runs first so downstream slots see the expanded body.
-- Finish with `core.fill(result, {})` to realize defaults; assert `is_ground`.
-- Registered as a core method (`core.register_method('bind', …)`) → `core.bind(...)`.
+- When a template has a single anonymous site and the filler matches the whole
+  face, `compose_at` **is** `assembly.compose` — the extension degrades to the
+  existing operation (no divergence from the standard).
+- `compose_at` reuses the existing substitution (`_set_at_path`) and port-name
+  wiring; the *only* additions are (a) selecting one **named** site and (b) the
+  **typed** face-match (§4.4).
+- Because each step is a composition, a partially-bound template is **still a valid
+  template** (a bigraph with a smaller inner face) — templates compose with
+  templates, and binding can be incremental / streamed.
 
-### 4.4 Interface conformance (shape of the process that fits)
+### 4.4 Interface conformance = face matching (the composition law)
 
-`conforms(core, required_interface, filler)`: the filler's interface —
-`filler.interface()` for an `Edge`/composite (`edge.py:144`), or the collected
-`_inputs`/`_outputs` of a subtree — must **satisfy** the slot's required interface:
+In Milner composition `a: I→J` ∘ `b: J→K` is defined **iff** the shared face `J`
+matches. A slot's declared interface *is* the template's local **inner face** at
+that site; the filler's **outer face** is `filler.interface()` (`edge.py:144`) or
+the collected `_inputs`/`_outputs` of the filler subtree. `compose_at` is defined
+iff:
 
-- every required input/output port is present with a **compatible type**
-  (`core.check` / `core.resolve` succeeds — structural subtyping, not equality, so
-  a filler may over-provide);
+- every port in the slot's face is present in the filler's outer face with a
+  **compatible type** — `core.check` / `core.resolve` succeeds (structural
+  subtyping: the filler may over-provide, never under-provide);
 - if the slot pins an address protocol, the filler's `address` matches.
 
-This is what lets a slot say "a process shaped `{glucose: float, biomass: map[float]}
-→ {growth_rate: float}`" and accept any registered process of that shape. Reuses
-existing type-compatibility (`core.check`, `core.resolve`) — no new type algebra.
+So "a process shaped `{glucose: float, biomass: map[float]} → {growth_rate: float}`"
+is a *face*, and any registered process whose outer face conforms composes into it.
+This is the standard's own well-definedness condition made **typed** — we reuse
+`core.check`/`core.resolve`, adding no new type algebra, only the requirement that
+the faces (not just port *names*) align. A non-conforming filler is a
+**composition error**, reported as such.
 
 ### 4.5 Generative cardinality (number of processes / store trees)
 
@@ -253,6 +294,13 @@ binding stays deterministic and re-runnable.
 5. **Binding result = ground composite.** `bind` returns `(schema, state)` with
    **no remaining required Slots** (`is_ground` modulo optional slots) — exactly
    what process-bigraph's `Composite` consumes (the Layer-2 handoff).
+6. **Composition consistency.** `compose_at` obeys the algebra: (a) it degrades to
+   `assembly.compose` for a single anonymous, whole-face site; (b) binding two
+   independent named slots **commutes** (order-independent) — order only matters
+   when one binding is inside a region a *cardinality* slot replicates, which is
+   why cardinality binds first; (c) a partially-bound template is itself a valid
+   template with a reduced inner face. These must hold as tests so the primitive
+   stays a true extension of composition, not a fork.
 4. **`CompositeSpec.parameters` subsumption.** A `CompositeSpec` with flat
    `${name}` params is the **all-scalar-slots, single-body** special case of a
    template. Layer 2 (process-bigraph) decides whether `CompositeSpec` becomes a
@@ -353,3 +401,9 @@ parameter grammar, `test_compose_*` (1578-1599) for substitution semantics.
 3. **`bind` return shape.** A ground schema only, or `(schema, state)` (schema +
    realized default state)? Recommendation: `(schema, state)` so Layer 2 gets a
    runnable composite directly, matching `Core.default`/`realize` conventions.
+4. **Extend `assembly.compose` in place vs. a new `compose_at`.** The named/typed/
+   partial composition is a strict generalization of today's `compose`.
+   Recommendation: add `compose_at` alongside `compose` and re-express `compose` as
+   `compose_at` over the (single, anonymous) site — one code path, the old
+   signature preserved — rather than a parallel wrapper that could drift from the
+   standard. Confirm this refactor is acceptable in the `assembly` module.
