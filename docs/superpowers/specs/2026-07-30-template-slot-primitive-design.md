@@ -380,11 +380,22 @@ reaction **matching** (a redex site captures sibling keys) — a different opera
   address + config, not ports) — `admits` no longer rejects every genuine filler.
 - **Done earlier:** cardinality reaction (§4.5), `build()` (§4.3).
 
-### In flight (queued Fable batch)
+### Done — Layer 1 complete (1130 tests, 0 failures)
 
-- **Address-injection** explicit tests (§4.6).
-- **Contract = face + amendments** (§4.7) — `describe_contract` to sites, `amend`
-  (`narrow`/`annotate`), `admits` via the contract.
+- **Address injection** (§4.6) — 5 tests of the abstract-process shape (fixed
+  face/config/wiring, only `address` open); conforming injections build to live
+  instances, non-conforming rejected naming the port. Fixed two further instances of
+  the address-bug root cause (declared *wires* were materialized as a `{port: path}`
+  dict and walked as a schema — every edge naming its own wiring was un-realizable on
+  `origin/main`).
+- **Contract = face + amendments** (§4.7) — `ProcessContract` absorbed it (two fields:
+  `face`, `amendments`); `core.describe_contract` universal (edge *or* site);
+  `amend`/`Amendment` with `narrow`/`annotate` (`extend` refused); `admits` routes
+  through `contract_of` + `contract_admits`. The **monotonicity law holds by
+  construction** — `narrow` may add required ports/predicates but **refuses to
+  redefine an existing port**, so a filler admissible after narrowing was admissible
+  before. (Noted tension: per-port *types* live on the face, per-port *prose* on
+  `ProcessContract.inputs`; kept separate so `annotate` cannot change admissibility.)
 
 ### Flagged, carried to Layer 2a (process-bigraph)
 
