@@ -42,6 +42,7 @@ from bigraph_schema.schema import (
     Wires,
     Protocol,
     LocalProtocol,
+    normalize_address,
     Schema,
     Link,
     Object,
@@ -610,18 +611,7 @@ def realize_link(core, schema: Link, encode, path=()):
     # rebuilt with the new wiring after realization.
     core.invalidate_link(path)
 
-    address = encode.get('address', 'local:edge')
-
-    if isinstance(address, str):
-        if ':' not in address:
-            protocol = 'local'
-            data = address
-        else:
-            protocol, data = address.split(':', 1)
-
-        address = {
-            'protocol': protocol,
-            'data': data}
+    address = normalize_address(encode.get('address', 'local:edge'))
 
     if 'instance' in encode:
         # Instance already exists — skip instantiation but still

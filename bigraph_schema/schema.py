@@ -12,6 +12,32 @@ from dataclasses import dataclass, is_dataclass, field
 NONE_SYMBOL = '__nil__'
 
 
+def normalize_address(address):
+    """Put a link's ``address`` into canonical ``{'protocol', 'data'}`` form.
+
+    An address is a **value**, not a type expression — ``'local:edge'``,
+    ``'edge'``, or an already-canonical dict. It must never be routed
+    through ``Core.access``: ``'local:edge'`` parses under the
+    named-parameter grammar (``name:Type``) and yields ``{'local': 'edge'}``,
+    which nothing downstream can read.
+
+    A string without a protocol defaults to ``local``. Anything that is not
+    a string or a canonical dict is returned unchanged, so callers can tell
+    "not an address" from "an address I normalized".
+    """
+    if isinstance(address, str):
+        if ':' in address:
+            protocol, data = address.split(':', 1)
+        else:
+            protocol, data = 'local', address
+        return {'protocol': protocol, 'data': data}
+
+    if isinstance(address, dict) and 'protocol' in address:
+        return address
+
+    return address
+
+
 def is_schema_field(schema, key):
     """Check whether a _ prefixed key on a schema is a schema field (vs metadata).
 

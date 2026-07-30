@@ -2165,13 +2165,9 @@ def test_build_of_a_ground_document_is_the_identity_on_shape(core):
     assert state == {'cell': {'mass': 0.0}}
 
 
-@pytest.mark.xfail(
-    reason='pre-existing on origin/main: core.access leaves a Link.address '
-           'as a raw str/dict rather than a Protocol, so default/realize '
-           'walk it as a schema and fail. Blocks build() for any filler '
-           'declaring an explicit address.',
-    strict=True)
 def test_build_with_an_addressed_filler(core):
+    """The real case: a filler that names an address — every registered
+    process does — builds to a runnable document with a live instance."""
     template = core.access({'study': {
         'model': {'_type': 'site', '_sort': MODEL_FACE}}})
     addressed = core.access({
@@ -2180,7 +2176,87 @@ def test_build_with_an_addressed_filler(core):
         '_inputs': {'glucose': 'float'},
         '_outputs': {'growth_rate': 'float'}})
 
-    core.build(template, {'model': addressed})
+    schema, state = core.build(template, {'model': addressed})
+
+    assert schema['study']['model'].address._default == {
+        'protocol': 'local', 'data': 'edge'}
+    assert state['study']['model']['address'] == {
+        'protocol': 'local', 'data': 'edge'}
+    assert isinstance(state['study']['model']['instance'], Edge)
+
+
+# ── addresses are values, not type expressions ──────────────────────
+
+
+@pytest.mark.parametrize('address', [
+    'local:edge', 'edge', {'protocol': 'local', 'data': 'edge'}])
+def test_access_compiles_an_address_to_a_protocol(core, address):
+    """Every spelling of an address compiles to the same ``Protocol``.
+
+    ``'local:edge'`` must not be routed through the type parser — it parses
+    under the named-parameter grammar and yields ``{'local': 'edge'}``,
+    which no consumer can read.
+    """
+    from bigraph_schema.schema import Protocol
+
+    link = core.access({
+        '_type': 'link',
+        'address': address,
+        '_inputs': {'x': 'float'},
+        '_outputs': {'y': 'float'}})
+
+    assert isinstance(link.address, Protocol)
+    assert link.address._default == {'protocol': 'local', 'data': 'edge'}
+
+
+def test_access_and_realize_agree_on_an_address(core):
+    """``access`` and ``realize`` must compile the same link identically —
+    they are two doors onto one document."""
+    declaration = {
+        '_type': 'link', 'address': 'local:edge',
+        '_inputs': {'x': 'float'}, '_outputs': {'y': 'float'}}
+
+    accessed = core.access(declaration)
+    realized_schema, _state, _merges = core.realize({}, {'p': declaration})
+
+    assert accessed.address._default == realized_schema['p'].address._default
+
+
+@pytest.mark.parametrize('declaration', [
+    {'_type': 'link', 'address': 'local:edge',
+     '_inputs': {'x': 'float'}, '_outputs': {'y': 'float'}},
+    {'_type': 'link',
+     '_inputs': {'x': 'float'}, '_outputs': {'y': 'float'}},
+    {'_type': 'link', 'address': 'local:edge', 'inputs': {'x': ['store']},
+     '_inputs': {'x': 'float'}, '_outputs': {'y': 'float'}},
+])
+def test_link_round_trips_through_render(core, declaration):
+    """``render`` is the inverse of ``access``: an address survives, and a
+    link that never declared one does not acquire a stand-in."""
+    accessed = core.access(declaration)
+    rendered = core.render(accessed)
+
+    assert core.access(rendered) == accessed
+    if 'address' in declaration:
+        assert rendered['address'] == 'local:edge'
+    else:
+        assert 'address' not in (rendered if isinstance(rendered, dict) else {})
+
+
+def test_rendered_link_realizes(core):
+    """A rendered link must survive realization — the round trip is only
+    useful if the far end still loads. An address-less link previously
+    rendered a bare ``protocol`` schema that ``load_protocol`` rejected."""
+    accessed = core.access({'p': {
+        '_type': 'link',
+        '_inputs': {'x': 'float'},
+        '_outputs': {'y': 'float'},
+        'inputs': {'x': ['x']}}})
+
+    schema, state, _merges = core.realize({}, core.render(accessed))
+
+    assert isinstance(state['p']['instance'], Edge)
+    assert 'x' in schema
 
 
 def test_compose_atom(core):

@@ -37,8 +37,10 @@ from bigraph_schema.schema import (
     Schema,
     Link,
     Object,
+    Protocol,
     schema_dtype,
     is_schema_field,
+    normalize_address,
 )
 
 # aligning parameters takes them from positioned arguments and gives them keys
@@ -253,9 +255,35 @@ def reify_schema(core, schema: Union, parameters):
     return replace(schema, **parameters)
 
 
+def access_address(core, address):
+    """Compile a link's ``address`` into a ``Protocol`` **schema node**.
+
+    The address itself is a value, so it rides on the node's ``_default`` —
+    which is exactly the shape ``realize`` produces for the same link, and
+    what ``default``/``realize_link`` already read. Routing it through
+    ``core.access`` instead would parse it as a type expression (see
+    ``normalize_address``).
+    """
+    if isinstance(address, Protocol):
+        return address
+
+    canonical = normalize_address(address)
+    if not isinstance(canonical, dict) or 'protocol' not in canonical:
+        return core.access(address)
+
+    try:
+        node = core.access(canonical['protocol'])
+    except Exception:
+        node = None
+    if not isinstance(node, Protocol):
+        node = Protocol()
+
+    return replace(node, _default=canonical)
+
+
 def reify_schema_link(core, schema, parameters):
     if 'address' in parameters:
-        schema.address = core.access(parameters['address'])
+        schema.address = access_address(core, parameters['address'])
     if 'config' in parameters:
         schema.config = core.access(parameters['config'])
     if 'inputs' in parameters:
