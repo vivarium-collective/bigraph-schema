@@ -265,6 +265,19 @@ class Core:
         from bigraph_schema.assembly import fill_sites
         return fill_sites(self, body, bindings)
 
+    def replicate(self, template, counts=None):
+        """Expand marked regions into keyed copies (the cardinality
+        reaction), before any filling."""
+        from bigraph_schema.assembly import replicate
+        return replicate(template, counts)
+
+    def build(self, template, overrides=None):
+        """Replicate, fill, default, and check groundness — returns a
+        runnable ``(schema, state)``. Convenience over ``replicate`` +
+        ``fill_sites`` + ``fill``; not a primitive."""
+        from bigraph_schema.assembly import build
+        return build(self, template, overrides)
+
     def call_method(self, key, *args, **kwargs):
         method = self.method_registry.get(key)
         if method is None:

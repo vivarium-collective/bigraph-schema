@@ -1801,11 +1801,18 @@ def test_fill_rejects_a_shape_mismatched_port(core):
 
 
 def test_fill_value_site_checks_and_rejects(core):
-    """A value-sorted site is decided by ``check``."""
+    """A value-sorted site is decided by ``check``.
+
+    A value is *state*, so filling puts it on the site's sort as that
+    sort's default — the filled tree stays a schema, and ``core.fill``
+    materializes the value later.
+    """
     body = _sorted_body(core, 'float')
 
     filled = core.fill_sites(body, {'model': 3.5})
-    assert filled['study']['model'] == 3.5
+    assert isinstance(filled['study']['model'], Float)
+    assert filled['study']['model']._default == 3.5
+    assert core.fill(filled, {})['study']['model'] == 3.5
 
     with pytest.raises(ValueError, match="site 'model'"):
         core.fill_sites(body, {'model': 'not a float'})
@@ -1816,10 +1823,11 @@ def test_fill_optional_site_falls_back_to_its_default(core):
     body = _sorted_body(core, 'float', _default=1.25)
 
     filled = core.fill_sites(body, {})
-    assert filled['study']['model'] == 1.25
+    assert filled['study']['model']._default == 1.25
 
     # An explicit binding still wins over the default.
-    assert core.fill_sites(body, {'model': 9.0})['study']['model'] == 9.0
+    assert core.fill_sites(
+        body, {'model': 9.0})['study']['model']._default == 9.0
 
 
 def test_fill_unsorted_site_admits_anything(core):
@@ -1834,13 +1842,32 @@ def test_fill_rejects_an_unknown_site_name(core):
         core.fill_sites(body, {'nonexistent': 1.0})
 
 
-def test_fill_rejects_an_ambiguous_site_name(core):
-    """Bindings address sites by name, so a duplicated name is an error."""
+def test_fill_addresses_a_shared_site_name_by_path(core):
+    """A key shared by two sites is not a usable address; the error offers
+    the path form, which addresses each site unambiguously."""
     body = core.access({
         'left': {'hole': {'_type': 'site'}},
         'right': {'hole': {'_type': 'site'}}})
-    with pytest.raises(ValueError, match='ambiguous'):
+
+    with pytest.raises(ValueError, match='more than one site') as raised:
         core.fill_sites(body, {'hole': 1.0})
+    assert 'left/hole' in str(raised.value)
+    assert 'right/hole' in str(raised.value)
+
+    filled = core.fill_sites(body, {'left/hole': 1.0, 'right/hole': 2.0})
+    assert filled['left']['hole'] == 1.0
+    assert filled['right']['hole'] == 2.0
+
+
+def test_fill_rejects_binding_one_site_under_two_addresses(core):
+    """The bare key and the path name the same hole — binding both is a
+    conflict, not a silent last-wins."""
+    body = core.access({'study': {'model': {'_type': 'site'}}})
+
+    assert core.fill_sites(body, {'study/model': 1.0})['study']['model'] == 1.0
+
+    with pytest.raises(ValueError, match='bound twice'):
+        core.fill_sites(body, {'model': 1.0, 'study/model': 2.0})
 
 
 def test_register_sort_overrides_the_default_discipline(core):
@@ -1959,6 +1986,201 @@ def test_non_ground_document_survives_round_trip(core):
     assert not is_ground(round_tripped)
     assert isinstance(round_tripped['study']['model'], Site)
     assert core.render(round_tripped) == rendered
+
+
+# ── cardinality: replication is a reaction ──────────────────────────
+
+
+def _colony(core, **region):
+    """A document with one region marked for replication."""
+    return core.access({'colony': {
+        'cell': dict({'_control': 'replicate'}, **region),
+        'medium': 'float'}})
+
+
+def test_replicate_expands_a_marked_region(core):
+    """n=3 yields three keyed copies of the region's contents."""
+    body = _colony(core, mass='float', genome='string')
+
+    replicated = core.replicate(body, {'cell': 3})
+
+    assert sorted(replicated['colony']) == [
+        'cell_0', 'cell_1', 'cell_2', 'medium']
+    for index in range(3):
+        copy_ = replicated['colony'][f'cell_{index}']
+        assert sorted(copy_) == ['genome', 'mass']
+        assert isinstance(copy_['mass'], Float)
+    # The sibling that was never marked is untouched.
+    assert isinstance(replicated['colony']['medium'], Float)
+
+
+def test_replicate_is_deterministic(core):
+    """Same input and same count → identical structure, every time."""
+    body = _colony(core, mass='float', genome='string')
+    assert core.replicate(body, {'cell': 3}) == core.replicate(body, {'cell': 3})
+
+
+def test_replicate_n_of_one(core):
+    """n=1 yields exactly one copy — still renamed, so the shape of a
+    document does not depend on its count."""
+    replicated = core.replicate(_colony(core, mass='float'), {'cell': 1})
+    assert sorted(replicated['colony']) == ['cell_0', 'medium']
+
+
+def test_replicate_count_defaults_to_the_region(core):
+    """A region may carry its own ``_count``; an override wins."""
+    body = core.access({'colony': {
+        'cell': {'_control': 'replicate', '_count': 2, 'mass': 'float'}}})
+
+    assert sorted(core.replicate(body)['colony']) == ['cell_0', 'cell_1']
+    assert sorted(core.replicate(body, {'cell': 3})['colony']) == [
+        'cell_0', 'cell_1', 'cell_2']
+
+
+def test_replicate_drops_the_mark_so_it_reaches_quiescence(core):
+    """Copies are unmarked, so replication cannot fire on its own output."""
+    from bigraph_schema.assembly import collect_regions
+
+    replicated = core.replicate(_colony(core, mass='float'), {'cell': 2})
+
+    assert collect_regions(replicated) == {}
+    assert core.replicate(replicated, {'cell': 5}) == replicated
+
+
+def test_replicate_materializes_a_per_instance_site(core):
+    """A site inside the region is materialized n times and is fillable
+    per instance — addressed by path, since the copies share its key."""
+    from bigraph_schema.assembly import collect_sites
+
+    body = core.access({'colony': {'cell': {
+        '_control': 'replicate',
+        'seed': {'_type': 'site', '_sort': 'integer'}}}})
+
+    replicated = core.replicate(body, {'cell': 3})
+    addresses = sorted(a for a in collect_sites(replicated) if '/' in a)
+    assert addresses == [
+        'colony/cell_0/seed', 'colony/cell_1/seed', 'colony/cell_2/seed']
+
+    filled = core.fill_sites(replicated, {
+        'colony/cell_0/seed': 1,
+        'colony/cell_1/seed': 2,
+        'colony/cell_2/seed': 3})
+    assert [core.fill(filled, {})['colony'][f'cell_{i}']['seed']
+            for i in range(3)] == [1, 2, 3]
+
+
+def test_replicate_expands_only_the_named_region(core):
+    """Two marked siblings expand independently, each by its own count."""
+    body = core.access({'colony': {
+        'cell': {'_control': 'replicate', 'mass': 'float'},
+        'vessel': {'_control': 'replicate', 'volume': 'float'}}})
+
+    replicated = core.replicate(body, {'cell': 2, 'vessel': 3})
+
+    assert sorted(replicated['colony']) == [
+        'cell_0', 'cell_1', 'vessel_0', 'vessel_1', 'vessel_2']
+    assert 'mass' in replicated['colony']['cell_0']
+    assert 'volume' in replicated['colony']['vessel_0']
+
+
+def test_replicate_rejects_a_bad_count(core):
+    body = _colony(core, mass='float')
+    for bad in (-1, 2.5, 'three'):
+        with pytest.raises(ValueError, match='non-negative int'):
+            core.replicate(body, {'cell': bad})
+
+    from bigraph_schema.assembly import MAX_REPLICAS
+    with pytest.raises(ValueError, match='MAX_REPLICAS'):
+        core.replicate(body, {'cell': MAX_REPLICAS + 1})
+
+
+def test_replicate_rule_is_a_shared_parameter_reaction(core):
+    """The mechanism is Milner's parametric rule: every reactum site
+    instantiates from the *same* redex site (§8.1), which is what makes
+    the copies copies."""
+    from bigraph_schema.assembly import replicate_rule
+
+    rule = replicate_rule('cell', 3)
+    assert set(rule.instantiation.values()) == {'contents'}
+    assert sorted(rule.reactum) == ['cell_0', 'cell_1', 'cell_2']
+
+
+# ── build: the template convenience ─────────────────────────────────
+
+
+def test_build_is_the_litmus_test(core):
+    """A template with a face-sorted model site, a value site, and a
+    replicated region: drop in a conforming process and get a ground,
+    runnable document — no code."""
+    from bigraph_schema.assembly import interfaces
+
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'timestep': {'_type': 'site', '_sort': 'float', '_default': 1.0},
+        'seeds': {
+            '_control': 'replicate',
+            'seed': {'_type': 'site', '_sort': 'integer'}}}})
+
+    model = _process(core, {'glucose': 'float'}, {'growth_rate': 'float'})
+
+    schema, state = core.build(template, {
+        'model': model,
+        'seeds': 2,
+        'study/seeds_0/seed': 7,
+        'study/seeds_1/seed': 8})
+
+    assert sorted(schema['study']) == [
+        'model', 'seeds_0', 'seeds_1', 'timestep']
+    assert interfaces(schema)[0]._places == ()      # ground: no open sites
+    assert state['study']['timestep'] == 1.0        # the site's default
+    assert state['study']['seeds_0']['seed'] == 7
+    assert state['study']['seeds_1']['seed'] == 8
+
+
+def test_build_reports_an_unfilled_required_site(core):
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'timestep': {'_type': 'site', '_sort': 'float'}}})
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        core.build(template, {})
+    assert 'study/model' in str(raised.value)
+    assert 'study/timestep' in str(raised.value)
+
+
+def test_build_reports_a_non_conforming_filler(core):
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE}}})
+    wrong = _process(core, {'glucose': 'float'}, {'biomass': 'float'})
+
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.build(template, {'model': wrong})
+
+
+def test_build_of_a_ground_document_is_the_identity_on_shape(core):
+    """A template with no sites and no marks is already a document."""
+    template = core.access({'cell': {'mass': 'float'}})
+    schema, state = core.build(template)
+    assert schema == template
+    assert state == {'cell': {'mass': 0.0}}
+
+
+@pytest.mark.xfail(
+    reason='pre-existing on origin/main: core.access leaves a Link.address '
+           'as a raw str/dict rather than a Protocol, so default/realize '
+           'walk it as a schema and fail. Blocks build() for any filler '
+           'declaring an explicit address.',
+    strict=True)
+def test_build_with_an_addressed_filler(core):
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE}}})
+    addressed = core.access({
+        '_type': 'link',
+        'address': 'local:edge',
+        '_inputs': {'glucose': 'float'},
+        '_outputs': {'growth_rate': 'float'}})
+
+    core.build(template, {'model': addressed})
 
 
 def test_compose_atom(core):

@@ -27,7 +27,7 @@ formal definitions.
 import copy
 import random
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional, Dict, List as TypingList, Tuple as TypingTuple
 
 from bigraph_schema.schema import (
@@ -698,22 +698,53 @@ def admits(core, site, filler):
 
 
 def collect_sites(body):
-    """Map each open site's **name** to its path.
+    """Map each open site's **address** to ``(path, site)``.
 
-    A site's name is its key in the place graph — the same convention
-    ``instantiate`` and ``Match.bindings`` already use. Raises when one
-    name is ambiguous across two paths, since bindings address sites by
-    name.
+    A site is addressed by its key in the place graph — the convention
+    ``instantiate`` and ``Match.bindings`` already use — and *always* also
+    by its full ``/``-joined path. The path form is what distinguishes
+    sites that replication (:func:`replicate`) has given the same key in
+    different copies of a region. A bare key shared by more than one site
+    is simply not registered, so using it is an error that can name the
+    alternatives rather than silently filling the wrong hole.
     """
+    places = list(interfaces(body)[0]._places)
+
+    shared = {}
+    for path, _site in places:
+        shared.setdefault(path[-1] if path else '', []).append(path)
+
     sites = {}
-    for path, site in interfaces(body)[0]._places:
+    for path, site in places:
+        sites['/'.join(path)] = (path, site)
         name = path[-1] if path else ''
-        if name in sites:
-            raise ValueError(
-                f'fill: site name {name!r} is ambiguous — it appears at '
-                f'{sites[name][0]} and at {path}')
-        sites[name] = (path, site)
+        if len(shared[name]) == 1:
+            sites[name] = (path, site)
+
     return sites
+
+
+def _as_schema(core, site, filler):
+    """Shape a filler for substitution into a *schema* tree.
+
+    A structural filler is already a subtree and goes in as-is. A **value**
+    filler is state, not schema — so it lands as the site's own sort
+    carrying that value as its default. Filling a document therefore keeps
+    it a document, and ``core.fill`` later materializes the value into
+    state. An unsorted site has no sort to carry the value, so the raw
+    filler stands (the pure-Milner case).
+    """
+    if isinstance(filler, (Node, dict)):
+        return filler
+
+    sort = getattr(site, '_sort', '')
+    if not sort or core is None:
+        return filler
+
+    schema = core.access(sort)
+    if isinstance(schema, Node):
+        return replace(schema, _default=filler)
+    return filler
 
 
 def _fill_at_paths(core, body, filling):
@@ -732,7 +763,8 @@ def _fill_at_paths(core, body, filling):
             raise ValueError(
                 f'fill: filler rejected for site {label!r} at {path}: '
                 f'{reason}')
-        _set_at_path(result, path, copy.deepcopy(filler))
+        _set_at_path(
+            result, path, copy.deepcopy(_as_schema(core, site, filler)))
 
     return result
 
@@ -752,21 +784,193 @@ def fill_sites(core, body, bindings):
 
     unknown = set(bindings) - set(sites)
     if unknown:
-        raise ValueError(
-            f'fill: no such site(s): {sorted(unknown)} '
-            f'(open sites: {sorted(sites)})')
+        hints = []
+        for name in sorted(unknown):
+            alternatives = sorted(
+                address for address, (path, _site) in sites.items()
+                if '/' in address and path and path[-1] == name)
+            if alternatives:
+                hints.append(
+                    f'{name!r} names more than one site — address it by '
+                    f'path, one of {alternatives}')
+        detail = '; '.join(hints) if hints else (
+            f'open sites: {sorted(sites)}')
+        raise ValueError(f'fill: no such site(s): {sorted(unknown)} — {detail}')
+
+    # A site carries up to two addresses (bare key and path); resolve every
+    # binding down to the path it designates so both spellings agree.
+    bound = {}
+    for address, filler in bindings.items():
+        path, _site = sites[address]
+        if path in bound and bound[path][1] is not filler:
+            raise ValueError(
+                f'fill: the site at {path} is bound twice, as '
+                f'{bound[path][0]!r} and as {address!r}')
+        bound[path] = (address, filler)
 
     filling = {}
-    for name, (path, site) in sites.items():
-        if name in bindings:
-            filler = bindings[name]
+    for address, (path, site) in sites.items():
+        if path in filling:
+            continue
+        if path in bound:
+            label, filler = bound[path]
         elif getattr(site, '_default', None) is not None:
-            filler = site._default
+            label, filler = address, site._default
         else:
             continue                    # left open, still a site
-        filling[path] = (name, site, filler)
+        filling[path] = (label, site, filler)
 
     return _fill_at_paths(core, body, filling)
+
+
+# ── Cardinality: replication is a reaction, not a kind of site ──────
+# "How many processes / store subtrees" changes the *shape* of the
+# document, so it is not a hole to be filled — it is a rewrite. Milner
+# already has the right tool: a parametric reaction rule whose reactum
+# mentions the redex's parameter more than once shares that parameter
+# across every occurrence (§8.1, p. 83). Replication is exactly that
+# rule, so this adds no operator — only the rule and a driver.
+
+REPLICATE = 'replicate'
+"""The control marking a repeatable region. A node carrying
+``_control: 'replicate'`` is replicated by :func:`replicate` into keyed
+copies; the copies do not carry the mark, so replication is idempotent
+and the rewrite reaches quiescence on its own."""
+
+COUNT_KEY = '_count'
+"""Optional default count on a marked region, overridable at build time."""
+
+MAX_REPLICAS = 1024
+"""Guard against a count that explodes the document."""
+
+
+def collect_regions(body):
+    """Map each marked region's name (its key) to its path."""
+    regions = {}
+
+    def walk(node, path):
+        if not isinstance(node, dict):
+            return
+        if node.get('_control') == REPLICATE:
+            name = path[-1] if path else ''
+            if name in regions:
+                raise ValueError(
+                    f'replicate: region name {name!r} is ambiguous — it '
+                    f'appears at {regions[name]} and at {path}')
+            regions[name] = path
+            return                      # regions do not nest through a mark
+        for key, child in node.items():
+            if isinstance(key, str) and not key.startswith('_'):
+                walk(child, path + (key,))
+
+    walk(body, ())
+    return regions
+
+
+def replicate_rule(name, count):
+    """The cardinality rule: one marked region in, ``count`` copies out.
+
+    The redex is the marked region with a single site capturing its
+    contents; the reactum is ``count`` keyed copies whose sites all
+    instantiate from that *same* redex site — Milner's shared parameter.
+    The copies drop the mark, so the rule cannot fire on its own output.
+    """
+    return ReactionRule(
+        redex={name: {'_control': REPLICATE, 'contents': Site()}},
+        reactum={
+            f'{name}_{index}': {'contents': Site()}
+            for index in range(count)},
+        instantiation={
+            f'{name}_{index}': 'contents' for index in range(count)},
+        label=f'replicate {name} x{count}')
+
+
+def replicate(body, counts=None):
+    """Expand every marked region into keyed copies, before filling.
+
+    ``counts`` maps a region's name to its count, overriding the region's
+    own ``_count``; a region with neither stays single. Regions are
+    expanded one at a time, re-walking after each firing because
+    expansion changes paths — and because a copied region may itself
+    contain a marked sub-region.
+
+    Deterministic: the copy keys are ``<name>_<i>`` for ``i`` in order, and
+    the region to expand is chosen in walk order, so the same input and
+    the same counts always yield the identical document.
+    """
+    counts = counts or {}
+    body = copy.deepcopy(body)
+
+    for _ in range(MAX_REPLICAS):
+        regions = collect_regions(body)
+        if not regions:
+            return body
+
+        name, path = next(iter(regions.items()))
+        region = _get_at_path(body, path)
+        count = counts.get(name, region.get(COUNT_KEY, 1))
+
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise ValueError(
+                f'replicate: count for region {name!r} must be a '
+                f'non-negative int, got {count!r}')
+        if count > MAX_REPLICAS:
+            raise ValueError(
+                f'replicate: count {count} for region {name!r} exceeds '
+                f'MAX_REPLICAS ({MAX_REPLICAS})')
+
+        rule = replicate_rule(name, count)
+
+        # The redex matches any node bearing the mark, so select the match
+        # that is *this* region: same parent, and the pattern key assigned
+        # to this region's key.
+        parent = tuple(path[:-1])
+        index = next(
+            (position for position, match in enumerate(
+                find_matches(body, rule.redex))
+             if tuple(match.path) == parent and match.key_map.get(name) == name),
+            None)
+        if index is None:
+            raise ValueError(
+                f'replicate: marked region {name!r} at {path} did not match '
+                f'its own rule')
+
+        body, _match = fire_rule(body, rule, match_index=index)
+
+    raise ValueError(
+        f'replicate: more than {MAX_REPLICAS} regions expanded — a marked '
+        f'region is probably regenerating the mark')
+
+
+# ── build — the template convenience (sugar, not a primitive) ───────
+
+
+def build(core, template, overrides=None):
+    """Replicate, fill, default, and check groundness. Returns
+    ``(schema, state)`` — directly runnable by process-bigraph.
+
+    ``overrides`` carries region counts *and* site fillers in one map;
+    a key naming a marked region is a count, anything else is a filler.
+    Not a primitive: every step is an existing operation.
+    """
+    overrides = overrides or {}
+
+    regions = collect_regions(template)
+    counts = {name: overrides[name] for name in regions if name in overrides}
+    body = replicate(template, counts)
+
+    bindings = {key: value for key, value in overrides.items()
+                if key not in counts}
+    schema = fill_sites(core, body, bindings)
+
+    open_sites = [path for path, _site in interfaces(schema)[0]._places]
+    if open_sites:
+        raise ValueError(
+            'build: document is not ground — required site(s) left '
+            'unfilled: ' + ', '.join(
+                repr('/'.join(path)) for path in sorted(open_sites)))
+
+    return schema, core.fill(schema, {})
 
 
 # ── Binding / link locality ─────────────────────────────────────────
