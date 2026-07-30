@@ -205,6 +205,47 @@ face is the contract, the address is the hole.
   `Protocol` for `realize`. Address *injection* is address *resolution* applied to a
   filled address — the same fix enables both.
 
+### 4.7 The contract = the face (typed core) + semantics + amendments
+
+"The face is the contract" generalises: a **contract** is the full interface spec of
+an **edge *or* a site**, and the **face** (`_inputs`/`_outputs`) is its
+machine-checkable **typed core** — the part `admits` reads. This *unifies* the face
+with the existing `ProcessContract` / `Edge.describe_contract()`
+(`bigraph_schema/contract.py`), which already carries the documentary part (summary,
+math, per-port semantics, assumptions, references). They are not two objects: the
+face is the **typed projection** of one contract.
+
+- **Universal.** `describe_contract()` today answers only for edges; extend it to
+  **every edge and every site** — a **site's sort *is* a contract**. A template site
+  says "a process satisfying *this contract*" (typed face + documented meaning), not
+  merely "shaped like X". So the face-as-contract holds at exactly the granularity
+  you fill.
+- **`admits` = `face_conforms` + amendment predicates.** The face decides typed
+  admissibility; amendments may add predicate-bearing constraints.
+
+**Amendments** — an ordered, append-only, provenance-carrying refinement of a
+contract:
+
+```
+amendment = { op, target, detail, by, when, why }
+   op ∈  narrow    (tighten the face / add a port or constraint)
+         annotate  (add or refine a description / per-port semantics)
+```
+
+Decision (per review): **`narrow` + `annotate` only** — a contract may get *stricter*
+and *better-documented* as it flows down, never looser and never gain new ports
+(`extend` is out until a use case demands it). This keeps amendment **monotone**, so
+`admits` stays sound: a filler admissible for an amended (narrower) contract is
+admissible for the original. Amendments give you the *description of a contract* as a
+first-class, editable thing, and — because each carries `by/when/why` — the
+**provenance** of how an interface evolved through composition and filling.
+
+- `amend(contract, amendment)` is pure and append-only; a composite's contract is its
+  constituents' contracts, amended.
+- Lands downstream: Layer 2a exposes one `describe_contract` for composites; the
+  viewer's contract region renders it (face + description + amendments), and a site
+  renders its *required* contract.
+
 ## 5. Contracts
 
 1. **`fill` is a monoid action on documents.** Filling **independent** sites
@@ -241,6 +282,11 @@ face is the contract, the address is the hole.
   `admits` passes and the filled edge `realize`s to a runnable process; inject a
   non-conforming address → fill error naming the face mismatch. Assert the two
   flavors (address-hole vs. whole-edge site) both go through the same `fill`.
+- **Contract + amendments (§4.7).** `describe_contract` answers for a **site** (its
+  required contract) as well as an edge; `amend` is append-only; a `narrow` amendment
+  makes `admits` **stricter** (a filler rejected after narrowing was admissible
+  before — monotonicity); `annotate` changes docs without changing admissibility;
+  `extend` is refused.
 - **Composition law.** Filling two independent sites commutes; a partially filled
   document is still fillable; `compose` degrades to `assembly.compose` on empties.
 - **Cardinality.** A marked region + `n=3` yields three keyed instances
