@@ -140,56 +140,67 @@ resolution, interface checking, and tensor-expansion all reuse existing ops.
 
 ## 4. The primitives
 
-### 4.1 `Slot` — a named, typed hole
+### 4.1 A slot *is* a sorted `Site` — not a new type
 
-A `Slot(Site)` subclass (so it *is* a place-graph hole and every existing
-`Site`-aware traversal — `interfaces`, `compose`, `is_ground` — already sees it):
+bigraph-schema already models a typed hole: `Site._sort` (`schema.py:623`, a
+Milner §6.2 sort label) + the sorting discipline in `assembly.py` (`Sorting`,
+`stratified_sorting`, `validate_sorting`, `formation(parent_sort, child_sort)`).
+**A slot is a `Site` whose `_sort` names the constraint on its filler** — we do
+**not** subclass `Site`. Every existing traversal (`interfaces`/`compose`/
+`is_ground`/`validate_sorting`) already handles it.
 
-```python
-@dataclass(kw_only=True)
-class Slot(Site):
-    _schema_keys = Site._schema_keys | frozenset({'_name', '_slot', '_kind', '_optional'})
-    _name: str = ''            # slot identifier, unique within a template
-    _kind: str = 'value'       # 'process' | 'value' | 'cardinality'
-    _slot: Node = field(default_factory=Node)   # the slot's TYPE CONSTRAINT:
-                               #  process     → an INTERFACE: link[_inputs,_outputs]
-                               #                (+ optional address protocol) that a
-                               #                filler's interface() must conform to
-                               #  value       → a value schema (float/string/map[...])
-                               #  cardinality → an int (optionally range[lo,hi])
-    _optional: bool = False    # if True, an unbound slot falls back to _default
-    _target: list = field(default_factory=list)  # cardinality only: path of the
-                               # body region whose multiplicity this count drives
-```
+The constraint per kind is carried by the sort:
 
-- `_kind` selects the binding mechanism (the §3 table). It is derivable from
-  `_slot` (an interface ⇒ `process`; an int with a `_target` ⇒ `cardinality`; else
-  `value`) — stored explicitly for clarity/validation.
-- A `process` slot's `_slot` is an **interface** (`link[in,out]` or `Interface`).
-  There is no runtime `composite` type; the hole stays a `Site` in the place graph,
-  and the interface constrains what may fill it (§4.4).
-- `render`/`access` round-trip and the `type[...]`/`{default}` grammar come for
-  free from `Node`/`Site`.
+- **process slot** — `_sort` names a sort whose **formation is structural
+  interface conformance**: a filler is admissible iff its outer face
+  (`interface()` / collected `_inputs`,`_outputs`) conforms (§4.4). Sorts may be
+  registered by name (`'model'`) or given inline as an interface literal that
+  auto-registers an anonymous sort; either way the *mechanism* is the existing
+  `Sorting.formation` — we supply a formation that calls `core.check`/`resolve`
+  instead of nominal label-equality.
+- **value slot** — `_sort` is a value type (`float`/`string`/`map[...]`);
+  admissibility is `core.check(sort, value)`.
+- **cardinality** — *not a site.* Replication is a region-level annotation in the
+  Template header (§4.2), expanded via `tensor`; it is not a hole in the place
+  graph, so it does not live on `Site`.
+
+This keeps `Site` pure Milner (a sorted hole) and puts every ergonomic
+concern — the slot's **name**, **optionality**, and **cardinality** — in the
+Template header, where they belong.
+
+*(Subclassing `Slot(Site)` remains a fallback if we later want the name/optional
+flags physically on the hole; the recommendation is to avoid it — a slot is a
+sorted site, nothing more.)*
 
 ### 4.2 `Template` — a schema with named slots + a body
 
-A template is a schema **document** (an ordinary bigraph) that contains `Slot`s in
-its place graph, plus a small header declaring the slots by name:
+A template is a schema **document** (an ordinary bigraph) whose place graph
+contains sorted `Site`s, plus a small **header** that names them and declares the
+non-hole metadata (Milner sites are positional/anonymous — the header is where
+concrete names + optionality + cardinality live):
 
 ```python
 @dataclass(kw_only=True)
 class Template(Node):
     _schema_keys = Node._schema_keys | frozenset({'_slots', '_body'})
-    _slots: dict = field(default_factory=dict)   # name -> Slot (the declared holes)
-    _body: Node = field(default_factory=Node)    # the composite schema referencing them
+    _body: Node = field(default_factory=Node)    # the composite schema, with sorted Sites
+    _slots: dict = field(default_factory=dict)   # slot_name -> {
+                                                 #   'path': [...],          # the Site's position
+                                                 #   'sort': <sort or interface literal>,
+                                                 #   'optional': bool,
+                                                 #   'cardinality': {'target':[...], 'range':[lo,hi]}?  }
 ```
 
-- `_slots` is derived from the body on registration (walk `_body`, collect `Slot`s
-  by `_name`) — declaring it explicitly is an optimization/validation aid, not a
-  second source of truth. A single-composite study template is `len(_slots)==1`;
-  a comparison template (model-under-test vs. reference) is `len(_slots)==2`.
-- A `Template` is registered like any type (`core.register_type('template', Template)`
-  in `BASE_TYPES`), and downstream templates register via the `register_types`
+- `_slots` maps a **name → the Site's path** (+ its sort/optionality, and a
+  `cardinality` entry when the name drives a replicated region rather than fills a
+  hole). Names/paths are how `bind` addresses a specific slot; the sort is the
+  admissibility constraint validated by the `Sorting`.
+- `_slots` is recoverable from `_body` (walk it, collect sorted `Site`s by path);
+  the header is the authoritative *naming* layer + the home for cardinality (which
+  has no Site to attach to). Single-composite study template = one process slot;
+  comparison template (model-under-test vs. reference) = two.
+- A `Template` registers like any type (`core.register_type('template', Template)`
+  in `BASE_TYPES`); downstream templates register via the `register_types`
   discovery hook — so `study`, `investigation`, and concrete templates all become
   bigraph-schema types (the umbrella's "bigraph-schema as the registry").
 
@@ -243,10 +254,13 @@ iff:
 
 So "a process shaped `{glucose: float, biomass: map[float]} → {growth_rate: float}`"
 is a *face*, and any registered process whose outer face conforms composes into it.
-This is the standard's own well-definedness condition made **typed** — we reuse
-`core.check`/`core.resolve`, adding no new type algebra, only the requirement that
-the faces (not just port *names*) align. A non-conforming filler is a
-**composition error**, reported as such.
+
+Mechanically this is the **existing sorting discipline** (`assembly.Sorting` /
+`validate_sorting`, `assembly.py:401-491`) with a `formation` that decides
+admissibility by **structural face-conformance** (`core.check`/`resolve`) rather
+than nominal label-equality. We add no new type algebra — only a formation callback
+that compares faces (not just port *names*). A non-conforming filler is a
+**composition error** (equivalently, a sorting violation), reported as such.
 
 ### 4.5 Generative cardinality (number of processes / store trees)
 
@@ -390,20 +404,29 @@ parameter grammar, `test_compose_*` (1578-1599) for substitution semantics.
 
 ---
 
-## 10. Open decisions for review
+## 10. Decisions (resolved 2026-07-30)
 
-1. **`Slot` as a `Site` subclass vs. a `Site` + external name-registry.** Spec
-   recommends the subclass (keeps all Milner traversals working); confirm.
-2. **Where `composite` registers.** As a `Site`-alias marker here (recommended), or
-   deferred until process-bigraph defines a real composite type and templates
-   reference *that*? Recommendation: marker here, so bigraph-schema stays the
-   keystone with no upstream dependency.
-3. **`bind` return shape.** A ground schema only, or `(schema, state)` (schema +
-   realized default state)? Recommendation: `(schema, state)` so Layer 2 gets a
-   runnable composite directly, matching `Core.default`/`realize` conventions.
-4. **Extend `assembly.compose` in place vs. a new `compose_at`.** The named/typed/
-   partial composition is a strict generalization of today's `compose`.
-   Recommendation: add `compose_at` alongside `compose` and re-express `compose` as
-   `compose_at` over the (single, anonymous) site — one code path, the old
-   signature preserved — rather than a parallel wrapper that could drift from the
-   standard. Confirm this refactor is acceptable in the `assembly` module.
+Milner grounding: in bigraph theory the holes are **sites** (numbered, untyped);
+composition plugs a filler's **roots into the context's sites** and is defined iff
+the shared **face** matches; constraining what may fill a hole is a **sorting**.
+bigraph-schema's `Site` is exactly Milner's site. Our `Slot` therefore = a
+**concrete (named) site under a sorting discipline (a typed face)** — a recognized
+extension, not a departure. This validates decisions 1 & 4 below.
+
+1. **A slot *is* a sorted `Site` — no subclass** ✅ — `Site._sort` + the existing
+   `Sorting`/`validate_sorting` discipline already model a typed hole. A slot is a
+   `Site` whose sort's `formation` is structural interface conformance. The slot's
+   **name, optionality, and cardinality** live in the **Template header** (Milner
+   sites are anonymous/positional), keeping `Site` pure. (Subclassing `Slot(Site)`
+   is a fallback only if we later want name/optional physically on the hole.)
+2. **`composite` stays a marker here; the composite concept is hardened in
+   process-bigraph** ✅ — bigraph-schema keeps no runtime `composite` type (no
+   upstream dep). The first-class `Composite` / `generate_composite` lives and is
+   hardened in **process-bigraph** (Layer 2), which references this template
+   machinery — including migrating `viva_superpowers`'s composite-generator into
+   process-bigraph.
+3. **`bind` returns `(schema, state)`** ✅ — a directly runnable composite for
+   Layer 2; matches `Core.default`/`realize`.
+4. **Extend `assembly.compose` in place** ✅ — re-express `compose` as `compose_at`
+   over the single anonymous site (one code path, old signature preserved); no
+   parallel wrapper that could drift from the standard.
