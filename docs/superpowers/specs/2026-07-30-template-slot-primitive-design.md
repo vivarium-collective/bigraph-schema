@@ -359,24 +359,36 @@ ports to one shared store, rebased through the site; `compose` raises naming the
 when a join isn't expressible. Also fixed: `render` dropped a site's `_sort` (leaked a
 Python object into the JSON document) — face-sorted templates now round-trip.
 
-### Open decision (resolve at Layer 2a's first task)
+### Decision 5 — RESOLVED (place semantics): keep the wrapper / site-position form ✅
 
-5. **`fill_sites` place semantics: aim at forest-splice (Milner-correct).**
-   `instantiate` forest-splices a multi-root filler **at the parent** (roots are
-   *regions*); `compose`'s `_set_at_path` keeps the site's key as a **wrapper node**.
-   `fill_sites` currently follows `compose` (conservative — no behavior change). The
-   **decision:** move toward the Milner forest-splice, validated with **evidence** —
-   Layer 2a's first task fills a *real composite* into a site and picks the semantics
-   against what `Composite` actually consumes (updating `compose`'s tests if changed).
-   Until then `fill_sites` follows `compose`.
+`fill_sites` keeps `compose`'s semantics — a filler goes **at the site's position**,
+not forest-spliced at the parent — now documented and tested (not incidental).
+`compose` is unchanged. Evidence from a live `Composite` against a real registered
+process: forest-splicing a nested composite **drops the site's key** and **collides**
+the filler's inner keys with the template's own (silently losing one), and violates
+composition arity (one root → one site). `instantiate`'s forest-splice is correct for
+reaction **matching** (a redex site captures sibling keys) — a different operation.
 
-### Deferred (next Fable pass)
+### Status (all green: 1113 tests, PR #175)
 
-- **Cardinality** as a single `ReactionRule` (§4.5) — redex = marked region, reactum =
-  N keyed copies, fired via `fire_rule` before `fill_sites`.
-- **`build(core, template, overrides)`** convenience (§4.3) → `(schema, state)`.
+- **Address resolution — done.** Root cause: a link's `address` was compiled by the
+  *type parser* (`core.access`), never becoming a `Protocol`, so `default`/`realize`/
+  `render` walked it as a schema. Fix: one `schema.normalize_address` that `access`
+  and `realize` share; `render(Protocol/Link)` corrected (also fixed a second
+  pre-existing bug — an address-less link couldn't realize). Plus: `collect_face`
+  now resolves a filler's face from `core.link_registry` (a real process declares
+  address + config, not ports) — `admits` no longer rejects every genuine filler.
+- **Done earlier:** cardinality reaction (§4.5), `build()` (§4.3).
 
-### Flagged, orthogonal (separate fix)
+### In flight (queued Fable batch)
 
+- **Address-injection** explicit tests (§4.6).
+- **Contract = face + amendments** (§4.7) — `describe_contract` to sites, `amend`
+  (`narrow`/`annotate`), `admits` via the contract.
+
+### Flagged, carried to Layer 2a (process-bigraph)
+
+- `Composite.run()` **hangs on `IncreaseProcess`** even at `interval:1.0` — a real
+  process-bigraph bug, unrelated to this layer.
 - `is_bound`/`find_unbound_links` (`assembly.py:570`) read wires absolute-from-root,
   contradicting `port_merges`' relative-to-parent — untested; left alone.
