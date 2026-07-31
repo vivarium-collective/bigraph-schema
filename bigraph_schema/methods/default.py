@@ -224,12 +224,14 @@ def default(schema: Protocol):
 def _default_materialized(value, fallback):
     """Default a link field that ``access`` may leave **materialized**.
 
-    ``address`` and the ``inputs``/``outputs`` wires are values, not schemas:
-    a declared address survives as a ``Protocol``'s ``_default`` and declared
-    wires survive as a plain ``{port: path}`` dict. Walking either as a schema
-    reaches a raw string or a path list, which no ``default`` dispatch
-    accepts — so a link that declared an address or its wiring could not be
-    defaulted at all. Only an unmaterialized field goes through ``default``.
+    ``address``, the ``inputs``/``outputs`` wires, and ``config`` are values,
+    not schemas: a declared address survives as a ``Protocol``'s ``_default``,
+    declared wires survive as a plain ``{port: path}`` dict, and a declared
+    config survives as its own dict of raw values (``{'rate': 0.5}``). Walking
+    any of them as a schema reaches a raw string, a path list, or a bare
+    number, which no ``default`` dispatch accepts — so a link that declared an
+    address, its wiring, or a config could not be defaulted at all. Only an
+    unmaterialized field goes through ``default``.
     """
     if isinstance(value, dict):
         return value or fallback
@@ -244,7 +246,7 @@ def default_link(schema: Link):
     else:
         return {
             'address': _default_materialized(schema.address, 'local:edge'),
-            'config': default(schema.config) or {},
+            'config': _default_materialized(schema.config, {}),
             '_inputs': schema._inputs,
             '_outputs': schema._outputs,
             'inputs': _default_materialized(

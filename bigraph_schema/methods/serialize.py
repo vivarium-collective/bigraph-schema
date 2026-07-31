@@ -417,6 +417,27 @@ def render(schema: Wires, defaults=False):
     result = 'wires'
     return wrap_default(schema, result) if defaults else result
 
+def render_config(value, defaults=False):
+    """Render a link's ``config`` as **data**, keeping its shape.
+
+    A config is a value, not a type: ``render``'s dict path collapses a
+    string-valued mapping into the compact type expression ``a:b|c:d``, so an
+    emitter's ``{'emit': {'level': 'node'}}`` came back as the string
+    ``'emit:level:node'`` and the re-accessed edge was constructed with a
+    string for its config. Each leaf is still rendered — a schema node in a
+    config round-trips to its type name — but the mapping stays a mapping.
+    """
+    if isinstance(value, dict):
+        return {
+            key: render_config(item, defaults=defaults)
+            for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [render_config(item, defaults=defaults) for item in value]
+    if isinstance(value, Node):
+        return render(value, defaults=defaults)
+    return value
+
+
 _LINK_FIELD_DEFAULTS = None
 
 
@@ -461,7 +482,10 @@ def render(schema: Link, defaults=False):
         value = getattr(schema, field_name)
         if field_name in blank and value == blank[field_name]:
             continue
-        intermediate[field_name] = render(value, defaults=defaults)
+        if field_name == 'config':
+            intermediate[field_name] = render_config(value, defaults=defaults)
+        else:
+            intermediate[field_name] = render(value, defaults=defaults)
 
     # Compact form for a link that declares nothing but its ports.
     if (set(intermediate) == {'_type', '_inputs', '_outputs'}

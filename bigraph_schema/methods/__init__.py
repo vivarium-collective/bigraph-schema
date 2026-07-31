@@ -4,7 +4,7 @@ from bigraph_schema.methods.resolve import resolve, promote
 from bigraph_schema.methods.generalize import generalize
 from bigraph_schema.methods.check import check
 from bigraph_schema.methods.validate import validate
-from bigraph_schema.methods.serialize import serialize, render, wrap_default
+from bigraph_schema.methods.serialize import serialize, render, render_config, wrap_default
 from bigraph_schema.methods.bundle import bundle, BundleContext
 from bigraph_schema.methods.realize import realize, realize_link, load_protocol, load_local_protocol
 from bigraph_schema.methods.merge import merge, merge_update
