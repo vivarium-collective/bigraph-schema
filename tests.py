@@ -3790,3 +3790,76 @@ if __name__ == '__main__':
     test_pi_brs(core)
 
     test_resolve_conflict(core)
+
+
+# ── a link's config is a value, not a schema ────────────────────────
+
+
+class ConfiguredEdge(Edge):
+    """An edge whose behaviour depends on its config, like every real one."""
+
+    config_schema = {'rate': 'float'}
+
+    def inputs(self):
+        return {'level': 'float'}
+
+    def outputs(self):
+        return {'level': 'float'}
+
+
+@pytest.mark.parametrize('config', [
+    {'rate': 0.5},
+    {'nested': {'a': 1}},
+    {'mixed': [1, 2.5, 'three']},
+    {},
+])
+def test_a_declared_config_can_be_defaulted(core, config):
+    """`access` leaves a declared `config` materialized — its own dict of raw
+    values — exactly as it leaves the wires. `default` used to walk it as a
+    schema and reach a bare number, so a link that declared any config at all
+    could not be defaulted, which made `core.fill` and `build` unusable for
+    every realistic process document.
+    """
+    link = core.access({'p': {
+        '_type': 'link',
+        'address': 'local:edge',
+        'config': config,
+        '_inputs': {'level': 'float'},
+        '_outputs': {'level': 'float'},
+        'inputs': {'level': ['level']}}})
+
+    state = core.fill(link, {})
+
+    assert state['p']['config'] == config
+    assert isinstance(state['p']['instance'], Edge)
+
+
+def test_build_fills_a_site_with_a_config_bearing_process(core):
+    """The end-to-end case: a template whose model site is filled by a
+    process that carries a config must build to a runnable document."""
+    from bigraph_schema.assembly import build, interfaces
+
+    core.register_link('ConfiguredEdge', ConfiguredEdge)
+
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': {
+            '_type': 'link',
+            '_inputs': {'level': 'float'},
+            '_outputs': {'level': 'float'}}},
+        'level': 'float'}})
+
+    model = core.access({
+        '_type': 'link',
+        'address': 'local:ConfiguredEdge',
+        'config': {'rate': 0.5},
+        'inputs': {'level': ['level']},
+        'outputs': {'level': ['level']}})
+
+    schema, state = build(core, template, {'study/model': model})
+
+    assert interfaces(schema)[0]._places == ()          # ground
+    assert state['study']['model']['config'] == {'rate': 0.5}
+
+    instance = state['study']['model']['instance']
+    assert isinstance(instance, ConfiguredEdge)
+    assert instance.config['rate'] == 0.5                # config reached it

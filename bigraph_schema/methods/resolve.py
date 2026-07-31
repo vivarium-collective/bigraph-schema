@@ -773,6 +773,37 @@ def resolve_link(link: Link, update, path=None):
 
     return schema
 
+_MATERIALIZED_LINK_FIELDS = ('address', 'config', 'inputs', 'outputs')
+
+
+@dispatch
+def resolve(current: Link, update: Link, path=None):
+    """Unify two links.
+
+    Only the **schema** fields (``_inputs``/``_outputs``) are unified. A
+    link's ``address``, ``config`` and wires are *values* that ``access``
+    leaves materialized — a config is its own dict of raw data
+    (``{'rate': 0.5}``) — so resolving them field-wise reaches a bare number
+    and fails with "cannot resolve types, not schemas". The generic
+    field-walk cannot tell those apart from schemas; here the convention is
+    known, so the more-informed side simply wins.
+    """
+    if path:
+        return resolve_link(current, update, path=path)
+
+    schema = current
+    for key in ('_inputs', '_outputs'):
+        subresolve = resolve(getattr(current, key), getattr(update, key))
+        schema = replace(schema, **{key: subresolve})
+
+    for key in _MATERIALIZED_LINK_FIELDS:
+        carried = getattr(update, key)
+        if isinstance(carried, (dict, str)) and carried:
+            schema = replace(schema, **{key: carried})
+
+    return schema
+
+
 @dispatch
 def resolve(current: Link, update: dict, path=None):
     return resolve_link(current, update, path=path)
