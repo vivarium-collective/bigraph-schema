@@ -1,4 +1,6 @@
 from plum import dispatch
+
+from bigraph_schema.fastdispatch import fast_dispatch
 import numpy as np
 
 from bigraph_schema.methods.check import check
@@ -767,3 +769,9 @@ def apply(schema: Node, state, update, path):
         result = update
 
     return result, merges
+
+
+# The recursive calls above resolve `apply` through this module's globals, so
+# rebinding here puts the whole recursion on the memoized front end, not just
+# the outermost call. See `bigraph_schema.fastdispatch` for why this is sound.
+apply = fast_dispatch(apply)
