@@ -234,6 +234,31 @@ class Core:
         for key, link in links.items():
             self.register_link(key, link)
 
+    def list_processes(self):
+        """Return every known link NAME without importing anything.
+
+        Works whether ``link_registry`` is a plain dict (eager discovery) or a
+        LazyLinkRegistry (lazy discovery) — in the lazy case this enumerates
+        pending placeholders too, so "list every available process" callers see
+        the full set without triggering heavy imports. Use ``materialize_links``
+        (or iterate ``link_registry.items()``) when the actual classes are
+        needed.
+        """
+        return list(self.link_registry.keys())
+
+    def materialize_links(self):
+        """Force lazy discovery to import every pending process module.
+
+        No-op for an eager/plain-dict registry. After this call
+        ``link_registry`` holds real classes for every known name — the
+        explicit "eager" escape hatch for callers that must introspect every
+        registered class.
+        """
+        materialize = getattr(self.link_registry, "materialize_all", None)
+        if callable(materialize):
+            materialize()
+        return self
+
     def update_link(self, key, data):
         """Deep-merge metadata/overrides into an existing registry entry."""
         self.link_registry[key] = data
@@ -1574,6 +1599,7 @@ class Core:
 
 
 _cached_base_core = None
+_cached_base_core_eager = None
 
 
 def _isolated_copy(base):
@@ -1594,7 +1620,12 @@ def _isolated_copy(base):
     import copy
     clone = copy.copy(base)
     clone.registry = dict(base.registry)
-    clone.link_registry = dict(base.link_registry)
+    # ``link_registry`` may be a LazyLinkRegistry: use its ``.copy()`` so
+    # placeholders are preserved instead of being materialized (a plain
+    # ``dict(...)`` would import every pending module). Falls back to ``dict``
+    # for the eager/plain-dict case.
+    _copy = getattr(base.link_registry, "copy", None)
+    clone.link_registry = _copy() if callable(_copy) else dict(base.link_registry)
     clone.method_registry = dict(base.method_registry)
     # Fresh, empty per-instance caches so warm entries (and the id-keyed
     # witnesses they hold) never bleed between independently-allocated cores.
@@ -1608,7 +1639,7 @@ def _isolated_copy(base):
     return clone
 
 
-def allocate_core(top=None):
+def allocate_core(top=None, eager=None):
     """Allocate a new Core with all discovered packages.
 
     The base core (without ``top``) is built once and cached to avoid
@@ -1617,16 +1648,30 @@ def allocate_core(top=None):
     types/links/methods registered on one core never leak into another,
     while the base types from discovery are present on every copy. See
     :func:`_isolated_copy` for the (container-level) copy semantics.
+
+    Discovery is LAZY by default: process modules are imported only when a
+    process address is first resolved, so a cold ``allocate_core()`` no longer
+    imports every (possibly heavy) package up front. ``core.link_registry``
+    still enumerates every known process NAME without importing. Pass
+    ``eager=True`` to force the classic behaviour of importing everything and
+    populating a plain-dict registry (also toggled by
+    ``BIGRAPH_SCHEMA_LAZY_DISCOVERY=0``). The lazy and eager base cores are
+    cached separately.
     """
-    global _cached_base_core
-    if top is None and _cached_base_core is not None:
-        return _isolated_copy(_cached_base_core)
+    global _cached_base_core, _cached_base_core_eager
+    if top is None:
+        cached = _cached_base_core_eager if eager else _cached_base_core
+        if cached is not None:
+            return _isolated_copy(cached)
 
     core = Core(BASE_TYPES)
-    core = discover_packages(core, top)
+    core = discover_packages(core, top, eager=eager)
 
     if top is None:
-        _cached_base_core = core
+        if eager:
+            _cached_base_core_eager = core
+        else:
+            _cached_base_core = core
         return _isolated_copy(core)
 
     return core
