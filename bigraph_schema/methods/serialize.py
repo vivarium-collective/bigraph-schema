@@ -417,7 +417,7 @@ def render(schema: Wires, defaults=False):
     result = 'wires'
     return wrap_default(schema, result) if defaults else result
 
-def _render_config(value, defaults=False):
+def render_config(value, defaults=False):
     """Render a link's ``config`` as **data**, keeping its shape.
 
     A config is a value, not a type: ``render``'s dict path collapses a
@@ -429,10 +429,10 @@ def _render_config(value, defaults=False):
     """
     if isinstance(value, dict):
         return {
-            key: _render_config(item, defaults=defaults)
+            key: render_config(item, defaults=defaults)
             for key, item in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_render_config(item, defaults=defaults) for item in value]
+        return [render_config(item, defaults=defaults) for item in value]
     if isinstance(value, Node):
         return render(value, defaults=defaults)
     return value
@@ -483,7 +483,7 @@ def render(schema: Link, defaults=False):
         if field_name in blank and value == blank[field_name]:
             continue
         if field_name == 'config':
-            intermediate[field_name] = _render_config(value, defaults=defaults)
+            intermediate[field_name] = render_config(value, defaults=defaults)
         else:
             intermediate[field_name] = render(value, defaults=defaults)
 
