@@ -21,6 +21,8 @@ pass over the same tree.
 """
 
 from plum import dispatch
+
+from bigraph_schema.fastdispatch import fast_dispatch
 import numpy as np
 
 from bigraph_schema.schema import (
@@ -716,3 +718,8 @@ def reconcile(schema: dict, updates: list):
             result[key] = reconciled
 
     return result if result else None
+
+
+# As in `apply`: the recursion resolves `reconcile` through module globals, so
+# rebinding here memoizes every level, not only the entry call.
+reconcile = fast_dispatch(reconcile)
