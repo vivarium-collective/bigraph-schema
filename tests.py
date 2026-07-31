@@ -3863,3 +3863,28 @@ def test_build_fills_a_site_with_a_config_bearing_process(core):
     instance = state['study']['model']['instance']
     assert isinstance(instance, ConfiguredEdge)
     assert instance.config['rate'] == 0.5                # config reached it
+
+
+@pytest.mark.parametrize('config', [
+    {'emit': {'level': 'node', 'global_time': 'node'}},   # an emitter's schema
+    {'rate': 0.5},
+    {'nested': {'a': 1}},
+    {'mixed': [1, 'two', {'three': 3}]},
+    {},
+])
+def test_a_config_round_trips_as_data(core, config):
+    """`render` must not collapse a config into a type expression.
+
+    The dict path folds a string-valued mapping into the compact `a:b|c:d`
+    form, so an emitter's `{'emit': {'level': 'node'}}` came back as the
+    string `'emit:level:node'` and the re-accessed edge was constructed with
+    a string where its config belonged.
+    """
+    link = core.access({
+        '_type': 'link', 'address': 'local:edge', 'config': config,
+        '_inputs': {'level': 'float'}, '_outputs': {'level': 'float'}})
+
+    rendered = core.render(link)
+
+    assert rendered['config'] == config
+    assert core.render(core.access(rendered)) == rendered
