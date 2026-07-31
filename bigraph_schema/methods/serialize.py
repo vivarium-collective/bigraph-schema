@@ -32,6 +32,7 @@ from bigraph_schema.schema import (
     DivideReset,
     DivideShare,
     LineageSeed,  # for render dispatch only
+    Protocol,
     List,
     Set,
     Map,
@@ -86,8 +87,15 @@ def render(schema: Empty, defaults=False):
 # metadata carried on the schema.
 
 def _render_bigraph_structural(schema, type_name, defaults=False):
-    if getattr(schema, '_sort', ''):
-        result = {'_type': type_name, '_sort': schema._sort}
+    sort = getattr(schema, '_sort', '')
+    if sort:
+        # ``_sort`` is a schema key, so ``access`` resolves a sort given as a
+        # type — a value type, or a link literal naming a face — into a schema
+        # node. Render it back so a sorted site (and so a template) survives
+        # the round trip to an on-disk document.
+        if isinstance(sort, Node):
+            sort = render(sort, defaults=defaults)
+        result = {'_type': type_name, '_sort': sort}
     else:
         result = type_name
     return wrap_default(schema, result) if defaults else result
@@ -409,20 +417,56 @@ def render(schema: Wires, defaults=False):
     result = 'wires'
     return wrap_default(schema, result) if defaults else result
 
+_LINK_FIELD_DEFAULTS = None
+
+
+def _link_field_defaults():
+    """The value each ``Link`` field carries when nothing was declared."""
+    global _LINK_FIELD_DEFAULTS
+    if _LINK_FIELD_DEFAULTS is None:
+        blank = Link()
+        _LINK_FIELD_DEFAULTS = {
+            name: getattr(blank, name) for name in blank.__dataclass_fields__}
+    return _LINK_FIELD_DEFAULTS
+
+
+@dispatch
+def render(schema: Protocol, defaults=False):
+    """Render a protocol back to the ``protocol:data`` address form.
+
+    A ``Protocol`` node's ``_default`` *is* the address it names (that is
+    what both ``access`` and ``realize`` put there), so rendering the node's
+    schema fields would throw the address away and emit something
+    ``load_protocol`` cannot read. An address-less protocol renders as its
+    bare type name.
+    """
+    address = schema._default
+    if isinstance(address, dict) and 'protocol' in address and 'data' in address:
+        return f"{address['protocol']}:{address['data']}"
+    return _node_type_name(type(schema)) or 'protocol'
+
+
 @dispatch
 def render(schema: Link, defaults=False):
     intermediate = {'_type': 'link'}
 
+    # Only fields that were actually declared are rendered. A link that
+    # never named an address must not emit one: the rendered form is fed
+    # back through ``access``, and a stand-in address would be read as a
+    # real one (and then fail to load as a protocol).
+    blank = _link_field_defaults()
     for field_name in schema.__dataclass_fields__:
         if not is_schema_field(schema, field_name):
             continue
         value = getattr(schema, field_name)
+        if field_name in blank and value == blank[field_name]:
+            continue
         intermediate[field_name] = render(value, defaults=defaults)
 
-    # Compact form for simple links with only core fields
-    if (isinstance(intermediate.get('_inputs'), str)
-            and isinstance(intermediate.get('_outputs'), str)
-            and len(intermediate) <= 5):
+    # Compact form for a link that declares nothing but its ports.
+    if (set(intermediate) == {'_type', '_inputs', '_outputs'}
+            and isinstance(intermediate['_inputs'], str)
+            and isinstance(intermediate['_outputs'], str)):
         result = f'link[{intermediate["_inputs"]},{intermediate["_outputs"]}]'
     else:
         result = intermediate

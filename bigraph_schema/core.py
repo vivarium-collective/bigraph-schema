@@ -149,6 +149,13 @@ class Core:
         self.registry = {}
         self.link_registry = {}
         self.method_registry = {}
+        # sort name -> admits(core, site, filler): the FILLING discipline
+        # (what may close a hole), as opposed to Sorting.formation, which
+        # is the NESTING discipline (what may live inside what).
+        self.sort_registry = {}
+        # sort name -> ProcessContract: the interface a site of that sort
+        # *requires*, amendments included.
+        self.contract_registry = {}
         # ``_access_cache`` is keyed by ``id(dict)`` and holds the dict
         # witness alive (so id reuse after GC is detected). Fresh
         # short-lived dicts produced per-tick (projection schemas,
@@ -233,6 +240,66 @@ class Core:
 
     def register_method(self, key, data):
         self.method_registry[key] = data
+
+    def register_sort(self, key, admits):
+        """Register the **filling** discipline for a sort.
+
+        ``admits(core, site, filler) -> bool`` decides whether a filler may
+        close a site of this sort. Distinct from ``Sorting.formation``,
+        which is the *nesting* discipline (see ``assembly``); a sort with no
+        registered ``admits`` falls back to face-conformance when it names a
+        link and to ``check`` otherwise.
+        """
+        self.sort_registry[key] = admits
+
+    def register_contract(self, key, contract):
+        """Register the contract a sort names.
+
+        A site sorted with this name then requires that contract — including
+        any amendments it carries — so a narrowed or better-documented
+        interface can be shared by name rather than restated at each site.
+        """
+        self.contract_registry[key] = contract
+
+    def describe_contract(self, node):
+        """The contract of an edge **or a site** — the face as typed core,
+        plus its documented meaning and amendment history.
+
+        For a site this is the contract it *requires*; for an edge, the one
+        it provides. ``Edge.describe_contract()`` remains the per-instance
+        spelling of the same thing.
+        """
+        from bigraph_schema.assembly import contract_of
+        return contract_of(self, node)
+
+    def admits(self, site, filler):
+        """Is ``filler`` an admissible filling for this sorted site?"""
+        from bigraph_schema.assembly import admits
+        return admits(self, site, filler)
+
+    def fill_sites(self, body, bindings):
+        """Substitute fillers into ``body``'s named open sites.
+
+        The one substitution primitive: ``admits``-checked, order-independent
+        across independent sites, and leaving unbound sites open so a
+        partially filled document is still a document. Note this is **not**
+        ``Core.bind``, which binds a logical key (a jump) to a target.
+        """
+        from bigraph_schema.assembly import fill_sites
+        return fill_sites(self, body, bindings)
+
+    def replicate(self, template, counts=None):
+        """Expand marked regions into keyed copies (the cardinality
+        reaction), before any filling."""
+        from bigraph_schema.assembly import replicate
+        return replicate(template, counts)
+
+    def build(self, template, overrides=None):
+        """Replicate, fill, default, and check groundness — returns a
+        runnable ``(schema, state)``. Convenience over ``replicate`` +
+        ``fill_sites`` + ``fill``; not a primitive."""
+        from bigraph_schema.assembly import build
+        return build(self, template, overrides)
 
     def call_method(self, key, *args, **kwargs):
         method = self.method_registry.get(key)

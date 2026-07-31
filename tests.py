@@ -1588,6 +1588,1136 @@ def test_compose_fills_sites(core):
     assert 'site1' in region
 
 
+def _resolve_wire(link_path, wire):
+    """Resolve a wire the way ``realize.port_merges`` does.
+
+    A wire is relative to the link's **parent** store, so the store it
+    designates is ``link_path[:-1] + wire``.
+    """
+    return tuple(link_path[:-1]) + tuple(wire)
+
+
+def _assert_wire_lands_on_a_store(schema, store_path):
+    """Every proper ancestor of ``store_path`` must exist in ``schema`` and
+    none of them may be a ``Link`` — ports read from stores, not from links."""
+    node = schema
+    for step in store_path[:-1]:
+        assert isinstance(node, dict) and step in node, (
+            f'wire target {store_path} escapes the composed tree at {step!r}')
+        node = node[step]
+        assert not isinstance(node, Link), (
+            f'wire target {store_path} passes through the Link at {step!r}')
+
+
+def test_compose_wires_link_into_wired_document(core):
+    """Task 0: compose a Link-bearing subtree into a site inside a wired
+    document and assert the resulting wires resolve.
+
+    The other compose tests only ever substitute *empty* regions into empty
+    holes, so the link-composition branch was unexercised. Joining an outer
+    name to an inner name has to satisfy three things at once: the wire must
+    be expressed in the **composed** tree's coordinates (not the filler's),
+    it must land on a **store** rather than inside a ``Link`` node, and the
+    filler's matching port must be wired to the **same** store — a join has
+    two ends.
+    """
+    from bigraph_schema.assembly import compose
+
+    outer = core.access({'world': {
+        'hole': {'_type': 'site'},
+        'consumer': {
+            '_type': 'link',
+            '_inputs': {'growth_rate': 'float'},
+            '_outputs': {'biomass': 'float'},
+            'outputs': {'biomass': ['biomass']}}}})
+
+    inner = core.access({'producer': {
+        'proc': {
+            '_type': 'link',
+            '_inputs': {'nutrient': 'float'},
+            '_outputs': {'growth_rate': 'float'},
+            'inputs': {'nutrient': ['nutrient']}}}})
+
+    result = compose(outer, inner)
+
+    consumer = result['world']['consumer']
+    producer = result['world']['hole']['proc']
+
+    # Both ends of the join are wired.
+    assert 'growth_rate' in consumer.inputs, 'outer input port left dangling'
+    assert 'growth_rate' in producer.outputs, 'filler output port left dangling'
+
+    # Both ends designate the same store.
+    consumer_store = _resolve_wire(
+        ('world', 'consumer'), consumer.inputs['growth_rate'])
+    producer_store = _resolve_wire(
+        ('world', 'hole', 'proc'), producer.outputs['growth_rate'])
+    assert consumer_store == producer_store, (
+        f'join ends disagree: {consumer_store} vs {producer_store}')
+
+    # And that store is reachable in the composed tree, through stores only.
+    _assert_wire_lands_on_a_store(result, consumer_store)
+
+    # The filler's already-wired port is untouched.
+    assert producer.inputs['nutrient'] == ['nutrient']
+
+
+def test_compose_wires_survive_realization(core):
+    """The wires ``compose`` writes must materialize a real shared store.
+
+    This is the end-to-end form of Task 0: realization is what turns wires
+    into stores (``realize.port_merges``), so a wire that resolves on paper
+    but not through ``realize`` is still dangling.
+    """
+    from bigraph_schema.assembly import compose
+
+    outer = core.access({'world': {
+        'hole': {'_type': 'site'},
+        'consumer': {
+            '_type': 'link',
+            'address': 'local:edge',
+            '_inputs': {'growth_rate': 'float'},
+            '_outputs': {'biomass': 'float'},
+            'outputs': {'biomass': ['biomass']}}}})
+
+    inner = core.access({'producer': {
+        'proc': {
+            '_type': 'link',
+            'address': 'local:edge',
+            '_inputs': {'nutrient': 'float'},
+            '_outputs': {'growth_rate': 'float'}}}})
+
+    result = compose(outer, inner)
+    schema, _state, _merges = core.realize({}, core.render(result))
+
+    consumer_store = _resolve_wire(
+        ('world', 'consumer'),
+        result['world']['consumer'].inputs['growth_rate'])
+
+    node = schema
+    for step in consumer_store:
+        assert isinstance(node, dict) and step in node, (
+            f'realization did not materialize {consumer_store} '
+            f'(missing {step!r})')
+        node = node[step]
+
+    # The join materialized as an actual typed store, reached from both ends.
+    assert isinstance(node, Float)
+
+
+def test_compose_raises_when_the_join_is_inexpressible(core):
+    """Wires are relative to a link's parent and cannot ascend, so a join is
+    only expressible when the outer link's parent contains the filled site.
+    When it does not, ``compose`` must say so rather than emit a wire that
+    silently resolves to nothing."""
+    from bigraph_schema.assembly import compose
+
+    # The consumer sits in a sibling subtree of the site, so no relative
+    # wire from ``left/`` can reach a store under ``right/hole/``.
+    outer = core.access({
+        'left': {
+            'consumer': {
+                '_type': 'link',
+                '_inputs': {'growth_rate': 'float'},
+                '_outputs': {}}},
+        'right': {
+            'hole': {'_type': 'site'}}})
+
+    inner = core.access({'producer': {
+        'proc': {
+            '_type': 'link',
+            '_inputs': {},
+            '_outputs': {'growth_rate': 'float'}}}})
+
+    with pytest.raises(ValueError, match='growth_rate'):
+        compose(outer, inner)
+
+
+# ── fill + admits: one primitive, one filling discipline ────────────
+
+MODEL_FACE = {
+    '_type': 'link',
+    '_inputs': {'glucose': 'float'},
+    '_outputs': {'growth_rate': 'float'}}
+
+
+def _sorted_body(core, sort, **extra):
+    """A one-site document whose site carries ``sort``."""
+    return core.access({'study': {
+        'model': dict({'_type': 'site', '_sort': sort}, **extra),
+        'note': 'string'}})
+
+
+def _process(core, inputs, outputs):
+    return core.access({
+        '_type': 'link',
+        '_inputs': inputs,
+        '_outputs': outputs})
+
+
+def test_fill_admits_a_conforming_filler(core):
+    """A face-sorted site accepts a filler whose outer face conforms."""
+    body = _sorted_body(core, MODEL_FACE)
+    filler = _process(core, {'glucose': 'float'}, {'growth_rate': 'float'})
+
+    filled = core.fill_sites(body, {'model': filler})
+
+    from bigraph_schema.assembly import interfaces
+    assert isinstance(filled['study']['model'], Link)
+    assert not isinstance(filled['study']['model'], Site)
+    assert interfaces(filled)[0]._places == ()   # the hole is closed
+
+
+def test_fill_admits_an_over_providing_filler(core):
+    """Conformance is structural subtyping: over-providing ports is fine."""
+    body = _sorted_body(core, MODEL_FACE)
+    generous = _process(
+        core,
+        {'glucose': 'float', 'oxygen': 'float'},
+        {'growth_rate': 'float', 'waste': 'float'})
+
+    filled = core.fill_sites(body, {'model': generous})
+    assert 'oxygen' in filled['study']['model']._inputs
+
+
+def test_fill_rejects_an_under_providing_filler(core):
+    """Under-providing is a fill error that names the site and the port."""
+    body = _sorted_body(core, MODEL_FACE)
+    stingy = _process(core, {'glucose': 'float'}, {'biomass': 'float'})
+
+    with pytest.raises(ValueError, match="site 'model'") as raised:
+        core.fill_sites(body, {'model': stingy})
+    assert 'growth_rate' in str(raised.value)
+
+
+def test_fill_rejects_a_shape_mismatched_port(core):
+    """A shared port whose type will not ``resolve`` is not admissible."""
+    body = _sorted_body(core, MODEL_FACE)
+    mistyped = _process(
+        core, {'glucose': 'map[float]'}, {'growth_rate': 'float'})
+
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.fill_sites(body, {'model': mistyped})
+
+
+def test_fill_value_site_checks_and_rejects(core):
+    """A value-sorted site is decided by ``check``.
+
+    A value is *state*, so filling puts it on the site's sort as that
+    sort's default — the filled tree stays a schema, and ``core.fill``
+    materializes the value later.
+    """
+    body = _sorted_body(core, 'float')
+
+    filled = core.fill_sites(body, {'model': 3.5})
+    assert isinstance(filled['study']['model'], Float)
+    assert filled['study']['model']._default == 3.5
+    assert core.fill(filled, {})['study']['model'] == 3.5
+
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.fill_sites(body, {'model': 'not a float'})
+
+
+def test_fill_optional_site_falls_back_to_its_default(core):
+    """``optional``/``default`` live on the site, not in a header."""
+    body = _sorted_body(core, 'float', _default=1.25)
+
+    filled = core.fill_sites(body, {})
+    assert filled['study']['model']._default == 1.25
+
+    # An explicit binding still wins over the default.
+    assert core.fill_sites(
+        body, {'model': 9.0})['study']['model']._default == 9.0
+
+
+def test_fill_unsorted_site_admits_anything(core):
+    """An unsorted site is a pure Milner hole — no filling constraint."""
+    body = core.access({'world': {'hole': {'_type': 'site'}}})
+    assert core.fill_sites(body, {'hole': 42})['world']['hole'] == 42
+
+
+def test_fill_rejects_an_unknown_site_name(core):
+    body = _sorted_body(core, 'float')
+    with pytest.raises(ValueError, match='no such site'):
+        core.fill_sites(body, {'nonexistent': 1.0})
+
+
+def test_fill_addresses_a_shared_site_name_by_path(core):
+    """A key shared by two sites is not a usable address; the error offers
+    the path form, which addresses each site unambiguously."""
+    body = core.access({
+        'left': {'hole': {'_type': 'site'}},
+        'right': {'hole': {'_type': 'site'}}})
+
+    with pytest.raises(ValueError, match='more than one site') as raised:
+        core.fill_sites(body, {'hole': 1.0})
+    assert 'left/hole' in str(raised.value)
+    assert 'right/hole' in str(raised.value)
+
+    filled = core.fill_sites(body, {'left/hole': 1.0, 'right/hole': 2.0})
+    assert filled['left']['hole'] == 1.0
+    assert filled['right']['hole'] == 2.0
+
+
+def test_fill_rejects_binding_one_site_under_two_addresses(core):
+    """The bare key and the path name the same hole — binding both is a
+    conflict, not a silent last-wins."""
+    body = core.access({'study': {'model': {'_type': 'site'}}})
+
+    assert core.fill_sites(body, {'study/model': 1.0})['study']['model'] == 1.0
+
+    with pytest.raises(ValueError, match='bound twice'):
+        core.fill_sites(body, {'model': 1.0, 'study/model': 2.0})
+
+
+def test_register_sort_overrides_the_default_discipline(core):
+    """A sort may decide admissibility for itself."""
+    core.register_sort(
+        'even', lambda core, site, filler: filler % 2 == 0)
+    body = _sorted_body(core, 'even')
+
+    assert core.fill_sites(body, {'model': 4})['study']['model'] == 4
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.fill_sites(body, {'model': 3})
+
+
+def test_admits_is_not_formation(core):
+    """``admits`` (filling) and ``formation`` (nesting) are two relations.
+
+    ``admits`` is consulted at the site, *before* substitution, while the
+    site's ``_sort`` still exists; ``validate_sorting`` walks parent/child
+    pairs *after*. The distinction is load-bearing: once a site is filled
+    there is no site — and no ``_sort`` — left for ``formation`` to see.
+    """
+    from bigraph_schema.assembly import admits, interfaces, validate_sorting, Sorting
+
+    body = _sorted_body(core, MODEL_FACE)
+    (_path, site), = interfaces(body)[0]._places
+    conforming = _process(core, {'glucose': 'float'}, {'growth_rate': 'float'})
+
+    assert admits(core, site, conforming)
+    assert not admits(core, site, _process(core, {}, {}))
+
+    filled = core.fill_sites(body, {'model': conforming})
+    assert interfaces(filled)[0]._places == ()   # the sort is gone with the site
+
+    # Nesting is still policed separately, and says nothing about filling.
+    unconstrained = Sorting(sorts=set(), controls={}, formation=None)
+    assert validate_sorting(filled, unconstrained) == []
+
+
+# ── the composition law ─────────────────────────────────────────────
+
+
+def test_fill_independent_sites_commutes(core):
+    """Filling independent sites is order-independent (a monoid action)."""
+    body = core.access({'study': {
+        'model': {'_type': 'site'},
+        'reference': {'_type': 'site'}}})
+    a = _process(core, {'glucose': 'float'}, {'growth_rate': 'float'})
+    b = _process(core, {'oxygen': 'float'}, {'biomass': 'float'})
+
+    both = core.fill_sites(body, {'model': a, 'reference': b})
+    one_then_other = core.fill_sites(
+        core.fill_sites(body, {'model': a}), {'reference': b})
+    other_then_one = core.fill_sites(
+        core.fill_sites(body, {'reference': b}), {'model': a})
+
+    assert both == one_then_other == other_then_one
+
+
+def test_partially_filled_document_is_still_fillable(core):
+    """A document with sites left open is still a document (still a template)."""
+    from bigraph_schema.assembly import is_ground
+
+    body = core.access({'study': {
+        'model': {'_type': 'site'},
+        'reference': {'_type': 'site'}}})
+
+    partial = core.fill_sites(body, {'model': 1.0})
+    assert not is_ground(partial)          # still open at 'reference'
+    assert isinstance(partial['study']['reference'], Site)
+
+    ground = core.fill_sites(partial, {'reference': 2.0})
+    assert is_ground(ground)
+
+
+def test_compose_is_fill_with_positional_bindings(core):
+    """``compose`` degrades to the same substitution ``fill_sites`` performs.
+
+    Milner's sites are anonymous, so composition pairs them with roots by
+    index while ``fill_sites`` pairs them by name; on a single-site document
+    the two must agree.
+    """
+    from bigraph_schema.assembly import compose, merge, barren
+
+    outer = merge(1)
+    inner = barren('a')
+
+    assert compose(outer, inner) == core.fill_sites(outer, {'site0': inner['a']})
+
+
+def test_fill_sites_does_not_shadow_core_bind(core):
+    """``Core.bind`` binds a logical key to a target and predates this work;
+    the fill primitive must not take its name."""
+    import inspect
+
+    assert core.bind is not core.fill_sites
+    assert list(inspect.signature(core.bind).parameters) == [
+        'schema', 'state', 'raw_key', 'target']
+    assert list(inspect.signature(core.fill_sites).parameters) == [
+        'body', 'bindings']
+
+
+def test_non_ground_document_survives_round_trip(core):
+    """A template — a document that is not ground — must render and re-access."""
+    from bigraph_schema.assembly import is_ground
+
+    body = _sorted_body(core, 'float')
+    assert not is_ground(body)
+
+    # ``_sort`` is a schema field, so access resolves it to a schema node;
+    # the round-trip claim is that render → access preserves the open site
+    # *and* its sort.
+    rendered = core.render(body)
+    assert rendered['study']['model'] == {'_type': 'site', '_sort': 'float'}
+
+    round_tripped = core.access(rendered)
+    assert not is_ground(round_tripped)
+    assert isinstance(round_tripped['study']['model'], Site)
+    assert core.render(round_tripped) == rendered
+
+
+# ── cardinality: replication is a reaction ──────────────────────────
+
+
+def _colony(core, **region):
+    """A document with one region marked for replication."""
+    return core.access({'colony': {
+        'cell': dict({'_control': 'replicate'}, **region),
+        'medium': 'float'}})
+
+
+def test_replicate_expands_a_marked_region(core):
+    """n=3 yields three keyed copies of the region's contents."""
+    body = _colony(core, mass='float', genome='string')
+
+    replicated = core.replicate(body, {'cell': 3})
+
+    assert sorted(replicated['colony']) == [
+        'cell_0', 'cell_1', 'cell_2', 'medium']
+    for index in range(3):
+        copy_ = replicated['colony'][f'cell_{index}']
+        assert sorted(copy_) == ['genome', 'mass']
+        assert isinstance(copy_['mass'], Float)
+    # The sibling that was never marked is untouched.
+    assert isinstance(replicated['colony']['medium'], Float)
+
+
+def test_replicate_is_deterministic(core):
+    """Same input and same count → identical structure, every time."""
+    body = _colony(core, mass='float', genome='string')
+    assert core.replicate(body, {'cell': 3}) == core.replicate(body, {'cell': 3})
+
+
+def test_replicate_n_of_one(core):
+    """n=1 yields exactly one copy — still renamed, so the shape of a
+    document does not depend on its count."""
+    replicated = core.replicate(_colony(core, mass='float'), {'cell': 1})
+    assert sorted(replicated['colony']) == ['cell_0', 'medium']
+
+
+def test_replicate_count_defaults_to_the_region(core):
+    """A region may carry its own ``_count``; an override wins."""
+    body = core.access({'colony': {
+        'cell': {'_control': 'replicate', '_count': 2, 'mass': 'float'}}})
+
+    assert sorted(core.replicate(body)['colony']) == ['cell_0', 'cell_1']
+    assert sorted(core.replicate(body, {'cell': 3})['colony']) == [
+        'cell_0', 'cell_1', 'cell_2']
+
+
+def test_replicate_drops_the_mark_so_it_reaches_quiescence(core):
+    """Copies are unmarked, so replication cannot fire on its own output."""
+    from bigraph_schema.assembly import collect_regions
+
+    replicated = core.replicate(_colony(core, mass='float'), {'cell': 2})
+
+    assert collect_regions(replicated) == {}
+    assert core.replicate(replicated, {'cell': 5}) == replicated
+
+
+def test_replicate_materializes_a_per_instance_site(core):
+    """A site inside the region is materialized n times and is fillable
+    per instance — addressed by path, since the copies share its key."""
+    from bigraph_schema.assembly import collect_sites
+
+    body = core.access({'colony': {'cell': {
+        '_control': 'replicate',
+        'seed': {'_type': 'site', '_sort': 'integer'}}}})
+
+    replicated = core.replicate(body, {'cell': 3})
+    addresses = sorted(a for a in collect_sites(replicated) if '/' in a)
+    assert addresses == [
+        'colony/cell_0/seed', 'colony/cell_1/seed', 'colony/cell_2/seed']
+
+    filled = core.fill_sites(replicated, {
+        'colony/cell_0/seed': 1,
+        'colony/cell_1/seed': 2,
+        'colony/cell_2/seed': 3})
+    assert [core.fill(filled, {})['colony'][f'cell_{i}']['seed']
+            for i in range(3)] == [1, 2, 3]
+
+
+def test_replicate_expands_only_the_named_region(core):
+    """Two marked siblings expand independently, each by its own count."""
+    body = core.access({'colony': {
+        'cell': {'_control': 'replicate', 'mass': 'float'},
+        'vessel': {'_control': 'replicate', 'volume': 'float'}}})
+
+    replicated = core.replicate(body, {'cell': 2, 'vessel': 3})
+
+    assert sorted(replicated['colony']) == [
+        'cell_0', 'cell_1', 'vessel_0', 'vessel_1', 'vessel_2']
+    assert 'mass' in replicated['colony']['cell_0']
+    assert 'volume' in replicated['colony']['vessel_0']
+
+
+def test_replicate_rejects_a_bad_count(core):
+    body = _colony(core, mass='float')
+    for bad in (-1, 2.5, 'three'):
+        with pytest.raises(ValueError, match='non-negative int'):
+            core.replicate(body, {'cell': bad})
+
+    from bigraph_schema.assembly import MAX_REPLICAS
+    with pytest.raises(ValueError, match='MAX_REPLICAS'):
+        core.replicate(body, {'cell': MAX_REPLICAS + 1})
+
+
+def test_replicate_rule_is_a_shared_parameter_reaction(core):
+    """The mechanism is Milner's parametric rule: every reactum site
+    instantiates from the *same* redex site (§8.1), which is what makes
+    the copies copies."""
+    from bigraph_schema.assembly import replicate_rule
+
+    rule = replicate_rule('cell', 3)
+    assert set(rule.instantiation.values()) == {'contents'}
+    assert sorted(rule.reactum) == ['cell_0', 'cell_1', 'cell_2']
+
+
+# ── build: the template convenience ─────────────────────────────────
+
+
+def test_build_is_the_litmus_test(core):
+    """A template with a face-sorted model site, a value site, and a
+    replicated region: drop in a conforming process and get a ground,
+    runnable document — no code."""
+    from bigraph_schema.assembly import interfaces
+
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'timestep': {'_type': 'site', '_sort': 'float', '_default': 1.0},
+        'seeds': {
+            '_control': 'replicate',
+            'seed': {'_type': 'site', '_sort': 'integer'}}}})
+
+    model = _process(core, {'glucose': 'float'}, {'growth_rate': 'float'})
+
+    schema, state = core.build(template, {
+        'model': model,
+        'seeds': 2,
+        'study/seeds_0/seed': 7,
+        'study/seeds_1/seed': 8})
+
+    assert sorted(schema['study']) == [
+        'model', 'seeds_0', 'seeds_1', 'timestep']
+    assert interfaces(schema)[0]._places == ()      # ground: no open sites
+    assert state['study']['timestep'] == 1.0        # the site's default
+    assert state['study']['seeds_0']['seed'] == 7
+    assert state['study']['seeds_1']['seed'] == 8
+
+
+def test_build_reports_an_unfilled_required_site(core):
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'timestep': {'_type': 'site', '_sort': 'float'}}})
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        core.build(template, {})
+    assert 'study/model' in str(raised.value)
+    assert 'study/timestep' in str(raised.value)
+
+
+def test_build_reports_a_non_conforming_filler(core):
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE}}})
+    wrong = _process(core, {'glucose': 'float'}, {'biomass': 'float'})
+
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.build(template, {'model': wrong})
+
+
+def test_build_of_a_ground_document_is_the_identity_on_shape(core):
+    """A template with no sites and no marks is already a document."""
+    template = core.access({'cell': {'mass': 'float'}})
+    schema, state = core.build(template)
+    assert schema == template
+    assert state == {'cell': {'mass': 0.0}}
+
+
+def test_build_with_an_addressed_filler(core):
+    """The real case: a filler that names an address — every registered
+    process does — builds to a runnable document with a live instance."""
+    template = core.access({'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE}}})
+    addressed = core.access({
+        '_type': 'link',
+        'address': 'local:edge',
+        '_inputs': {'glucose': 'float'},
+        '_outputs': {'growth_rate': 'float'}})
+
+    schema, state = core.build(template, {'model': addressed})
+
+    assert schema['study']['model'].address._default == {
+        'protocol': 'local', 'data': 'edge'}
+    assert state['study']['model']['address'] == {
+        'protocol': 'local', 'data': 'edge'}
+    assert isinstance(state['study']['model']['instance'], Edge)
+
+
+# ── addresses are values, not type expressions ──────────────────────
+
+
+@pytest.mark.parametrize('address', [
+    'local:edge', 'edge', {'protocol': 'local', 'data': 'edge'}])
+def test_access_compiles_an_address_to_a_protocol(core, address):
+    """Every spelling of an address compiles to the same ``Protocol``.
+
+    ``'local:edge'`` must not be routed through the type parser — it parses
+    under the named-parameter grammar and yields ``{'local': 'edge'}``,
+    which no consumer can read.
+    """
+    from bigraph_schema.schema import Protocol
+
+    link = core.access({
+        '_type': 'link',
+        'address': address,
+        '_inputs': {'x': 'float'},
+        '_outputs': {'y': 'float'}})
+
+    assert isinstance(link.address, Protocol)
+    assert link.address._default == {'protocol': 'local', 'data': 'edge'}
+
+
+def test_access_and_realize_agree_on_an_address(core):
+    """``access`` and ``realize`` must compile the same link identically —
+    they are two doors onto one document."""
+    declaration = {
+        '_type': 'link', 'address': 'local:edge',
+        '_inputs': {'x': 'float'}, '_outputs': {'y': 'float'}}
+
+    accessed = core.access(declaration)
+    realized_schema, _state, _merges = core.realize({}, {'p': declaration})
+
+    assert accessed.address._default == realized_schema['p'].address._default
+
+
+@pytest.mark.parametrize('declaration', [
+    {'_type': 'link', 'address': 'local:edge',
+     '_inputs': {'x': 'float'}, '_outputs': {'y': 'float'}},
+    {'_type': 'link',
+     '_inputs': {'x': 'float'}, '_outputs': {'y': 'float'}},
+    {'_type': 'link', 'address': 'local:edge', 'inputs': {'x': ['store']},
+     '_inputs': {'x': 'float'}, '_outputs': {'y': 'float'}},
+])
+def test_link_round_trips_through_render(core, declaration):
+    """``render`` is the inverse of ``access``: an address survives, and a
+    link that never declared one does not acquire a stand-in."""
+    accessed = core.access(declaration)
+    rendered = core.render(accessed)
+
+    assert core.access(rendered) == accessed
+    if 'address' in declaration:
+        assert rendered['address'] == 'local:edge'
+    else:
+        assert 'address' not in (rendered if isinstance(rendered, dict) else {})
+
+
+class LevelProcess(Edge):
+    """A registered edge that declares its ports on the class, the way every
+    real process does — the declaration names an address, not an interface."""
+
+    def inputs(self):
+        return {'level': 'float'}
+
+    def outputs(self):
+        return {'level': 'float'}
+
+
+def test_admits_resolves_a_filler_face_from_its_address(core):
+    """A real process declaration carries an address and a config, not its
+    ports. ``admits`` must resolve the face from the registered class, or a
+    site could only ever be filled by a declaration restating its own
+    interface — which no registered process does."""
+    core.register_link('LevelProcess', LevelProcess)
+
+    template = core.access({'study': {'model': {
+        '_type': 'site',
+        '_sort': {'_type': 'link',
+                  '_inputs': {'level': 'float'},
+                  '_outputs': {'level': 'float'}}}}})
+
+    # No _inputs/_outputs declared anywhere — only the address.
+    filler = core.access({'_type': 'link', 'address': 'local:LevelProcess'})
+    assert filler._inputs == {}
+
+    filled = core.fill_sites(template, {'model': filler})
+    assert filled['study']['model'] is not None
+
+    # An address naming a class with the wrong face is still rejected.
+    core.register_link('EmptyProcess', Edge)
+    wrong = core.access({'_type': 'link', 'address': 'local:EmptyProcess'})
+    with pytest.raises(ValueError, match="site 'model'"):
+        core.fill_sites(template, {'model': wrong})
+
+
+# ── place semantics: a site takes one root, at the site's position ──
+
+
+def test_fill_places_a_filler_at_the_site_position(core):
+    """One site, one filler, at the site's own path.
+
+    Evidence (recorded here because it settles the open question): handed a
+    template whose ``model`` site is filled by a real registered process,
+    ``process_bigraph.Composite`` reports
+    ``process_paths == [('study', 'model')]`` — it expects the process node
+    to sit exactly where the site was.
+    """
+    core.register_link('LevelProcess', LevelProcess)
+    template = core.access({'study': {
+        'model': {'_type': 'site'},
+        'level': 'float'}})
+    filler = core.access({'_type': 'link', 'address': 'local:LevelProcess'})
+
+    filled = core.fill_sites(template, {'model': filler})
+
+    assert isinstance(filled['study']['model'], Link)
+    assert sorted(filled['study']) == ['level', 'model']
+
+
+def test_fill_does_not_splice_a_multi_root_filler(core):
+    """A multi-root filler nests **under** the site; it is not spliced into
+    the site's parent.
+
+    Splicing would (a) drop the site's key, so the filled region loses the
+    name the template gave it, and (b) merge the filler's roots into the
+    parent's namespace — here the filler's own ``level`` store would collide
+    with the template's ``study/level`` and one of the two would be silently
+    lost. Milner is the same answer from the other side: composition plugs
+    **one root into one site**, so a filler with n roots fills n sites, not
+    one — ``compose`` already enforces that arity.
+    """
+    template = core.access({'study': {
+        'model': {'_type': 'site'},
+        'level': 'float'}})
+    multi = core.access({
+        'A': {'_type': 'link', 'address': 'local:edge'},
+        'B': {'_type': 'link', 'address': 'local:edge'},
+        'level': 'float'})
+
+    filled = core.fill_sites(template, {'model': multi})
+
+    assert sorted(filled['study']) == ['level', 'model']
+    assert sorted(filled['study']['model']) == ['A', 'B', 'level']
+    # The filler's store and the template's store stay distinct.
+    assert filled['study']['level'] is not filled['study']['model']['level']
+
+
+# ── address injection: an abstract process ──────────────────────────
+
+
+SOLVER_FACE = {
+    '_type': 'link',
+    '_inputs': {'model': 'string'},
+    '_outputs': {'trajectory': 'map[float]'}}
+
+
+class CopasiSolver(Edge):
+    """A conforming implementation of the solver face."""
+
+    def inputs(self):
+        return {'model': 'string'}
+
+    def outputs(self):
+        return {'trajectory': 'map[float]'}
+
+
+class TelluriumSolver(Edge):
+    """A second conforming implementation — the point of the pattern."""
+
+    def inputs(self):
+        return {'model': 'string', 'seed': 'integer'}   # may over-provide
+
+    def outputs(self):
+        return {'trajectory': 'map[float]'}
+
+
+class NotASolver(Edge):
+    """Right shape of thing, wrong face."""
+
+    def inputs(self):
+        return {'model': 'string'}
+
+    def outputs(self):
+        return {'steady_state': 'float'}
+
+
+def _abstract_solver(core):
+    """A template edge whose face, config and wiring are fixed and whose
+    **address** — its implementation — is the only hole."""
+    core.register_link('CopasiSolver', CopasiSolver)
+    core.register_link('TelluriumSolver', TelluriumSolver)
+    core.register_link('NotASolver', NotASolver)
+    return core.access({
+        'sim': {
+            '_type': 'link',
+            'address': {'_type': 'site', '_sort': SOLVER_FACE},
+            '_inputs': {'model': 'string'},
+            '_outputs': {'trajectory': 'map[float]'},
+            'inputs': {'model': ['model']},
+            'outputs': {'trajectory': ['traj']}},
+        'model': 'string'})
+
+
+def test_an_address_site_is_an_open_hole(core):
+    """An edge that fixes its face but leaves ``address`` open is a process
+    definition without an implementation — and it is genuinely not ground."""
+    from bigraph_schema.assembly import is_ground, collect_sites
+
+    template = _abstract_solver(core)
+
+    assert not is_ground(template)
+    assert 'sim/address' in collect_sites(template)
+
+
+@pytest.mark.parametrize('implementation', ['CopasiSolver', 'TelluriumSolver'])
+def test_injecting_a_conforming_address_builds(core, implementation):
+    """Inject a conforming implementation → a runnable edge. This is the
+    solver-swap pattern: one face, many implementations, no code."""
+    template = _abstract_solver(core)
+
+    schema, state = core.build(
+        template, {'sim/address': f'local:{implementation}'})
+
+    assert state['sim']['address'] == {
+        'protocol': 'local', 'data': implementation}
+    assert isinstance(state['sim']['instance'], Edge)
+    # The parts the template fixed are untouched by the injection.
+    assert state['sim']['inputs'] == {'model': ['model']}
+    assert state['sim']['outputs'] == {'trajectory': ['traj']}
+
+
+def test_injecting_a_non_conforming_address_names_the_mismatch(core):
+    template = _abstract_solver(core)
+
+    with pytest.raises(ValueError, match="site 'sim/address'") as raised:
+        core.build(template, {'sim/address': 'local:NotASolver'})
+
+    message = str(raised.value)
+    assert 'trajectory' in message          # the port the face required
+    assert 'steady_state' in message        # what the filler offered instead
+
+
+def test_both_injection_flavors_go_through_one_fill(core):
+    """Address-hole and whole-edge site are the same operation: one
+    ``fill``, one ``admits``, differing only in what the filler spells."""
+    from bigraph_schema.assembly import interfaces
+    core.register_link('CopasiSolver', CopasiSolver)
+
+    # (a) address-hole — only the implementation varies.
+    address_hole = _abstract_solver(core)
+    by_address = core.fill_sites(
+        address_hole, {'sim/address': 'local:CopasiSolver'})
+
+    # (b) whole-edge site — inject the entire edge.
+    edge_hole = core.access({
+        'sim': {'_type': 'site', '_sort': SOLVER_FACE},
+        'model': 'string'})
+    by_edge = core.fill_sites(edge_hole, {'sim': core.access({
+        '_type': 'link',
+        'address': 'local:CopasiSolver',
+        'inputs': {'model': ['model']},
+        'outputs': {'trajectory': ['traj']}})})
+
+    for filled in (by_address, by_edge):
+        assert interfaces(filled)[0]._places == ()
+        assert filled['sim'].address._default == {
+            'protocol': 'local', 'data': 'CopasiSolver'}
+
+
+def test_wired_link_defaults_and_realizes(core):
+    """A link that declared its wiring must still default and realize.
+
+    ``access`` materializes declared wires as a plain ``{port: path}`` dict;
+    ``default``/``realize`` used to walk that as a schema and reach a raw
+    path list, so any edge that named its own wiring could not be built.
+    """
+    wired = core.access({'p': {
+        '_type': 'link',
+        '_inputs': {'x': 'float'},
+        '_outputs': {'y': 'float'},
+        'inputs': {'x': ['x']},
+        'outputs': {'y': ['y']}}})
+
+    state = core.fill(wired, {})
+
+    assert state['p']['inputs'] == {'x': ['x']}
+    assert state['p']['outputs'] == {'y': ['y']}
+    assert isinstance(state['p']['instance'], Edge)
+
+
+# ── the contract: face as typed core, plus semantics and amendments ─
+
+
+def _solver_contract():
+    from bigraph_schema.contract import ProcessContract
+    return ProcessContract(
+        summary='Integrates a model.',
+        face={'inputs': {'model': 'string'},
+              'outputs': {'trajectory': 'map[float]'}})
+
+
+class SeededSolver(Edge):
+    """A solver that also consumes a seed."""
+
+    def inputs(self):
+        return {'model': 'string', 'seed': 'integer'}
+
+    def outputs(self):
+        return {'trajectory': 'map[float]'}
+
+
+def _solver_fillers(core):
+    core.register_link('CopasiSolver', CopasiSolver)
+    core.register_link('SeededSolver', SeededSolver)
+    core.register_link('NotASolver', NotASolver)
+    return {
+        name: core.access({'_type': 'link', 'address': f'local:{name}'})
+        for name in ('CopasiSolver', 'SeededSolver', 'NotASolver')}
+
+
+def test_describe_contract_answers_for_a_site(core):
+    """A site's sort *is* a contract — the interface it requires."""
+    site = core.access({'_type': 'site', '_sort': SOLVER_FACE})
+
+    contract = core.describe_contract(site)
+
+    assert sorted(contract.face_ports('inputs')) == ['model']
+    assert sorted(contract.face_ports('outputs')) == ['trajectory']
+
+
+def test_describe_contract_answers_for_an_edge(core):
+    """The same call answers for the thing that fills the hole, and the
+    face is the typed projection of the one contract."""
+    instance = CopasiSolver({}, core)
+
+    contract = core.describe_contract(instance)
+
+    assert contract.face == {
+        'inputs': {'model': 'string'},
+        'outputs': {'trajectory': 'map[float]'}}
+    # The documentary half still comes from the docstring convention.
+    assert 'conforming implementation' in contract.summary
+    # ``Edge.describe_contract()`` is the per-instance spelling of the same.
+    assert instance.describe_contract().face == contract.face
+
+
+def test_amend_is_pure_and_append_only(core):
+    from bigraph_schema.contract import Amendment, amend
+
+    base = _solver_contract()
+    first = amend(base, Amendment(
+        op='narrow', detail={'inputs': {'seed': 'integer'}},
+        by='fable', when='2026-07-30', why='reproducibility'))
+    second = amend(first, Amendment(op='annotate', detail={'summary': 'v2'}))
+
+    # The input is never mutated.
+    assert base.amendments == []
+    assert 'seed' not in base.face_ports('inputs')
+
+    # Every amendment is kept, in order, with its provenance.
+    assert [a.op for a in second.amendments] == ['narrow', 'annotate']
+    assert second.amendments[0].by == 'fable'
+    assert second.amendments[0].why == 'reproducibility'
+
+
+def test_narrow_makes_admits_strictly_stricter(core):
+    """Narrowing adds a required port, so strictly fewer fillers conform."""
+    from bigraph_schema.contract import Amendment, amend
+
+    fillers = _solver_fillers(core)
+    base = _solver_contract()
+    narrowed = amend(base, Amendment(
+        op='narrow', detail={'inputs': {'seed': 'integer'}}))
+
+    core.register_contract('solver', base)
+    core.register_contract('solver_seeded', narrowed)
+    loose = core.access({'_type': 'site', '_sort': 'solver'})
+    strict = core.access({'_type': 'site', '_sort': 'solver_seeded'})
+
+    assert core.admits(loose, fillers['CopasiSolver'])
+    assert core.admits(loose, fillers['SeededSolver'])
+
+    # The one that never took a seed no longer conforms.
+    assert not core.admits(strict, fillers['CopasiSolver'])
+    assert core.admits(strict, fillers['SeededSolver'])
+
+
+def test_narrow_is_monotone(core):
+    """The law that keeps ``admits`` sound: anything admissible under an
+    amended (narrower) contract was admissible under the original."""
+    from bigraph_schema.contract import Amendment, amend
+
+    fillers = _solver_fillers(core)
+    base = _solver_contract()
+
+    amended = base
+    for amendment in (
+            Amendment(op='narrow', detail={'inputs': {'seed': 'integer'}}),
+            Amendment(op='annotate', detail={'summary': 'seeded solver'}),
+            Amendment(op='narrow', detail={
+                'predicate': lambda core, filler: True}),
+    ):
+        amended = amend(amended, amendment)
+
+        core.register_contract('base', base)
+        core.register_contract('amended', amended)
+        before = core.access({'_type': 'site', '_sort': 'base'})
+        after = core.access({'_type': 'site', '_sort': 'amended'})
+
+        for name, filler in fillers.items():
+            if core.admits(after, filler):
+                assert core.admits(before, filler), (
+                    f'{name} admissible under the amended contract but not '
+                    f'the original — narrowing must never widen')
+
+
+def test_annotate_changes_docs_not_admissibility(core):
+    from bigraph_schema.contract import Amendment, amend
+
+    fillers = _solver_fillers(core)
+    base = _solver_contract()
+    annotated = amend(base, Amendment(
+        op='annotate',
+        detail={'summary': 'Integrates a model with an adaptive step.',
+                'inputs': {'model': 'an SBML document'},
+                'assumptions': ['well-mixed']}))
+
+    assert annotated.face == base.face
+    assert annotated.inputs == {'model': 'an SBML document'}
+    assert annotated.assumptions == ['well-mixed']
+
+    core.register_contract('base', base)
+    core.register_contract('annotated', annotated)
+    before = core.access({'_type': 'site', '_sort': 'base'})
+    after = core.access({'_type': 'site', '_sort': 'annotated'})
+
+    for filler in fillers.values():
+        assert core.admits(before, filler) == core.admits(after, filler)
+
+
+def test_narrow_predicate_further_restricts(core):
+    """A narrowing amendment may add a predicate on top of the face."""
+    from bigraph_schema.contract import Amendment, amend
+    from bigraph_schema.assembly import collect_face
+
+    fillers = _solver_fillers(core)
+    base = _solver_contract()
+    seeded_only = amend(base, Amendment(
+        op='narrow',
+        detail={'predicate': lambda core, filler: 'seed' in collect_face(
+            core, filler)[0]},
+        why='only stochastic solvers are comparable here'))
+
+    core.register_contract('seeded_only', seeded_only)
+    site = core.access({'_type': 'site', '_sort': 'seeded_only'})
+
+    assert core.admits(site, fillers['SeededSolver'])
+    assert not core.admits(site, fillers['CopasiSolver'])
+
+
+def test_extend_is_refused(core):
+    """A contract may get stricter and better documented, never looser."""
+    from bigraph_schema.contract import Amendment, amend, AmendmentError
+
+    with pytest.raises(AmendmentError, match='never looser'):
+        amend(_solver_contract(), Amendment(
+            op='extend', detail={'inputs': {'anything': 'float'}}))
+
+
+def test_narrow_may_not_redefine_a_port(core):
+    """Replacing a port's type could widen what conforms, so it is refused —
+    that is what makes narrowing monotone by construction."""
+    from bigraph_schema.contract import Amendment, amend, AmendmentError
+
+    with pytest.raises(AmendmentError, match='may not redefine'):
+        amend(_solver_contract(), Amendment(
+            op='narrow', detail={'inputs': {'model': 'map[float]'}}))
+
+    # Restating a port identically is harmless.
+    amend(_solver_contract(), Amendment(
+        op='narrow', detail={'inputs': {'model': 'string'}}))
+
+
+def test_annotate_may_not_touch_the_typed_core(core):
+    from bigraph_schema.contract import Amendment, amend, AmendmentError
+
+    with pytest.raises(AmendmentError, match='only touch documentation'):
+        amend(_solver_contract(), Amendment(
+            op='annotate', detail={'face': {'inputs': {}}}))
+
+
+def test_contract_to_dict_is_json_safe(core):
+    """Amendments carry provenance and must survive serialization even when
+    a predicate is not itself serializable."""
+    import json
+    from bigraph_schema.contract import Amendment, amend
+
+    contract = amend(_solver_contract(), Amendment(
+        op='narrow', detail={'predicate': lambda core, filler: True},
+        by='fable', when='2026-07-30', why='stochastic only'))
+
+    payload = contract.to_dict()
+    json.dumps(payload)
+
+    assert payload['amendments'][0]['why'] == 'stochastic only'
+    assert isinstance(payload['amendments'][0]['detail']['predicate'], str)
+
+
+def test_compose_requires_one_root_per_site(core):
+    """The arity law that makes splicing wrong: sites and roots match 1:1."""
+    from bigraph_schema.assembly import compose, merge, barren, tensor
+
+    with pytest.raises(ValueError, match='faces must match'):
+        compose(merge(1), tensor(barren('a'), barren('b')))
+
+
+def test_rendered_link_realizes(core):
+    """A rendered link must survive realization — the round trip is only
+    useful if the far end still loads. An address-less link previously
+    rendered a bare ``protocol`` schema that ``load_protocol`` rejected."""
+    accessed = core.access({'p': {
+        '_type': 'link',
+        '_inputs': {'x': 'float'},
+        '_outputs': {'y': 'float'},
+        'inputs': {'x': ['x']}}})
+
+    schema, state, _merges = core.realize({}, core.render(accessed))
+
+    assert isinstance(state['p']['instance'], Edge)
+    assert 'x' in schema
+
+
 def test_compose_atom(core):
     """ion ∘ barren produces a K-atom (ion with site filled)."""
     from bigraph_schema.assembly import ion, barren, compose, interfaces, is_ground

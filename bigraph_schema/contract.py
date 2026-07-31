@@ -38,9 +38,66 @@ _DIST_NAMES = (
 _MATH_RE = re.compile(r"[=~≈←≥≤∑∏]|\b(?:" + _DIST_NAMES + r")\b")
 
 
+#: Documentary fields — ``annotate`` may touch these and nothing else.
+ANNOTATABLE = (
+    'summary', 'description', 'inputs', 'outputs', 'config',
+    'math', 'symbols', 'assumptions', 'references')
+
+
+class AmendmentError(Exception):
+    """An amendment that would make a contract unsound or looser."""
+
+
+@dataclass
+class Amendment:
+    """One ordered, provenance-carrying refinement of a contract.
+
+    ``op`` is **``narrow``** (tighten the face, or add a predicate) or
+    **``annotate``** (refine documentation). There is deliberately no
+    ``extend``: a contract may get stricter and better-documented as it flows
+    down through composition and filling, never looser and never gain ports
+    it did not require. That is what keeps amendment *monotone*, and so keeps
+    ``admits`` sound.
+    """
+
+    op: str
+    target: str = ""
+    detail: dict = field(default_factory=dict)
+    by: str = ""
+    when: str = ""
+    why: str = ""
+
+    def to_dict(self):
+        detail = {
+            key: (value if _is_jsonish(value) else repr(value))
+            for key, value in (self.detail or {}).items()}
+        return {'op': self.op, 'target': self.target, 'detail': detail,
+                'by': self.by, 'when': self.when, 'why': self.why}
+
+
+def _is_jsonish(value):
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return True
+    if isinstance(value, (list, tuple)):
+        return all(_is_jsonish(item) for item in value)
+    if isinstance(value, dict):
+        return all(_is_jsonish(item) for item in value.values())
+    return False
+
+
 @dataclass
 class ProcessContract:
     """A structured superset of ``Edge.description``.
+
+    A contract is the full interface spec of an **edge or a site**, and
+    ``face`` is its machine-checkable **typed core** — the part ``admits``
+    reads. The remaining fields are the documented meaning around that same
+    interface. They are not two objects: the face is the typed projection of
+    one contract.
+
+    Note the two senses of "inputs" here, kept deliberately separate:
+    ``face['inputs']`` maps a port to its **type** (checked), while
+    ``inputs`` maps a port to its **prose semantics** (documentation only).
 
     All mutable fields use ``default_factory`` so instances never share state.
     """
@@ -54,10 +111,29 @@ class ProcessContract:
     symbols: dict = field(default_factory=dict)
     assumptions: list = field(default_factory=list)
     references: list = field(default_factory=list)
+    face: dict = field(default_factory=lambda: {'inputs': {}, 'outputs': {}})
+    amendments: list = field(default_factory=list)
+
+    def face_ports(self, direction):
+        """The typed core's ports for ``'inputs'`` or ``'outputs'``."""
+        found = (self.face or {}).get(direction)
+        return found if isinstance(found, dict) else {}
+
+    def predicates(self):
+        """Every predicate contributed by a ``narrow`` amendment."""
+        found = []
+        for amendment in self.amendments:
+            predicate = (amendment.detail or {}).get('predicate')
+            if callable(predicate):
+                found.append(predicate)
+        return found
 
     def to_dict(self):
         """Return a JSON-safe plain-``dict`` representation."""
-        return asdict(self)
+        result = asdict(self)
+        result['amendments'] = [
+            amendment.to_dict() for amendment in self.amendments]
+        return result
 
     @classmethod
     def from_description(cls, text):
@@ -117,6 +193,83 @@ class ProcessContract:
         return merged
 
 
+def _as_amendment(amendment):
+    if isinstance(amendment, Amendment):
+        return amendment
+    if isinstance(amendment, dict):
+        try:
+            return Amendment(**amendment)
+        except TypeError as error:
+            raise AmendmentError(f'malformed amendment: {error}') from None
+    raise AmendmentError(f'not an amendment: {amendment!r}')
+
+
+def amend(contract, amendment):
+    """Append one amendment to ``contract``, returning a **new** contract.
+
+    Pure and append-only: the input is never mutated and no amendment is ever
+    dropped, so a contract carries the full record of how its interface
+    evolved — each entry with its ``by``/``when``/``why``.
+
+    - ``narrow`` tightens the typed core: it may add ports the face did not
+      require, and may add a ``predicate`` that a filler must also satisfy.
+      It may **not** redefine a port the face already requires — replacing a
+      port's type could widen what conforms, which would break monotonicity —
+      and it may not remove one.
+    - ``annotate`` refines documentation only, leaving admissibility exactly
+      as it was.
+    - anything else (notably ``extend``) is refused: a contract may become
+      stricter and better-documented, never looser.
+
+    **Monotonicity.** Because ``narrow`` only ever adds required ports and
+    conjunctive predicates, every filler admissible under the amended
+    contract was admissible under the original. ``admits`` therefore stays
+    sound as a contract flows down through composition and filling.
+    """
+    amendment = _as_amendment(amendment)
+    amended = copy.deepcopy(contract)
+    detail = amendment.detail or {}
+
+    if amendment.op == 'narrow':
+        for direction in ('inputs', 'outputs'):
+            added = detail.get(direction)
+            if not isinstance(added, dict):
+                continue
+            existing = amended.face_ports(direction)
+            for port, port_type in added.items():
+                if port in existing and existing[port] != port_type:
+                    raise AmendmentError(
+                        f'narrow may not redefine the {direction[:-1]} port '
+                        f'{port!r} ({existing[port]!r} -> {port_type!r}): '
+                        f'replacing a port type can widen what conforms. '
+                        f'Add a new port or a predicate instead.')
+            amended.face = dict(amended.face or {})
+            amended.face[direction] = {**existing, **added}
+
+    elif amendment.op == 'annotate':
+        for key, value in detail.items():
+            if key not in ANNOTATABLE:
+                raise AmendmentError(
+                    f'annotate may only touch documentation '
+                    f'{ANNOTATABLE}, not {key!r}')
+            current = getattr(amended, key)
+            if isinstance(current, dict) and isinstance(value, dict):
+                setattr(amended, key, {**current, **value})
+            elif isinstance(current, list) and isinstance(value, list):
+                setattr(amended, key, [*current, *value])
+            else:
+                setattr(amended, key, value)
+
+    else:
+        raise AmendmentError(
+            f'unsupported amendment op {amendment.op!r} — a contract may '
+            f'only be narrowed or annotated, so that it can get stricter '
+            f'and better documented but never looser')
+
+    amended.amendments = [*amended.amendments, amendment]
+    return amended
+
+
 def _as_contract(declared):
     """Coerce a declared ``contract`` attribute into a ``ProcessContract``.
 
@@ -154,19 +307,48 @@ def resolve_contract(instance):
 
         contract = _as_contract(declared)
         if contract is not None:
-            return contract.merged_with_description(desc or "")
+            resolved = contract.merged_with_description(desc or "")
+        elif desc:
+            resolved = ProcessContract.from_description(desc)
+        else:
+            # Docstring fallback — but ignore a docstring merely inherited
+            # from ``object`` (so a bare ``object()`` resolves to None, while
+            # a class with its own docstring resolves).
+            doc = inspect.getdoc(type(instance))
+            resolved = (
+                ProcessContract.from_description(doc)
+                if doc and doc != inspect.getdoc(object)
+                else None)
 
-        if desc:
-            derived = ProcessContract.from_description(desc)
-            if derived is not None:
-                return derived
-
-        # Docstring fallback — but ignore a docstring merely inherited from
-        # ``object`` (so a bare ``object()`` resolves to None, while a class
-        # with its own docstring resolves).
-        doc = inspect.getdoc(type(instance))
-        if doc and doc != inspect.getdoc(object):
-            return ProcessContract.from_description(doc)
-        return None
+        return _with_declared_face(instance, resolved)
     except Exception:
         return None
+
+
+def _with_declared_face(instance, contract):
+    """Fill an edge's typed core from its own ``interface()``.
+
+    The face is the contract's machine-checkable projection, so an edge that
+    reports ports carries them on its contract — an authored ``face`` wins.
+    """
+    interface = getattr(instance, 'interface', None)
+    if not callable(interface):
+        return contract
+
+    try:
+        face = interface() or {}
+    except Exception:
+        return contract
+
+    declared = {
+        'inputs': dict(face.get('inputs') or {}),
+        'outputs': dict(face.get('outputs') or {})}
+    if not declared['inputs'] and not declared['outputs']:
+        return contract
+
+    if contract is None:
+        return ProcessContract(face=declared)
+    if not contract.face_ports('inputs') and not contract.face_ports('outputs'):
+        contract = copy.deepcopy(contract)
+        contract.face = declared
+    return contract
