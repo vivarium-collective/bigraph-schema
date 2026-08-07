@@ -5,7 +5,6 @@ Supports add, remove, replace, and move operations.
 Each operation is a dict with 'op', 'path', and optionally 'value'/'from'.
 """
 
-from bigraph_schema.methods.default import default
 
 
 def _get_at_path(state, path):

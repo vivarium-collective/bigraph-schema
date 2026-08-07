@@ -7,7 +7,7 @@ import pandas as pd
 
 from bigraph_schema import Edge, allocate_core, BASE_TYPES
 from bigraph_schema.schema import (
-    Float, String, Map, Tree, Link, Array, Overwrite, Node, Empty,
+    Float, String, Map, Tree, Link, Array, Empty,
     Site, InnerName, OuterName, Interface)
 from bigraph_schema.methods import check, render, serialize, apply, reconcile
 from bigraph_schema.package.discover import (
@@ -497,7 +497,7 @@ def test_resolve(core):
         core.resolve(
             {'a': 'map[string]', 'b': 'node'},
             node_schema)
-    except Exception as e:
+    except Exception:
         failed = True
     assert failed
 
@@ -517,7 +517,6 @@ def test_promote(core):
     # Sparse update schema: only touches `fields/glucose`. Inner shape
     # is a wire-level projection ``{0: {0: count}}`` — what
     # project_ports_fast emits for a per-cell process update.
-    from bigraph_schema.schema import Float
     sparse = {
         'fields': {
             'glucose': {0: {0: 'float'}},
@@ -846,7 +845,7 @@ def test_resolve_conflict(core):
     conflict = False
     try:
         schema, realized, _ = core.realize({}, state)
-    except Exception as e:
+    except Exception:
         conflict = True
 
     assert conflict
@@ -1577,7 +1576,7 @@ def test_elementary_substitution_closure(core):
 
 def test_compose_fills_sites(core):
     """Composing merge(2) with two barren roots fills both sites."""
-    from bigraph_schema.assembly import merge, barren, tensor, compose, interfaces, is_ground
+    from bigraph_schema.assembly import merge, barren, tensor, compose, is_ground
     outer = merge(2)
     inner = tensor(barren('a'), barren('b'))
     result = compose(outer, inner)
@@ -2720,7 +2719,7 @@ def test_rendered_link_realizes(core):
 
 def test_compose_atom(core):
     """ion ∘ barren produces a K-atom (ion with site filled)."""
-    from bigraph_schema.assembly import ion, barren, compose, interfaces, is_ground
+    from bigraph_schema.assembly import ion, barren, compose, interfaces
     k = ion(core, 'K', ('x', 'y'))
     filler = barren('root')
     atom = compose(k, filler)
@@ -2762,7 +2761,7 @@ def test_category_laws(core):
     from the constructors in assembly.py.
     """
     from bigraph_schema.assembly import (
-        interfaces, barren, merge, ion, tensor, compose, EPSILON)
+        barren, merge, tensor, compose, EPSILON)
 
     # ── C2: associativity of composition ──
     # h ∘ (g ∘ f) = (h ∘ g) ∘ f
@@ -2827,7 +2826,7 @@ def test_control_status_activity(core):
     """Dynamic control status (Milner Def. 8.2): reactions can only fire
     at locations where every ancestor has an active control. Controls
     are matched by type name or by dict key name."""
-    from bigraph_schema.assembly import is_active, ACTIVE, PASSIVE, ATOMIC
+    from bigraph_schema.assembly import is_active, PASSIVE, ATOMIC
 
     building = {
         'building': {
@@ -2854,7 +2853,7 @@ def test_control_status_activity(core):
 def test_reaction_rule_construction(core):
     """ReactionRule bundles a redex, reactum, and instantiation map.
     Default instantiation matches sites by key name."""
-    from bigraph_schema.assembly import ReactionRule, interfaces
+    from bigraph_schema.assembly import ReactionRule
 
     # Simple rule: a site is replaced by a different structure
     redex = {'slot': Site()}
@@ -2886,7 +2885,7 @@ def test_reaction_rule_built_environment(core):
     We encode B3 here since it's the most interesting — it changes
     the place graph by moving the agent inside the room.
     """
-    from bigraph_schema.assembly import ReactionRule, interfaces, compose
+    from bigraph_schema.assembly import ReactionRule, interfaces
 
     # B3 redex: agent and room are siblings in the same building.
     # The room has a site for its existing contents.
@@ -3021,7 +3020,7 @@ def test_linkvar_match_equality(core):
     "panel.auth and person.badge share an edge".
     """
     from bigraph_schema.assembly import (
-        ReactionRule, LinkVar, find_matches)
+        LinkVar, find_matches)
 
     # bob's badge and the panel's auth wire to the same anchor —
     # this is what "linked" looks like at the runtime level.
@@ -3070,7 +3069,7 @@ def test_linkvar_match_unconstrained_when_absent(core):
     wires on the state node — links are only checked where the redex
     asks for them.
     """
-    from bigraph_schema.assembly import ReactionRule, find_matches
+    from bigraph_schema.assembly import find_matches
 
     state = {
         'office': {
@@ -3337,7 +3336,6 @@ def test_run_reactions_deterministic(core):
     """run_reactions in deterministic mode fires rules in order until
     no more matches are found."""
     from bigraph_schema.assembly import ReactionRule, run_reactions
-    import random
 
     state = {
         'bldg': {
@@ -3462,7 +3460,7 @@ def test_built_environment_scenario(core):
 def test_sorting_validation(core):
     """Stratified place sorting rejects ill-sorted nesting."""
     from bigraph_schema.assembly import (
-        stratified_sorting, validate_sorting, ACTIVE, PASSIVE)
+        stratified_sorting, validate_sorting, PASSIVE)
 
     # CCS-style: p and a alternate
     sorting = stratified_sorting(

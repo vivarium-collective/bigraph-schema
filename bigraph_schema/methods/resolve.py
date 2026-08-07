@@ -1,8 +1,7 @@
 import copy
 from plum import dispatch
-import numpy as np
 
-from dataclasses import replace, dataclass
+from dataclasses import replace
 
 from bigraph_schema.schema import (
     Node,
@@ -10,24 +9,14 @@ from bigraph_schema.schema import (
     Union,
     Tuple,
     Boolean,
-    Number,
     Integer,
     Float,
-    Delta,
-    Nonnegative,
     String,
-    Enum,
     Wrap,
-    Maybe,
-    Overwrite,
     List,
     Map,
     Tree,
     Array,
-    Key,
-    Path,
-    Wires,
-    Schema,
     Link,
     dtype_schema,
     schema_dtype,
@@ -36,7 +25,7 @@ from bigraph_schema.schema import (
 
 
 from bigraph_schema.methods.default import default
-from bigraph_schema.methods.merge import merge, merge_update
+from bigraph_schema.methods.merge import merge_update
 from bigraph_schema.methods.is_empty import is_empty as _is_empty
 
 
@@ -420,7 +409,6 @@ def resolve(current: Map, update: Node, path=None):
 @dispatch
 def resolve(current: Map, update: dict, path=None):
     if path:
-        head = path[0]
         down_resolve = resolve(current._value, update, path[1:])
         return replace(current, **{'_value': down_resolve})
 
@@ -430,7 +418,7 @@ def resolve(current: Map, update: dict, path=None):
             result = resolve(result, value)
         resolved = replace(current, _value=result)
 
-    except:
+    except Exception:
         # upgrade from map to struct schema
         map_default = default(current)
         resolved = {
@@ -481,7 +469,7 @@ def resolve(current: dict, update: Map, path=None):
             result = resolve(result, value)
         resolved = replace(update, _value=result)
 
-    except:
+    except Exception:
         # upgrade from map to struct schema
         map_default = default(update)
         resolved = {
@@ -496,7 +484,6 @@ def resolve(current: dict, update: Map, path=None):
 
 
 def tree_path(current, update, path):
-    head = path[0]
     down_resolve = resolve(current, update, path[1:])
     if isinstance(down_resolve, Tree):
         return down_resolve
@@ -538,11 +525,10 @@ def resolve(current: Tree, update: Node, path=None):
     leaf = current._leaf
     try:
         resolved = resolve(leaf, update)
-    except:
+    except Exception:
         raise Exception(f'update schema is neither a tree or a leaf:\n{current}\n{update}')
 
-    replace(current, _leaf=resolved)
-    return current
+    return replace(current, _leaf=resolved)
 
 @dispatch
 def resolve(current: Tree, update: dict, path=None):
@@ -554,7 +540,7 @@ def resolve(current: Tree, update: dict, path=None):
     for key, value in update.items():
         try:
             leaf = resolve(leaf, value)
-        except:
+        except Exception:
             result = resolve(result, value)
     resolved = replace(result, _leaf=leaf)
 
@@ -950,7 +936,7 @@ def resolve(current: tuple, update: Tuple, path=None):
     index = 0
 
     for subcurrent, subelement in zip(current, update._values):
-        subresolve = resolve(subcurrent, subupdate, path=path)
+        subresolve = resolve(subcurrent, subelement, path=path)
         result.append(subresolve)
         index += 1
 

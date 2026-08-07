@@ -6,7 +6,7 @@ import numpy.lib.format as nf
 import collections
 
 from plum import dispatch
-from dataclasses import dataclass, is_dataclass, field
+from dataclasses import dataclass, field
 
 
 NONE_SYMBOL = '__nil__'

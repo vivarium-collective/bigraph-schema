@@ -1,40 +1,23 @@
 import copy
 from plum import dispatch
-import numpy as np
 
-from dataclasses import replace, dataclass
+from dataclasses import replace
 
 from bigraph_schema.schema import (
     Node,
     Empty,
-    Union,
-    Tuple,
-    Boolean,
-    Number,
     Integer,
     Float,
-    Delta,
-    Nonnegative,
     String,
-    Enum,
     Wrap,
-    Maybe,
-    Overwrite,
-    List,
     Map,
     Tree,
     Array,
-    Key,
-    Path,
-    Wires,
-    Schema,
-    Link,
 )
 
 
 from bigraph_schema.methods.default import default
-from bigraph_schema.methods.resolve import resolve
-from bigraph_schema.methods.merge import merge, merge_update
+from bigraph_schema.methods.merge import merge_update
 
 
 # TODO: update generalize to use is_schema_field like the other methods.
@@ -148,7 +131,7 @@ def generalize(current: Map, update: dict):
             result = generalize(result, value)
         generalized = replace(current, _value=result)
 
-    except:
+    except Exception:
         # upgrade from map to struct schema
         map_default = default(current)
         generalized = {
@@ -169,7 +152,7 @@ def generalize(current: dict, update: Map):
             result = generalize(result, value)
         generalized = replace(update, _value=result)
 
-    except:
+    except Exception:
         # upgrade from map to struct schema
         map_default = default(update)
         generalized = {
@@ -206,11 +189,10 @@ def generalize(current: Tree, update: Node):
     leaf = current._leaf
     try:
         generalized = generalize(leaf, update)
-    except:
-        raise(f'update schema is neither a tree or a leaf:\n{current}\n{update}')
+    except Exception:
+        raise Exception(f'update schema is neither a tree or a leaf:\n{current}\n{update}')
 
-    replace(current, _leaf=generalized)
-    return current
+    return replace(current, _leaf=generalized)
 
 @dispatch
 def generalize(current: Tree, update: dict):
@@ -219,7 +201,7 @@ def generalize(current: Tree, update: dict):
     for key, value in update.items():
         try:
             leaf = generalize(leaf, value)
-        except:
+        except Exception:
             result = generalize(result, value)
     generalized = replace(result, _leaf=leaf)
 

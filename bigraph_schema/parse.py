@@ -163,7 +163,7 @@ class CoreVisitor(NodeVisitor):
                 values = tuple([int(x) for x in nodes])
 
                 return values
-            except Exception as e:
+            except Exception:
                 return Tuple(_values=nodes)
 
     def visit_tree(self, node, visit):

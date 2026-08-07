@@ -1,40 +1,18 @@
 from plum import dispatch
-import numpy as np
-import numpy.lib.format as nf
 
-from types import NoneType
 from dataclasses import replace
 
 from bigraph_schema.schema import (
-    Atom,
     Node,
     Union,
     Tuple,
-    Boolean,
     Number,
-    Integer,
-    Float,
-    Complex,
-    Delta,
-    Nonnegative,
-    NPRandom,
-    String,
     Enum,
-    Wrap,
-    Maybe,
-    Overwrite,
-    Const,
     Range,
-    List,
     Set,
     Map,
-    Tree,
     Array,
     Frame,
-    Key,
-    Path,
-    Wires,
-    Schema,
     Link,
     Object,
     Protocol,

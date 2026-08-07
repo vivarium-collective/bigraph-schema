@@ -7,19 +7,17 @@ name = "bigraph-schema"
 version = "1.6.0"
 description = "A serializable type schema for compositional systems biology"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   {name = "Eran Agmon"},
   {name = "Ryan Spangler"}
 ]
 dependencies = [
-    "fire",
     "numpy",
     "pandas",
     "parsimonious",
     "pint",
     "plum-dispatch",
-    "requests>=2.31.0",
 ]
 
 [dependency-groups]
@@ -35,3 +33,24 @@ packages = [
     "bigraph_schema.methods",
     "bigraph_schema.package",
 ]
+
+[tool.ruff]
+# Lint gate: guard against undefined names / broken dispatch (F) and
+# bare ``except:`` clauses (E722) that silently swallow control flow.
+# Notebooks are exploratory and out of scope for the gate.
+extend-exclude = ["notebooks", "*.ipynb"]
+
+[tool.ruff.lint]
+select = ["F", "E722"]
+# F811 (redefined-while-unused) fires on every ``@dispatch`` overload —
+# multiple dispatch intentionally redefines the same function name per
+# type, so this rule is a false positive for this codebase's core idiom.
+ignore = ["F811"]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-export hubs: names imported purely to expose them as public API.
+"**/__init__.py" = ["F401"]
+# Test modules bind intermediate values for readability / debugging.
+"tests.py" = ["F841"]
+"test_matrix.py" = ["F841"]
+"tests/*" = ["F841"]

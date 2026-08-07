@@ -1,7 +1,7 @@
 from plum import dispatch
 import numpy as np
 
-from dataclasses import replace, dataclass
+from dataclasses import replace
 
 from bigraph_schema.schema import (
     Node,
@@ -9,25 +9,14 @@ from bigraph_schema.schema import (
     Empty,
     Union,
     Tuple,
-    Boolean,
-    Number,
-    Integer,
-    Float,
-    Delta,
-    Nonnegative,
-    String,
-    Enum,
     Wrap,
     Maybe,
-    Overwrite,
     List,
     Map,
     Tree,
     Array,
     Key,
-    Path,
     Wires,
-    Schema,
     Link,
     Star,
     Index,
@@ -37,7 +26,7 @@ from bigraph_schema.schema import (
     is_schema_field,
 )
 
-from bigraph_schema.methods import default, check, serialize, resolve
+from bigraph_schema.methods import check, serialize, resolve
 
 
 @dispatch
@@ -68,7 +57,7 @@ def jump(schema: Union, state, to, context):
 
 @dispatch
 def jump(schema: Tuple, state, to: Key, context):
-    index = Index(int(to._value))
+    index = Index(_value=int(to._value))
     return jump(schema, state, index, context)
 
 
@@ -110,7 +99,7 @@ def jump(schema: Tuple, state, to: Jump, context):
 
 @dispatch
 def jump(schema: List, state, to: Key, context):
-    index = Index(int(to._value))
+    index = Index(_value=int(to._value))
     return jump(schema, state, index, context)
 
 
@@ -128,7 +117,7 @@ def jump(schema: List, state, to: Star, context):
     subelement = Node()
     elements = []
 
-    for index, value in state:
+    for index, value in enumerate(state):
         subvalue_schema, subvalue = traverse(
             schema._element,
             state[index],
@@ -149,7 +138,7 @@ def jump(schema: List, state, to: Jump, context):
 
 @dispatch
 def jump(schema: Map, state, to: Index, context):
-    key = Key(str(to._value))
+    key = Key(_value=str(to._value))
     return jump(schema, state, key, context)
 
 
@@ -310,7 +299,7 @@ def jump(schema: Node, state, to: Star, context):
     value_schema = {}
     values = {}
 
-    for key, value in schema.__dataclass_fields__:
+    for key in schema.__dataclass_fields__:
         if is_schema_field(schema, key) and key in state:
             subschema, subvalue = traverse(
                 getattr(schema, key),

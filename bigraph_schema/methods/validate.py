@@ -4,34 +4,25 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
-    Atom,
     Empty,
     Union,
     Tuple,
     Boolean,
-    Number,
     Integer,
     Float,
     Complex,
-    Delta,
     Nonnegative,
     Range,
     String,
     Enum,
     Wrap,
     Maybe,
-    Overwrite,
-    Const,
     List,
     Set,
     Map,
     Tree,
     Array,
     Key,
-    Path,
-    Wires,
-    Schema,
-    Link,
     dtype_schema,
     is_schema_field,
 )
@@ -180,14 +171,12 @@ def validate(core, schema: Map, state):
         return results
 
     elif not isinstance(schema._key, String):
+        from bigraph_schema.methods.realize import _realize_map_key
         results = filter_nones([
             validate(
                 core,
                 schema._key,
-                realize(
-                    core,
-                    schema._key,
-                    key))
+                _realize_map_key(core, schema._key, key))
             for key in state.keys()])
 
         if results:

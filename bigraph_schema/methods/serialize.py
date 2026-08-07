@@ -10,7 +10,6 @@ from bigraph_schema.schema import (
     InnerName,
     OuterName,
     Interface,
-    NONE_SYMBOL,
     Union,
     Tuple,
     Boolean,
@@ -53,7 +52,6 @@ from bigraph_schema.schema import (
 )
 
 from bigraph_schema.methods.check import check
-from bigraph_schema.methods.resolve import resolve
 
 
 def wrap_default(schema, result):
