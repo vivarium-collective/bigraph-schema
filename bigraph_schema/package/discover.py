@@ -8,7 +8,7 @@ import sys
 import json
 import hashlib
 import tempfile
-from typing import Dict, List, Tuple, Set, Type
+from typing import List, Set, Type
 
 from bigraph_schema import Edge
 from bigraph_schema.schema import Node

@@ -7,7 +7,6 @@ eager-mode parity, and the on-disk index cache. See
 ``bigraph_schema/package/discover.py``.
 """
 
-import os
 import sys
 import time
 import textwrap
@@ -17,7 +16,6 @@ import pytest
 import bigraph_schema.core as core_module
 from bigraph_schema.core import allocate_core
 from bigraph_schema.package.lazy_registry import LazyLinkRegistry
-from bigraph_schema.package import discover as D
 # Contract: these must remain importable for downstream eager consumers.
 from bigraph_schema.package.discover import (  # noqa: F401
     recursive_dynamic_import,

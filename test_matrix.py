@@ -20,7 +20,7 @@ from bigraph_schema.schema import (
     Node, Empty, Union, Tuple, Boolean, Or, And, Xor,
     Number, Integer, Float, Delta, Nonnegative, Complex, Range,
     String, Enum, Maybe, Wrap, Quote, Overwrite, Const,
-    List, Set, Map, Tree, Array, Frame, Path, Wires, Link,
+    List, Set, Map, Tree, Array, Frame, Path, Wires,
 )
 from bigraph_schema.methods import (
     default, check, validate, render, serialize, realize, merge, apply,

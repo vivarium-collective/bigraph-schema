@@ -5,24 +5,12 @@ walk handles the structural recursion for all container types,
 letting callers focus on leaf behavior and result assembly.
 """
 
-import numpy as np
 
 from bigraph_schema.schema import (
     Node,
     Atom,
-    Empty,
     Union,
     Tuple,
-    Boolean,
-    Number,
-    Integer,
-    Float,
-    Complex,
-    Delta,
-    Nonnegative,
-    Range,
-    String,
-    Enum,
     Wrap,
     Maybe,
     Overwrite,
@@ -31,12 +19,6 @@ from bigraph_schema.schema import (
     Set,
     Map,
     Tree,
-    Array,
-    Frame,
-    Key,
-    Path,
-    Wires,
-    Schema,
     Link,
 )
 

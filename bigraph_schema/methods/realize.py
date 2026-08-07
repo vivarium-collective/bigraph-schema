@@ -1,4 +1,3 @@
-from pprint import pformat as pf
 from plum import dispatch
 import numpy as np
 import pandas as pd
@@ -15,21 +14,15 @@ from bigraph_schema.schema import (
     Union,
     Tuple,
     Boolean,
-    Number,
     Integer,
     Float,
     Complex,
-    Delta,
-    Nonnegative,
     Range,
     NPRandom,
     String,
-    Enum,
     Wrap,
     Quote,
     Maybe,
-    Overwrite,
-    Const,
     LineageSeed,
     List,
     Set,
@@ -37,13 +30,9 @@ from bigraph_schema.schema import (
     Tree,
     Array,
     Frame,
-    Key,
-    Path,
-    Wires,
     Protocol,
     LocalProtocol,
     normalize_address,
-    Schema,
     Link,
     Object,
     Function,
@@ -53,7 +42,6 @@ from bigraph_schema.schema import (
 )
 
 
-from bigraph_schema.methods.serialize import render
 from bigraph_schema.methods.default import default
 
 

@@ -27,22 +27,13 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
-    Atom,
     Empty,
-    Union,
     Tuple,
     Boolean,
-    Number,
     Integer,
     Float,
-    Complex,
-    Delta,
-    Nonnegative,
-    Range,
     String,
-    Enum,
     Wrap,
-    Maybe,
     Overwrite,
     Const,
     List,
@@ -50,8 +41,6 @@ from bigraph_schema.schema import (
     Map,
     Tree,
     Array,
-    Frame,
-    Link,
 )
 from bigraph_schema.methods.events import get_reconcile_sink
 

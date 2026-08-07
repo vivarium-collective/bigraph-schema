@@ -19,7 +19,7 @@ triple that can be fed to ``run_reactions`` or ``ReactionStep``.
 from bigraph_schema.schema import Site
 from bigraph_schema.assembly import (
     Sorting, ReactionRule, stratified_sorting, many_one_sorting,
-    ACTIVE, PASSIVE, ATOMIC)
+    ACTIVE, PASSIVE)
 
 
 # ── CCS ─────────────────────────────────────────────────────────────
@@ -450,9 +450,9 @@ def petri_fire_rule(event_name, n_pre, n_post):
         **{f'post_{i}': f'post_{i}' for i in range(n_post)}}
     # token sites preserved through
     for i in range(n_pre):
-        instantiation[f'token'] = 'token'
+        instantiation['token'] = 'token'
     for i in range(n_post):
-        instantiation[f'token'] = 'token'
+        instantiation['token'] = 'token'
 
     return ReactionRule(
         redex=redex,

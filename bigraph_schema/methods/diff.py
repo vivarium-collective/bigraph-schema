@@ -8,23 +8,11 @@ from plum import dispatch
 
 from bigraph_schema.schema import (
     Node,
-    Atom,
     Empty,
-    Union,
     Tuple,
     Boolean,
-    Or,
-    And,
-    Xor,
     Number,
-    Integer,
-    Float,
-    Complex,
-    Delta,
-    Nonnegative,
-    Range,
     String,
-    Enum,
     Wrap,
     Maybe,
     Overwrite,
@@ -33,7 +21,6 @@ from bigraph_schema.schema import (
     Set,
     Map,
     Tree,
-    Array,
     is_schema_field,
 )
 

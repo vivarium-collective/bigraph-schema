@@ -26,14 +26,12 @@ formal definitions.
 
 import copy
 import random
-import math
 from dataclasses import dataclass, field, replace
-from typing import Optional, Dict, List as TypingList, Tuple as TypingTuple
+from typing import Optional, Dict
 
 from bigraph_schema.schema import (
     Node, Empty, Site, Interface, Link, Wires, Path, Place,
-    Map, List, Set, Tree, Tuple, Wrap, Union, Protocol, normalize_address,
-    is_schema_field)
+    Map, List, Set, Tree, Tuple, Wrap, Union, Protocol, normalize_address)
 
 
 EPSILON = Interface()
@@ -478,8 +476,6 @@ def stratified_sorting(sorts, phi, controls, hard_sorts=None):
     (Def. 6.2) — every root with a hard sort must contain at least
     one node.
     """
-    hard = hard_sorts or set()
-
     def formation(parent_sort, child_sort):
         expected = phi.get(parent_sort)
         if expected is None:

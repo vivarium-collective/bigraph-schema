@@ -1,7 +1,7 @@
 from plum import dispatch
 import numpy as np
 
-from dataclasses import replace, dataclass
+from dataclasses import replace
 
 from bigraph_schema.schema import (
     Node,
@@ -9,16 +9,6 @@ from bigraph_schema.schema import (
     Empty,
     Union,
     Tuple,
-    Boolean,
-    Number,
-    Integer,
-    Float,
-    Complex,
-    Delta,
-    Nonnegative,
-    Range,
-    String,
-    Enum,
     Wrap,
     Maybe,
     Overwrite,
@@ -29,10 +19,7 @@ from bigraph_schema.schema import (
     Tree,
     Array,
     Frame,
-    Key,
-    Path,
     Wires,
-    Schema,
     Link,
     is_schema_field,
 )

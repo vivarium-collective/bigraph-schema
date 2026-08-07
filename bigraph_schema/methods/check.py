@@ -3,34 +3,25 @@ import numpy as np
 
 from bigraph_schema.schema import (
     Node,
-    Atom,
     Empty,
     Union,
     Tuple,
     Boolean,
-    Number,
     Integer,
     Float,
     Complex,
-    Delta,
     Nonnegative,
     Range,
     String,
     Enum,
     Wrap,
     Maybe,
-    Overwrite,
-    Const,
     List,
     Set,
     Map,
     Tree,
     Array,
     Key,
-    Path,
-    Wires,
-    Schema,
-    Link,
     is_schema_field,
 )
 
@@ -152,13 +143,13 @@ def check(schema: Map, state):
         return all_values
 
     else:
-        # if the keys are not strings, we must realize
-        # them all to tell if they pass the check?
-        # - this seems expensive?
+        # Non-string keys: check each state key directly against the
+        # key schema. ``check`` carries no ``core`` (it is a pure
+        # predicate), so we cannot realize serialized key strings here
+        # the way ``validate`` does; the map's in-memory keys are the
+        # already-realized Python objects, so a direct check is correct.
         all_keys = all([
-            # TODO: if realize needs core this will fail
-            #   does that matter?
-            check(schema._key, realize(None, schema._key, key))
+            check(schema._key, key)
             for key in state.keys()])
 
         return all_keys and all_values

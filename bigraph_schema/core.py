@@ -24,48 +24,18 @@ import collections
 
 from pprint import pformat as pf
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 import importlib.metadata
 
 from bigraph_schema.schema import (
     BASE_TYPES,
-    deep_merge,
     resolve_path,
     convert_jump,
     convert_path,
     blank_context,
-    Atom,
     Node,
-    Union,
     Tuple,
-    Boolean,
-    Or,
-    And,
-    Xor,
-    Number,
-    Integer,
-    Float,
-    Delta,
-    Nonnegative,
-    String,
-    Enum,
-    Wrap,
-    Maybe,
-    Overwrite,
-    List,
-    Map,
-    Tree,
-    Array,
-    Key,
-    Path,
-    Wires,
-    Schema,
-    Link,
-    Jump,
-    Star,
     Index,
-    Protocol,
-    LocalProtocol
 )
 
 from bigraph_schema.parse import visit_expression, CoreVisitor
@@ -87,8 +57,7 @@ from bigraph_schema.methods import (
     traverse,
     apply,
     reconcile,
-    bundle,
-    BundleContext)
+    bundle)
 
 from bigraph_schema.package import discover_packages
 
@@ -199,8 +168,13 @@ class Core:
             self.update_type(key, found)
         else:
             self.registry[key] = found
-        # Invalidate access cache since type registry changed
-        self._access_cache.pop(key, None)
+        # Invalidate cached parses since the type registry changed.
+        # ``key`` is a type NAME (a string), so it is memoized in
+        # ``_access_string_cache`` (keyed by the string). ``_access_cache``
+        # is keyed by ``id(dict)``, so popping a string from it is always a
+        # no-op — which left the stale parse in ``_access_string_cache``
+        # serving the old definition forever.
+        self._access_string_cache.pop(key, None)
         # Record the reverse class -> name mapping so serialize.render() can emit
         # this type's NAME (not a Python class repr) when a port declares it as a
         # type OBJECT (e.g. a process whose inputs() returns InPlaceDict()).
@@ -822,10 +796,32 @@ class Core:
         return traverse(found, state, path, context)
 
     def bind(self, schema, state, raw_key, target):
-        """Bind a logical key (jump) to a target."""
-        found = self.access(schema)
+        """Bind a logical key (a single jump) to a target within ``state``.
+
+        The write-side counterpart to :meth:`jump`: ``jump`` reads the
+        value under ``raw_key``; ``bind`` returns a NEW state in which
+        that key resolves to ``target``. ``raw_key`` is normalized via
+        ``convert_jump`` — string/``Key`` and ``Star`` keys set a mapping
+        entry, integer/``Index`` keys set a sequence element (extending
+        by one when the index is past the end). The input ``state`` is
+        never mutated.
+        """
+        self.access(schema)
         key = convert_jump(raw_key)
-        return bind(found, state, key, target)
+
+        if isinstance(key, Index):
+            elements = list(state or [])
+            index = key._value
+            if 0 <= index < len(elements):
+                elements[index] = target
+            else:
+                elements.append(target)
+            return tuple(elements) if isinstance(state, tuple) else elements
+
+        # Key / Star / fallback: mapping-style bind.
+        bound = dict(state or {})
+        bound[key._value] = target
+        return bound
 
     def merge(self, schema, state, merge_state, path=()):
         """Schema-aware merge of `merge_state` into `state`."""
@@ -917,7 +913,6 @@ class Core:
         return projected
 
     def view(self, schema, state, link_path, ports_key='inputs'):
-        found = self.access(schema)
         link_schema, link_state = self.traverse(schema, state, link_path)
         ports_schema = getattr(link_schema, f'_{ports_key}')
         wires = link_state.get(ports_key) or {}
@@ -1461,7 +1456,6 @@ class Core:
                 return project_schema, project_state
 
     def project(self, schema, state, link_path, view, ports_key='outputs'):
-        found = self.access(schema)
         link_schema, link_state = self.traverse(schema, state, link_path)
         ports_schema = getattr(link_schema, f'_{ports_key}')
         wires = link_state.get(ports_key) or {}

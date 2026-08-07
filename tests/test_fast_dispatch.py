@@ -5,7 +5,6 @@ path of every simulation. What matters is not that it is fast — it is that it
 cannot answer differently from plum.
 """
 
-import pytest
 from plum import Function, dispatch
 
 from bigraph_schema.fastdispatch import FastDispatch, fast_dispatch
