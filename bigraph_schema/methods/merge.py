@@ -26,6 +26,7 @@ from bigraph_schema.schema import (
 
 from bigraph_schema.methods.check import check
 from bigraph_schema.methods.default import default
+from bigraph_schema.methods.is_empty import is_empty as _is_empty
 
 
 @dispatch
@@ -249,7 +250,6 @@ def merge(schema: Frame, current, update, path=()):
 
 @dispatch
 def merge(schema: Atom, current, update, path=()):
-    from bigraph_schema.methods.is_empty import is_empty as _is_empty
     if not _is_empty(schema, update):
         return update
     elif not _is_empty(schema, current):
@@ -313,8 +313,6 @@ def merge(schema: Node, current, update, path=()):
 
     else:
         # Non-empty wins over empty. If both non-empty, update wins.
-        from bigraph_schema.methods.is_empty import is_empty as _is_empty
-
         update_empty = _is_empty(schema, update)
         current_empty = _is_empty(schema, current)
 

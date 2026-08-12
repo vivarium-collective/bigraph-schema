@@ -547,14 +547,12 @@ class Core:
                 result = current
             else:
                 result = resolve(current, update)
-        except ValueError:
-            # numpy grumble grumble
-            result = resolve(current, update)
         except Exception:
-            # Unum raises IncompatibleUnitsError on `unum_a == unum_b`
-            # when their units differ, rather than returning False.
-            # Any comparison failure means "not equal" — fall through
-            # to the dispatched resolve.
+            # Any comparison failure means "not equal" — fall through to
+            # the dispatched resolve. Two known culprits: numpy raises
+            # ValueError on ambiguous array truthiness, and Unum raises
+            # IncompatibleUnitsError on `unum_a == unum_b` when their
+            # units differ rather than returning False.
             result = resolve(current, update)
 
         if cache_key is not None:
