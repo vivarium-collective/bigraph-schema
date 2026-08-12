@@ -122,7 +122,7 @@ def validate(core, schema: Range, state):
 @dispatch
 def validate(core, schema: String, state):
     if not isinstance(state, str):
-        return f'Float schema but state is not a float:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
+        return f'String schema but state is not a string:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
 
 @dispatch
@@ -223,7 +223,7 @@ def validate(core, schema: Array, state):
 
 @dispatch
 def validate(core, schema: Key, state):
-    if not isinstance(state, int) or isinstance(state, str):
+    if not (isinstance(state, int) or isinstance(state, str)):
         return f'Key schema but state is not a key:\n\nschema: {pf(render(schema))}\n\nstate: {pf(state)}\n\n'
 
 
