@@ -576,6 +576,14 @@ def port_merges(core, port_schema, wires, path):
                 {},
                 key)
 
+            # A wire may reference a port with no declared schema (e.g.
+            # an undeclared port key, or one merged in as ``None``) —
+            # ``down_schema`` comes back ``None`` in that case. Skip it
+            # rather than recursing/merging with it, mirroring the
+            # sibling ``view_ports``'s ``if subschema is None: continue``.
+            if down_schema is None:
+                continue
+
             submerges = port_merges(
                 core,
                 down_schema,
