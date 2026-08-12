@@ -282,9 +282,18 @@ class Core:
         """Apply a registered translator to ``value``.
 
         Returns ``Crossed(result)`` on success, or a ``Refusal`` — **never**
-        ``None`` (the anti-silent-None law). This is the contrast with
-        ``coerce``: a translator refuses exactly where ``coerce`` would
-        silently substitute a default.
+        ``None`` and **never a propagated exception** (every crossing
+        outcome is ``Crossed | Refusal``: a raising ``cross_fn`` is caught
+        and converted to a ``Refusal`` rather than escaping ``cross``).
+        This is the contrast with ``coerce``: a translator refuses exactly
+        where ``coerce`` would silently substitute a default.
+
+        Modes (``total``/``partial``/``lossy``/``widening``) are advisory
+        labels declared on the ``Translator`` — only ``lossy``'s ``loss``
+        requirement is enforced (at registration time, in
+        ``register_translator``). A ``total`` translator is not exempt
+        from the source/target checks below; it can still yield a
+        ``Refusal``.
         """
         translator = self.translator_registry.get(translator_id)
         if translator is None:
@@ -299,9 +308,19 @@ class Core:
                 reason=f'source type mismatch: value does not satisfy {source_label!r}',
                 source=str(source_label),
                 target=str(target_label),
+                offending=value,
             )
 
-        result = translator.cross_fn(value)
+        try:
+            result = translator.cross_fn(value)
+        except Exception as e:
+            return Refusal(
+                translator_id=translator.id,
+                reason=f'cross_fn raised: {e!r}',
+                source=str(source_label),
+                target=str(target_label),
+                offending=value,
+            )
 
         if isinstance(result, Refusal):
             return result
@@ -312,6 +331,7 @@ class Core:
                 reason='crossing returned None (anti-silent-None law)',
                 source=str(source_label),
                 target=str(target_label),
+                offending=value,
             )
 
         if not self.check(translator.target, result):
@@ -320,6 +340,7 @@ class Core:
                 reason=f'target type mismatch: result does not satisfy {target_label!r}',
                 source=str(source_label),
                 target=str(target_label),
+                offending=result,
             )
 
         return Crossed(result)

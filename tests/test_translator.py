@@ -102,6 +102,7 @@ def test_translator_refuses_where_coerce_silently_passes(core):
     refusal = core.cross('int_to_float', 'abc')
     assert isinstance(refusal, Refusal)
     assert 'source' in refusal.reason
+    assert refusal.offending == 'abc'
 
     # The existing (unmodified) coerce method: applying it to the exact
     # same mismatched input silently returns a default int (0), with no
@@ -277,3 +278,89 @@ def test_existing_core_behavior_unchanged():
 
     resolved = core.resolve(core.access('integer'), core.access('integer'))
     assert resolved is not None
+
+
+# ---------------------------------------------------------------------------
+# 10. a raising cross_fn becomes a Refusal, never propagates
+# ---------------------------------------------------------------------------
+
+def test_cross_fn_raising_becomes_refusal_not_propagated(core):
+    core.register_translator(Translator(
+        id='divides_by_zero',
+        source='integer',
+        target='integer',
+        mode='total',
+        cross_fn=lambda value: 1 // 0,
+    ))
+
+    # Must NOT raise: cross() catches it and returns a Refusal.
+    result = core.cross('divides_by_zero', 5)
+    assert isinstance(result, Refusal)
+    assert 'raised' in result.reason
+    assert result.offending == 5
+
+
+# ---------------------------------------------------------------------------
+# 11. target-type mismatch: cross_fn returns a wrong-typed non-None value
+# ---------------------------------------------------------------------------
+
+def test_target_type_mismatch_becomes_refusal(core):
+    core.register_translator(Translator(
+        id='int_to_bad_float',
+        source='integer',
+        target='float',
+        mode='total',
+        cross_fn=lambda value: 'not a float',
+    ))
+
+    result = core.cross('int_to_bad_float', 5)
+    assert isinstance(result, Refusal)
+    assert 'target' in result.reason
+    assert result.offending == 'not a float'
+
+
+# ---------------------------------------------------------------------------
+# 12. compose_translators raises ValueError when source/target don't line up
+# ---------------------------------------------------------------------------
+
+def test_compose_translators_incompatible_types_raises(core):
+    core.register_translator(Translator(
+        id='int_to_float',
+        source='integer',
+        target='float',
+        mode='total',
+        cross_fn=float,
+    ))
+    core.register_translator(Translator(
+        id='string_to_int',
+        source='string',
+        target='integer',
+        mode='total',
+        cross_fn=int,
+    ))
+
+    # int_to_float.target ('float') != string_to_int.source ('string')
+    with pytest.raises(ValueError):
+        core.compose_translators('string_to_int', 'int_to_float')
+
+
+# ---------------------------------------------------------------------------
+# 13. registration/crossing works beyond scalars (a complex type)
+# ---------------------------------------------------------------------------
+
+def test_translator_with_complex_map_type(core):
+    core.register_translator(Translator(
+        id='map_float_to_map_float_scaled',
+        source='map[float]',
+        target='map[float]',
+        mode='total',
+        cross_fn=lambda value: {key: item * 2.0 for key, item in value.items()},
+    ))
+
+    result = core.cross('map_float_to_map_float_scaled', {'a': 1.0, 'b': 2.5})
+    assert result == Crossed({'a': 2.0, 'b': 5.0})
+
+    # Source mismatch still refuses correctly for the complex type too.
+    refusal = core.cross('map_float_to_map_float_scaled', 'not a map')
+    assert isinstance(refusal, Refusal)
+    assert refusal.offending == 'not a map'

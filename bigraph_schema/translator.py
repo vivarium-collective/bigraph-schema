@@ -31,11 +31,12 @@ class Refusal:
     reason: str
     source: str
     target: str
+    offending: Any = None
 
     def __str__(self) -> str:
         return (
             f"Refusal[{self.translator_id}]: {self.reason} "
-            f"({self.source} -> {self.target})"
+            f"({self.source} -> {self.target}) offending={self.offending!r}"
         )
 
 
@@ -61,10 +62,21 @@ class Translator:
             - ``lossy``: succeeds, but discards information (``loss`` is
               required and must describe what is lost).
             - ``widening``: succeeds, embedding into a strictly larger type.
+
+            NOTE: modes are advisory, self-declared labels — except
+            ``lossy``, whose ``loss`` requirement IS enforced at
+            registration time. ``total``/``partial``/``widening`` are not
+            themselves checked at ``cross`` time: e.g. a ``total``
+            translator can still yield a ``Refusal`` from the ordinary
+            source/target type checks (declaring ``total`` does not exempt
+            it from those checks, it only asserts the author's intent that
+            every well-typed input succeeds).
         cross_fn: ``value -> value`` (or ``value -> Refusal`` for a
             ``partial`` crossing). Returning ``None`` is treated as an
             accidental omission, not a valid crossing, and is converted to
-            a ``Refusal`` by ``Core.cross`` (the anti-silent-None law).
+            a ``Refusal`` by ``Core.cross`` (the anti-silent-None law). A
+            ``cross_fn`` that *raises* is also caught by ``Core.cross`` and
+            converted to a ``Refusal`` rather than propagating.
         loss: Required, non-empty description of what information is
             discarded when ``mode == 'lossy'``.
     """
