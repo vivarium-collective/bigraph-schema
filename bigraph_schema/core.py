@@ -60,6 +60,7 @@ from bigraph_schema.methods import (
     bundle)
 
 from bigraph_schema.package import discover_packages
+from bigraph_schema.translator import Translator, Refusal, Crossed, worst_mode
 
 
 def schema_keys(schema):
@@ -118,6 +119,10 @@ class Core:
         self.registry = {}
         self.link_registry = {}
         self.method_registry = {}
+        # translator id -> Translator: declared typed crossings registered
+        # via ``register_translator`` and applied via ``cross``. See
+        # ``bigraph_schema/translator.py``.
+        self.translator_registry = {}
         # sort name -> admits(core, site, filler): the FILLING discipline
         # (what may close a hole), as opposed to Sorting.formation, which
         # is the NESTING discipline (what may live inside what).
@@ -239,6 +244,158 @@ class Core:
 
     def register_method(self, key, data):
         self.method_registry[key] = data
+
+    def register_translator(self, translator):
+        """Register a declared, typed crossing between two schema types.
+
+        Validates well-typedness of ``translator.source``/``translator.target``
+        (each must resolve to a real, compiled schema via ``access``) and, for
+        ``mode == 'lossy'``, that ``translator.loss`` is a non-empty string
+        describing what information the crossing discards. Raises
+        ``ValueError`` on either violation. Returns the (stored) translator.
+        """
+        for label, encoded in (('source', translator.source), ('target', translator.target)):
+            try:
+                found = self.access(encoded)
+            except Exception as e:
+                raise ValueError(
+                    f"translator '{translator.id}': {label} type {encoded!r} "
+                    f"is not a valid schema (failed to access): {e}"
+                )
+            if not isinstance(found, Node):
+                raise ValueError(
+                    f"translator '{translator.id}': {label} type {encoded!r} "
+                    f"is not a valid, registered schema"
+                )
+
+        if translator.mode == 'lossy':
+            if not isinstance(translator.loss, str) or not translator.loss.strip():
+                raise ValueError(
+                    f"translator '{translator.id}': mode 'lossy' requires a "
+                    f"non-empty 'loss' description of what information is discarded"
+                )
+
+        self.translator_registry[translator.id] = translator
+        return translator
+
+    def cross(self, translator_id, value):
+        """Apply a registered translator to ``value``.
+
+        Returns ``Crossed(result)`` on success, or a ``Refusal`` — **never**
+        ``None`` and **never a propagated exception** (every crossing
+        outcome is ``Crossed | Refusal``: a raising ``cross_fn`` is caught
+        and converted to a ``Refusal`` rather than escaping ``cross``).
+        This is the contrast with ``coerce``: a translator refuses exactly
+        where ``coerce`` would silently substitute a default.
+
+        Modes (``total``/``partial``/``lossy``/``widening``) are advisory
+        labels declared on the ``Translator`` — only ``lossy``'s ``loss``
+        requirement is enforced (at registration time, in
+        ``register_translator``). A ``total`` translator is not exempt
+        from the source/target checks below; it can still yield a
+        ``Refusal``.
+        """
+        translator = self.translator_registry.get(translator_id)
+        if translator is None:
+            raise ValueError(f"no translator registered with id '{translator_id}'")
+
+        source_label = self.render(self.access(translator.source))
+        target_label = self.render(self.access(translator.target))
+
+        if not self.check(translator.source, value):
+            return Refusal(
+                translator_id=translator.id,
+                reason=f'source type mismatch: value does not satisfy {source_label!r}',
+                source=str(source_label),
+                target=str(target_label),
+                offending=value,
+            )
+
+        try:
+            result = translator.cross_fn(value)
+        except Exception as e:
+            return Refusal(
+                translator_id=translator.id,
+                reason=f'cross_fn raised: {e!r}',
+                source=str(source_label),
+                target=str(target_label),
+                offending=value,
+            )
+
+        if isinstance(result, Refusal):
+            return result
+
+        if result is None:
+            return Refusal(
+                translator_id=translator.id,
+                reason='crossing returned None (anti-silent-None law)',
+                source=str(source_label),
+                target=str(target_label),
+                offending=value,
+            )
+
+        if not self.check(translator.target, result):
+            return Refusal(
+                translator_id=translator.id,
+                reason=f'target type mismatch: result does not satisfy {target_label!r}',
+                source=str(source_label),
+                target=str(target_label),
+                offending=result,
+            )
+
+        return Crossed(result)
+
+    def compose_translators(self, id2, id1, new_id=None):
+        """Compose two registered translators: apply ``id1`` then ``id2``.
+
+        Requires ``t1.target`` and ``t2.source`` to resolve to the same
+        type (compared via their rendered normal forms), raising
+        ``ValueError`` otherwise. Returns (and registers) a new
+        ``Translator`` whose ``cross_fn`` threads a ``Refusal`` from either
+        stage straight through without applying the next stage. The
+        composed ``mode`` is the worst of the two input modes (``partial``
+        worst, then ``lossy``, then ``widening``, then ``total``); the
+        composed ``loss`` concatenates both declared losses (empty parts
+        omitted).
+        """
+        t1 = self.translator_registry.get(id1)
+        t2 = self.translator_registry.get(id2)
+        if t1 is None:
+            raise ValueError(f"no translator registered with id '{id1}'")
+        if t2 is None:
+            raise ValueError(f"no translator registered with id '{id2}'")
+
+        t1_target_label = self.render(self.access(t1.target))
+        t2_source_label = self.render(self.access(t2.source))
+        if t1_target_label != t2_source_label:
+            raise ValueError(
+                f"cannot compose '{id1}' -> '{id2}': "
+                f"{id1}.target ({t1_target_label!r}) != {id2}.source ({t2_source_label!r})"
+            )
+
+        composed_id = new_id or f'{id1}__then__{id2}'
+        composed_mode = worst_mode(t1.mode, t2.mode)
+        losses = [loss for loss in (t1.loss, t2.loss) if loss]
+        composed_loss = '; '.join(losses) if losses else None
+
+        def composed_cross_fn(value, _id1=id1, _id2=id2):
+            first = self.cross(_id1, value)
+            if isinstance(first, Refusal):
+                return first
+            second = self.cross(_id2, first.value)
+            if isinstance(second, Refusal):
+                return second
+            return second.value
+
+        composed = Translator(
+            id=composed_id,
+            source=t1.source,
+            target=t2.target,
+            mode=composed_mode,
+            cross_fn=composed_cross_fn,
+            loss=composed_loss,
+        )
+        return self.register_translator(composed)
 
     def register_sort(self, key, admits):
         """Register the **filling** discipline for a sort.
@@ -1619,6 +1776,7 @@ def _isolated_copy(base):
     _copy = getattr(base.link_registry, "copy", None)
     clone.link_registry = _copy() if callable(_copy) else dict(base.link_registry)
     clone.method_registry = dict(base.method_registry)
+    clone.translator_registry = dict(base.translator_registry)
     # Fresh, empty per-instance caches so warm entries (and the id-keyed
     # witnesses they hold) never bleed between independently-allocated cores.
     clone._access_cache = collections.OrderedDict()
