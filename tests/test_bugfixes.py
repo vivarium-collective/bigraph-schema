@@ -136,3 +136,65 @@ def test_realize_link_skips_undeclared_port_wire(core):
     # No exception; the undeclared port's wire is preserved in state
     # (port_merges just skips contributing a *merge* for it).
     assert decode_state['inputs'] == {'a': ['a'], 'b': ['b']}
+
+
+# --- BUG 5: realize_link's 'instance' branch never rebinds a missing core -
+
+class _MinimalEdge(Edge):
+    """Minimal process with no ports — enough to exercise realize_link's
+    ``'instance' in encode`` branch without any real domain logic."""
+
+    def inputs(self):
+        return {}
+
+    def outputs(self):
+        return {}
+
+
+def test_realize_link_rebinds_core_on_a_supplied_instance_with_none_core(core):
+    """A caller can hand realize_link an already-constructed ``'instance'``
+    (``encode['instance']``) rather than an ``address``/``config`` pair —
+    this is a real, supported, documented path (the branch's own comment:
+    "Instance already exists — skip instantiation"), used e.g. by
+    v2ecoli's ``EcoliStep``/``EcoliProcess`` adapter classes, whose custom
+    ``__init__`` bypasses ``Edge.__init__``'s own "must provide a core"
+    guard and can silently end up with ``self.core = None`` (a stale or
+    unset ambient fallback).
+
+    Before this fix, only the OTHER branch (fresh construction from
+    address+config) defended against this — line ~673: ``if not
+    hasattr(edge_instance, 'core') or edge_instance.core is None:
+    edge_instance.core = core``. The 'instance' branch had no equivalent
+    check, so a supplied instance with ``core=None`` built and ran without
+    error and only failed much later, in ``Link.serialize``:
+
+        config_schema = instance.core.access(instance.config_schema)
+        AttributeError: 'NoneType' object has no attribute 'access'
+
+    Confirmed live in production (sms-ecoli chain-dispatch, real
+    CloudWatch logs, commit c2ae8eb) and reproduced locally against the
+    real v2ecoli ``ecoli_baseline`` composite before this fix.
+    """
+    instance = _MinimalEdge({}, core=core)
+    assert instance.core is core  # sanity: real construction binds it
+
+    # Simulate the real defect: an instance handed to realize_link whose
+    # own core got lost (e.g. via a custom __init__ that bypasses Edge's
+    # guard, like v2ecoli's EcoliStep falling back to a stale/unset
+    # ambient global). realize_link must not trust it blindly.
+    instance.core = None
+
+    encode = {
+        'address': class_address(_MinimalEdge),
+        'config': {},
+        'instance': instance,
+    }
+
+    decode_schema, decode_state, merges = core.realize('link', encode)
+
+    assert decode_state['instance'].core is core, (
+        "realize_link's 'instance' branch did not rebind a missing core "
+        "on a caller-supplied instance — Composite.serialize_state() will "
+        "later crash on it with AttributeError: 'NoneType' object has no "
+        "attribute 'access' (Link.serialize's instance.core.access(...))."
+    )

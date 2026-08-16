@@ -617,6 +617,15 @@ def realize_link(core, schema: Link, encode, path=()):
         edge_instance = encode['instance']
         decode = dict(encode)
 
+        # Ensure all instances have core for config_schema resolution
+        # (needed by serialize) — the same guard the fresh-construction
+        # branch below applies. A caller-supplied instance built without a
+        # core (e.g. constructed standalone, outside this function) would
+        # otherwise build and run without error and only fail much later,
+        # in Link.serialize's ``instance.core.access(...)``.
+        if not hasattr(edge_instance, 'core') or edge_instance.core is None:
+            edge_instance.core = core
+
         # Enrich the port schemas with runtime defaults from ports_schema()
         if hasattr(edge_instance, 'ports_schema'):
             try:
