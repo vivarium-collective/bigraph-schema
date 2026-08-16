@@ -826,6 +826,16 @@ def realize(core, schema: None, encode, path=()):
                 core, schema, encode, path=path)
 
             return result_schema, result_state, merges
+        elif '_control' in encode:
+            # A dict carrying a node control (``_control``) IS a bigraph node.
+            # Realize it as the generic ``node`` type, whose realize preserves
+            # ``_control`` and the node's contents. The structural fall-through
+            # below would instead type ``_control`` as an ordinary ``_``-prefixed
+            # field, which ``is_schema_field`` treats as dict metadata and drops
+            # in phase-2 realize (silently losing node identity on untyped stores).
+            node_schema = core.access('node')
+            return realize(core, node_schema, encode, path=path)
+
         else:
             merges = []
             schema = {}
