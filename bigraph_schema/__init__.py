@@ -1,6 +1,12 @@
 from bigraph_schema.edge import Edge
 from bigraph_schema.contract import ProcessContract, resolve_contract
-from bigraph_schema.protocols import local_lookup_module
+from bigraph_schema.protocols import (
+    local_lookup_module,
+    iter_link_addresses,
+    registry_dependent_addresses,
+    unresolvable_addresses,
+    assert_portable_addresses,
+)
 
 from bigraph_schema.schema import BASE_TYPES, resolve_path, deep_merge, make_default
 from bigraph_schema.core import Core, allocate_core
