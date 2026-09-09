@@ -12,7 +12,7 @@ import pytest
 
 from bigraph_schema import allocate_core, class_address
 from bigraph_schema.edge import Edge
-from bigraph_schema.schema import Key, String
+from bigraph_schema.schema import Empty, Index, Key, Star, String
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -136,3 +136,30 @@ def test_realize_link_skips_undeclared_port_wire(core):
     # No exception; the undeclared port's wire is preserved in state
     # (port_merges just skips contributing a *merge* for it).
     assert decode_state['inputs'] == {'a': ['a'], 'b': ['b']}
+
+
+# --- BUG 5: jump on an Empty schema was ambiguous for Jump tokens -------
+#
+# `jump(schema: Empty, state, to, context)` (specific on the schema arg,
+# generic on `to`) crossed with `jump(schema: Node, state, to: Jump,
+# context)` (generic on the schema arg, specific on `to`): for an Empty
+# schema navigated by a Key/Index/Star token, neither method dominated, so
+# plum raised AmbiguousLookupError. This fired in practice whenever a wire
+# or port targeted a path whose schema was still Empty (unresolved) --
+# e.g. an unresolved `species` port -- producing the exact error
+# `jump(Empty(_default=None), {}, Key(_value='species'), {})` is ambiguous.
+# Fix: explicit `jump(Empty, ..., to: Jump, ...)` and `... to: Star, ...`
+# overloads (Star needs its own because Node has a Star-specific handler).
+@pytest.mark.parametrize("token", [
+    Key(_value="species"),
+    Index(_value=0),
+    Star(),
+])
+def test_jump_into_empty_schema_is_unambiguous(token):
+    from bigraph_schema.core import jump
+    schema, state = jump(Empty(_default=None), {}, token, {})
+    # Navigating into an Empty schema yields Empty with no state -- there is
+    # nothing there. The point of the test is that this does NOT raise
+    # plum.AmbiguousLookupError.
+    assert isinstance(schema, Empty)
+    assert state is None
