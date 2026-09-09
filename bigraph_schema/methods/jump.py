@@ -34,6 +34,26 @@ def jump(schema: Empty, state, to, context):
     return schema, None
 
 
+# Navigating INTO an Empty (unresolved) schema yields Empty, whatever the
+# navigation token. These explicit overloads exist to break a latent dispatch
+# ambiguity: `jump(schema: Empty, state, to, context)` above (specific on the
+# schema arg, generic on `to`) crosses with `jump(schema: Node, state, to: Jump,
+# context)` (generic on the schema arg, specific on `to`) whenever an Empty
+# schema is navigated with a Jump token (Key/Index/Star) — neither dominates, so
+# plum raises AmbiguousLookupError. That happens in practice when a wire/port
+# targets a path whose schema is still Empty (e.g. an unresolved `species` port).
+# `Star` additionally needs its own overload because `jump(schema: Node, state,
+# to: Star, context)` is more specific on `to` than the `Jump` overload here.
+@dispatch
+def jump(schema: Empty, state, to: Jump, context):
+    return schema, None
+
+
+@dispatch
+def jump(schema: Empty, state, to: Star, context):
+    return schema, None
+
+
 @dispatch
 def jump(schema: Maybe, state, to, context):
     if state is None:
