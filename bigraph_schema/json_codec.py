@@ -18,6 +18,8 @@ round-trip without schema info:
 - ``numpy`` scalars → native ``int``/``float``/``bool``
 - ``set``/``frozenset`` → ``{"__set__": true, "data": [...]}``
 - ``bytes`` → ``{"__bytes__": true, "data": "<hex>"}``
+- ``schema.Node`` subclass (String, Integer, Map, …) →
+  ``{"__bigraph_node__": "<ClassName>", "<field>": ..., ...}`` (its dataclass fields)
 
 Tuples are NOT tagged — ``json.JSONEncoder`` bypasses ``default()`` for
 tuples since they're natively encodable as JSON arrays. They round-trip
@@ -110,6 +112,24 @@ class BigraphJSONEncoder(json.JSONEncoder):
             return {'__set__': True, 'data': sorted(obj, key=str)}
         if isinstance(obj, bytes):
             return {'__bytes__': True, 'data': obj.hex()}
+        # bigraph-schema ``Node`` dataclasses (String, Integer, Map, Dtype, …)
+        # can surface in schema-agnostic state trees — e.g. a process's
+        # ``_inputs`` schema captured by ``gather_emitter_results`` — where this
+        # codec, which carries no matched schema, would otherwise raise
+        # "Object of type <Node> is not JSON serializable" on the encoder's own
+        # types. Emit a tagged dict of the node's dataclass fields (its class
+        # name under ``__bigraph_node__``); nested Node fields round-trip through
+        # this same encoder, and :func:`bigraph_json_hook` rebuilds the subclass.
+        try:
+            import dataclasses as _dc
+            from bigraph_schema.schema import Node as _Node
+            if isinstance(obj, _Node):
+                tagged = {'__bigraph_node__': type(obj).__name__}
+                for _f in _dc.fields(obj):
+                    tagged[_f.name] = getattr(obj, _f.name)
+                return tagged
+        except Exception:  # noqa: BLE001 — schema import/introspection best-effort
+            pass
         # Note: tuples are NOT tagged. json.JSONEncoder bypasses ``default()``
         # for tuples because they're natively encodable as JSON arrays, so a
         # tag here wouldn't fire. Tuples round-trip as lists. Callers that
@@ -127,6 +147,21 @@ def bigraph_json_hook(obj: Any) -> Any:
     unchanged, so plain JSON objects still load as ``dict``.
     """
     if not isinstance(obj, dict):
+        return obj
+    node_cls_name = obj.get('__bigraph_node__')
+    if node_cls_name:
+        # Reverse of the Node tag emitted by :meth:`BigraphJSONEncoder.default`.
+        # Rebuild the ``bigraph_schema.schema`` subclass from its dataclass
+        # fields; nested Node fields are already rebuilt (object_hook runs
+        # bottom-up). Unknown class / bad fields → return the dict unchanged.
+        try:
+            from bigraph_schema import schema as _schema
+            cls = getattr(_schema, node_cls_name, None)
+            if cls is not None:
+                fields = {k: v for k, v in obj.items() if k != '__bigraph_node__'}
+                return cls(**fields)
+        except Exception:  # noqa: BLE001 — tolerate unknown/renamed node types
+            pass
         return obj
     if obj.get('__pint__') or obj.get('__pint_array__'):
         # ``__pint_array__`` is v2ecoli's legacy variant tag for array-valued
