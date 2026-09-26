@@ -18,7 +18,7 @@ from bigraph_schema.json_codec import (
     dumps,
     loads,
 )
-from bigraph_schema.schema import Node, String, Integer, Map
+from bigraph_schema.schema import String, Integer, Map
 
 
 def test_encoder_serializes_bare_node():
