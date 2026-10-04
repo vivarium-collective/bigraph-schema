@@ -42,3 +42,35 @@ def test_unparseable_units_is_an_error():
     c = ProcessContract(face={'inputs': {'g': {'_type': 'float', '_units': 'not_a_unit_xyz'}}, 'outputs': {}})
     report = audit_contract(_Core(), c)
     assert any(f.code == 'bad_units' and f.severity == 'error' for f in report.findings)
+
+
+def test_non_numeric_bounds_are_an_error_not_a_crash():
+    c = ProcessContract(face={'inputs': {'t': {'_type': 'float', '_min': 'low', '_max': 'high'}}, 'outputs': {}})
+    report = audit_contract(object(), c)   # must not raise
+    assert any(f.code == 'bad_range' and f.severity == 'error' for f in report.findings)
+
+
+def test_malformed_expr_is_an_expr_parse_error():
+    from bigraph_schema.contract import Amendment
+    c = ProcessContract(face={'inputs': {'mass': 'float'}, 'outputs': {'mass': 'float'}})
+    c.amendments.append(Amendment(op='narrow', detail={'condition': {'kind': 'invariant', 'name': 'bad', 'expr': 'outputs. +', 'tol': 0.0}}))
+    report = audit_contract(object(), c)
+    assert any(f.severity == 'error' and f.code == 'expr_parse' for f in report.findings)
+
+
+def test_good_incomplete_and_lying_contracts():
+    good = narrow_condition(
+        ProcessContract(face={'inputs': {'mass': {'_type': 'float', '_min': 0, '_units': 'mg'}},
+                              'outputs': {'mass': {'_type': 'float', '_min': 0, '_units': 'mg'}}}),
+        'invariant', 'abs(outputs.mass - inputs.mass) <= tol', tol=1e-9)
+    r_good = audit_contract(_Core(), good)
+    assert r_good.ok and not [f for f in r_good.findings if f.severity == 'error']
+
+    incomplete = ProcessContract(face={'inputs': {'mass': 'float'}, 'outputs': {'mass': 'float'}})
+    r_incomplete = audit_contract(_Core(), incomplete)
+    assert r_incomplete.ok                                  # incomplete is never an error
+    assert any(f.code == 'completeness' for f in r_incomplete.findings)
+
+    lying = narrow_condition(incomplete, 'post', 'outputs.ghost >= 0')  # no 'ghost' port
+    r_lying = audit_contract(_Core(), lying)
+    assert not r_lying.ok and any(f.severity == 'error' for f in r_lying.findings)

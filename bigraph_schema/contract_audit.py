@@ -69,8 +69,11 @@ def audit_contract(core, contract) -> AuditReport:
             if not isinstance(port_type, dict):
                 continue
             lo, hi = port_type.get('_min'), port_type.get('_max')
-            if lo is not None and hi is not None and lo > hi:
-                findings.append(Finding('error', 'bad_range', f'{direction}.{port}', f'_min {lo} > _max {hi}'))
+            if lo is not None and hi is not None:
+                if not (isinstance(lo, (int, float)) and isinstance(hi, (int, float))):
+                    findings.append(Finding('error', 'bad_range', f'{direction}.{port}', f'_min/_max must be numeric, got {lo!r}/{hi!r}'))
+                elif lo > hi:
+                    findings.append(Finding('error', 'bad_range', f'{direction}.{port}', f'_min {lo} > _max {hi}'))
             unit = port_type.get('_units')
             if unit and _unit_registry is not None:
                 try:
