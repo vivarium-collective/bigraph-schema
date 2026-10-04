@@ -49,7 +49,7 @@ def _core():
 
 def test_face_subsumes_exact():
     core = _core()
-    face = {'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 5, '_units': 'mg'}}, 'outputs': {}}
+    face = {'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 5000, '_units': 'mg'}}, 'outputs': {}}
     ok, fails, over = face_subsumes(core, face, {'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 3, '_units': 'g'}}, 'outputs': {}})
     assert ok is True and fails == []
 
@@ -144,3 +144,28 @@ def test_full_fail_on_missing_port():
     cand = ProcessContract(face={'inputs': {}, 'outputs': {}})
     result = contract_subsumes(core, hole, cand)
     assert result.ok is False and any('face' in f['condition'] for f in result.fails)
+
+
+def test_range_subsumes_unit_scaled_exceeds():
+    # 3 g = 3000 mg, which exceeds the 5 mg ceiling → fail after unit normalization
+    ok, reason = range_subsumes({'_min': 0, '_max': 5, '_units': 'mg'},
+                                {'_min': 0, '_max': 3, '_units': 'g'})
+    assert ok is False and 'max' in reason
+
+
+def test_range_subsumes_unit_scaled_within():
+    # 3 g = 3000 mg ⊆ 5000 mg ceiling → ok
+    ok, _ = range_subsumes({'_min': 0, '_max': 5000, '_units': 'mg'},
+                           {'_min': 0, '_max': 3, '_units': 'g'})
+    assert ok is True
+
+
+def test_conditions_cover_validity_kind():
+    hole = narrow_condition(ProcessContract(face={'inputs': {}, 'outputs': {}}),
+                            'validity', 'config.k > 0', name='k_positive')
+    cand = narrow_condition(ProcessContract(face={'inputs': {}, 'outputs': {}}),
+                            'validity', 'config.k > 0', name='k_positive')
+    assert conditions_cover(hole, cand) == (True, [])
+    bare = ProcessContract(face={'inputs': {}, 'outputs': {}})
+    ok, missing = conditions_cover(hole, bare)
+    assert ok is False and any('k_positive' in m['reason'] for m in missing)

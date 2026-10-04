@@ -41,8 +41,22 @@ def range_subsumes(required_port, candidate_port):
     any candidate bound. An absent candidate bound against a present required
     bound is a failure (candidate admits values the hole forbids).
     """
-    req_lo, req_hi, _ = port_bounds(required_port)
-    cand_lo, cand_hi, _ = port_bounds(candidate_port)
+    req_lo, req_hi, req_units = port_bounds(required_port)
+    cand_lo, cand_hi, cand_units = port_bounds(candidate_port)
+
+    # Bounds/units is the exact region (spec §4): normalize candidate bounds
+    # into the required units before comparing, so a scale mismatch (3 g vs a
+    # 5 mg ceiling) is caught. Incompatible/unparseable units are left raw and
+    # surfaced by units_compatible instead.
+    if req_units and cand_units and _unit_registry is not None:
+        try:
+            factor = _unit_registry.Quantity(1, cand_units).to(req_units).magnitude
+            if cand_lo is not None:
+                cand_lo = cand_lo * factor
+            if cand_hi is not None:
+                cand_hi = cand_hi * factor
+        except Exception:  # noqa: BLE001 - incompatible/unparseable units: leave raw
+            pass
 
     if req_lo is not None:
         if cand_lo is None or cand_lo < req_lo:
@@ -171,7 +185,7 @@ def contract_subsumes(core, hole_contract, candidate_contract):
     """
     hole_face = getattr(hole_contract, 'face', None) or {}
     cand_face = getattr(candidate_contract, 'face', None) or {}
-    ok_face, fails, over = face_subsumes(core, hole_face, cand_face)
-    ok_cond, missing = conditions_cover(hole_contract, candidate_contract)
+    _, fails, over = face_subsumes(core, hole_face, cand_face)
+    _, missing = conditions_cover(hole_contract, candidate_contract)
     all_fails = list(fails) + list(missing)
     return SubsumptionResult(ok=(not all_fails), over_provides=over, fails=all_fails)
