@@ -70,3 +70,46 @@ def units_compatible(required_port, candidate_port):
     if req.is_compatible_with(cand):
         return True, None
     return False, f'cannot convert candidate {cand_units!r} to required {req_units!r}'
+
+
+def face_subsumes(core, required_face, candidate_face):
+    """Structural + bound/unit subsumption between two declared faces.
+
+    The candidate must provide every required port at a type core.resolve
+    accepts (mirrors face_conforms), and for each required port its numeric
+    range must be ⊆ and its units convertible. Over-provided ports are fine
+    and recorded. Returns (ok, fails, over_provides).
+    """
+    fails = []
+    over_provides = []
+    required_face = required_face or {}
+    candidate_face = candidate_face or {}
+
+    for direction in ('inputs', 'outputs'):
+        required = required_face.get(direction) or {}
+        provided = candidate_face.get(direction) or {}
+        if not isinstance(required, dict) or not isinstance(provided, dict):
+            continue
+        for port, req_schema in required.items():
+            if port not in provided:
+                fails.append({'condition': f'face.{direction}.{port}',
+                              'reason': f'candidate does not provide {direction} port {port!r}'})
+                continue
+            cand_schema = provided[port]
+            try:
+                core.resolve(req_schema, cand_schema)
+            except Exception as error:  # noqa: BLE001 - resolve failure = non-conforming type
+                fails.append({'condition': f'face.{direction}.{port}',
+                              'reason': f'{direction} port {port!r} type does not resolve: {error}'})
+                continue
+            ok, reason = range_subsumes(req_schema, cand_schema)
+            if not ok:
+                fails.append({'condition': f'bounds.{direction}.{port}', 'reason': reason})
+            ok, reason = units_compatible(req_schema, cand_schema)
+            if not ok:
+                fails.append({'condition': f'units.{direction}.{port}', 'reason': reason})
+        for port in provided:
+            if port not in required:
+                over_provides.append(f'{direction}.{port}')
+
+    return (not fails), fails, over_provides

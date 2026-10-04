@@ -38,3 +38,35 @@ def test_units_compatible_without_pint_is_permissive(monkeypatch):
     monkeypatch.setattr(sub, '_unit_registry', None)
     ok, _ = units_compatible({'_units': 'mg'}, {'_units': 'second'})
     assert ok is True   # pint absent → cannot check → permit (matches audit_contract)
+
+
+# Face subsumption tests (Task 3)
+from bigraph_schema.core import allocate_core
+from bigraph_schema.subsumption import face_subsumes
+
+def _core():
+    return allocate_core()
+
+def test_face_subsumes_exact():
+    core = _core()
+    face = {'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 5, '_units': 'mg'}}, 'outputs': {}}
+    ok, fails, over = face_subsumes(core, face, {'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 3, '_units': 'g'}}, 'outputs': {}})
+    assert ok is True and fails == []
+
+def test_face_missing_required_port_fails():
+    core = _core()
+    face = {'inputs': {'m': 'float'}, 'outputs': {}}
+    ok, fails, _ = face_subsumes(core, face, {'inputs': {}, 'outputs': {}})
+    assert ok is False and any('m' in f['reason'] for f in fails)
+
+def test_face_out_of_range_fails():
+    core = _core()
+    face = {'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 5}}, 'outputs': {}}
+    ok, fails, _ = face_subsumes(core, face, {'inputs': {'m': {'_type': 'float', '_min': -1, '_max': 5}}, 'outputs': {}})
+    assert ok is False and any('min' in f['reason'] for f in fails)
+
+def test_over_provision_is_allowed_and_recorded():
+    core = _core()
+    face = {'inputs': {'m': 'float'}, 'outputs': {}}
+    ok, fails, over = face_subsumes(core, face, {'inputs': {'m': 'float', 'extra': 'float'}, 'outputs': {}})
+    assert ok is True and fails == [] and 'inputs.extra' in over
