@@ -6,6 +6,7 @@ hole's declared contract?" — the relation find_candidates needs. Purely
 additive; the instance-level admit path is untouched.
 """
 import re
+from dataclasses import dataclass, field
 
 try:
     from bigraph_schema.units import units as _unit_registry
@@ -153,3 +154,24 @@ def face_subsumes(core, required_face, candidate_face):
                 over_provides.append(f'{direction}.{port}')
 
     return (not fails), fails, over_provides
+
+
+@dataclass
+class SubsumptionResult:
+    ok: bool
+    over_provides: list = field(default_factory=list)
+    fails: list = field(default_factory=list)   # [{'condition','reason'}]
+
+
+def contract_subsumes(core, hole_contract, candidate_contract):
+    """Does candidate's declared contract satisfy the hole's? The reverse,
+    declaration-level counterpart of contract_admits. Face + bounds + units
+    are exact; conditions are structural (spec §4/§11). Returns a
+    SubsumptionResult; ok iff nothing failed.
+    """
+    hole_face = getattr(hole_contract, 'face', None) or {}
+    cand_face = getattr(candidate_contract, 'face', None) or {}
+    ok_face, fails, over = face_subsumes(core, hole_face, cand_face)
+    ok_cond, missing = conditions_cover(hole_contract, candidate_contract)
+    all_fails = list(fails) + list(missing)
+    return SubsumptionResult(ok=(not all_fails), over_provides=over, fails=all_fails)

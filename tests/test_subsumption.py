@@ -116,3 +116,31 @@ def test_face_mirrors_face_conforms_resolvability():
     face = {'inputs': {'m': 'float'}, 'outputs': {}}
     ok, fails, _ = face_subsumes(core, face, {'inputs': {'m': 'string'}, 'outputs': {}})
     assert ok is True and fails == []
+
+
+# Contract subsumption tests (Task 5)
+from bigraph_schema.subsumption import contract_subsumes, SubsumptionResult
+
+def test_bare_hole_matches_on_face_alone():
+    core = _core()
+    hole = ProcessContract(face={'inputs': {'m': 'float'}, 'outputs': {}})
+    cand = ProcessContract(face={'inputs': {'m': 'float', 'extra': 'float'}, 'outputs': {}})
+    result = contract_subsumes(core, hole, cand)
+    assert isinstance(result, SubsumptionResult)
+    assert result.ok is True and result.fails == [] and 'inputs.extra' in result.over_provides
+
+def test_near_miss_face_ok_but_missing_guarantee():
+    core = _core()
+    hole = narrow_condition(ProcessContract(face={'inputs': {'m': 'float'}, 'outputs': {'m': 'float'}}),
+                            'post', 'outputs.m >= 0', name='nonneg')
+    cand = ProcessContract(face={'inputs': {'m': 'float'}, 'outputs': {'m': 'float'}})
+    result = contract_subsumes(core, hole, cand)
+    assert result.ok is False
+    assert any('nonneg' in f['reason'] for f in result.fails)
+
+def test_full_fail_on_missing_port():
+    core = _core()
+    hole = ProcessContract(face={'inputs': {'m': 'float'}, 'outputs': {}})
+    cand = ProcessContract(face={'inputs': {}, 'outputs': {}})
+    result = contract_subsumes(core, hole, cand)
+    assert result.ok is False and any('face' in f['condition'] for f in result.fails)
