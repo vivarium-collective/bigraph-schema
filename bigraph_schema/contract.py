@@ -26,6 +26,8 @@ import copy
 import re
 from dataclasses import dataclass, field, asdict
 
+from bigraph_schema.contract_expr import parse as _parse_expr, ExprError as _ExprError
+
 
 # Lines that read as governing equations rather than prose. Matched by any of
 # the canonical relation / operator markers, or by a probability-distribution
@@ -128,6 +130,17 @@ class ProcessContract:
                 found.append(predicate)
         return found
 
+    def conditions(self, kind=None):
+        """Structured declarative condition dicts from narrow amendments
+        (``detail['condition']``), optionally filtered by kind."""
+        out = []
+        for amendment in self.amendments:
+            condition = (amendment.detail or {}).get('condition')
+            if isinstance(condition, dict) and 'kind' in condition:
+                if kind is None or condition['kind'] == kind:
+                    out.append(condition)
+        return out
+
     def to_dict(self):
         """Return a JSON-safe plain-``dict`` representation."""
         result = asdict(self)
@@ -202,6 +215,26 @@ def _as_amendment(amendment):
         except TypeError as error:
             raise AmendmentError(f'malformed amendment: {error}') from None
     raise AmendmentError(f'not an amendment: {amendment!r}')
+
+
+CONDITION_KINDS = frozenset({'invariant', 'pre', 'post', 'validity'})
+
+
+def narrow_condition(contract, kind, expr, *, name=None, tol=0.0):
+    """Return a NEW contract with one declarative condition added as a narrow
+    amendment (``detail['condition']``). ``kind`` in ``CONDITION_KINDS``; ``expr``
+    is parsed now so a typo fails at authoring. Does not touch the callable
+    admit-path predicates."""
+    if kind not in CONDITION_KINDS:
+        raise ValueError(f'unknown condition kind {kind!r}; use one of {sorted(CONDITION_KINDS)}')
+    try:
+        _parse_expr(expr)
+    except _ExprError as error:
+        raise ValueError(f'invalid {kind} expression {expr!r}: {error}') from None
+    if not isinstance(tol, (int, float)) or tol < 0:
+        raise ValueError(f'tol must be a non-negative number, got {tol!r}')
+    condition = {'kind': kind, 'name': name or f'{kind}_{len(contract.amendments)}', 'expr': expr, 'tol': tol}
+    return amend(contract, Amendment(op='narrow', detail={'condition': condition}))
 
 
 def amend(contract, amendment):

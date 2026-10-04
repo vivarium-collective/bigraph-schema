@@ -1,0 +1,90 @@
+from bigraph_schema.contract import ProcessContract, narrow_condition
+from bigraph_schema.contract_audit import completeness, Finding, AuditReport, audit_contract
+
+def test_bare_float_ports_score_low():
+    c = ProcessContract(face={'inputs': {'mass': 'float'}, 'outputs': {'mass': 'float'}})
+    assert completeness(c) < 0.5
+
+def test_constrained_ports_and_a_predicate_score_higher():
+    c = narrow_condition(
+        ProcessContract(face={'inputs': {'mass': 'positive_float[mM]'}, 'outputs': {'mass': 'positive_float[mM]'}}),
+        'invariant', 'abs(sum(outputs.mass) - sum(inputs.mass)) <= tol', tol=1e-9)
+    assert completeness(c) > completeness(ProcessContract(face={'inputs': {'mass': 'float'}, 'outputs': {'mass': 'float'}}))
+
+def test_report_ok_iff_no_error():
+    assert AuditReport(ok=True, findings=[Finding('info', 'x', 'y', 'z')]).ok is True
+    assert AuditReport(ok=False, findings=[Finding('error', 'x', 'y', 'z')]).ok is False
+
+
+class _Core:  # a stand-in; audit_contract must not require a real core in Phase 1
+    pass
+
+def test_predicate_referencing_unknown_port_is_an_error():
+    c = narrow_condition(ProcessContract(face={'inputs': {'mass': 'float'}, 'outputs': {'mass': 'float'}}),
+                         'invariant', 'outputs.flux == 0')  # no 'flux' port
+    report = audit_contract(_Core(), c)
+    assert report.ok is False
+    assert any(f.severity == 'error' and 'flux' in f.message for f in report.findings)
+
+def test_predicate_referencing_declared_ports_is_clean():
+    c = narrow_condition(ProcessContract(face={'inputs': {'mass': 'float'}, 'outputs': {'mass': 'float'}}),
+                         'invariant', 'abs(outputs.mass - inputs.mass) <= tol', tol=1e-9)
+    report = audit_contract(_Core(), c)
+    assert not [f for f in report.findings if f.severity == 'error']
+
+
+def test_min_greater_than_max_is_an_error():
+    c = ProcessContract(face={'inputs': {'t': {'_type': 'float', '_min': 10, '_max': 0}}, 'outputs': {}})
+    report = audit_contract(_Core(), c)
+    assert any(f.code == 'bad_range' and f.severity == 'error' for f in report.findings)
+
+def test_unparseable_units_is_an_error():
+    c = ProcessContract(face={'inputs': {'g': {'_type': 'float', '_units': 'not_a_unit_xyz'}}, 'outputs': {}})
+    report = audit_contract(_Core(), c)
+    assert any(f.code == 'bad_units' and f.severity == 'error' for f in report.findings)
+
+
+def test_non_numeric_bounds_are_an_error_not_a_crash():
+    c = ProcessContract(face={'inputs': {'t': {'_type': 'float', '_min': 'low', '_max': 'high'}}, 'outputs': {}})
+    report = audit_contract(object(), c)   # must not raise
+    assert any(f.code == 'bad_range' and f.severity == 'error' for f in report.findings)
+
+
+def test_malformed_expr_is_an_expr_parse_error():
+    from bigraph_schema.contract import Amendment
+    c = ProcessContract(face={'inputs': {'mass': 'float'}, 'outputs': {'mass': 'float'}})
+    c.amendments.append(Amendment(op='narrow', detail={'condition': {'kind': 'invariant', 'name': 'bad', 'expr': 'outputs. +', 'tol': 0.0}}))
+    report = audit_contract(object(), c)
+    assert any(f.severity == 'error' and f.code == 'expr_parse' for f in report.findings)
+
+
+def test_good_incomplete_and_lying_contracts():
+    good = narrow_condition(
+        ProcessContract(face={'inputs': {'mass': {'_type': 'float', '_min': 0, '_units': 'mg'}},
+                              'outputs': {'mass': {'_type': 'float', '_min': 0, '_units': 'mg'}}}),
+        'invariant', 'abs(outputs.mass - inputs.mass) <= tol', tol=1e-9)
+    r_good = audit_contract(_Core(), good)
+    assert r_good.ok and not [f for f in r_good.findings if f.severity == 'error']
+
+    incomplete = ProcessContract(face={'inputs': {'mass': 'float'}, 'outputs': {'mass': 'float'}})
+    r_incomplete = audit_contract(_Core(), incomplete)
+    assert r_incomplete.ok                                  # incomplete is never an error
+    assert any(f.code == 'completeness' for f in r_incomplete.findings)
+
+    lying = narrow_condition(incomplete, 'post', 'outputs.ghost >= 0')  # no 'ghost' port
+    r_lying = audit_contract(_Core(), lying)
+    assert not r_lying.ok and any(f.severity == 'error' for f in r_lying.findings)
+
+
+def test_condition_missing_expr_is_an_error_not_a_crash():
+    from bigraph_schema.contract import Amendment
+    c = ProcessContract(face={'inputs': {}, 'outputs': {}},
+                        amendments=[Amendment(op='narrow', detail={'condition': {'kind': 'invariant', 'name': 'x'}})])
+    report = audit_contract(object(), c)
+    assert any(f.code == 'malformed_condition' and f.severity == 'error' for f in report.findings)
+
+
+def test_lone_non_numeric_min_is_bad_range():
+    c = ProcessContract(face={'inputs': {'x': {'_type': 'float', '_min': 'low'}}, 'outputs': {}})
+    report = audit_contract(object(), c)
+    assert any(f.code == 'bad_range' and f.severity == 'error' for f in report.findings)
