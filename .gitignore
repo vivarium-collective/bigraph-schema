@@ -16,3 +16,4 @@ bigraph_schema.egg-info/
 .devenv*
 .devenv/
 devenv.lock
+.superpowers/
