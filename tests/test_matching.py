@@ -1,6 +1,6 @@
 from bigraph_schema.core import allocate_core
 from bigraph_schema.contract import ProcessContract, narrow_condition
-from bigraph_schema.matching import find_candidates, CandidateMatch
+from bigraph_schema.matching import find_candidates
 from bigraph_schema.schema import Site
 
 
