@@ -74,3 +74,17 @@ def test_good_incomplete_and_lying_contracts():
     lying = narrow_condition(incomplete, 'post', 'outputs.ghost >= 0')  # no 'ghost' port
     r_lying = audit_contract(_Core(), lying)
     assert not r_lying.ok and any(f.severity == 'error' for f in r_lying.findings)
+
+
+def test_condition_missing_expr_is_an_error_not_a_crash():
+    from bigraph_schema.contract import Amendment
+    c = ProcessContract(face={'inputs': {}, 'outputs': {}},
+                        amendments=[Amendment(op='narrow', detail={'condition': {'kind': 'invariant', 'name': 'x'}})])
+    report = audit_contract(object(), c)
+    assert any(f.code == 'malformed_condition' and f.severity == 'error' for f in report.findings)
+
+
+def test_lone_non_numeric_min_is_bad_range():
+    c = ProcessContract(face={'inputs': {'x': {'_type': 'float', '_min': 'low'}}, 'outputs': {}})
+    report = audit_contract(object(), c)
+    assert any(f.code == 'bad_range' and f.severity == 'error' for f in report.findings)

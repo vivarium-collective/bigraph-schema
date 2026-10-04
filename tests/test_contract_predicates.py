@@ -33,3 +33,8 @@ def test_condition_survives_to_dict_round_trip():
     assert {'kind': 'post', 'name': 'nonneg', 'expr': 'all(outputs.mass >= 0)', 'tol': 0.0} in conds
     rebuilt = ProcessContract(face=data['face'], amendments=[Amendment(**a) for a in data['amendments']])
     assert len(rebuilt.conditions(kind='post')) == 1
+
+
+def test_negative_tol_rejected():
+    with pytest.raises(ValueError):
+        narrow_condition(_base(), 'invariant', 'inputs.mass > 0', tol=-1)

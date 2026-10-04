@@ -231,6 +231,8 @@ def narrow_condition(contract, kind, expr, *, name=None, tol=0.0):
         _parse_expr(expr)
     except _ExprError as error:
         raise ValueError(f'invalid {kind} expression {expr!r}: {error}') from None
+    if not isinstance(tol, (int, float)) or tol < 0:
+        raise ValueError(f'tol must be a non-negative number, got {tol!r}')
     condition = {'kind': kind, 'name': name or f'{kind}_{len(contract.amendments)}', 'expr': expr, 'tol': tol}
     return amend(contract, Amendment(op='narrow', detail={'condition': condition}))
 

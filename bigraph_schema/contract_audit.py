@@ -51,10 +51,14 @@ def audit_contract(core, contract) -> AuditReport:
     out_ports = set((face.get('outputs') or {}).keys())
     for predicate in contract.conditions():
         name = predicate.get('name', '?')
+        expr = predicate.get('expr')
+        if not expr:
+            findings.append(Finding('error', 'malformed_condition', f'condition:{name}', 'condition has no expr'))
+            continue
         try:
-            ast = parse(predicate['expr'])
+            ast = parse(expr)
         except ExprError as error:
-            findings.append(Finding('error', 'expr_parse', f'predicate:{name}', str(error)))
+            findings.append(Finding('error', 'expr_parse', f'condition:{name}', str(error)))
             continue
         for path in names_in(ast):
             root, port = path[0], (path[1] if len(path) > 1 else None)
@@ -69,11 +73,11 @@ def audit_contract(core, contract) -> AuditReport:
             if not isinstance(port_type, dict):
                 continue
             lo, hi = port_type.get('_min'), port_type.get('_max')
-            if lo is not None and hi is not None:
-                if not (isinstance(lo, (int, float)) and isinstance(hi, (int, float))):
-                    findings.append(Finding('error', 'bad_range', f'{direction}.{port}', f'_min/_max must be numeric, got {lo!r}/{hi!r}'))
-                elif lo > hi:
-                    findings.append(Finding('error', 'bad_range', f'{direction}.{port}', f'_min {lo} > _max {hi}'))
+            for edge_name, edge_val in (('_min', lo), ('_max', hi)):
+                if edge_val is not None and not isinstance(edge_val, (int, float)):
+                    findings.append(Finding('error', 'bad_range', f'{direction}.{port}', f'{edge_name} must be numeric, got {edge_val!r}'))
+            if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo > hi:
+                findings.append(Finding('error', 'bad_range', f'{direction}.{port}', f'_min {lo} > _max {hi}'))
             unit = port_type.get('_units')
             if unit and _unit_registry is not None:
                 try:
