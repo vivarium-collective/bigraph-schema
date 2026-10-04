@@ -57,3 +57,39 @@ def test_uninstantiable_candidate_is_skipped_not_crash():
     core.register_link('explodes', Explodes)
     results = find_candidates(core, Site(_sort='hole2'))
     assert all(r.address != 'explodes' for r in results)
+
+
+def test_end_to_end_template_hole_surfaces_fitting_and_near_miss():
+    """A hole requiring a mass-conservation guarantee: a conserving process is
+    a full match; a non-conserving one of the same shape is a near-miss naming
+    the exact failing guarantee (the §4 'copasi fits except…' example)."""
+    core = allocate_core()
+    hole = narrow_condition(
+        ProcessContract(face={'inputs': {'mass': {'_type': 'float', '_min': 0, '_units': 'mg'}},
+                              'outputs': {'mass': {'_type': 'float', '_min': 0, '_units': 'mg'}}}),
+        'invariant', 'outputs.mass - inputs.mass <= tol', name='conservation', tol=1e-9)
+    _register_contract_hole(core, 'conserver', hole)
+
+    from bigraph_schema.edge import Edge as Process
+
+    class Conserving(Process):
+        contract = narrow_condition(
+            ProcessContract(face={'inputs': {'mass': {'_type': 'float', '_min': 0, '_units': 'g'}},
+                                  'outputs': {'mass': {'_type': 'float', '_min': 0, '_units': 'g'}}}),
+            'invariant', 'outputs.mass - inputs.mass <= tol', name='conservation', tol=1e-9)
+        def inputs(self): return {'mass': {'_type': 'float', '_min': 0, '_units': 'g'}}
+        def outputs(self): return {'mass': {'_type': 'float', '_min': 0, '_units': 'g'}}
+        def update(self, state, interval): return {}
+
+    class Leaking(Process):   # same shape + units, no conservation guarantee
+        def inputs(self): return {'mass': {'_type': 'float', '_min': 0, '_units': 'g'}}
+        def outputs(self): return {'mass': {'_type': 'float', '_min': 0, '_units': 'g'}}
+        def update(self, state, interval): return {}
+
+    core.register_link('conserving', Conserving)
+    core.register_link('leaking', Leaking)
+
+    results = {r.address: r for r in find_candidates(core, Site(_sort='conserver'))}
+    assert results['conserving'].match == 'full'
+    assert results['leaking'].match == 'partial'
+    assert any('conservation' in f['reason'] for f in results['leaking'].fails)
