@@ -7,6 +7,7 @@ against a whitelist before a hand-written evaluator walks it.
 """
 from __future__ import annotations
 import ast as _ast
+import operator
 from dataclasses import dataclass
 
 class ExprError(ValueError):
@@ -56,12 +57,16 @@ def _convert(node, expr):
             raise ExprError(f'only the reducers {sorted(REDUCERS)} may be called, not {_ast.dump(node.func)}')
         if node.keywords:
             raise ExprError('reducers take no keyword arguments')
+        if len(node.args) != 1:
+            raise ExprError(f'{node.func.id}() takes exactly 1 argument, got {len(node.args)}')
         return Expr('call', op=node.func.id, args=tuple(_convert(a, expr) for a in node.args))
     raise ExprError(f'disallowed construct {type(node).__name__} in {expr!r}')
 
 def _path(node, expr):
     parts = []
     while isinstance(node, _ast.Attribute):
+        if node.attr.startswith('__'):
+            raise ExprError(f'dunder path segment {node.attr!r} not allowed in {expr!r}')
         parts.append(node.attr)
         node = node.value
     if not isinstance(node, _ast.Name):
@@ -79,6 +84,7 @@ def names_in(ast: Expr) -> set:
     walk(ast)
     return found
 
+_BIN_OP = {'+': operator.add, '-': operator.sub, '*': operator.mul, '/': operator.truediv}
 _REDUCE = {'sum': sum, 'min': min, 'max': max, 'abs': abs, 'all': all, 'any': any}
 
 def evaluate(ast: Expr, env: dict, *, tol: float = 0.0):
@@ -95,7 +101,7 @@ def evaluate(ast: Expr, env: dict, *, tol: float = 0.0):
             return -ev(node.args[0])
         if node.kind == 'bin':
             a, b = ev(node.args[0]), ev(node.args[1])
-            return {'+': a + b, '-': a - b, '*': a * b, '/': a / b}[node.op]
+            return _BIN_OP[node.op](a, b)
         if node.kind == 'call':
             values = [ev(a) for a in node.args]
             return _REDUCE[node.op](*values) if node.op == 'abs' else _REDUCE[node.op](values[0])

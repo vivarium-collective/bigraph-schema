@@ -42,3 +42,16 @@ def test_evaluate_precondition():
 def test_evaluate_missing_name_raises():
     with pytest.raises(ExprError):
         evaluate(parse("inputs.x > 0"), {})
+
+def test_bin_does_not_eagerly_divide():
+    assert evaluate(parse('inputs.x + 0'), {('inputs', 'x'): 1}) == 1
+
+def test_rejects_dunder_path_segment():
+    with pytest.raises(ExprError):
+        parse('inputs.__class__')
+
+def test_rejects_wrong_reducer_arity():
+    with pytest.raises(ExprError):
+        parse('sum()')
+    with pytest.raises(ExprError):
+        parse('abs(inputs.a, inputs.b)')
