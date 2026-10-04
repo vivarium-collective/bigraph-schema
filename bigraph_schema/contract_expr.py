@@ -68,3 +68,13 @@ def _path(node, expr):
         raise ExprError(f'a name path must start at a bare root (inputs/outputs/config/state) in {expr!r}')
     parts.append(node.id)
     return tuple(reversed(parts))
+
+def names_in(ast: Expr) -> set:
+    found = set()
+    def walk(node):
+        if node.kind == 'name' and node.value != ('tol',):
+            found.add(node.value)
+        for arg in node.args:
+            walk(arg)
+    walk(ast)
+    return found

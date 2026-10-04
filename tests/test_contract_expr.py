@@ -21,3 +21,9 @@ def test_rejects_dunder_and_calls_outside_the_whitelist():
 def test_rejects_an_unknown_reducer():
     with pytest.raises(ExprError):
         parse("total(outputs.mass) == 0")
+
+from bigraph_schema.contract_expr import names_in
+
+def test_names_in_collects_paths_and_excludes_tol():
+    names = names_in(parse("abs(sum(outputs.mass) - sum(inputs.mass)) <= tol"))
+    assert names == {('outputs', 'mass'), ('inputs', 'mass')}
