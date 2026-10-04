@@ -7,6 +7,11 @@ additive; the instance-level admit path is untouched.
 """
 import re
 
+try:
+    from bigraph_schema.units import units as _unit_registry
+except Exception:  # noqa: BLE001 - pint is optional, mirror contract_audit
+    _unit_registry = None
+
 _BRACKET = re.compile(r'^[A-Za-z_][\w]*\[(?P<units>[^\]]+)\]$')
 
 
@@ -43,3 +48,25 @@ def range_subsumes(required_port, candidate_port):
         if cand_hi is None or cand_hi > req_hi:
             return False, f'candidate _max {cand_hi} is above required _max {req_hi}'
     return True, None
+
+
+def units_compatible(required_port, candidate_port):
+    """Candidate units convertible to required units. Returns (ok, reason).
+
+    Absent units on either side, or pint unavailable, is permissive (cannot
+    disprove compatibility → do not reject). Matches contract_audit's stance.
+    """
+    _, _, req_units = port_bounds(required_port)
+    _, _, cand_units = port_bounds(candidate_port)
+    if not req_units or not cand_units:
+        return True, None
+    if _unit_registry is None:
+        return True, None
+    try:
+        req = _unit_registry.Unit(req_units)
+        cand = _unit_registry.Unit(cand_units)
+    except Exception as error:  # noqa: BLE001 - unparseable unit: cannot check
+        return True, f'unit parse skipped: {error}'
+    if req.is_compatible_with(cand):
+        return True, None
+    return False, f'cannot convert candidate {cand_units!r} to required {req_units!r}'
