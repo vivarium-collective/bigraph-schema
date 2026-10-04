@@ -6,6 +6,11 @@ from dataclasses import dataclass, field
 
 from bigraph_schema.contract_expr import parse, names_in, ExprError
 
+try:
+    from bigraph_schema.units import units as _unit_registry  # the shared pint registry
+except Exception:  # noqa: BLE001 — units optional; absence is not an audit error
+    _unit_registry = None
+
 _BARE = frozenset({'float', 'int', 'integer', 'number', 'string', 'boolean', 'bool', 'any'})
 
 @dataclass
@@ -59,6 +64,19 @@ def audit_contract(core, contract) -> AuditReport:
                 findings.append(Finding('error', 'unknown_port', f'predicate:{name}', f'outputs.{port} is not a declared output port'))
             elif root not in {'inputs', 'outputs', 'config', 'state'}:
                 findings.append(Finding('error', 'unknown_root', f'predicate:{name}', f'{root} is not a valid reference root'))
+    for direction in ('inputs', 'outputs'):
+        for port, port_type in (face.get(direction) or {}).items():
+            if not isinstance(port_type, dict):
+                continue
+            lo, hi = port_type.get('_min'), port_type.get('_max')
+            if lo is not None and hi is not None and lo > hi:
+                findings.append(Finding('error', 'bad_range', f'{direction}.{port}', f'_min {lo} > _max {hi}'))
+            unit = port_type.get('_units')
+            if unit and _unit_registry is not None:
+                try:
+                    _unit_registry.Unit(unit)
+                except Exception:  # noqa: BLE001 — a bad unit string is the finding
+                    findings.append(Finding('error', 'bad_units', f'{direction}.{port}', f'cannot parse units {unit!r}'))
     grade = completeness(contract)
     findings.append(Finding('info', 'completeness', 'contract', f'completeness grade {grade:.2f}'))
     return AuditReport(ok=not any(f.severity == 'error' for f in findings), findings=findings)

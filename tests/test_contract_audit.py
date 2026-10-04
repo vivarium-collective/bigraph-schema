@@ -31,3 +31,14 @@ def test_predicate_referencing_declared_ports_is_clean():
                          'invariant', 'abs(outputs.mass - inputs.mass) <= tol', tol=1e-9)
     report = audit_contract(_Core(), c)
     assert not [f for f in report.findings if f.severity == 'error']
+
+
+def test_min_greater_than_max_is_an_error():
+    c = ProcessContract(face={'inputs': {'t': {'_type': 'float', '_min': 10, '_max': 0}}, 'outputs': {}})
+    report = audit_contract(_Core(), c)
+    assert any(f.code == 'bad_range' and f.severity == 'error' for f in report.findings)
+
+def test_unparseable_units_is_an_error():
+    c = ProcessContract(face={'inputs': {'g': {'_type': 'float', '_units': 'not_a_unit_xyz'}}, 'outputs': {}})
+    report = audit_contract(_Core(), c)
+    assert any(f.code == 'bad_units' and f.severity == 'error' for f in report.findings)
