@@ -12,6 +12,8 @@ try:
 except Exception:  # noqa: BLE001 - pint is optional, mirror contract_audit
     _unit_registry = None
 
+from bigraph_schema.contract_expr import parse as _parse_expr, names_in as _names_in
+
 _BRACKET = re.compile(r'^[A-Za-z_][\w]*\[(?P<units>[^\]]+)\]$')
 
 
@@ -72,6 +74,39 @@ def units_compatible(required_port, candidate_port):
     return False, f'cannot convert candidate {cand_units!r} to required {req_units!r}'
 
 
+def _normalized(expr):
+    """A kind-stable signature of an expression: the referenced-name set plus
+    the stripped source. Structural, not semantic (per spec §11): two exprs
+    that parse to the same names + text are treated as the same guarantee.
+    """
+    try:
+        ast = _parse_expr(expr)
+        return (frozenset(_names_in(ast)), (expr or '').replace(' ', ''))
+    except Exception:  # noqa: BLE001 - unparseable: fall back to raw text
+        return (frozenset(), (expr or '').replace(' ', ''))
+
+
+def conditions_cover(hole_contract, candidate_contract):
+    """Does the candidate DECLARE every condition the hole requires? Structural.
+
+    For each hole condition, the candidate must declare one of the same kind
+    whose expression normalizes identically. A sound filter: it will not pass
+    a candidate that fails to even claim a required guarantee. Returns
+    (ok, missing).
+    """
+    missing = []
+    hole_conditions = hole_contract.conditions() if hasattr(hole_contract, 'conditions') else []
+    cand_conditions = candidate_contract.conditions() if hasattr(candidate_contract, 'conditions') else []
+    cand_index = {(c['kind'], _normalized(c.get('expr'))) for c in cand_conditions}
+    for condition in hole_conditions:
+        key = (condition['kind'], _normalized(condition.get('expr')))
+        if key not in cand_index:
+            missing.append({'condition': f"{condition['kind']}:{condition.get('name')}",
+                            'reason': f"candidate does not declare {condition['kind']} "
+                                      f"{condition.get('name')!r} ({condition.get('expr')!r})"})
+    return (not missing), missing
+
+
 def face_subsumes(core, required_face, candidate_face):
     """Structural + bound/unit subsumption between two declared faces.
 
@@ -85,6 +120,11 @@ def face_subsumes(core, required_face, candidate_face):
     required_face = required_face or {}
     candidate_face = candidate_face or {}
 
+    # Note: the per-port type check below mirrors the existing face_conforms
+    # (core.resolve), which is intentionally loose on primitive type identity
+    # (e.g. it does not reject 'string' for a 'float' port). Phase 2a's new
+    # strictness is bounds/units (here) and conditions (conditions_cover) — NOT
+    # primitive-type identity, so that subsumption mirrors the admit path.
     for direction in ('inputs', 'outputs'):
         required = required_face.get(direction) or {}
         provided = candidate_face.get(direction) or {}

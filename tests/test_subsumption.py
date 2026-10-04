@@ -70,3 +70,49 @@ def test_over_provision_is_allowed_and_recorded():
     face = {'inputs': {'m': 'float'}, 'outputs': {}}
     ok, fails, over = face_subsumes(core, face, {'inputs': {'m': 'float', 'extra': 'float'}, 'outputs': {}})
     assert ok is True and fails == [] and 'inputs.extra' in over
+
+
+# Condition coverage tests (Task 4)
+from bigraph_schema.contract import ProcessContract, narrow_condition
+from bigraph_schema.subsumption import conditions_cover
+
+
+def _with(kind, expr, name):
+    return narrow_condition(ProcessContract(face={'inputs': {}, 'outputs': {}}), kind, expr, name=name)
+
+
+def test_candidate_declares_required_guarantee():
+    hole = _with('post', 'outputs.mass >= 0', 'nonneg')
+    cand = _with('post', 'outputs.mass >= 0', 'nonneg')
+    ok, missing = conditions_cover(hole, cand)
+    assert ok is True and missing == []
+
+
+def test_candidate_missing_required_guarantee():
+    hole = _with('post', 'outputs.mass >= 0', 'nonneg')
+    cand = ProcessContract(face={'inputs': {}, 'outputs': {}})  # declares nothing
+    ok, missing = conditions_cover(hole, cand)
+    assert ok is False and any('nonneg' in m['reason'] or 'post' in m['reason'] for m in missing)
+
+
+def test_candidate_matches_by_normalized_expr_not_name():
+    hole = _with('invariant', 'outputs.x - inputs.x <= tol', 'conservation')
+    cand = _with('invariant', 'outputs.x - inputs.x <= tol', 'different_name')
+    ok, missing = conditions_cover(hole, cand)
+    assert ok is True   # same kind + same parsed expr ⇒ covered
+
+
+def test_bare_hole_is_covered_by_anything():
+    hole = ProcessContract(face={'inputs': {}, 'outputs': {}})
+    cand = ProcessContract(face={'inputs': {}, 'outputs': {}})
+    assert conditions_cover(hole, cand) == (True, [])
+
+
+def test_face_mirrors_face_conforms_resolvability():
+    # Pins inherited behavior: a primitive TYPE mismatch is NOT caught at the
+    # face level (core.resolve does not reject it), matching the existing
+    # face_conforms / admit path. Phase 2a adds bounds/units/conditions strictness.
+    core = _core()
+    face = {'inputs': {'m': 'float'}, 'outputs': {}}
+    ok, fails, _ = face_subsumes(core, face, {'inputs': {'m': 'string'}, 'outputs': {}})
+    assert ok is True and fails == []
