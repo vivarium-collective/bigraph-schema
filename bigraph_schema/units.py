@@ -36,9 +36,11 @@ def set_quantity_registry(registry):
 def parse_time_interval(value):
     """Normalize a declared timestep to (canonical_seconds, declared_unit).
 
-    ``value`` may be a number (interpreted as seconds, declared_unit None) or a
-    pint-parseable time string ("1 min", "2 minutes", "30 s"). A non-time
-    quantity or an unparseable string raises ValueError naming the value.
+    ``value`` may be a number (interpreted as seconds, declared_unit None); a
+    bare numeric string ("3.0", "1") which is likewise interpreted as seconds;
+    or a pint-parseable time string ("1 min", "2 minutes", "30 s"). A string
+    carrying a non-time dimension ("1 meter") or an unparseable string raises
+    ValueError naming the value.
     """
     if isinstance(value, bool):
         raise ValueError(f'interval must be a number or time string, got {value!r}')
@@ -51,6 +53,12 @@ def parse_time_interval(value):
         except Exception as error:  # pint raises several types; normalize them
             raise ValueError(
                 f'could not parse interval {value!r} as a time quantity: {error}')
+        # A bare numeric string ("3.0", "1") is dimensionless — treat it as the
+        # canonical unit (seconds), exactly like a numeric literal, with no
+        # declared unit. Only a string carrying a genuine non-time dimension
+        # (e.g. "1 meter") is an error.
+        if quantity.dimensionless:
+            return float(quantity.magnitude), None
         if not quantity.check('[time]'):
             raise ValueError(
                 f'interval {value!r} is not a time quantity '
@@ -193,6 +201,11 @@ def test_parse_time_interval():
     # bare number -> seconds, no declared unit
     assert parse_time_interval(60) == (60.0, None)
     assert parse_time_interval(1.5) == (1.5, None)
+
+    # bare numeric string -> seconds, no declared unit (dimensionless)
+    assert parse_time_interval('3.0') == (3.0, None)
+    assert parse_time_interval('1') == (1.0, None)
+    assert parse_time_interval('0.5') == (0.5, None)
 
     # pint strings -> canonical seconds + declared unit name
     assert parse_time_interval('1 min') == (60.0, 'minute')
