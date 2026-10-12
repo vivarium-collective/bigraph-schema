@@ -33,6 +33,46 @@ def set_quantity_registry(registry):
     _quantity_registry = registry
 
 
+def parse_time_interval(value):
+    """Normalize a declared timestep to (canonical_seconds, declared_unit).
+
+    ``value`` may be a number (interpreted as seconds, declared_unit None) or a
+    pint-parseable time string ("1 min", "2 minutes", "30 s"). A non-time
+    quantity or an unparseable string raises ValueError naming the value.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f'interval must be a number or time string, got {value!r}')
+    if isinstance(value, (int, float)):
+        return float(value), None
+    if isinstance(value, str):
+        ureg = get_quantity_registry()
+        try:
+            quantity = ureg.Quantity(value)
+        except Exception as error:  # pint raises several types; normalize them
+            raise ValueError(
+                f'could not parse interval {value!r} as a time quantity: {error}')
+        if not quantity.check('[time]'):
+            raise ValueError(
+                f'interval {value!r} is not a time quantity '
+                f'(dimensionality {quantity.dimensionality})')
+        return float(quantity.to('second').magnitude), str(quantity.units)
+    raise ValueError(f'interval must be a number or time string, got {value!r}')
+
+
+def format_time_interval(seconds, unit):
+    """Render the author-facing label for a canonical-seconds interval.
+
+    ``unit is None`` -> "<seconds> s" (canonical). Otherwise convert back into
+    the declared ``unit`` and append its short symbol, e.g. "1 min".
+    """
+    if unit is None:
+        return f'{seconds:g} s'
+    ureg = get_quantity_registry()
+    magnitude = ureg.Quantity(seconds, 'second').to(unit).magnitude
+    symbol = f'{ureg.Unit(unit):~}'
+    return f'{magnitude:g} {symbol}'
+
+
 def render_coefficient(original_power):
     power = abs(original_power)
     int_part = int(power)
@@ -147,6 +187,43 @@ def test_roots_cycle():
 
     assert render == 'length^1_5*time^3/mass^2_5'
     assert recover == dimensionality
+
+
+def test_parse_time_interval():
+    # bare number -> seconds, no declared unit
+    assert parse_time_interval(60) == (60.0, None)
+    assert parse_time_interval(1.5) == (1.5, None)
+
+    # pint strings -> canonical seconds + declared unit name
+    assert parse_time_interval('1 min') == (60.0, 'minute')
+    assert parse_time_interval('2 minutes') == (120.0, 'minute')
+    assert parse_time_interval('30 s') == (30.0, 'second')
+    assert parse_time_interval('1.5 min') == (90.0, 'minute')
+
+    # non-time dimensionality is rejected, naming the value
+    import pytest
+    with pytest.raises(ValueError, match='1 meter'):
+        parse_time_interval('1 meter')
+    with pytest.raises(ValueError, match='nonsense'):
+        parse_time_interval('nonsense')
+
+
+def test_format_time_interval():
+    assert format_time_interval(60.0, 'minute') == '1 min'
+    assert format_time_interval(120.0, 'minute') == '2 min'
+    assert format_time_interval(90.0, 'minute') == '1.5 min'
+    assert format_time_interval(30.0, 'second') == '30 s'
+    # no declared unit -> canonical seconds label
+    assert format_time_interval(90.0, None) == '90 s'
+    assert format_time_interval(0.5, None) == '0.5 s'
+
+
+def test_time_interval_round_trip():
+    # parse then format returns the author's declared form
+    seconds, unit = parse_time_interval('1 min')
+    assert format_time_interval(seconds, unit) == '1 min'
+    seconds, unit = parse_time_interval(60)
+    assert format_time_interval(seconds, unit) == '60 s'
 
 
 if __name__ == '__main__':
