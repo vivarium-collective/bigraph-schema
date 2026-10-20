@@ -240,16 +240,6 @@ def generalize(current: dict, update: Node):
     else:
         return update
 
-# @dispatch
-# def generalize(current: dict, update: Node):
-#     fields = set(update.__dataclass_fields__)
-#     keys = set(current.keys())
-
-#     for key in keys.intersect(fields):
-#         getattr(update, key)
-    
-    
-
 @dispatch
 def generalize(current: list, update: list):
     return tuple(update)

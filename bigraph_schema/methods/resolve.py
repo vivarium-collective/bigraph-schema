@@ -649,17 +649,6 @@ def resolve(current: Array, update: Node, path=None):
 
     return current
 
-    # for key, subschema in update.items():
-    #     if isinstance(key, int):
-
-# @dispatch
-# def resolve(current: Node, update: Array, path=None):
-#     if path:
-
-#         return resolve_array_path(update, current, path=path)
-
-#     return update
-
 @dispatch
 def resolve(current: Array, update: dict, path=None):
     if path:
@@ -844,40 +833,6 @@ def resolve(current: String, update: Node, path=None):
     if current._default:
         update._default = current._default
     return update
-
-# @dispatch
-# def resolve(current: Node, update: String):
-#     if update._default:
-#         current._default = update._default
-#     return current
-
-# @dispatch
-# def resolve(current: String, update: Wrap):
-#     return resolve(current, update._value)
-
-# @dispatch
-# def resolve(current: String, update: String):
-#     if update._default or not current._default:
-#         return update
-#     else:
-#         return current
-
-# @dispatch
-# def resolve(current: Node, update: String):
-#     if update._default:
-#         current = replace(current, **{'_default': update._default})
-#     return current
-
-
-# @dispatch
-# def resolve(current: dict, update: Node):
-#     fields = set(update.__dataclass_fields__)
-#     keys = set(current.keys())
-
-#     for key in keys.intersect(fields):
-#         getattr(update, key)
-    
-    
 
 @dispatch
 def resolve(current: List, update: List, path=None):
