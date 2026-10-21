@@ -19,11 +19,17 @@ class Finding:
     code: str
     where: str
     message: str
+    # Optional graded fields, set by leveled audits (e.g. the study L0-L5 audit)
+    # that ride this same record; the composite contract audit leaves them None.
+    level: str | None = None   # e.g. 'L0'..'L5'
+    tier: str | None = None    # e.g. 'hard' | 'soft'
+    score: float | None = None
 
 @dataclass
 class AuditReport:
     ok: bool
     findings: list = field(default_factory=list)
+    grade: float | None = None   # optional completeness/sufficiency grade in [0, 1]
 
 def _port_constrained(port_type) -> bool:
     if isinstance(port_type, dict):
@@ -44,12 +50,23 @@ def completeness(contract) -> float:
     predicate_bonus = 0.25 if contract.conditions() else 0.0
     return min(1.0, 0.75 * port_score + predicate_bonus)
 
-def audit_contract(core, contract) -> AuditReport:
+def audit_face(core, face, *, conditions=None) -> list:
+    """Audit a raw contract *face* (an ``{'inputs': {...}, 'outputs': {...}}``
+    port-type dict) plus optional declarative predicate ``conditions`` (each a
+    ``{'name', 'expr', ...}`` dict), returning a list of :class:`Finding`.
+
+    This is the typed audit kernel shared by the composite contract audit
+    (``audit_contract``, below, which passes a ``ProcessContract``'s face +
+    conditions) and the study-level ``contract.face`` audit in viva-superpowers,
+    so both levels run the same port/predicate well-formedness checks. Pure
+    analysis: it never runs anything and never raises on a well-formed-but-
+    incomplete face.
+    """
     findings = []
-    face = contract.face or {}
+    face = face or {}
     in_ports = set((face.get('inputs') or {}).keys())
     out_ports = set((face.get('outputs') or {}).keys())
-    for predicate in contract.conditions():
+    for predicate in (conditions or []):
         name = predicate.get('name', '?')
         expr = predicate.get('expr')
         if not expr:
@@ -84,6 +101,15 @@ def audit_contract(core, contract) -> AuditReport:
                     _unit_registry.Unit(unit)
                 except Exception:  # noqa: BLE001 — a bad unit string is the finding
                     findings.append(Finding('error', 'bad_units', f'{direction}.{port}', f'cannot parse units {unit!r}'))
+    return findings
+
+
+def audit_contract(core, contract) -> AuditReport:
+    """Static audit of a ``ProcessContract``: routes its face + declarative
+    conditions through :func:`audit_face`, then appends a completeness grade.
+    Pure analysis — never runs the process, never raises on a well-formed-but-
+    incomplete contract."""
+    findings = audit_face(core, contract.face or {}, conditions=contract.conditions())
     grade = completeness(contract)
     findings.append(Finding('info', 'completeness', 'contract', f'completeness grade {grade:.2f}'))
-    return AuditReport(ok=not any(f.severity == 'error' for f in findings), findings=findings)
+    return AuditReport(ok=not any(f.severity == 'error' for f in findings), findings=findings, grade=grade)
