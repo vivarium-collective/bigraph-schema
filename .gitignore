@@ -17,3 +17,6 @@ bigraph_schema.egg-info/
 .devenv/
 devenv.lock
 .superpowers/
+
+# superpowers planning/design docs — kept local, not tracked
+docs/superpowers/
