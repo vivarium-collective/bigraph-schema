@@ -65,7 +65,7 @@ class Edge:
         if config is None:
             config = {}
 
-        self._config = self.core.fill(self.config_schema, config)
+        self._config = self.core.fill_config(self.config_schema, config)
         self._composition = 'edge'
         self._state = {}
 
