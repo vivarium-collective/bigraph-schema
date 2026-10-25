@@ -27,7 +27,7 @@ wheels = [
 
 [[package]]
 name = "bigraph-schema"
-version = "1.8.0"
+version = "1.8.3"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
