@@ -993,6 +993,55 @@ class Core:
         else:
             return merge(merge_schema, base_state, state)
 
+    def fill_config(self, config_schema, config):
+        """Fill an edge/process config from its ``config_schema``.
+
+        Config-filling is NOT state-merging. A value the caller SUPPLIES
+        replaces the schema default outright: a supplied ``0``, ``0.0``,
+        ``''`` or ``[]`` stands as given, and a supplied list replaces the
+        default rather than concatenating onto it. A declared key the caller
+        omits (or sets to ``None``) takes its default, so every declared key
+        with a default is present. Only genuine field GROUPS (a dict of
+        sub-fields, no ``_type``) recurse, which keeps a partially-supplied
+        group's untouched siblings at their defaults.
+
+        ``fill`` (used for state) keeps its merge semantics — this method is
+        used only for config, so state-filling is untouched.
+        """
+        self.access(config_schema)
+        return self._fill_config(config_schema, config)
+
+    def _fill_config(self, schema, config):
+        is_group = (
+            isinstance(schema, dict)
+            and '_type' not in schema
+            and any(not str(key).startswith('_') for key in schema))
+
+        if not is_group:
+            # A leaf field (typed, or an opaque schema): a supplied non-None
+            # value replaces the default wholesale.
+            if config is None:
+                _, default_state = self.default(schema)
+                return default_state
+            return config
+
+        if config is not None and not isinstance(config, dict):
+            return config
+        config = config or {}
+
+        result = {}
+        for key in schema:
+            if str(key).startswith('_'):
+                continue
+            subschema = schema[key]
+            if key in config and config[key] is not None:
+                result[key] = self._fill_config(subschema, config[key])
+            else:
+                _, default_state = self.default(subschema)
+                if default_state is not None:
+                    result[key] = default_state
+        return result
+
     def view_ports(self, schema, state, path, declared_schema, wires):
         """Return the state visible through a port.
 
@@ -1089,6 +1138,11 @@ class Core:
 
         if isinstance(wires, (list, tuple)):
             destination = resolve_path(list(path) + list(wires))
+
+            # Only the keys the port declares may travel through it — a
+            # projected view (e.g. from initial_state()) that carries extra
+            # keys must not write them into the wired store (#201).
+            view = self._project_through_schema(view, ports_schema)
 
             project_schema = self.resolve(
                 project_schema,
