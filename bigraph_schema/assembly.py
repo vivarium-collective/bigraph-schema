@@ -599,6 +599,35 @@ def is_address(value):
             and 'protocol' in value and 'data' in value)
 
 
+def _resolve_edge_class(core, canonical):
+    """Resolve the class a canonical address names.
+
+    For the ``local`` protocol, resolve through
+    :func:`bigraph_schema.protocols.local_lookup`, which handles BOTH the
+    portable ``local:!module.path.Class`` import form (via
+    ``local_lookup_module``) and the bare ``local:<name>`` registry form. For
+    any other protocol — or when ``local_lookup`` yields nothing — fall back to
+    the process registry ``.get(...)`` so existing behavior is preserved.
+
+    Returns the class, or ``None`` when the address names nothing this core
+    knows.
+    """
+    data = canonical.get('data')
+
+    if canonical.get('protocol') == 'local' and isinstance(data, str):
+        # Local import inside the function avoids any protocols<->assembly
+        # import-cycle risk at module load.
+        from bigraph_schema.protocols import local_lookup
+        try:
+            resolved = local_lookup(core, data)
+        except Exception:
+            resolved = None
+        if resolved is not None:
+            return resolved
+
+    return getattr(core, 'link_registry', {}).get(data)
+
+
 def _face_from_address(core, address, config):
     """Resolve an edge's ports from the class its address names.
 
@@ -620,7 +649,7 @@ def _face_from_address(core, address, config):
     if not isinstance(canonical, dict):
         return None
 
-    edge_class = getattr(core, 'link_registry', {}).get(canonical.get('data'))
+    edge_class = _resolve_edge_class(core, canonical)
     if edge_class is None:
         return None
 
@@ -746,8 +775,7 @@ def contract_of(core, node):
             address = address._default
         canonical = normalize_address(address)
         if isinstance(canonical, dict):
-            edge_class = getattr(core, 'link_registry', {}).get(
-                canonical.get('data'))
+            edge_class = _resolve_edge_class(core, canonical)
             if edge_class is not None:
                 try:
                     documented = resolve_contract(
