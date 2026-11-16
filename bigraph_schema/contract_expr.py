@@ -1,13 +1,12 @@
 """A tiny, safe expression language for contract predicates.
 
 parse() -> an Expr tree (frozen); names_in() -> referenced port/config/state
-paths; evaluate() -> value against a binding environment. NEVER uses eval/exec:
-the string is parsed with the stdlib ``ast`` module and every node is checked
-against a whitelist before a hand-written evaluator walks it.
+paths. NEVER uses eval/exec: the string is parsed with the stdlib ``ast`` module
+and every node is checked against a whitelist before a hand-written parser builds
+the frozen Expr tree.
 """
 from __future__ import annotations
 import ast as _ast
-import operator
 from dataclasses import dataclass
 
 class ExprError(ValueError):
@@ -84,33 +83,3 @@ def names_in(ast: Expr) -> set:
     walk(ast)
     return found
 
-_BIN_OP = {'+': operator.add, '-': operator.sub, '*': operator.mul, '/': operator.truediv}
-_REDUCE = {'sum': sum, 'min': min, 'max': max, 'abs': abs, 'all': all, 'any': any}
-
-def evaluate(ast: Expr, env: dict, *, tol: float = 0.0):
-    def ev(node):
-        if node.kind == 'lit':
-            return node.value
-        if node.kind == 'name':
-            if node.value == ('tol',):
-                return tol
-            if node.value not in env:
-                raise ExprError(f'no binding for {".".join(node.value)}')
-            return env[node.value]
-        if node.kind == 'neg':
-            return -ev(node.args[0])
-        if node.kind == 'bin':
-            a, b = ev(node.args[0]), ev(node.args[1])
-            return _BIN_OP[node.op](a, b)
-        if node.kind == 'call':
-            values = [ev(a) for a in node.args]
-            return _REDUCE[node.op](*values) if node.op == 'abs' else _REDUCE[node.op](values[0])
-        if node.kind == 'cmp':
-            a, b = ev(node.args[0]), ev(node.args[1])
-            if node.op == '==':
-                return abs(a - b) <= tol if isinstance(a, (int, float)) and isinstance(b, (int, float)) else a == b
-            if node.op == '!=':
-                return not (abs(a - b) <= tol) if isinstance(a, (int, float)) and isinstance(b, (int, float)) else a != b
-            return {'<': a < b, '<=': a <= b, '>': a > b, '>=': a >= b}[node.op]
-        raise ExprError(f'cannot evaluate node kind {node.kind!r}')
-    return ev(ast)
