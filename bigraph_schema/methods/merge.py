@@ -241,7 +241,10 @@ def merge(schema: Array, current, update, path=()):
 
 @dispatch
 def merge(schema: Frame, current, update, path=()):
-    if isinstance(update, dict):
+    # No update (an empty branch the engine pruned) keeps the table, as the Array merge does.
+    if update is None:
+        return default(schema) if current is None else current
+    elif isinstance(update, dict):
         return current
     elif update.empty:
         return current

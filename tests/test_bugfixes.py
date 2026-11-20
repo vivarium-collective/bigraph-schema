@@ -163,3 +163,22 @@ def test_jump_into_empty_schema_is_unambiguous(token):
     # plum.AmbiguousLookupError.
     assert isinstance(schema, Empty)
     assert state is None
+
+
+def test_frame_merge_keeps_the_table_when_the_update_is_none(core):
+    """An empty branch that the engine prunes reaches merge as None (process-bigraph 1.11's
+    without_document_leaves drops an edge's empty initial state). A Frame merge must keep the current table, or
+    the default table when there is none, as the Array merge does, instead of failing on ``None.empty``.
+    vivarium-tyssue's EulerSolver hit this: its 2-D sheet's ``cell_df`` starts empty."""
+    import pandas as pd
+
+    from bigraph_schema.methods.merge import merge
+
+    schema = core.access('dataframe[a:float|b:integer[64]]')
+    table = pd.DataFrame({'a': [1.0], 'b': [2]})
+
+    assert merge(schema, table, None) is table
+
+    filled = merge(schema, None, None)
+    assert isinstance(filled, pd.DataFrame)
+    assert filled.empty and list(filled.columns) == ['a', 'b']
